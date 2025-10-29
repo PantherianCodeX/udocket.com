@@ -56,7 +56,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Communications & Outbound Delivery Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -65,8 +65,8 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | Compliance Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -434,7 +434,7 @@ ______________________________________________________________________
 #### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-NOTIFY-OUTAGE` | Provider outage / degraded delivery | Provider escalation paths, failover to backup channel |
 | `RB-NOTIFY-WEBHOOK` | Webhook signature drift / compromise | Key rotation, backlog replay, SIEM coordination |
 | `RB-NOTIFY-SMS` | STOP/HELP surge & regulatory response | Compliance scripts, opt-in reinstatement |
@@ -497,14 +497,14 @@ ______________________________________________________________________
 **Breadcrumbs:** Integration specs, dependency docs. **|**
 **References:** Link to other service docs or appendices.
 
-| Dependency             | Interface / artifact                                                                   | Responsibilities                                                                                      | Notes                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Settings Registry      | Keys `notifications.*`, rate limits, provider configs                                   | Supplies templates, throttles, provider secrets, DMARC policy enforcement                            | Activation diff artifacts archived with template/version metadata     |
-| Localization & Policy Engine | Locale bundles `i18n.notifications.*`, residency policy hints                      | Ensures localized copy, policy context for residency checks                                          | Digests rely on LP Engine fallback logic                              |
-| Guardian               | Quarantine verdicts, moderation verdict SSE                                            | Blocks unsafe notifications, provides context for Security/Compliance notifications                  | Quarantine reasons surface in notifications payloads                  |
-| Worker Cluster (Celery)| Task modules `notifications.dispatch_outbox`, `notifications.generate_digest`          | Executes delivery batches, digest generation, DLQ fan-out                                            | Separate queue to isolate from agent workloads                        |
-| Portal/Client apps     | SSE endpoints, download token validation                                                | Renders in-app notifications, enforces single-use tokens, shows invalidation banners                 | Portal invalidation logic in `apps/platform/portal/notifications.py`  |
-| Ops analytics          | Runbook catalog, drill scheduler                                                        | Tracks runbook freshness, drill cadence, compliance evidence                                         | Buildkite docs job fails when catalog stale                           |
+| Dependency | Interface / artifact | Responsibilities | Notes |
+| --- | --- | --- | --- |
+| Settings Registry | Keys `notifications.*`, rate limits, provider configs | Supplies templates, throttles, provider secrets, DMARC policy enforcement | Activation diff artifacts archived with template/version metadata |
+| Localization & Policy Engine | Locale bundles `i18n.notifications.*`, residency policy hints | Ensures localized copy, policy context for residency checks | Digests rely on LP Engine fallback logic |
+| Guardian | Quarantine verdicts, moderation verdict SSE | Blocks unsafe notifications, provides context for Security/Compliance notifications | Quarantine reasons surface in notifications payloads |
+| Worker Cluster (Celery)| Task modules `notifications.dispatch_outbox`, `notifications.generate_digest` | Executes delivery batches, digest generation, DLQ fan-out | Separate queue to isolate from agent workloads |
+| Portal/Client apps | SSE endpoints, download token validation | Renders in-app notifications, enforces single-use tokens, shows invalidation banners | Portal invalidation logic in `apps/platform/portal/notifications.py` |
+| Ops analytics | Runbook catalog, drill scheduler | Tracks runbook freshness, drill cadence, compliance evidence | Buildkite docs job fails when catalog stale |
 
 ______________________________________________________________________
 

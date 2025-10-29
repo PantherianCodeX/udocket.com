@@ -71,16 +71,16 @@ ______________________________________________________________________
 
 ## Document Controls
 
-| Field          | Value |
-| -------------- | ----- |
-| Version        | 0.1-draft |
-| Status         | Implementable |
-| Last updated   | 2025-10-29 |
+| Field | Value |
+| --- | --- |
+| Version | 0.1-draft |
+| Status | Implementable |
+| Last updated | 2025-10-29 |
 | Primary owners | Platform Architecture, Security Engineering |
-| Approvers      | Architecture Steering Committee; Security Review Board |
-| Reviewers      | QA Engineering Lead; SRE Manager |
-| Approved by    | |
-| Approved date  | |
+| Approvers | Architecture Steering Committee; Security Review Board |
+| Reviewers | QA Engineering Lead; SRE Manager |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -106,13 +106,13 @@ ______________________________________________________________________
 
 ### Artifact classes (authoritative definitions)
 
-| Class                 | Key    | Canonical definition                                      | Visibility          |
-| --------------------- | ------ | --------------------------------------------------------- | ------------------- |
-| Source Asset          | **SA** | Raw, immutable inputs we ingest.                          | Staff (scoped)      |
-| Work Product          | **WP** | Internal derived data never exposed to clients.           | Staff only          |
+| Class | Key | Canonical definition | Visibility |
+|---|---|---|---|
+| Source Asset | **SA** | Raw, immutable inputs we ingest. | Staff (scoped) |
+| Work Product | **WP** | Internal derived data never exposed to clients. | Staff only |
 | Candidate Deliverable | **CD** | Human-readable draft that may be released after approval. | Staff reviewers/ops |
-| Deliverable           | **DL** | Approved, signed, client-visible document.                | Staff + client      |
-| Auxiliary Record      | **AR** | Attestations/receipts that prove what happened.           | Auditors/admin      |
+| Deliverable | **DL** | Approved, signed, client-visible document. | Staff + client |
+| Auxiliary Record | **AR** | Attestations/receipts that prove what happened. | Auditors/admin |
 
 ### Canonical statuses (link to §5.2.2)
 
@@ -122,12 +122,12 @@ ______________________________________________________________________
 
 ### Guardian judgments → statuses (link to §5.2.3)
 
-| Judgment | WP next         | CD next       | Notes              |
-| -------- | --------------- | ------------- | ------------------ |
-| PASS     | CLEARED_FOR_USE | OPERATOR_PREP | default            |
-| WARN     | CLEARED_FOR_USE | OPERATOR_PREP | banners            |
-| BLOCK    | QUARANTINED     | QUARANTINED   | remediation/waiver |
-| WAIVED   | as PASS         | as PASS       | dual approval      |
+| Judgment | WP next | CD next | Notes |
+|---|---|---|---|
+| PASS | CLEARED_FOR_USE | OPERATOR_PREP | default |
+| WARN | CLEARED_FOR_USE | OPERATOR_PREP | banners |
+| BLOCK | QUARANTINED | QUARANTINED | remediation/waiver |
+| WAIVED | as PASS | as PASS | dual approval |
 
 Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1; other sections cite these tables instead of rephrasing them.
 
@@ -153,13 +153,13 @@ ______________________________________________________________________
 **Role-based quick start (binding)**\
 Use this checklist to jump to the right sections on a first read:
 
-| Stakeholder role           | Start here                                                                                                | Must-review highlights                                                      |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Architecture / Security    | §3 (platform architecture), §4 (tenancy & access), §7 (Guardian/Signer), §12 (observability/DR)           | §3.8 residency, §4.4–§4.5 masking/RLS, §7.1 judgments, §12.5 resilience     |
-| Engineering (agents & API) | §6 (agent ecosystem), §10 (APIs), App.D (artifact schemas)                                                | §6.2–§6.4 pipelines, §10.3 idempotency, Appendix F API contracts            |
-| Product / Operations       | §1 (executive summary), §11 (UX), §14 (retention & compliance)                                            | §11.1 workspace/portal behaviors, §14.2 DSAR flows, §15 roadmap checkpoints |
-| QA / Compliance            | §5 (lifecycle), §13 (testing & governance), App.K (controls map)                                          | §5.2 status vocabulary, §13.3 detection QA, §13.5 deployment gates          |
-| SRE / Platform Ops         | §3 (infra context), §8 (LLM runtime), §12 (observability/DR), [Runbook catalog](../ops/runbooks/index.md) | §8.7 FinOps guard, §12.4–§12.6 DR & dashboards, `../ops/runbooks/index.md`  |
+| Stakeholder role | Start here | Must-review highlights |
+|---|---|---|
+| Architecture / Security | §3 (platform architecture), §4 (tenancy & access), §7 (Guardian/Signer), §12 (observability/DR) | §3.8 residency, §4.4–§4.5 masking/RLS, §7.1 judgments, §12.5 resilience |
+| Engineering (agents & API) | §6 (agent ecosystem), §10 (APIs), App.D (artifact schemas) | §6.2–§6.4 pipelines, §10.3 idempotency, Appendix F API contracts |
+| Product / Operations | §1 (executive summary), §11 (UX), §14 (retention & compliance) | §11.1 workspace/portal behaviors, §14.2 DSAR flows, §15 roadmap checkpoints |
+| QA / Compliance | §5 (lifecycle), §13 (testing & governance), App.K (controls map) | §5.2 status vocabulary, §13.3 detection QA, §13.5 deployment gates |
+| SRE / Platform Ops | §3 (infra context), §8 (LLM runtime), §12 (observability/DR), [Runbook catalog](../ops/runbooks/index.md) | §8.7 FinOps guard, §12.4–§12.6 DR & dashboards, `../ops/runbooks/index.md` |
 
 ### Diagram usage standard
 
@@ -269,14 +269,14 @@ ______________________________________________________________________
 
 - Compliance mapping (binding): traceable connection between regulation, platform controls, and evidence ensures auditors can verify posture without ad-hoc spreadsheets.
 
-  | Regulation / Framework | Key platform controls & features                                                                               | Canonical references          |
-  | ---------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-  | GDPR & UK GDPR         | DSAR/erasure workflow (`ERASURE_JOURNAL`), data minimization, audit seals, residency enforcement               | §2.2, §14.2.1, App.N, App.K   |
-  | CCPA / CPRA            | “No sale/share” enforcement, notice ledgers, SPI routing and disclosure logging                                | §2.2 (SPI), §11.5, App.K      |
-  | HIPAA                  | HIPAA mode activation gates, Guardian PHI quarantine, evidence-store excerpt suppression, WebAuthn enforcement | §2.2, §7.1, §8.2, App.N       |
-  | SOC 2 (CC6 / CC7)      | Audit logging, approvals workflows, change management, monitoring dashboards                                   | §12, §14.5, Appendix H, App.K |
-  | ISO/IEC 27001 & 27701  | Security management, retention schedules, risk assessments, policy bundles                                     | §2.2, §12.6, §14, App.K       |
-  | PIPEDA / CPPA / PHIPA  | Residency controls, consent logging, legal hold & retention automation                                         | §2.2, §3.8, §14.2, App.N      |
+  | Regulation / Framework | Key platform controls & features | Canonical references |
+  |---|---|---|
+  | GDPR & UK GDPR | DSAR/erasure workflow (`ERASURE_JOURNAL`), data minimization, audit seals, residency enforcement | §2.2, §14.2.1, App.N, App.K |
+  | CCPA / CPRA | “No sale/share” enforcement, notice ledgers, SPI routing and disclosure logging | §2.2 (SPI), §11.5, App.K |
+  | HIPAA | HIPAA mode activation gates, Guardian PHI quarantine, evidence-store excerpt suppression, WebAuthn enforcement | §2.2, §7.1, §8.2, App.N |
+  | SOC 2 (CC6 / CC7) | Audit logging, approvals workflows, change management, monitoring dashboards | §12, §14.5, Appendix H, App.K |
+  | ISO/IEC 27001 & 27701 | Security management, retention schedules, risk assessments, policy bundles | §2.2, §12.6, §14, App.K |
+  | PIPEDA / CPPA / PHIPA | Residency controls, consent logging, legal hold & retention automation | §2.2, §3.8, §14.2, App.N |
 
 - HIPAA mode: applies only to U.S. workloads with an executed BAA. Org activation (`privacy.hipaa.enabled=true`) requires dual approval (`org_admin` + platform `sysadmin`), verifies BAA-backed storage and compute, and enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`) plus WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`). Settings expose `privacy.hipaa.enforcement_mode ∈ {optional, required}`—`required` is reserved for U.S. orgs under BAA, while `optional` allows voluntary adoption elsewhere. Outside the U.S. HIPAA stays optional; organizations may opt in for contractual reasons, but enforcement defaults to the general SPI/PHI controls unless HIPAA mode is explicitly enabled.
 
@@ -354,206 +354,17 @@ ______________________________________________________________________
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
 
-### 3.2 Deployment topology (environments, Kubernetes primitives)
+### 3.2 Deployment topology & guardrails (summary)
 
-*Purpose: Capture the runtime footprint and security guardrails applied per environment.*
+*Purpose: Point to the authoritative runtime policies without duplicating manifests in the TDD.*
 
-- Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host Deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
-- Service mesh or SPIFFE/SPIRE workload identity enforces strict mTLS; certificates rotate with TTL ≤ 24h and SLO of 99.9% renewals within five minutes of expiry. Certificates that exceed `security.tls.cert_ttl_minutes + 5` minutes trigger a hard fail (traffic denied) and page on-call; soft warnings fire 30 minutes before TTL expiry to allow proactive rotation. Mutating RPCs must satisfy both mutual TLS **and** HMAC headers: the mesh validates SANs against SPIFFE IDs (`spiffe://uDocket/<service>`) or an allowlisted CN, and the receiving service reconstructs the shared-secret signature (Appendix F). Calls missing either layer are rejected with `401 AUTH_ERROR` and recorded via `auth_layer_violation_total`.
-- Network policy: ingress terminates TLS (TLS 1.3 preferred; limited TLS 1.2 fallback). Egress is default-deny aside from kube-dns and the Istio egress gateway; the gateway enforces the region-scoped allowlists rendered from the `network.egress.allowed_hosts` Settings bundle, and drift detection nightly resolves each FQDN (for example `*.blob.core.windows.net`, `*.table.core.windows.net`, `*.queue.core.windows.net`, TSA/OCSP hosts) to compare against SAN lists.
-- TLS details: TLS 1.3 remains the platform default. When `security.tls.fips_mode=true`, only FIPS-approved AES-GCM ciphers are permitted (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`) and ChaCha20 suites are rejected at validation time (mirrors OpenSSL FIPS provider guidance). Non-FIPS environments (explicit `security.tls.performance_mode=true`) MAY allow `TLS_CHACHA20_POLY1305_SHA256` to improve mobile performance but must record the exception in the release checklist. TLS 1.2 fallback suites remain explicit (`{'ECDHE-ECDSA-AES128-GCM-SHA256', 'ECDHE-RSA-AES128-GCM-SHA256', 'ECDHE-ECDSA-AES256-GCM-SHA384', 'ECDHE-RSA-AES256-GCM-SHA384'}`). OCSP stapling stays enabled on ingress. Fallback may be enabled via `security.tls.legacy_exceptions[]` entries that include endpoint name, justification, and an expiry ≤ 30 days out; Settings activation validator rejects longer windows, and an alert fires seven days before expiry to force review. Production ingress treats TLS 1.3 (`security.tls.min_version=TLSv1.3`) as the control surface; downgrades require Security approval plus updated attestation for the impacted environment. A synthetic handshake job (`scripts/security/check_tls_ciphers.py`) runs per environment on each deploy and as part of nightly CI, failing the build if CHACHA20 handshakes succeed while FIPS mode is enabled or if AES-GCM suites disappear from the non-FIPS profile.
-- Platform services leverage managed secrets (Vault or Azure Key Vault). Nodes run chrony/NTP with ±100 ms drift to support TSA validation. Redis handles broker/cache needs; Postgres (regional HA) stores relational data.
-- Object storage: Azure Blob (prod) or S3-compatible (dev) buckets configured for versioning, SSE-KMS, and immutable retention for audit sinks. Residency isolation is enforced via dedicated containers per data-residency cohort with no cross-region replication; replication is permitted only within the region boundary declared in `regions.allowlist.storage`, and manifests record the container + key vault backing each cohort so compliance teams can attest to zero-copy guarantees.
-- Database encryption at rest: managed Postgres clusters rely on cloud Transparent Data Encryption; storage, WAL archives, and snapshots are encrypted with Azure-managed keys by default and can swap to customer-managed keys (`security.db.cmk_id`) when an org or regulator requires attestation. Key rotation flows through Key Vault, produces `DB_TDE_ROTATION` artifacts, and triggers automated smoke tests that verify new keys before swaps propagate to replicas.
-- Container runtime: all workloads ship as OCI images. Production deployments run on AKS-managed Kubernetes with Flux CD applying Helm releases per environment; PodSecurity is set to the restricted baseline (no privileged pods, read-only root FS where feasible), and image provenance is enforced via cosign attestations validated by an admission webhook. Local developer workflows use `docker compose` (`docker-compose.yml` + override) to mirror the full stack—web, workers, Guardian, Signer, Settings, Redis, Postgres, object storage emulator, and supporting queues. Compose wiring reuses the same `.env` schema and health checks; developers run `docker compose up --build` to start the stack, while integration tests spin subsets of services (for example, `docker compose -f docker-compose.tests.yml up web worker guardian`) to reproduce production behaviour before pushing changes.
-- Multi-region posture: each environment operates within a primary/secondary region pair; database replicas, blob replication, and queue failover respect the org-specific allowlists. Disaster recovery runbooks document region cutover and data rehydration using only approved regions per §3.8.
+- See [`../services/platform-runtime.md`](../services/platform-runtime.md) for the binding environment topology, mesh/TLS guardrails, reference manifests, and diagrams.
+- This TDD links to that spec from Settings (§9) and identity (§4) whenever those guardrails are required. Runtime deviations require waivers recorded alongside the platform-runtime spec and App.O.
 
-#### 3.2.1 Policy manifests (illustrative)
+### 3.3 Service inventory (summary)
 
-*Purpose: Show concrete Kubernetes/service-mesh policies to enforce topology constraints.*
-
-AuthorizationPolicy (Istio)
-
-```yaml
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata: { name: mesh-egress-allowlist, namespace: platform }
-spec:
-  action: ALLOW
-  rules:
-    - to:
-        - operation:
-            hosts:
-              - "na-us-1.api.cognitive.microsoft.com"
-              - "eu-west-2.api.cognitive.microsoft.com"
-              - "na-us-1.ocsp.msocsp.com"
-              - "tsa.partner.example.com"
-    - to:
-        - operation:
-            hosts: ["signing-root.example.com"]
-```
-
-- Illustrative host list; production values are rendered from the `network.egress.allowed_hosts` Settings bundle (SYSTEM scope) and materialized as `ServiceEntry` resources with exact SNI/authority matches. Istio AuthorizationPolicy host matching is literal—wildcards are rejected—so the helper renders the fully qualified domains for each approved endpoint.
-
-NetworkPolicy (Kubernetes)
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: { name: mesh-egress-baseline, namespace: platform }
-spec:
-  podSelector: { matchLabels: { mesh: enabled } }
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - namespaceSelector: { matchLabels: { kube-system: "true" } }
-          podSelector: { matchLabels: { k8s-app: kube-dns } }
-      ports:
-        - protocol: UDP
-          port: 53
-    - to:
-        - namespaceSelector: { matchLabels: { istio: control-plane } }
-          podSelector: { matchLabels: { app: istio-egressgateway } }
-    # External destinations are mediated by the service mesh AuthorizationPolicy allowlist.
-```
-
-AdmissionPolicy (prevent PgBouncer statement pooling)
-
-```yaml
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata: { name: deny-statement-pooling }
-spec:
-  rules:
-    - name: block-statement-pooling
-      match: { resources: { kinds: ["Deployment"], namespaces: ["platform"] } }
-      validate:
-        message: "PgBouncer must not use statement pooling"
-        foreach:
-          - list: "spec/template/spec/containers"
-            preconditions:
-              - key: "{{ element.name }}"
-                operator: Equals
-                value: pgbouncer
-            deny:
-              conditions:
-                - key: "{{ element.env[?name=='POOL_MODE'].value | default('session') }}"
-                  operator: Equals
-                  value: statement
-```
-
-- PgBouncer is permitted to run only in `transaction` (default) or `session` pooling modes as published through the `db.pgbouncer.pool_mode` Setting; statement pooling remains blocked to preserve per-request GUCs. Workers and web pods expose a `/healthz/pgbouncer-mode` probe that executes `SHOW pool_mode` via PgBouncer admin and fails closed if the reported mode drifts from the allowlist, aligning with §4.4 RLS guarantees.
-
-Ingress TLS policy (snippet)
-
-*TLS 1.3 is the platform default (`security.tls.min_version=TLSv1.3`). TLS 1.2 appears only when a `security.tls.legacy_exceptions[]` entry is active with Security-approved justification and an expiry of 30 days or less.*
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: platform
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.3 TLSv1.2"
-    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384"
-```
-
-- TLS 1.3 cipher suites are implicit; the annotation lists only the TLS 1.2 fallback suites the gateway permits.
-- Authoritative TLS policy is driven by `security.tls.min_version` (default `TLSv1.3`) and `security.tls.cipher_profile` Settings bundles; any TLS 1.2 exposure must be explicitly listed in `security.tls.legacy_exceptions[]` with documented review and expiry. Mesh and ingress templates consume the same settings so routing surfaces stay consistent.
-
-Pod Security Admission (namespace labels)
-
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: platform
-  labels:
-    pod-security.kubernetes.io/enforce: "restricted"
-    pod-security.kubernetes.io/enforce-version: "latest"
-```
-
-### 3.3 Service inventory table (role, tech stack, scaling)
-
-*Purpose: Provide a tabular summary for capacity planning and onboarding.*
-
-| Service                            | Runtime                                     | Responsibilities                                                                                                 | Scaling & notes                                                                           | Observability anchors                                                                                         |
-| ---------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Web                                | Django ASGI (uvicorn + gunicorn)            | REST APIs, staff UI, client portal, SSE endpoints, approval workflows                                            | HPA on CPU+request latency; sticky sessions avoided                                       | `web_http_*`, `frontend_latency_seconds`, `audit_event_total`                                                 |
-| Channels                           | Django Channels (Redis-backed)              | Real-time editors, approvals, QA feedback                                                                        | Separate Deployment with autoscale on WS connections                                      | `channels_active_connections`, `channels_msg_latency_seconds`                                                 |
-| Workers                            | Celery (prefork)                            | Media normalization, agent orchestration, notifications, ingestion, destruction                                  | Queue length auto-scaling; dedicated queues per agent class                               | `celery_queue_depth`, `job_duration_seconds`, `task_retry_total`                                              |
-| Guardian                           | FastAPI                                     | PASS/WARN/BLOCK/WAIVED judgments, policy evaluation, audit history                                               | Pod HPA on latency; 99.9% SLO                                                             | `guardian_judgment_latency_seconds`, `guardian_cleared_ratio`                                                 |
-| Digital Signer                     | FastAPI                                     | PDF/A signing, OCSP/CRL/TSA validation, bundle creation                                                          | Scales with signing queues; relies on KMS/TSA connectors                                  | `signer_request_latency_seconds`, `tsa_drift_seconds`                                                         |
-| LLM Registry                       | FastAPI                                     | Provider catalog, health probes, token accounting, fallback logic                                                | Low QPS; run ≥2 replicas                                                                  | `llm_provider_health`, `llm_circuit_state`                                                                    |
-| Settings Service                   | FastAPI                                     | Hierarchical settings APIs, bundle activation, diff previews                                                     | Autoscale on QPS; Redis pub/sub for cache invalidation                                    | `settings_activation_total`, `settings_cache_hit_ratio`                                                       |
-| Localization & Policy Engine (LPE) | FastAPI + worker cron + compiler jobs       | Localization (locale/i18n packs), policy contexts (privacy/residency), court catalogs                            | Compiler pods scale on activation; lookup API horizontally replicated                     | `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`                             |
-| Reference Manager                  | FastAPI + Celery ingest workers + review UI | Source connectors (Wikipedia, court sites, vendor feeds), catalog lifecycle, questionnaires/forms administration | Ingest workers autoscale on harvest queues; reviewer workload tracked via task backlog    | `reference_manager_ingest_duration_seconds`, `reference_manager_pending_reviews`, `reference_catalog_version` |
-| Notification Service               | Celery beat + worker                        | Outbox delivery (email/SMS/in-app), receipt tracking                                                             | Scales with delivery volume; provider specific adapters                                   | `delivery_success_ratio`, `delivery_retry_total`                                                              |
-| Storage adapters                   | Sidecar / init jobs                         | Object storage integrity checks, audio normalization caching                                                     | Scoped per namespace                                                                      | `storage_hash_mismatch_total`, `object_store_latency_seconds`                                                 |
-
-- **Stack note:** Web and Channels services run on Django 5.2.x (ASGI via uvicorn + gunicorn) and Django Channels 4.1.x, both pinned in `apps/platform/requirements.txt`; SBOM gates block implicit minor upgrades.
-
-### 3.3 Deployment models (SaaS, dedicated, customer-perimeter)
-
-*Purpose: Describe supported hosting patterns, required controls, and identity integrations.*
-
-- **Multi-tenant SaaS (default):** uDocket operates shared regional clusters; org isolation relies on RLS, tenancy-aware storage, and Guardian/LPE policy enforcement. A uDocket-hosted Keycloak instance provides identity with per-org clients/realms that federate to customer IdPs via brokers.
-- **Dedicated SaaS tenant:** Regulated or high-volume customers receive an isolated Kubernetes footprint (separate cluster or namespace boundary) with dedicated storage accounts and Keycloak realm. Reference Manager’s infrastructure catalogue records the deployment ID, residency posture, and compliance attestations so LPE/Settings enforce appropriate defaults.
-- **Customer-perimeter managed:** Large firms may require the stack inside their own security perimeter. uDocket supplies hardened Helm/Terraform bundles, handles release governance, and retains read-only observability. Keycloak can run in the customer environment (synchronized via management APIs) or connect to a uDocket-managed realm through secure outbound tunnels. uDocket maintains a break-glass service account while day-to-day auth flows against the customer’s IdP.
-- **Identity considerations:** Each deployment model maps to a Keycloak realm strategy—shared SaaS realms with per-org clients, dedicated realms for isolated tenants, or customer-hosted realms federated to their IdP. Realm provisioning enforces MFA policies and audit logging aligned with Appendix H.
-- **Configuration surface:** Settings expose `infrastructure.deployment_type ∈ {saas_multi, saas_dedicated, customer_managed}` and `infrastructure.realm_id`. PolicyContext includes the deployment type so Guardian, portal, and automation respect residency, logging, and support boundaries. Infrastructure catalogue entries list optional provider stacks (HIPAA storage, FedRAMP tiers, on-prem references) curated by RM to streamline future cutovers.
-
-### 3.4 Localization & Policy Engine (LPE)
-
-*Purpose: Point to the dedicated LPE specification that governs localization, residency, and policy enforcement.*
-
-The full service charter, compiler pipeline, PolicyContext contract, integrations, APIs, observability, and rollout plan now live in `../services/lp-engine.md`. Refer to that document for normative requirements, examples, testing matrices, and migration milestones. This platform TDD cites LPE outputs (PolicyContext digests, localization packs, waiver metadata) where needed but does not duplicate their definitions.
-
-### 3.5 Reference Manager (catalog ingestion & lifecycle)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/reference_manager/`, Tests `tests/reference/`, Observability Grafana “Reference Manager – Ingestion & Quality” / “Reference Manager – Review & Publishing”. *Purpose: Point to the dedicated Reference Manager specification governing ingestion, review, publishing, and rollout.* *Contract: `../services/reference-manager.md` defines binding behaviour for source acquisition, normalization, governance, bundles, APIs, and incident response; platform services must align with that specification.* *State: RM persists harvest, staging, curated, history, and bundle registry data in Postgres and publishes signed bundles referenced by downstream services.* *Failure modes & retries: Publishing, adoption, and rollback controls are enforced per `../services/reference-manager.md`; breaches of adoption lag or validation SLAs block promotion until resolved.* *Observability: Dashboards and metrics listed in `../services/reference-manager.md §5.1` monitor harvest health, review backlog, publish cadence, and adoption lag.*
-
-All normative requirements for Reference Manager—including connectors, governance, questionnaires/forms, publishing pipeline, testing, risks, APIs, and observability—now live in `../services/reference-manager.md`. This platform TDD references that document when describing Residency enforcement (§3.8), Settings activation (§4), LPE integration (§6), and artifact attribution (§7). Key integration hooks:
-
-- RM publishes signed catalog and resource bundles consumed by LPE, Settings, Guardian, Portal, and agents. See `../services/reference-manager.md §1.3` and §4 for event flows and adoption guarantees.
-- Provider endpoint catalogues from RM populate Settings residency allowlists and power enforcement jobs described in §3.8 and `../services/reference-manager.md §4.3`.
-- Questionnaires, forms, localization packs, and attribution metadata surface in staff/portal UI and Compose/Analyze agents via deterministic identifiers maintained by RM (`../services/reference-manager.md §3.3`).
-- Incident readiness, rollback tooling, and deploy gates remain aligned with `../services/reference-manager.md §5.3`; production reviews should consult that specification before approving bundle or adapter changes.
-
-### 3.6 Data flows between services
-
-*Purpose: Describe the critical sequences that tie services together.*
-
-- **Upload → Guardian → Approval:** Web accepts uploads, stages to object storage, inserts `class=SA` artifacts (`status='STORED'`), workers derive WP/CD entries (`PROCESSING → PENDING_JUDGMENT`), Guardian issues PASS/WARN/BLOCK judgments (→ `CLEARED_FOR_USE` / `OPERATOR_PREP` / `QUARANTINED`), operators submit from `OPERATOR_PREP` (→ `APPROVAL_REQUESTED`) and queue routing moves the draft into `QUEUED_FOR_REVIEW` before any reviewer touches it (sequence in `App.A.2`).
-- **Agent pipeline:** Workers fetch inputs (audio/transcripts), execute Transcribe/Analyze/Compose stages, write artifacts + manifests, and notify Guardian & SSE. Settings snapshots travel alongside each job to guarantee reproducibility.
-- **Reference curation loop:** Reference Manager harvests, reviews, and publishes regulated catalog bundles consumed by LPE, Settings, Guardian, Portal, and agents; integration and adoption guarantees live in `../services/reference-manager.md §4`.
-- **Notification loop:** Worker pushes delivery requests to Notification Service; receipts update artifact manifests and audit events. Portal fetches approved deliverables via signed URLs with guardian-enforced readiness.
-- **Telemetry stream:** All services emit logs/metrics/traces to the Observability Fabric (Elastic/OTel stack). Guardian judgments and settings activations append to ops audit JSONL under each case.
-- **Settings change propagation:** Activations in Settings Service publish invalidation events; consuming services flush caches and rehydrate GUC policies on next request/task.
-
-### 3.7 External integrations (Azure Speech, LLM providers, TSA/OCSP)
-
-*Purpose: Catalog regulated touchpoints subject to policy and audit.*
-
-- **Azure Speech (per-org allowlisted regions):** Batch transcription via SAS URLs and on-demand streaming; operations include hashing uploads, enforcing PCM normalization, and monitoring quotas. Regional endpoints are provisioned according to `regions.allowlist.compute`.
-
-- **Speech fallback providers (processor-agnostic):** Speechmatics Canada (primary fallback) and any additional providers must expose REST APIs with parity guarantees (WER/diarization deltas within policy thresholds) and identical residency attestations. Workers consume them through the same `TranscriptionAgent` interface so jobs remain provider-agnostic.
-
-- **LLM providers:** Restricted to org-approved regions and models; selection algorithm honors `fallback_priority`/`fallback_chain` and records equivalence evidence for every switchover. Evidence store records prompts, redaction metrics, and envelope metadata per call.
-
-- **Digital trust services:** TSA and OCSP/CRL endpoints defined in settings (`sign.trust_roots[]`); signer enforces drift ≤ ±5s and caches responses ≤12h.
-
-- **Notification channels:** Email/SMS providers configured per organization; webhook adapters log request/response pairs with PII masking.
-
-- **Localization & Policy Engine (LPE):** Runtime resolver for localization and policy bundles; refer to `../services/lp-engine.md` for compilation, adoption, and API contracts.
-
-- **Reference Manager sources:** Managed per `../services/reference-manager.md §2.1`, which documents approved connectors, throttles, and evidence capture requirements.
-
-- **Optional analytics sinks:** Metrics exported to Grafana/Prometheus; FinOps dashboards consume cost metrics for monthly guardrails.
-
-- Sub-processor directory: see App.Q for approved vendors, residency posture, and DPA commitments.
-
-______________________________________________________________________
+- The full first-party service catalog, provider notes, and observability anchors live in [`../services/platform-runtime.md §4`](../services/platform-runtime.md#4-service-catalog-binding).
+- Individual service specifications (`../services/*.md`) remain authoritative for implementation details; the catalog simply collates responsibilities for onboarding and capacity planning.
 
 ### 3.8 Region allowlist enforcement & egress policies (binding)
 
@@ -621,13 +432,13 @@ ______________________________________________________________________
 - The platform threat DFD (`overview/tdd/diagrams/threat/dfd-platform-stride-v1.mmd`) applies STRIDE categories per dataflow: ingress/egress gateways, service-mesh mTLS, Guardian/Signer decision loops, and outbound provider calls. Appendix B enumerates the detailed scenarios; this subsection records the binding between the DFD and container view.
 - Container threats and mitigations:
 
-| Container / trust boundary                   | Primary dataflows & STRIDE focus                                            | Key mitigations & references                                                                                                                                                       |
-| -------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Web & Channels (staff + portal)              | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations                                                       |
-| Worker cluster (Celery)                      | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`)            | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/[Runbook RB-LOCK-006](../ops/runbooks/index.md#rb-lock-006)), FinOps guard (§8.7/§13.5)                   |
-| Guardian & Signer services                   | Artifact promotion, digital seals (`Tampering`, `Repudiation`)              | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 (judgment & waiver scope)                                                      |
-| Settings service + policy compiler           | Config activation across tenants (`Spoofing`, `Elevation of privilege`)     | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8)                                                           |
-| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`)                         | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003)) |
+| Container / trust boundary | Primary dataflows & STRIDE focus | Key mitigations & references |
+|---|---|---|
+| Web & Channels (staff + portal) | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations |
+| Worker cluster (Celery) | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`) | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/[Runbook RB-LOCK-006](../ops/runbooks/index.md#rb-lock-006)), FinOps guard (§8.7/§13.5) |
+| Guardian & Signer services | Artifact promotion, digital seals (`Tampering`, `Repudiation`) | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 (judgment & waiver scope) |
+| Settings service + policy compiler | Config activation across tenants (`Spoofing`, `Elevation of privilege`) | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8) |
+| External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`) | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003)) |
 
 - Threat reviews must reference both the container diagram and DFD; new services may not progress past **Provisional** until they document ingress/egress paths, STRIDE analysis, and mitigations in Appendix B.
 
@@ -635,352 +446,19 @@ ______________________________________________________________________
 
 ## 4) Identity, tenancy & access control
 
-### 4.1 AuthN provider (Keycloak) and realm configuration
-
-*Purpose: Define the identity backbone and token contract consumed by all services.*
-
-- Realm `uDocket` with clients `staff-ui`, `client-portal`, `service-api`, `guardian`, `signer`, `settings`, `notifications`, `llm-registry`, `reference-manager`, `lpe` (former `reference` client retained temporarily as read-only shim until the migration window in `../services/lp-engine.md §8.4`).
-- Roles split into realm (`sysadmin`, `auditor`) and organization scope (`org_admin`, `org_manager`, `org_operator`, `org_reviewer`, `org_external_counsel`, `org_client`).
-- Tokens include `org_ids[]`, `active_org_id`, `active_org_roles[]`, optional `org_directory[]`. Middleware rejects any request where `active_org_id ∉ org_ids[]`.
-- Access tokens ≤15 minutes, refresh tokens 12h (staff) / 2h (portal); offline tokens disabled unless security approves exceptions. Step-up MFA signaled via OIDC `acr` claim for sensitive endpoints.
-- Login flow for org switching triggers re-authentication to mint new tokens bound to the selected organization—no custom headers for impersonation allowed.
-- High availability: Keycloak runs as an active-active cluster across at least two zones per permitted region with Galera-backed MariaDB or Aurora Postgres, sticky session disabled. Ingress health probing and Envoy failover drain unhealthy pods. Backup realm exports run hourly; disaster recovery rehydrates a warm standby in the paired region identified in `regions.allowlist.compute`.
-- IdP federation: organizations can register external IdPs (Azure Entra ID, Okta, Ping, ADFS) through Keycloak identity brokering. Each federation mapping undergoes automated policy linting (MFA enforcement, group-to-role mapping) before activation. Tokens always originate from Keycloak, so revocation/audit remain centralized even when primary credential verification happens upstream.
-- Emergency access: if an external IdP fails, operators flip the org to Keycloak-native credentials via a feature flag (`identity.org.{org_id}.primary_idp=keycloak`) with dual approval. Runbook `../ops/runbooks/index.md (RB-IDP-FAILOVER)` covers rollback. Conversely, if the Keycloak control plane is degraded, traffic fails over to the warm standby while orgs using external IdPs continue authenticating directly with their provider, minimizing downtime.
-- Federation flows: Keycloak brokers both OIDC (`authorization_code+PKCE`, signed JWT access tokens, enforced `acr` claims) and SAML 2.0 integrations. Each org-specific IdP registration supplies metadata (JWKS endpoint or SAML metadata URL), required MFA assurance levels, group-to-role mappers, and SCIM provisioning endpoints. SCIM sync (see §14.6) keeps org membership aligned; onboarding rejects providers that cannot assert MFA or pass signed-response validation. All tokens ultimately originate from Keycloak so audit, revocation, and Guardian controls remain centralized.
-
-### 4.2 Org/case membership model and RBAC lattice
-
-*Purpose: Explain how authorization decisions resolve across org and case scopes.*
-
-- `organization` table is the root tenant; `case` rows reference `org_id`. Users gain visibility through Keycloak Organizations; the platform mirrors minimal metadata for labels.
-- `case_member(user_id, case_id, role)` narrows access within an organization; default operator scope is “own cases.” Org settings can widen to “all org cases” with policy approval.
-- Effective permissions compile from Settings bundles into `effective_permission` (resource/action/role/field). `udocket_can(...)` function enforces deny-by-default, with only `sysadmin` realm role as hardcoded bypass.
-- Policies drive field-level allowances (`field_mask_rule`) and exclusivity (e.g., artifact types). Settings activation pipeline validates coverage before publishing changes.
-
-### 4.3 Session management & token binding
-
-*Purpose: Prevent token misuse and session fixation across services and clients.*
-
-- Middleware sets per-request context (`active_org_id`, `active_user`, roles) and stores them via `set_config(..., true)` to bind DB sessions. Missing context triggers 403 with `RLS_CONTEXT_MISSING`.
-- Access tokens bind to device fingerprint hashes; switching orgs invalidates active SSE/WebSocket connections to prevent cross-org leakage.
-- Device fingerprint derivation (binding): `ua_hash = sha256(lower(user-agent))`, IP normalized (`IPv4 /24`, `IPv6 /48`), `device_fp = sha256(f\"{ua_hash}:{ip_prefix}\")`; tokens carry `device_fp` claim and mismatches trigger re-auth/step-up flows.
-- Org settings `security.session.device_bind.ip_prefix_len_v4|ip_prefix_len_v6` control those prefix lengths (defaults `/24` and `/48`); mobile-heavy orgs may widen prefixes to reduce unnecessary prompts while retaining auditability. `security.session.device_bind.mode` selects `\"soft\"` (default) or `\"hard\"`: soft mode logs mismatches as `DEVICE_FP_MISMATCH_SOFT` audit events and prompts step-up only after three events within 24h, while hard mode terminates sessions immediately with `code=\"AUTH_ERROR\"`, records `DEVICE_FP_MISMATCH_HARD`, and requires privileged WebAuthn re-auth before retry. Behind trusted corporate NATs or CDN proxies the IP prefix remains a soft signal, and ingress trusts `X-Forwarded-For` only from mesh-managed gateway CIDRs declared in `security.session.trusted_proxy_cidrs[]`.
-- Refresh tokens are device-bound when enabled per org policy; defaults disable long-lived offline tokens except where Security approves exceptions.
-- Break-glass endpoints require step-up MFA at activation **and** closure, justification, and explicit expiry (configurable 5-60 minutes); generated `BreakGlassEvent` entries follow `spec/schemas/break_glass_event.schema.json` (`{schema_version:'break_glass_event@1.0', event_id, actor_id, approvers[], justification, opened_at, expires_at, closed_at?, retrospective_artifact_id?}`) and include approver IDs. Weekly job `ops/security/audit_break_glass.py` verifies every open/closed event is linked to a retrospective artifact; failures block the deployment pipeline and raise `break_glass_event_missing_retrospective_total` alerts.
-- Org switch to higher privileges defaults to requiring step-up MFA (`security.org_switch.step_up_required=true`), overridable only with documented risk acceptance.
-- HIPAA mode extends step-up MFA by enforcing WebAuthn for privileged roles (`security.mfa.webauthn_required_roles`) before approvals or portal deliveries touching HIPAA-classed artifacts.
-
-### 4.4 Database RLS and GUC enforcement
-
-*Purpose: Describe how data-layer access rules enforce the same contract as the API tier.*
-
-- All tenant tables carry `org_id`; Postgres RLS policies require per-connection GUCs (`udocket.active_org`, `active_user`, `active_roles`, `realm_roles`, `operator_scope`).
-
-- Helper functions (`udocket_has_realm_role`, `udocket_is_case_member`, `udocket_can`) centralize policy evaluation. Any query without GUC setup is denied; the `/healthz/pgbouncer-mode` probe confirms PgBouncer stays in approved `transaction` or `session` pooling modes (statement pooling remains blocked) so per-request GUCs remain intact.
-
-- Runtime guard (binding): every connection must satisfy `rls_context_ok()` immediately after checkout. Web middleware and Celery task bootstrap call `SELECT rls_context_assert();` which wraps `rls_context_ok()` and raises when `active_org`, `active_user`, `active_roles`, `realm_roles`, `operator_scope`, or `search_path` are unset or contain unexpected values. Violations emit a structured log with code `RLS_CONTEXT_MISSING`, record the offending connection id, and hard-fail the request with HTTP 500. The guard also confirms `current_setting('search_path') = 'pg_catalog, public'::text` to prevent implicit table access.
-
-- Secure views (`*_secure`) act as the only read surfaces; application role lacks direct SELECT on base tables. CI lints ensure ORM queries reference views, and production deployments rely on compiled helper tables (e.g., `field_mask_rule_effective`) to avoid per-row subqueries inside those views.
-
-- CI guardrails (binding): `pytest -k test_secure_view_usage` runs a static query-inspection test that fails if any Django queryset or raw SQL in `apps/platform` references base tables instead of `*_secure` views. The lint feeds the release gate and prevents regressions when new endpoints are added.
-
-- Advisory locks (`udlock` schema) encapsulate concurrency primitives with heartbeat registries and GC routines.
-
-#### 4.4.1 Masking profile mapping (binding)
-
-**Breadcrumbs:** Implementation `db/migrations/tenant/002_masking_profile_policies.sql`, Tests `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, Observability Grafana “Postgres RLS & Masking” with alert `rls_context_missing_total`.
-
-*Purpose: Map PolicyContext masking profiles onto database enforcement artifacts.*
-
-- Masking profiles in `PolicyContext` (see `../services/lp-engine.md §2.1`) compile into `field_mask_rule` rows that parameterize the SQL policies below. Activation fails if any required profile lacks entries for `CASE`, `ARTIFACT`, `QA_LOG`, `GUARDIAN_JUDGMENT`, or `DELIVERY_RECEIPT`.
-
-- Normative enforcement DDL (excerpt; see Appendix J for full catalog):
-
-  ```sql
-  ALTER TABLE "case"                  FORCE ROW LEVEL SECURITY;
-  ALTER TABLE artifact                FORCE ROW LEVEL SECURITY;
-  ALTER TABLE qa_log                  FORCE ROW LEVEL SECURITY;
-  ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
-
-  CREATE POLICY case_visibility ON "case"
-  USING (
-    org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-    AND udocket_can('CASE', 'read', "case".id, NULL, NULL)
-  )
-  WITH CHECK (
-    org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-    AND udocket_can('CASE', 'write', "case".id, NULL, NULL)
-  );
-  ```
-
-- Masked columns rely on `udocket_mask`/`udocket_mask_json`; the compiler injects `field_mask_rule` rows such as `('{org_uuid}', 'default', 'ARTIFACT', 'content_uri', 'REDACT', ARRAY['reviewer', 'auditor'])` and `('{org_uuid}', 'hipaa_strict', 'QA_LOG', 'notes_md', 'HASH', ARRAY['auditor'])`. Test `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy` verifies each profile masks the expected columns, while `tests/platform/db/test_rls_guard.py` and `tests/platform/db/test_secure_view_usage.py` assert that FORCE RLS remains active and base tables stay inaccessible.
-
-- Normative SQL (binding):
-
-```sql
--- Policy tables (compiled by Settings activation job)
--- effective_permission(org_id, resource, action, role, field NULLABLE)
--- field_mask_rule(org_id, profile, resource, field, mask, allowed_roles text[])
-
--- Central allow function (deny-by-default; sysadmin bypass)
-CREATE OR REPLACE FUNCTION udocket_can(
-  p_resource text,
-  p_action   text,
-  p_case     uuid,
-  p_artifact uuid,
-  p_field    text DEFAULT NULL
-)
-RETURNS boolean
-LANGUAGE plpgsql STABLE AS $$
-DECLARE v_org   uuid := NULLIF(current_setting('udocket.active_org',   true), '')::uuid;
-DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true), '');
-DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true), 'own_cases');
-DECLARE r text;
-BEGIN
-  IF udocket_has_realm_role('sysadmin') THEN RETURN true; END IF;
-  IF v_org IS NULL THEN RETURN false; END IF;
-
-  -- Enforce operator scope: when scoped to own_cases and a case is in play,
-  -- deny if caller is not a member (realm sysadmin already handled above)
-  IF p_case IS NOT NULL AND v_scope <> 'all_org_cases' THEN
-    IF NOT udocket_is_case_member(p_case) THEN
-      RETURN false;
-    END IF;
-  END IF;
-
-  FOR r IN SELECT regexp_split_to_table(v_roles, ',') LOOP
-    IF EXISTS (
-      SELECT 1
-        FROM effective_permission ep
-       WHERE ep.org_id = v_org
-         AND ep.resource = p_resource
-         AND ep.action   = p_action
-         AND ep.role     = r
-         AND (
-              (ep.field IS NULL AND p_field IS NULL)
-           OR (ep.field IS NOT NULL AND ep.field = p_field)
-         )
-    ) THEN
-      RETURN true;
-    END IF;
-  END LOOP;
-  RETURN false;
-END $$;
-
--- RLS policies rewritten to use settings-driven `udocket_can`
-DROP POLICY IF EXISTS case_visibility ON "case";
-CREATE POLICY case_visibility ON "case"
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND udocket_can('CASE', 'read', "case".id, NULL, NULL)
-)
-WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND udocket_can('CASE', 'write', "case".id, NULL, NULL)
-);
-
-DROP POLICY IF EXISTS artifact_visibility ON artifact;
-CREATE POLICY artifact_visibility ON artifact
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = artifact.case_id)
-  AND udocket_can('ARTIFACT', 'read', artifact.case_id, artifact.id, NULL)
-)
-WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND udocket_can('ARTIFACT', 'write', artifact.case_id, artifact.id, NULL)
-);
-
-DROP POLICY IF EXISTS job_vis ON job;
-CREATE POLICY job_vis ON job
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = job.case_id)
-  AND udocket_can('JOB', 'read', job.case_id, NULL, NULL)
-)
-WITH CHECK (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND udocket_can('JOB', 'write', job.case_id, NULL, NULL)
-);
-
-DROP POLICY IF EXISTS qa_vis ON qa_log;
-CREATE POLICY qa_vis ON qa_log
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND EXISTS (SELECT 1 FROM "case" c WHERE c.id = qa_log.case_id)
-  AND udocket_can('QA_LOG', 'read', qa_log.case_id, NULL, NULL)
-);
-
-
-DROP POLICY IF EXISTS delivery_vis ON delivery_receipt;
-CREATE POLICY delivery_vis ON delivery_receipt
-USING (
-  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
-  AND EXISTS (
-    SELECT 1
-      FROM artifact a
-      JOIN "case" c ON c.id = a.case_id
-     WHERE a.id = delivery_receipt.artifact_id
-       AND udocket_can('DELIVERY_RECEIPT', 'read', c.id, a.id, NULL)
-  )
-);
-
--- Enforce RLS even for table owners (unchanged)
-ALTER TABLE "case"                  FORCE ROW LEVEL SECURITY;
-ALTER TABLE artifact                FORCE ROW LEVEL SECURITY;
-ALTER TABLE job                     FORCE ROW LEVEL SECURITY;
-ALTER TABLE qa_log                  FORCE ROW LEVEL SECURITY;
-ALTER TABLE delivery_receipt        FORCE ROW LEVEL SECURITY;
-```
-
-| Binding                      | Implementation                                                                            | Test                                                                               | Observability                                                                     |
-| ---------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `rls_context_assert()` guard | Implementation: `apps/platform/db/guards.py::assert_rls_context`                          | Test: `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | Grafana “DB Session Guards” panel — metric `rls_context_missing_total`            |
-| Secure-view only access      | Implementation: `scripts/staticlint/enforce_secure_views.py` (invoked via `make lint-db`) | Test: `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`    | Buildkite Release job output (`lint-db` step) for policy validation observability |
-
-- Guardian table secure views, RLS bindings, and partition rotation requirements are maintained within the service; this section keeps the shared database contract concise.
-
-- Session hardening (binding):
-
-  - `SET LOCAL search_path = pg_catalog, public;` (prevent implicit resolution)
-  - `SET LOCAL statement_timeout = '30s';`
-  - `SET LOCAL idle_in_transaction_session_timeout = '15s';`
-  - `SET LOCAL lock_timeout = '5s';`
-  - `SET LOCAL deadlock_timeout = '200ms';`
-  - Enforce `ALTER DEFAULT PRIVILEGES` for the application role to prevent accidental base table grants.
-
-- Priority: High (security gating and policy determinism)
-
-- RLS and masking policies enforced even for table owners via `ALTER TABLE ... FORCE ROW LEVEL SECURITY`, ensuring administrative sessions respect policies.
-
-- Operational canaries verify GUC presence and pooling mode; see `App.J` for SQL snippets (`rls_context_ok` check, boot probe, search_path/timeout guard).
-
-### 4.5 Field-level masking, auditing, and break-glass procedures
-
-*Purpose: Explain the masking controls, audit logging, and emergency procedures for sensitive data.*
-
-- `udocket_mask` / `udocket_mask_json` apply redaction, hashing, or nulling per `field_mask_rule`; JSON fields accept only REDACT/NULL so the compiler cannot emit unsupported modes.
-- Masked secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, etc.) are the only read surfaces granted to the application role. Sysadmin remains the sole bypass for investigations, and break-glass events are dual-approved and watermarked.
-- Audit trail essentials: `audit_event` logs every significant read/write; `entitlement_snapshot` records token issuance with device fingerprints; `guardian_span_detection` stores PHI/PII evidence under RLS.
-- Break-glass usage logs justification, duration, reviewer acknowledgement, and triggers watchdogs that terminate sessions on expiry. Post-event review queues ensure accountability.
-- Structured logs (case/job correlated) and anomaly detectors watch for unusual read patterns or mass token reveals; alerts map to Guardian Appendix B runbooks (RB-GUARD-\*) and RB-MASK (`../ops/runbooks/index.md`).
-
-#### 4.5.1 Transformation modes & operator view (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/masking/profiles.py::render_transformation_modes`, Tests `tests/security/test_masking_profiles.py::test_mode_rendering`, Observability Grafana “Masking Vault & Profiles” dashboard.
-
-*Purpose: Define masking modes, operator experience, and deliverable implications.*
-
-| Mode                                    | When to use                                                             | Operator view                                            | Deliverable                   |
-| --------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------- |
-| **Redaction** (irreversible)            | Value must never be stored or restored (for example, API credentials).  | `████` or `REDACTED`.                                    | Remains redacted permanently. |
-| **Pseudonymization** (reversible token) | Value needed for analytics/ops but must stay masked during preparation. | Deterministic alias such as `[NAME-1]`, `SSN{•-•-1234}`. | Restored when policy allows.  |
-| **Format-Preserving Encryption (FPE)**  | Structured identifiers requiring valid shape (SSN, MRN, phone).         | Appears syntactically valid, e.g., `***-**-1A92`.        | Restored when policy allows.  |
-
-- Masking metadata captures `{span_id, mode, token_id?, vault_namespace, policy, restorable}` and is stored alongside Guardian detections (§7.1.0) using `uuidv7` identifiers.
-- Operators and reviewers receive masked drafts by default; restoration requires explicit policy intents (§4.5.4) or a break-glass workflow.
-- Organization policies decide the default mode per entity type. Profiles ship with HIPAA-safe defaults; Reference Manager entries add jurisdiction-specific overrides.
-
-#### 4.5.2 Token vault & reversible masking (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/masking/vault.py`, Tests `tests/security/test_fpe_tokenization.py::test_round_trip`, Observability Grafana “Masking Vault & Profiles” with metric `masking_vault_token_total`.
-
-*Purpose: Describe token vault design, cryptography, and access controls.*
-
-- Design: replace sensitive spans with deterministic tokens stored in an isolated Token Vault. Namespaces segment by `{org}:{case}` to prevent cross-case collisions.
-- Envelope encryption: each record stores `{token, hash(original|salt), entity_type, format_meta, created_at, created_by, uses[]}`. A per-record DEK encrypts the plaintext; the DEK is wrapped by a KEK in Managed HSM (FIPS mode). Rotation evidence lives in `ops/security/masking_key_rotation/<timestamp>.json`.
-- Determinism: repeated occurrences derive the same token within a namespace. Salts rotate with KEK rotation and are versioned so replay jobs remain deterministic.
-- Access controls: only Compose/Signing services and a tightly scoped “reveal” flow may detokenize. Break-glass requires dual approval, emits `TOKEN_REVEAL_REQUEST` artifacts, and watermarks the reviewer session. Operators never receive detokenize privileges without explicit policy + waiver.
-- Settings: `security.masking.vault_profile ∈ {fpe_v1, aes_gcm_v1}` selects the algorithm (FF3-1 for identifiers, AES-256-GCM for free-form values). `security.masking.vault_key_id` references the active KEK; rotations follow dual-publish (`current`, `next`) with 24-hour overlap.
-- Observability: manifests include `{masking_profile_id, token_vault_version, masking_hash_algorithm, fips_mode, fips_module_cert_id}`. Vault events append to `ops/security/masking_vault.jsonl`; metrics (`masking_vault_token_total`, `masking_vault_reveal_total`, `masking_vault_latency_seconds`) back dashboards.
-- Quality gates: `tests/security/test_fpe_tokenization.py` verifies format preservation; `tests/security/test_masking_restore_flow.py` enforces approval semantics; synthetic `synthetics/masking_vault_health.yaml` checks HSM availability, determinism, and attestation.
-
-#### 4.5.3 Masking rule catalogue (normative)
-
-*Purpose: Catalog masking rules for common data types and how policies apply them.*
-
-- **Names:** `[PATIENT-#]`, `[PROVIDER-#]` with case-wide stable numbering derived from span UUID.
-- **Addresses:** `[ADDR-#]`; policy may keep city/state/ZIP visible, masking street-level detail.
-- **Emails / phones:** FPE with final characters visible (`•••••@example.com`, `(***) ***-1234`); `format_meta` retains domain/country metadata.
-- **Identifiers (SSN/MRN/Insurance):** FF1/FF3 FPE with domain constraints; expose last four digits when policy allows.
-- **Dates:** generalized to month/year unless restoration intent is declared.
-- **Free text PHI/SPI:** segmented spans replaced with tokens; token records accumulate `uses[]` entries for each artifact/job referencing them.
-
-#### 4.5.4 Restoration & deliverable policy (binding)
-
-**Breadcrumbs:** Implementation `packages/udocket_core/masking/restoration.py`, Tests `tests/platform/compose/test_restoration_policy.py::test_restoration_requires_policy_intent`, Observability Grafana “Compose Restoration & Vault” with alert `token_reveal_total`.
-
-*Purpose: Specify restoration scenarios and deliverable policies governed by masking intents.*
-
-- Compose requests `POST /vault/detokenize` with `{object_urn, token_ids[], purpose ∈ {CLIENT_DL, LEGAL_DL, INTERNAL}}` once a CD reaches APPROVED and policy requires restoration. Vault enforces purpose-based allowlists and expiry windows.
-- Policy intents (for example, `privacy.masking.intent = deidentified` vs `full_record`) decide which entity types restore. “De-identify client copy” keeps tokens; “Full legal record” restores identifiers required for filings.
-- Restoration responses stream plaintext spans directly to Compose; plaintext never hits logs. Deliverables embed an auxiliary record summarizing `{token_count, masking_profile_id, vault_namespace, restored_types[], policy_intent, hsm_key_id}`.
-- Manual/Agent edit flows create new CD versions with inherited tokens; restoration repeats only after Guardian clears the edited version, preserving deterministic lineage.
-
-#### 4.5.5 Masking helpers & enforcement (normative)
-
-*Purpose: Provide helper functions and enforcement patterns that implement masking.*
-
-Masking helpers (normative)
-
-```sql
-CREATE OR REPLACE FUNCTION udocket_mask(value text, mask text)
-RETURNS text LANGUAGE plpgsql STABLE AS $$
-BEGIN
-  CASE mask
-    WHEN 'REDACT' THEN RETURN '[REDACTED]';
-    WHEN 'HASH' THEN RETURN encode(digest(coalesce(value, ''), 'sha256'), 'hex');
-    WHEN 'NULL' THEN RETURN NULL;
-    ELSE RAISE EXCEPTION 'Invalid mask %', mask;
-  END CASE;
-END $$;
-
-CREATE OR REPLACE FUNCTION udocket_mask_json(value jsonb, mask text)
-RETURNS jsonb LANGUAGE plpgsql STABLE AS $$
-BEGIN
-  CASE mask
-    WHEN 'REDACT' THEN RETURN '"[REDACTED]"'::jsonb;
-    WHEN 'NULL' THEN RETURN 'null'::jsonb;
-    ELSE RAISE EXCEPTION 'Invalid JSON mask %', mask;
-  END CASE;
-END $$;
-```
-
-Secure view example (security barrier)
-
-```sql
-CREATE VIEW artifact_secure WITH (security_barrier=true) AS
-SELECT id, org_id, case_id, type, status, content_sha256,
-       CASE
-         WHEN udocket_can('ARTIFACT', 'read', artifact.case_id, artifact.id, 'content_uri') THEN content_uri
-         ELSE udocket_mask(
-                content_uri,
-                COALESCE(
-                  (
-                    SELECT r.mask
-                      FROM field_mask_rule r
-                     WHERE r.org_id = artifact.org_id
-                       AND r.profile = COALESCE(
-                             NULLIF(current_setting('udocket.mask_profile', true), ''),
-                             'default'
-                           )
-                       AND r.resource = 'ARTIFACT'
-                       AND r.field = 'content_uri'
-                     LIMIT 1
-                  ),
-                  'REDACT'
-                )
-              )
-       END AS content_uri,
-       manifest
-  FROM artifact;
-```
-
-- `artifact` stores tombstone metadata columns (`deleted_at`, `deleted_by`, `deletion_trigger`, `deletion_certificate_id`, `deletion_request_id`, `erasure_journal_id`, `retention_schedule_version`, `deletion_manifest_sha256`, `tombstone_pruned_at`). Populating them is mandatory whenever `status IN ('ARCHIVED', 'DELETED')`; retention automation records its service principal in `deleted_by`.
-- Settings activation maintains `CREATE INDEX field_mask_rule_org_profile_resource_field ON field_mask_rule(org_id, profile, resource, field)` and precomputes effective allowlists into helper tables so hot paths avoid repeated subqueries; helpers refresh atomically with each activation.
-- Lint guard: `scripts/db/lint_status_column.py` scans generated DDL and ORM migrations to block accidental reintroduction of a `state` column name; CI job `lint-db-state-column` fails on violations and points to §5.2 for the canonical `status` vocabulary.
-- Vault tables mirror database RLS policies and honor the active masking profile; quarterly audits replay detokenization requests to confirm least-privilege enforcement.
+**Purpose:** Highlight platform integration points with the identity stack without repeating the full policy surface.
+**Contract:** The binding identity, authorization, masking, and break-glass details now live in [`../services/identity.md`](../services/identity.md); this section summarises the dependencies other components must observe. **|**
+**State:** Tokens, org/case membership, masking profiles, secure views, and break-glass events remain governed by the identity spec. **|**
+**Failures & handling:** IdP failover, RLS GUC gaps, masking violations, and device-binding issues follow the runbooks catalogued there. **|**
+**Observability:** Dashboards and metrics (`identity.md §8`) provide the authoritative signals; other services consume them via shared telemetry. **|**
+**Breadcrumbs:** Identity spec, Settings (`security.*`, `identity.*`), Worker cluster watchdogs, Guardian policy integrations. **|**
+
+### 4.1 Integration highlights (informative)
+
+- Services rely on Keycloak-issued tokens (`active_org_id`, `active_org_roles[]`) and must reject requests lacking those claims.
+- API layers set and assert the database GUCs defined in the identity spec before issuing queries (`udocket.active_org`, `udocket.active_user`, `udocket.active_roles`, etc.).
+- SSE/Channels enforce device binding and org scoping; token mismatches trigger the identity watchdogs (`device_fp_mismatch_total`).
+- Masking and break-glass governance flow through the secure views and masking profiles described in the identity spec; consumers log `MASKING_EVENT`/`BREAK_GLASS_EVENT` for provenance.
 
 ## 5) Artifact data layer & storage integrity
 
@@ -1031,8 +509,8 @@ SELECT id, org_id, case_id, type, status, content_sha256,
 
 - Binding breadcrumbs:
 
-  | Binding                       | Implementation                                                                          | Test                                                                                   | Observability                                                                                     |
-  | ----------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+  | Binding | Implementation | Test | Observability |
+  |---|---|---|---|
   | Artifact immutability trigger | Implementation: `apps/platform/artifacts/migrations/0024_artifact_immutable_trigger.py` | Test: `tests/platform/artifacts/test_immutability.py::test_update_blocked_after_draft` | Observability: Audit event `ARTIFACT_IMMUTABILITY_VIOLATION` (Alert: “Artifact Immutable Breach”) |
 
 ### 5.2 Artifact lifecycle (authoritative)
@@ -1074,13 +552,13 @@ Work Product that reaches `CLEARED_FOR_USE` becomes selectable input for Analyze
 
 *Purpose: Classify artifact types and clarify their lifecycle boundaries.*
 
-| Class                     | Key    | Purpose                                                                | Examples                                                                                                | Visibility          |
-| ------------------------- | ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------- |
-| **Source Asset**          | **SA** | Raw inputs we ingest. Immutable post-write.                            | Uploaded audio/video, PDFs, exhibits, notes                                                             | Staff (scoped)      |
-| **Work Product**          | **WP** | Internal derived data used to build deliverables; never client-facing. | Issues/timeline/entities/facts/gaps (JSON), interim LLM outputs, scores                                 | Staff only          |
-| **Candidate Deliverable** | **CD** | Human-readable draft intended for potential external release.          | Transcript draft, client summary draft, composed report draft                                           | Staff reviewers/ops |
-| **Deliverable**           | **DL** | Approved, signed, releasable document (client-visible).                | Transcript (final), client summary (final), bundle, signed report                                       | Staff + client      |
-| **Auxiliary Record**      | **AR** | Proofs/receipts/logs backing compliance.                               | Audit events, waiver records, hash manifests, job cancellation reports, TSA tokens, signature envelopes | Auditors/admin      |
+| Class | Key | Purpose | Examples | Visibility |
+|---|---|---|---|---|
+| **Source Asset** | **SA** | Raw inputs we ingest. Immutable post-write. | Uploaded audio/video, PDFs, exhibits, notes | Staff (scoped) |
+| **Work Product** | **WP** | Internal derived data used to build deliverables; never client-facing. | Issues/timeline/entities/facts/gaps (JSON), interim LLM outputs, scores | Staff only |
+| **Candidate Deliverable** | **CD** | Human-readable draft intended for potential external release. | Transcript draft, client summary draft, composed report draft | Staff reviewers/ops |
+| **Deliverable** | **DL** | Approved, signed, releasable document (client-visible). | Transcript (final), client summary (final), bundle, signed report | Staff + client |
+| **Auxiliary Record** | **AR** | Proofs/receipts/logs backing compliance. | Audit events, waiver records, hash manifests, job cancellation reports, TSA tokens, signature envelopes | Auditors/admin |
 
 Separation of concerns: **WP** stays internal, **CD** is the curated draft surface operators work in, **DL** is the only client-visible output, and **AR** carries the attestations that prove what happened.
 
@@ -1090,24 +568,24 @@ Separation of concerns: **WP** stays internal, **CD** is the curated draft surfa
 
 Status is scoped by object class and standardizes lifecycle semantics.
 
-| Status                 | Applies to     | Meaning                                                                           | Entered by            | Leaves when                                                                            |
-| ---------------------- | -------------- | --------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------- |
-| **STORED**             | SA             | Source durably persisted and hashed.                                              | System                | Pipeline starts → **PROCESSING**                                                       |
-| **PROCESSING**         | WP, CD         | System is generating/transforming.                                                | System                | Work done → **PENDING_JUDGMENT** or **FAILED**                                         |
-| **FAILED**             | WP, CD         | System error/missing dependency.                                                  | System                | Retry/repair → **PROCESSING**                                                          |
-| **PENDING_JUDGMENT**   | WP, CD         | Awaiting review judgment.                                                         | System                | Guardian decides (see §5.2.3)                                                          |
-| **CLEARED_FOR_USE**    | WP             | PASS/WARN unlocks internal use; downstream agents may spawn new CDs/deliverables. | Guardian              | Consumed downstream or replaced                                                        |
-| **OPERATOR_PREP**      | CD             | PASS/WARN, operator workspace to curate/edit.                                     | Guardian              | Operator requests review → **APPROVAL_REQUESTED**                                      |
-| **APPROVAL_REQUESTED** | CD             | Operator submitted for review; awaiting queue assignment/triage.                  | Operator/System\*     | Reviewer accepts assignment → **QUEUED_FOR_REVIEW**                                    |
-| **QUEUED_FOR_REVIEW**  | CD             | Reviewer actively evaluating the draft.                                           | System                | Reviewer acts (see §5.2.4)                                                             |
-| **CHANGES_REQUESTED**  | CD             | Reviewer rejected with edit instructions.                                         | Reviewer              | New CD version → **OPERATOR_PREP** (then **APPROVAL_REQUESTED**/**QUEUED_FOR_REVIEW**) |
-| **QUARANTINED**        | WP, CD         | Policy violation.                                                                 | Guardian/Reviewer     | Waiver or remediation → **OPERATOR_PREP**/**CLEARED_FOR_USE**                          |
-| **APPROVED**           | CD             | Human-approved draft (or auto-approved).                                          | Reviewer/System\*     | Signing → **SIGNED**                                                                   |
-| **SIGNED**             | DL             | uDocket-signed, TSA timestamped.                                                  | Signer                | Published → **RELEASED**                                                               |
-| **RELEASED**           | DL             | Visible/downloadable in portal.                                                   | System                | Replacement policy (see §5.2.6)                                                        |
-| **REVOKED**            | DL             | Pullback due to approval swap, policy error, or compliance request.               | System/Admin/Guardian | Retained, non-downloadable; archived via retention                                     |
-| **ARCHIVED**           | SA/WP/CD/DL    | Frozen under retention; content retained under legal/ops hold.                    | System                | Retention clock expires or approved erasure → **DELETED**                              |
-| **DELETED**            | SA/WP/CD/DL/AR | Content removed; only tombstone + audit metadata remain.                          | System                | Retention evidence window closes → purged tombstone (§14.2)                            |
+| Status | Applies to | Meaning | Entered by | Leaves when |
+|---|---|---|---|---|
+| **STORED** | SA | Source durably persisted and hashed. | System | Pipeline starts → **PROCESSING** |
+| **PROCESSING** | WP, CD | System is generating/transforming. | System | Work done → **PENDING_JUDGMENT** or **FAILED** |
+| **FAILED** | WP, CD | System error/missing dependency. | System | Retry/repair → **PROCESSING** |
+| **PENDING_JUDGMENT** | WP, CD | Awaiting review judgment. | System | Guardian decides (see §5.2.3) |
+| **CLEARED_FOR_USE** | WP | PASS/WARN unlocks internal use; downstream agents may spawn new CDs/deliverables. | Guardian | Consumed downstream or replaced |
+| **OPERATOR_PREP** | CD | PASS/WARN, operator workspace to curate/edit. | Guardian | Operator requests review → **APPROVAL_REQUESTED** |
+| **APPROVAL_REQUESTED** | CD | Operator submitted for review; awaiting queue assignment/triage. | Operator/System\* | Reviewer accepts assignment → **QUEUED_FOR_REVIEW** |
+| **QUEUED_FOR_REVIEW** | CD | Reviewer actively evaluating the draft. | System | Reviewer acts (see §5.2.4) |
+| **CHANGES_REQUESTED** | CD | Reviewer rejected with edit instructions. | Reviewer | New CD version → **OPERATOR_PREP** (then **APPROVAL_REQUESTED**/**QUEUED_FOR_REVIEW**) |
+| **QUARANTINED** | WP, CD | Policy violation. | Guardian/Reviewer | Waiver or remediation → **OPERATOR_PREP**/**CLEARED_FOR_USE** |
+| **APPROVED** | CD | Human-approved draft (or auto-approved). | Reviewer/System\* | Signing → **SIGNED** |
+| **SIGNED** | DL | uDocket-signed, TSA timestamped. | Signer | Published → **RELEASED** |
+| **RELEASED** | DL | Visible/downloadable in portal. | System | Replacement policy (see §5.2.6) |
+| **REVOKED** | DL | Pullback due to approval swap, policy error, or compliance request. | System/Admin/Guardian | Retained, non-downloadable; archived via retention |
+| **ARCHIVED** | SA/WP/CD/DL | Frozen under retention; content retained under legal/ops hold. | System | Retention clock expires or approved erasure → **DELETED** |
+| **DELETED** | SA/WP/CD/DL/AR | Content removed; only tombstone + audit metadata remain. | System | Retention evidence window closes → purged tombstone (§14.2) |
 
 Transitions into **ARCHIVED** or **DELETED** are mediated by the retention/erasure gate captured in App.A.2. The gate only opens when legal holds are clear *and* one of two triggers fires: (a) retention scheduler reaches the configured destruction window, or (b) a certified client erasure request is approved. Every call path MUST populate tombstone metadata before committing the status change:
 
@@ -1178,12 +656,12 @@ review.risk_overrides:
 
 Guardian judgments always run **before** these modes and gate whether operators can access the artifact. `review.mode` defaults to `MANUAL` per organization (case overrides allowed) and determines the deterministic state transitions after a PASS/WARN judgment:
 
-| Mode                   | After Guardian PASS/WARN                                             | Next transitions                                                                         |
-| ---------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| **MANUAL**             | **OPERATOR_PREP**                                                    | Operator requests review → **APPROVAL_REQUESTED → QUEUED_FOR_REVIEW** → reviewer outcome |
-| **SKIP_OPERATOR_PREP** | **QUEUED_FOR_REVIEW**                                                | Reviewer outcome (**APPROVED** / **CHANGES_REQUESTED** / **QUARANTINED**)                |
-| **SKIP_REVIEW**        | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED**                                                         |
-| **SKIP_ALL**           | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED**                                                         |
+| Mode | After Guardian PASS/WARN | Next transitions |
+|---|---|---|
+| **MANUAL** | **OPERATOR_PREP** | Operator requests review → **APPROVAL_REQUESTED → QUEUED_FOR_REVIEW** → reviewer outcome |
+| **SKIP_OPERATOR_PREP** | **QUEUED_FOR_REVIEW** | Reviewer outcome (**APPROVED** / **CHANGES_REQUESTED** / **QUARANTINED**) |
+| **SKIP_REVIEW** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
+| **SKIP_ALL** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
 
 PASS/WARN transitions follow the table above: WP always enters **CLEARED_FOR_USE** while CD jumps to the next state dictated by `review.mode` (OPERATOR_PREP, QUEUED_FOR_REVIEW, or APPROVED).
 
@@ -1210,17 +688,17 @@ Exclusive deliverables use **approval swap** semantics:
 - Optional client counter-signatures produce linked **AR** records.
 - Policy & controls matrix (excerpt):
 
-| Control                   |         SA |            WP |                            CD |                       DL |                         AR |
-| ------------------------- | ---------: | ------------: | ----------------------------: | -----------------------: | -------------------------: |
-| SHA-256 on create         |          ✓ |             ✓ |                             ✓ |                        ✓ |                          ✓ |
-| Content-addressed storage |          ✓ |             ✓ |                             ✓ |                        ✓ |                          ✓ |
-| Guardian judgment         |  (limited) | **Selective** |                 **Mandatory** |  **Fetch-time re-check** |                          — |
-| Operator prep workspace   |          — |             — |                   **Default** |                        — |                          — |
-| Human review              |          — |             — | per `review.mode` / overrides |                        — |                          — |
-| Digital signature + TSA   |          — |             — |                             — |                    **✓** | **✓** (manifests/receipts) |
-| Client counter-sign       |          — |             — |                             — |             **Optional** |                          — |
-| Residency enforcement     | **Strict** |    **Strict** |                    **Strict** |               **Strict** |                 **Strict** |
-| Portal visibility         |          ✗ |             ✗ |                             ✗ | **Only latest RELEASED** |                          ✗ |
+| Control | SA | WP | CD | DL | AR |
+|---| --- | --- | --- | --- | --- |
+| SHA-256 on create | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Content-addressed storage | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Guardian judgment | (limited) | **Selective** | **Mandatory** | **Fetch-time re-check** | — |
+| Operator prep workspace | — | — | **Default** | — | — |
+| Human review | — | — | per `review.mode` / overrides | — | — |
+| Digital signature + TSA | — | — | — | **✓** | **✓** (manifests/receipts) |
+| Client counter-sign | — | — | — | **Optional** | — |
+| Residency enforcement | **Strict** | **Strict** | **Strict** | **Strict** | **Strict** |
+| Portal visibility | ✗ | ✗ | ✗ | **Only latest RELEASED** | ✗ |
 
 #### 5.2.8 Schema & configuration guardrails
 
@@ -1332,9 +810,9 @@ Notes
 
 - Binding breadcrumbs:
 
-  | Binding                         | Implementation                                                    | Test                                                                                              | Observability                                                                      |
-  | ------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-  | Concurrent approval swap        | `packages/udocket_core/approvals/service.py::approve_artifact`    | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`         | Alert `approval_swap_conflict_total` (Grafana “Approvals” panel)                   |
+  | Binding | Implementation | Test | Observability |
+  |---|---|---|---|
+  | Concurrent approval swap | `packages/udocket_core/approvals/service.py::approve_artifact` | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner` | Alert `approval_swap_conflict_total` (Grafana “Approvals” panel) |
   | Deliverable release exclusivity | `packages/udocket_core/approvals/service.py::promote_deliverable` | `tests/platform/artifacts/test_deliverable_release.py::test_single_released_deliverable_enforced` | Metric `deliverable_release_retries_total`; alert `deliverable_release_uniqueness` |
 
 ### 5.5 Partitioning, indexing, and performance considerations
@@ -1760,11 +1238,11 @@ Handler pattern
 
 - Nightly janitor job `ops/idempotency/purge.py` deletes expired rows and runs `VACUUM (ANALYZE)` to keep the table bounded; `expires_at` is pinned to `api.idempotency.ttl_hours`.
 
-  | Binding                   | Implementation                                                                                | Test                                                                                       | Observability                                                 |
-  | ------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-  | Canonical scope constants | Implementation: `packages/udocket_core/idem/constants.py::IDEMPOTENCY_SCOPES`                 | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db`      | Observability: Buildkite `lint-idempotency` step (scope diff) |
-  | Response echo header      | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header`         | Observability: API metrics `idempotency_echo_missing_total`   |
-  | Replay semantics          | Implementation: `packages/udocket_core/idem/service.py::upsert_key`                           | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT`             |
+  | Binding | Implementation | Test | Observability |
+  |---|---|---|---|
+  | Canonical scope constants | Implementation: `packages/udocket_core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
+  | Response echo header | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header` | Observability: API metrics `idempotency_echo_missing_total` |
+  | Replay semantics | Implementation: `packages/udocket_core/idem/service.py::upsert_key` | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT` |
 
 #### 10.3.2 Reviews API (binding)
 
@@ -1812,11 +1290,11 @@ Handler pattern
 
 Binding breadcrumbs:
 
-| Control                    | Implementation                                                              | Test                                                            | Observability                                                    |
-| -------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| OpenAPI 3.1 enforcement    | `ops/openapi/rules/openapi-version.yaml`                                    | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`) | Buildkite `lint-openapi` stage                                   |
-| Rate-limit header contract | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`  | `tests/e2e/test_rate_limit_headers.py::test_429_headers`        | Metric `api_rate_limit_header_miss_total`                        |
-| CORS exposure policy       | `config/settings.py::CORS_EXPOSE_HEADERS` & Settings bundle `security.cors` | `scripts/security/verify_cors_headers.py`                       | CI job `security-headers` / Grafana “API Security Headers” panel |
+| Control | Implementation | Test | Observability |
+|---|---|---|---|
+| OpenAPI 3.1 enforcement | `ops/openapi/rules/openapi-version.yaml` | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`) | Buildkite `lint-openapi` stage |
+| Rate-limit header contract | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers` | `tests/e2e/test_rate_limit_headers.py::test_429_headers` | Metric `api_rate_limit_header_miss_total` |
+| CORS exposure policy | `config/settings.py::CORS_EXPOSE_HEADERS` & Settings bundle `security.cors` | `scripts/security/verify_cors_headers.py` | CI job `security-headers` / Grafana “API Security Headers” panel |
 
 - **Source material:** `§10`, `§10.5`, `§10.5`, `§10.8`, `§10.6`
 
@@ -1849,10 +1327,10 @@ Binding breadcrumbs:
 
 - Security: `scripts/security/verify_download_tokens.py` validates download-token expiry, residency guards, and HIPAA cache directives prior to release.
 
-  | Binding                      | Implementation                                                                                                                | Test                                                                                     | Observability                                                                         |
-  | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+  | Binding | Implementation | Test | Observability |
+  |---|---|---|---|
   | `content_length` persistence | Implementation: Migration `apps/platform/artifacts/migrations/0023_add_content_length.py` & ORM `CaseArtifact.content_length` | Test: `tests/platform/artifacts/test_content_metadata.py::test_content_length_persisted` | Observability: Grafana “Artifact Metadata Drift” panel (alerts on mismatched lengths) |
-  | Range/ETag staging test      | Implementation: `tests/e2e/test_artifact_range_download.py` (GitHub Actions `deploy-gate`)                                    | Test: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets`       | Observability: Buildkite deploy gate log (`range-etag-contract`)                      |
+  | Range/ETag staging test | Implementation: `tests/e2e/test_artifact_range_download.py` (GitHub Actions `deploy-gate`) | Test: `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | Observability: Buildkite deploy gate log (`range-etag-contract`) |
 
 ### 10.7 Error model and codes (normative)
 
@@ -1869,15 +1347,15 @@ Binding breadcrumbs:
 
 Client retry guidance (normative)
 
-| Error code                        | Typical cause                       | Client action                                                                |
-| --------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| `CONFLICT` + stale `version`      | Optimistic concurrency failure      | Re-fetch resource, apply latest state, retry with updated `expected_version` |
-| `CONFLICT` + idempotency mismatch | Replayed key with different payload | Generate a new `Idempotency-Key`; ensure request body matches original       |
-| `RATE_LIMIT`                      | Per-org/IP quota exceeded           | Honor `Retry-After` header; exponential backoff                              |
-| `POLICY_BLOCK`                    | Guardian/portal policy violation    | Surface message to operator; resolve underlying policy issue before retrying |
-| `QUARANTINED`                     | Guardian rejected artifact          | Present remediation reasons; require manual fix                              |
-| `INTEGRITY_ERROR`                 | Hash/ETag mismatch                  | Re-upload/file new hash; do not retry blindly                                |
-| `AUTH_CLOCK_SKEW` (401)           | Request timestamp outside ±120 s    | Re-sync clock; retry with corrected time                                     |
+| Error code | Typical cause | Client action |
+|---|---|---|
+| `CONFLICT` + stale `version` | Optimistic concurrency failure | Re-fetch resource, apply latest state, retry with updated `expected_version` |
+| `CONFLICT` + idempotency mismatch | Replayed key with different payload | Generate a new `Idempotency-Key`; ensure request body matches original |
+| `RATE_LIMIT` | Per-org/IP quota exceeded | Honor `Retry-After` header; exponential backoff |
+| `POLICY_BLOCK` | Guardian/portal policy violation | Surface message to operator; resolve underlying policy issue before retrying |
+| `QUARANTINED` | Guardian rejected artifact | Present remediation reasons; require manual fix |
+| `INTEGRITY_ERROR` | Hash/ETag mismatch | Re-upload/file new hash; do not retry blindly |
+| `AUTH_CLOCK_SKEW` (401) | Request timestamp outside ±120 s | Re-sync clock; retry with corrected time |
 
 ### 10.8 Stream events & replay (normative)
 
@@ -1905,7 +1383,7 @@ Client retry guidance (normative)
 
 - **Storage:** All persisted timestamps use UTC (`TIMESTAMP WITH TIME ZONE`) with millisecond precision; APIs return ISO 8601 UTC (`Z`) strings. Case/portal locale rendering converts at presentation time only.
 - **Client hints:** Requests may include `X-Client-Timezone` for UX personalization; server never trusts it for persistence or policy enforcement.
-- **Clock hygiene:** Services rely on chrony/NTP with ±100 ms drift budget (aligned with TSA requirements in §3.2). Health checks fail closed if drift exceeds 250 ms; alerts page SRE.
+- **Clock hygiene:** Services rely on chrony/NTP with ±100 ms drift budget (aligned with TSA requirements in [`platform-runtime §3.1`](../services/platform-runtime.md#31-environment-topology)). Health checks fail closed if drift exceeds 250 ms; alerts page SRE.
 - **UI controls:** Date pickers default to case locale; portal displays timezone label on deliverables and approvals. Manual edits capture both UTC timestamp and operator-local zone for audit clarity.
 - **Backfills/migrations:** Jobs ensure time arithmetic uses timezone-aware APIs; tests verify `created_at`/`decided_at` fields remain UTC during bulk updates.
 
@@ -2260,13 +1738,13 @@ Alert routing
 
 *Purpose: Summarize safety defaults, their downstream impact, and where to find remediation guidance.*
 
-| Subsystem              | Fail-closed behavior                                                            | User impact                                                                                              | Runbook                                                       |
-| ---------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Guardian               | Rejects submissions; artifacts remain `PENDING_JUDGMENT` until service recovers | New approvals paused; portal shows OPERATOR_PREP backlog                                                 | Appendix B.1                                                  |
-| Settings Service       | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled                                                      | [Runbook RB-GOV-008](../ops/runbooks/index.md#rb-gov-008)     |
-| Audit seal / WORM      | Portal deliveries blocked if seal chain breaks for >1 interval                  | Reviewers cannot promote artifacts; portal download attempts 503                                         | `../ops/runbooks/index.md (RB-AUDIT-004)`                     |
-| Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift                               | Org must adjust settings or seek waiver before resubmission                                              | [Runbook RB-RES-BLOCK](../ops/runbooks/index.md#rb-res-block) |
-| LLM provider circuit   | Queue enters `PAUSED_AWAITING_PROVIDER`; health probes run every 60 s           | Compose/Analyze jobs paused; auto-resume after consecutive green probes; manual drafting requires waiver | [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003)     |
+| Subsystem | Fail-closed behavior | User impact | Runbook |
+|---|---|---|---|
+| Guardian | Rejects submissions; artifacts remain `PENDING_JUDGMENT` until service recovers | New approvals paused; portal shows OPERATOR_PREP backlog | Appendix B.1 |
+| Settings Service | New jobs block on snapshot fetch; running jobs continue with embedded snapshots | Operators see queue backlog; activation UI disabled | [Runbook RB-GOV-008](../ops/runbooks/index.md#rb-gov-008) |
+| Audit seal / WORM | Portal deliveries blocked if seal chain breaks for >1 interval | Reviewers cannot promote artifacts; portal download attempts 503 | `../ops/runbooks/index.md (RB-AUDIT-004)` |
+| Residency policy guard | Jobs error with `RESIDENCY_POLICY_BLOCK` on drift | Org must adjust settings or seek waiver before resubmission | [Runbook RB-RES-BLOCK](../ops/runbooks/index.md#rb-res-block) |
+| LLM provider circuit | Queue enters `PAUSED_AWAITING_PROVIDER`; health probes run every 60 s | Compose/Analyze jobs paused; auto-resume after consecutive green probes; manual drafting requires waiver | [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003) |
 
 ______________________________________________________________________
 
@@ -2686,8 +2164,8 @@ ______________________________________________________________________
 - **App.I** Glossary and taxonomy *(source: Glossary, §16 taxonomy notes)*
 - **App.J** SQL policy patterns *(source: §4.4, §11.6)*
 - **App.K** Controls assurance map *(source: §2.2, §12, §14)*
-- **App.L** Benchmark baselines *(source: §3.2, §8, §12)*
-- **App.M** Environment & dependency matrix *(source: §3.2, §14.8)*
+- **App.L** Benchmark baselines *(source: [`platform-runtime §3`](../services/platform-runtime.md#3-deployment-guardrails--environment-policy-binding), §8, §12)*
+- **App.M** Environment & dependency matrix *(source: [`platform-runtime §3`](../services/platform-runtime.md#3-deployment-guardrails--environment-policy-binding), §14.8)*
 - **App.N** Privacy controls traceability *(source: §2.2, §14.2)*
 - **App.O** Active waivers ledger *(source: §3.8, §7.1.1, §14.9)*
 - **App.P** Third-party & OSS notices *(source: §13.6, App.P)*
@@ -2811,13 +2289,13 @@ ______________________________________________________________________
 
 ### C.1 Classification table
 
-| Class         | Examples            | Masking                         | Storage                       | Default retention              |
-| ------------- | ------------------- | ------------------------------- | ----------------------------- | ------------------------------ |
-| PUBLIC        | docs, marketing     | none                            | object storage (public site)  | n/a                            |
-| INTERNAL      | non‑PII ops logs    | redact sensitive fields         | object storage (private)      | life of case + 2y              |
-| PII           | names, contact info | REDACT/HASH in logs             | object storage (private)      | life of case + 2y              |
-| SENSITIVE_PII | health, minors      | REDACT in UI logs; NULL in JSON | object storage (private, KMS) | case + 2y (HIPAA may override) |
-| HIPAA_PH      | medical             | REDACT everywhere; no excerpts  | object storage (private, KMS) | org policy (shorter)           |
+| Class | Examples | Masking | Storage | Default retention |
+|---|---|---|---|---|
+| PUBLIC | docs, marketing | none | object storage (public site) | n/a |
+| INTERNAL | non‑PII ops logs | redact sensitive fields | object storage (private) | life of case + 2y |
+| PII | names, contact info | REDACT/HASH in logs | object storage (private) | life of case + 2y |
+| SENSITIVE_PII | health, minors | REDACT in UI logs; NULL in JSON | object storage (private, KMS) | case + 2y (HIPAA may override) |
+| HIPAA_PH | medical | REDACT everywhere; no excerpts | object storage (private, KMS) | org policy (shorter) |
 
 ### C.2 Retention mapping
 
@@ -2857,50 +2335,50 @@ General rules
 
 Ingestion inputs (binding)
 
-| Artifact type     | Purpose                                                  | Notes                                                                          |
-| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| EXHIBIT_RAW       | Original exhibit uploads (PDF/image/archive)             | Stored under `docs/raw/`; Guardian enforces format allowlist prior to parsing. |
-| EXHIBIT_TEXT      | Parsed/ocr text companion for exhibits                   | Linked to `EXHIBIT_RAW` via `source.inputs[]`; feeds Analyze search.           |
-| COURT_DOC_RAW     | Court filings or orders as uploaded                      | Similar handling to `EXHIBIT_RAW`; maintains original casing.                  |
-| COURT_DOC_TEXT    | Structured text extraction for court documents           | Used for diffing, timeline extraction, and Compose references.                 |
-| EMAIL_RFC822      | Raw RFC822 email payloads (including headers)            | Stored encrypted; normalized to `EMAIL_TEXT` and attachments.                  |
-| EMAIL_TEXT        | Parsed email body (plaintext/HTML converted)             | Preserves header metadata for Guardian/Compose citations.                      |
-| EMAIL_ATTACHMENTS | Individual artifacts emitted per attachment              | Guardian scans each attachment; retained under case `docs/attachments/`.       |
-| FINANCIALS_RAW    | Spreadsheet or CSV financial uploads                     | Normalized before conversion; preserved for audit.                             |
-| FINANCIALS_TABLE  | Structured table representation of financial artifacts   | Stored as JSON/CSV; downstream analytics consume.                              |
-| MEMO_TEXT\_\*     | Staff/comms memos with deterministic suffix per template | Used by Guardian to validate memo templates and approvals.                     |
+| Artifact type | Purpose | Notes |
+|---|---|---|
+| EXHIBIT_RAW | Original exhibit uploads (PDF/image/archive) | Stored under `docs/raw/`; Guardian enforces format allowlist prior to parsing. |
+| EXHIBIT_TEXT | Parsed/ocr text companion for exhibits | Linked to `EXHIBIT_RAW` via `source.inputs[]`; feeds Analyze search. |
+| COURT_DOC_RAW | Court filings or orders as uploaded | Similar handling to `EXHIBIT_RAW`; maintains original casing. |
+| COURT_DOC_TEXT | Structured text extraction for court documents | Used for diffing, timeline extraction, and Compose references. |
+| EMAIL_RFC822 | Raw RFC822 email payloads (including headers) | Stored encrypted; normalized to `EMAIL_TEXT` and attachments. |
+| EMAIL_TEXT | Parsed email body (plaintext/HTML converted) | Preserves header metadata for Guardian/Compose citations. |
+| EMAIL_ATTACHMENTS | Individual artifacts emitted per attachment | Guardian scans each attachment; retained under case `docs/attachments/`. |
+| FINANCIALS_RAW | Spreadsheet or CSV financial uploads | Normalized before conversion; preserved for audit. |
+| FINANCIALS_TABLE | Structured table representation of financial artifacts | Stored as JSON/CSV; downstream analytics consume. |
+| MEMO_TEXT\_\* | Staff/comms memos with deterministic suffix per template | Used by Guardian to validate memo templates and approvals. |
 
 Artifact table
 
-| Artifact type             | Directory / pattern                          | Exclusive | Manifest pointer                       | Notes                                                                              |
-| ------------------------- | -------------------------------------------- | --------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
-| TRANSCRIPT                | `transcript/<job_id>__transcript.txt`        | **Yes**   | `<transcript>.manifest.json`           | Header includes case, source, language, hashes                                     |
-| AUDIO_NORMALIZED          | `audio/<job_id>__<normalized_name>`          | No        | n/a                                    | PCM 16 kHz mono copy for reproducibility                                           |
-| OUTLINE_JSON              | `analysis/<job_id>__outline_v1.json`         | No        | `<outline>.manifest.json`              | Hierarchical outline for Compose                                                   |
-| TIMELINE_JSON             | `timeline/<job_id>__timeline_v1.json`        | No        | `<timeline>.manifest.json`             | Normalized timeline events (speakers, timestamps, UUID anchors)                    |
-| ENTITIES_JSON             | `analysis/<job_id>__entitIES_v1.json`        | No        | `<entities>.manifest.json`             | Deterministic UUID per entity/relationship                                         |
-| ISSUES_JSON               | `analysis/<job_id>__issues_v1.json`          | No        | `<issues>.manifest.json`               | Issues presented or evident                                                        |
-| FACTS_JSON                | `analysis/<job_id>__facts_v1.md`             | No        | `<facts>.manifest.json`                | Facts as they are presented                                                        |
-| GAPS_JSON                 | `analysis/<job_id>__gaps_v1.md`              | No        | `<gaps>.manifest.json`                 | information gaps and other unknowns                                                |
-| REPORT_MD                 | `analysis/<job_id>__analyze_report_v1.md`    | No        | `<report>.manifest.json`               | Human readable report containing internal notes, QA logs and run logs              |
-| COMPOSE_CLIENT_MD/DOCX    | `docs/<job_id>__compose_client_v1.md\|docx`  | **Yes**   | `<compose_client>.manifest.json`       |                                                                                    |
-| COMPOSE_LAWYER_MD/DOCX    | `docs/<job_id>__compose_lawyer_v1.md\|docx`  | **Yes**   | `<compose_lawyer>.manifest.json`       |                                                                                    |
-| COMPOSE_BUNDLE_EXCERPT_MD | `docs/<job_id>__compose_bundle_v1.md`        | **Yes**   | `<compose_bundle>.manifest.json`       | Excerpt for bundle                                                                 |
-| COMPOSE_STAFF_REPORT_MD   | `docs/<job_id>__compose_staff_report_v1.md`  | No        | `<compose_staff_report>.manifest.json` | QA staff notes                                                                     |
-| COMPOSE_QA_REPORT_MD      | `docs/<job_id>__compose_qa_report_v1.md`     | No        | `<compose_qa_report>.manifest.json`    | QA outcomes                                                                        |
-| DPIA_RECORD               | `privacy/<job_id>__dpia_v1.json\|md`         | No        | `<dpia>.manifest.json`                 |                                                                                    |
-| ROPA_RECORD               | `privacy/<job_id>__ropa_v1.json\|md`         | No        | `<ropa>.manifest.json`                 |                                                                                    |
-| AUDIT_SEAL                | `ops/<timestamp>__audit_seal_v1.json`        | No        | `<audit_seal>.manifest.json`           | Rolling Merkle root                                                                |
-| SIGNATURE_CERT            | `docs/<job_id>__signature_cert_v1.json`      | No        | `<signature_cert>.manifest.json`       | Signer certificate bundle                                                          |
-| ATTACHMENT_RAW            | `docs/<job_id>__attachment_raw_v1.bin`       | No        | `<attachment_raw>.manifest.json`       | Source binary for portal messaging/client uploads; Guardian-gated                  |
-| ATTACHMENT_TEXT           | `docs/<job_id>__attachment_text_v1.json\|md` | No        | `<attachment_text>.manifest.json`      |                                                                                    |
-| ERASURE_JOURNAL           | `privacy/<job_id>__erasure_journal_v1.json`  | No        | `<erasure_journal>.manifest.json`      | Hard-purge DSAR evidence; subject hashed with HKDF salt                            |
-| DESTRUCTION_CERT          | `privacy/<job_id>__destruction_cert_v1.json` | No        | `<destruction_cert>.manifest.json`     | Case-level destruction attestation; links retention trigger + tombstone IDs        |
-| CHAT_SESSION_JSON         | `ops/<session_id>__chat_staff.jsonl`         | No        | `<chat_session>.manifest.json`         | Staff Copilot conversation log with citations + moderation metadata                |
-| CHAT_SESSION_CLIENT_JSON  | `ops/<session_id>__chat_client.jsonl`        | No        | `<chat_client_session>.manifest.json`  | Client portal chat conversation; portal-visible subset; Guardian-audited           |
-| CHAT_SUMMARY_JSON         | `analysis/<job_id>__chat_summary_v1.json`    | No        | `<chat_summary>.manifest.json`         | Optional summarization of chat session; includes references and moderation outcome |
-| AGENT_EDIT_PROPOSAL_MD    | `analysis/<job_id>__edit_proposal_v1.md`     | No        | `<agent_edit_proposal>.manifest.json`  | AI-assisted edit proposal human-reviewed before promotion                          |
-| AGENT_EDIT_DIFF_JSON      | `analysis/<job_id>__edit_diff_v1.json`       | No        | `<agent_edit_diff>.manifest.json`      | Machine-readable diff for Agent edit proposals                                     |
+| Artifact type | Directory / pattern | Exclusive | Manifest pointer | Notes |
+|---|---|---|---|---|
+| TRANSCRIPT | `transcript/<job_id>__transcript.txt` | **Yes** | `<transcript>.manifest.json` | Header includes case, source, language, hashes |
+| AUDIO_NORMALIZED | `audio/<job_id>__<normalized_name>` | No | n/a | PCM 16 kHz mono copy for reproducibility |
+| OUTLINE_JSON | `analysis/<job_id>__outline_v1.json` | No | `<outline>.manifest.json` | Hierarchical outline for Compose |
+| TIMELINE_JSON | `timeline/<job_id>__timeline_v1.json` | No | `<timeline>.manifest.json` | Normalized timeline events (speakers, timestamps, UUID anchors) |
+| ENTITIES_JSON | `analysis/<job_id>__entitIES_v1.json` | No | `<entities>.manifest.json` | Deterministic UUID per entity/relationship |
+| ISSUES_JSON | `analysis/<job_id>__issues_v1.json` | No | `<issues>.manifest.json` | Issues presented or evident |
+| FACTS_JSON | `analysis/<job_id>__facts_v1.md` | No | `<facts>.manifest.json` | Facts as they are presented |
+| GAPS_JSON | `analysis/<job_id>__gaps_v1.md` | No | `<gaps>.manifest.json` | information gaps and other unknowns |
+| REPORT_MD | `analysis/<job_id>__analyze_report_v1.md` | No | `<report>.manifest.json` | Human readable report containing internal notes, QA logs and run logs |
+| COMPOSE_CLIENT_MD/DOCX | `docs/<job_id>__compose_client_v1.md\|docx`  | **Yes** | `<compose_client>.manifest.json` | |
+| COMPOSE_LAWYER_MD/DOCX | `docs/<job_id>__compose_lawyer_v1.md\|docx`  | **Yes** | `<compose_lawyer>.manifest.json` | |
+| COMPOSE_BUNDLE_EXCERPT_MD | `docs/<job_id>__compose_bundle_v1.md` | **Yes** | `<compose_bundle>.manifest.json` | Excerpt for bundle |
+| COMPOSE_STAFF_REPORT_MD | `docs/<job_id>__compose_staff_report_v1.md` | No | `<compose_staff_report>.manifest.json` | QA staff notes |
+| COMPOSE_QA_REPORT_MD | `docs/<job_id>__compose_qa_report_v1.md` | No | `<compose_qa_report>.manifest.json` | QA outcomes |
+| DPIA_RECORD | `privacy/<job_id>__dpia_v1.json\|md`         | No | `<dpia>.manifest.json` | |
+| ROPA_RECORD | `privacy/<job_id>__ropa_v1.json\|md`         | No | `<ropa>.manifest.json` | |
+| AUDIT_SEAL | `ops/<timestamp>__audit_seal_v1.json` | No | `<audit_seal>.manifest.json` | Rolling Merkle root |
+| SIGNATURE_CERT | `docs/<job_id>__signature_cert_v1.json` | No | `<signature_cert>.manifest.json` | Signer certificate bundle |
+| ATTACHMENT_RAW | `docs/<job_id>__attachment_raw_v1.bin` | No | `<attachment_raw>.manifest.json` | Source binary for portal messaging/client uploads; Guardian-gated |
+| ATTACHMENT_TEXT | `docs/<job_id>__attachment_text_v1.json\|md` | No | `<attachment_text>.manifest.json` | |
+| ERASURE_JOURNAL | `privacy/<job_id>__erasure_journal_v1.json` | No | `<erasure_journal>.manifest.json` | Hard-purge DSAR evidence; subject hashed with HKDF salt |
+| DESTRUCTION_CERT | `privacy/<job_id>__destruction_cert_v1.json` | No | `<destruction_cert>.manifest.json` | Case-level destruction attestation; links retention trigger + tombstone IDs |
+| CHAT_SESSION_JSON | `ops/<session_id>__chat_staff.jsonl` | No | `<chat_session>.manifest.json` | Staff Copilot conversation log with citations + moderation metadata |
+| CHAT_SESSION_CLIENT_JSON | `ops/<session_id>__chat_client.jsonl` | No | `<chat_client_session>.manifest.json` | Client portal chat conversation; portal-visible subset; Guardian-audited |
+| CHAT_SUMMARY_JSON | `analysis/<job_id>__chat_summary_v1.json` | No | `<chat_summary>.manifest.json` | Optional summarization of chat session; includes references and moderation outcome |
+| AGENT_EDIT_PROPOSAL_MD | `analysis/<job_id>__edit_proposal_v1.md` | No | `<agent_edit_proposal>.manifest.json` | AI-assisted edit proposal human-reviewed before promotion |
+| AGENT_EDIT_DIFF_JSON | `analysis/<job_id>__edit_diff_v1.json` | No | `<agent_edit_diff>.manifest.json` | Machine-readable diff for Agent edit proposals |
 
 - **NOTE:** Replace "v1" with v{n}
 
@@ -3060,19 +2538,19 @@ ______________________________________________________________________
 
 ### F.0 `ApiError.code` values
 
-| Code                     | Description                                       |
-| ------------------------ | ------------------------------------------------- |
-| `POLICY_BLOCK`           | Guardian or settings policy prevented the action. |
-| `QUARANTINED`            | Artifact is quarantined and unavailable.          |
-| `INTEGRITY_ERROR`        | Hash or integrity validation failed.              |
-| `VALIDATION_ERROR`       | Input payload failed validation.                  |
-| `AUTH_ERROR`             | Authentication error (legacy umbrella code).      |
-| `AUTH_CLOCK_SKEW`        | HMAC timestamp outside allowed skew window.       |
-| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch.                      |
-| `NOT_FOUND`              | Resource not found or not visible.                |
-| `CONFLICT`               | Optimistic concurrency or idempotency conflict.   |
-| `RATE_LIMIT`             | Rate, quota, or budget exceeded.                  |
-| `PROVIDER_DEGRADED`      | Downstream provider degraded/unavailable.         |
+| Code | Description |
+|---|---|
+| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
+| `QUARANTINED` | Artifact is quarantined and unavailable. |
+| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
+| `VALIDATION_ERROR` | Input payload failed validation. |
+| `AUTH_ERROR` | Authentication error (legacy umbrella code). |
+| `AUTH_CLOCK_SKEW` | HMAC timestamp outside allowed skew window. |
+| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch. |
+| `NOT_FOUND` | Resource not found or not visible. |
+| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
+| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
+| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
 
 The authoritative schema for these payloads lives at `spec/schemas/api_error.schema.json`. Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
 
@@ -3107,17 +2585,17 @@ CREATE UNIQUE INDEX idempotency_request_dedupe_idx
 
 Scope dimensions
 
-| Column                      | Description                                                                                                                 |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `scope`                     | Logical action bucket (`job:create`, `artifact:approve`, etc.); shared constants in `packages.udocket_core.idem.constants`. |
-| `endpoint`                  | Canonical `METHOD:/api/...` string preventing cross-route collisions.                                                       |
-| `case_id`                   | Optional discriminator for case-scoped flows (null for global jobs).                                                        |
-| `request_hash`              | `sha256` of the canonicalised request payload (body + sorted query + idempotency key).                                      |
-| `status`                    | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs.                  |
-| `result_ref`                | Identifier returned to the caller (artifact ID, job ID, etc.).                                                              |
-| `response_hash`             | `sha256` of the serialized response body for auditability.                                                                  |
-| `response_code`             | HTTP status associated with the stored response (used for `Idempotency-Status`).                                            |
-| `last_seen_at`/`expires_at` | Replay window accounting (default TTL = `api.idempotency.ttl_hours`).                                                       |
+| Column | Description |
+|---|---|
+| `scope` | Logical action bucket (`job:create`, `artifact:approve`, etc.); shared constants in `packages.udocket_core.idem.constants`. |
+| `endpoint` | Canonical `METHOD:/api/...` string preventing cross-route collisions. |
+| `case_id` | Optional discriminator for case-scoped flows (null for global jobs). |
+| `request_hash` | `sha256` of the canonicalised request payload (body + sorted query + idempotency key). |
+| `status` | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs. |
+| `result_ref` | Identifier returned to the caller (artifact ID, job ID, etc.). |
+| `response_hash` | `sha256` of the serialized response body for auditability. |
+| `response_code` | HTTP status associated with the stored response (used for `Idempotency-Status`). |
+| `last_seen_at`/`expires_at` | Replay window accounting (default TTL = `api.idempotency.ttl_hours`). |
 
 Collision handling & headers
 
@@ -3339,13 +2817,13 @@ X-uDocket-API-Version: 2025-01
 
 *Purpose: Record mandatory HTTP headers and deprecation signals for external APIs.*
 
-| Category                  | Header(s)                                                                                                                                                                                  | Enforcement & reference                                                                                                                           | Notes                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Exposed response headers  | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset`                                                          | `config/settings.py::CORS_EXPOSE_HEADERS`; Settings bundle `security.cors.expose_headers`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 acceptance; deviations require dual approval.             |
-| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py`                                                   | Nonce headers support CSP enforcement per §11.5.                            |
-| Security baseline         | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`                                                                         | Generated by `apps/platform/ui/security/csp.py` + middleware; asserted in `tests/e2e/test_security_headers.py::test_csp_header_enforced`          | CSP requires per-response script/style nonces; see §11.5.                   |
-| Download guard contract   | `If-Match`, `If-None-Match`, `Range`, `If-Range`                                                                                                                                           | `apps/platform/portal/downloads.py::enforce_if_match`; tests in §10.6 acceptance                                                                  | Clients must echo `If-Match` ETag; violations return 412 `INTEGRITY_ERROR`. |
-| Rate-limit headers        | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`                                                                                                           | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`; monitored via `api_rate_limit_header_miss_total`                      | Contract referenced in §10.5 acceptance and Appendix F.9.                   |
+| Category | Header(s) | Enforcement & reference | Notes |
+|---|---|---|---|
+| Exposed response headers | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset` | `config/settings.py::CORS_EXPOSE_HEADERS`; Settings bundle `security.cors.expose_headers`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 acceptance; deviations require dual approval. |
+| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py` | Nonce headers support CSP enforcement per §11.5. |
+| Security baseline | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | Generated by `apps/platform/ui/security/csp.py` + middleware; asserted in `tests/e2e/test_security_headers.py::test_csp_header_enforced` | CSP requires per-response script/style nonces; see §11.5. |
+| Download guard contract | `If-Match`, `If-None-Match`, `Range`, `If-Range` | `apps/platform/portal/downloads.py::enforce_if_match`; tests in §10.6 acceptance | Clients must echo `If-Match` ETag; violations return 412 `INTEGRITY_ERROR`. |
+| Rate-limit headers | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`; monitored via `api_rate_limit_header_miss_total` | Contract referenced in §10.5 acceptance and Appendix F.9. |
 
 Refer to §10.5, §10.6, §11.2.2, and §11.5 for narrative requirements tied to these headers.
 
@@ -3746,42 +3224,42 @@ ______________________________________________________________________
 
 Quick crosswalk (illustrative)
 
-| Control family    | See                    |
-| ----------------- | ---------------------- |
-| SOC2 CC1 / ISO 5  | §2, §15.3, App.S       |
-| SOC2 CC6 / ISO 9  | §4, App.J              |
+| Control family | See |
+|---|---|
+| SOC2 CC1 / ISO 5 | §2, §15.3, App.S |
+| SOC2 CC6 / ISO 9 | §4, App.J |
 | SOC2 CC7 / ISO 12 | §12, §14.5, Appendix H |
-| SOC2 CC8 / ISO 14 | §3.2, §12.5, App.L     |
-| SOC2 PI / ISO 18  | §2.2, §14.2, App.N     |
-| Vendor CUECs      | §3.7, §8, App.Q        |
+| SOC2 CC8 / ISO 14 | [`platform-runtime §3`](../services/platform-runtime.md#3-deployment-guardrails--environment-policy-binding), §12.5, App.L |
+| SOC2 PI / ISO 18 | §2.2, §14.2, App.N |
+| Vendor CUECs | §3.7, §8, App.Q |
 
 HMAC key inventory
 
-| Service → Service | Key ID                   | Last rotated (UTC) | Evidence bundle                                      |
-| ----------------- | ------------------------ | ------------------ | ---------------------------------------------------- |
-| web → guardian    | `svc-web-guardian-v3`    | 2025-09-12T14:30Z  | `ops/security/key_rotation/guardian_2025-09-12.json` |
-| worker → settings | `svc-worker-settings-v4` | 2025-08-01T09:00Z  | `ops/security/key_rotation/settings_2025-08-01.json` |
-| guardian → signer | `svc-guardian-signer-v2` | 2025-07-18T16:45Z  | `ops/security/key_rotation/signer_2025-07-18.json`   |
+| Service → Service | Key ID | Last rotated (UTC) | Evidence bundle |
+|---|---|---|---|
+| web → guardian | `svc-web-guardian-v3` | 2025-09-12T14:30Z | `ops/security/key_rotation/guardian_2025-09-12.json` |
+| worker → settings | `svc-worker-settings-v4` | 2025-08-01T09:00Z | `ops/security/key_rotation/settings_2025-08-01.json` |
+| guardian → signer | `svc-guardian-signer-v2` | 2025-07-18T16:45Z | `ops/security/key_rotation/signer_2025-07-18.json` |
 
 Key rotation calendar (rolling 90 days)
 
-| Upcoming rotation        | Owners                                 | Window                  | Notes                                                        |
-| ------------------------ | -------------------------------------- | ----------------------- | ------------------------------------------------------------ |
-| `svc-web-guardian-v4`    | Security Eng Lead, Platform SRE        | 2025-12-05 → 2025-12-07 | Requires APP.SEC-117 approval; pre-stage secret in Key Vault |
-| `svc-worker-settings-v5` | Settings Service TL, Security Eng Lead | 2026-01-08 → 2026-01-10 | Align with Settings deploy freeze lift                       |
+| Upcoming rotation | Owners | Window | Notes |
+|---|---|---|---|
+| `svc-web-guardian-v4` | Security Eng Lead, Platform SRE | 2025-12-05 → 2025-12-07 | Requires APP.SEC-117 approval; pre-stage secret in Key Vault |
+| `svc-worker-settings-v5` | Settings Service TL, Security Eng Lead | 2026-01-08 → 2026-01-10 | Align with Settings deploy freeze lift |
 
-| Control ID / Policy        | Scope                      | Primary coverage (Section/App)                         | Evidence artifact(s)                                                                                                                                                                             | Status |
-| -------------------------- | -------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| SOC2 CC1.1 / ISO 5.1       | Governance & principles    | §2 Core principles; §15.3 Risks                        | App.K map, App.O waivers ledger, decision log exports                                                                                                                                            | Pass   |
-| SOC2 CC6.x / ISO 9         | Access control             | §4 Identity & RLS; App.J SQL policies                  | `case_secure`/`artifact_secure` views, Settings activation audit trail ([`../services/settings-registry.md Appendix A`](../services/settings.md#appendix-a-settings-key-map-traceability-index)) | Pass   |
-| SOC2 CC7.x / ISO 12        | Operations & change        | §12 Observability; §14.5 Change mgmt                   | `../ops/runbooks/index.md` runbooks, Guardian/Signer synthetics, deployment playbooks                                                                                                            | Pass   |
-| SOC2 CC8.x / ISO 14        | Availability & resilience  | §3.2 topology; §12.5 capacity                          | App.L benchmarks, autoscaling dashboards, synthetic monitor reports                                                                                                                              | Pass   |
-| SOC2 PI1 / ISO 18          | Privacy & retention        | §2.2 regulatory constraints; §14.2 retention           | App.N privacy traceability matrix, DPIA/ROPA artifacts                                                                                                                                           | Pass   |
-| SOC2 CUEC / Vendor reviews | Third-party oversight      | §3.7 external integrations; §8 LLM governance          | Provider registry health logs, evidence store envelopes, vendor reassessment checklist                                                                                                           | Pass   |
-| Internal POL-SC-01         | Security incident response | §12.3 incident workflows; §14.9 disclosure             | Incident register exports, security.txt contact, on-call rotation docs                                                                                                                           | Pass   |
-| Internal POL-DS-02         | Data residency             | §3.8 region enforcement; §7.1 Guardian judgments       | Egress AuthorizationPolicy manifests, App.O waiver entries, ops logs `RESIDENCY_POLICY_BLOCK`                                                                                                    | Pass   |
-| Internal POL-AU-01         | Audit & approvals          | §10 API contracts; §11 approvals UX                    | Guardian history, audit_event partitions, reviewer swap algorithm logs                                                                                                                           | Pass   |
-| Internal POL-BCP-03        | Business continuity        | §12.10 BCP drills; `../ops/runbooks/index.md` runbooks | `BCP_DRILL_REPORT` artifacts, incident templates                                                                                                                                                 | Pass   |
+| Control ID / Policy | Scope | Primary coverage (Section/App) | Evidence artifact(s) | Status |
+|---|---|---|---|---|
+| SOC2 CC1.1 / ISO 5.1 | Governance & principles | §2 Core principles; §15.3 Risks | App.K map, App.O waivers ledger, decision log exports | Pass |
+| SOC2 CC6.x / ISO 9 | Access control | §4 Identity & RLS; App.J SQL policies | `case_secure`/`artifact_secure` views, Settings activation audit trail ([`../services/settings-registry.md Appendix A`](../services/settings.md#appendix-a-settings-key-map-traceability-index)) | Pass |
+| SOC2 CC7.x / ISO 12 | Operations & change | §12 Observability; §14.5 Change mgmt | `../ops/runbooks/index.md` runbooks, Guardian/Signer synthetics, deployment playbooks | Pass |
+| SOC2 CC8.x / ISO 14 | Availability & resilience | [`platform-runtime §3`](../services/platform-runtime.md#3-deployment-guardrails--environment-policy-binding) topology; §12.5 capacity | App.L benchmarks, autoscaling dashboards, synthetic monitor reports | Pass |
+| SOC2 PI1 / ISO 18 | Privacy & retention | §2.2 regulatory constraints; §14.2 retention | App.N privacy traceability matrix, DPIA/ROPA artifacts | Pass |
+| SOC2 CUEC / Vendor reviews | Third-party oversight | §3.7 external integrations; §8 LLM governance | Provider registry health logs, evidence store envelopes, vendor reassessment checklist | Pass |
+| Internal POL-SC-01 | Security incident response | §12.3 incident workflows; §14.9 disclosure | Incident register exports, security.txt contact, on-call rotation docs | Pass |
+| Internal POL-DS-02 | Data residency | §3.8 region enforcement; §7.1 Guardian judgments | Egress AuthorizationPolicy manifests, App.O waiver entries, ops logs `RESIDENCY_POLICY_BLOCK` | Pass |
+| Internal POL-AU-01 | Audit & approvals | §10 API contracts; §11 approvals UX | Guardian history, audit_event partitions, reviewer swap algorithm logs | Pass |
+| Internal POL-BCP-03 | Business continuity | §12.10 BCP drills; `../ops/runbooks/index.md` runbooks | `BCP_DRILL_REPORT` artifacts, incident templates | Pass |
 
 Controls mapped here drive quarterly evidence reviews. Each entry references runbooks, dashboards, or artifacts cited in the final column; missing evidence must be captured before release sign-off.
 
@@ -3791,13 +3269,13 @@ ______________________________________________________________________
 
 *Purpose: Capture recent performance and cost baselines that back the documented SLOs.*
 
-| Workload                      | Date (UTC) | Load profile                            | P50 / P95 latency    | Cost / tokens | Source                                                                    |
-| ----------------------------- | ---------- | --------------------------------------- | -------------------- | ------------- | ------------------------------------------------------------------------- |
-| Web API (`GET /api/v1/cases`) | 2025-09-30 | 1k virtual users, 50 RPS step           | 0.112 s / 0.238 s    | n/a           | k6 run `benchmarks/api_caselist.json`, Grafana `web_http_latency_seconds` |
-| Guardian judgment decision    | 2025-10-05 | 500 concurrent submissions, 5k/day      | 48 s / 242 s         | n/a           | Synthetic job `guardian_slo.yaml`, `guardian_judgment_latency_seconds`    |
-| Compose client deliverable    | 2025-10-11 | Transcript 9k tokens, default templates | 8.3 min / 21.4 min   | 58k tokens    | LangGraph harness `compose_benchmark.py`, `llm_cost_estimate_total`       |
-| Analyze summary lane          | 2025-10-11 | Transcript 9k tokens, 4 exhibits        | 6.1 min / 13.7 min   | 42k tokens    | LangGraph harness `analyze_benchmark.py`, `agent_lane_duration_seconds`   |
-| Portal DOCX download 25 MB    | 2025-09-28 | 500 clients, CDN disabled               | 310 ms / 480 ms TTFB | n/a           | Locust scenario `portal_download.py`, Nginx access logs                   |
+| Workload | Date (UTC) | Load profile | P50 / P95 latency | Cost / tokens | Source |
+|---|---|---|---|---|---|
+| Web API (`GET /api/v1/cases`) | 2025-09-30 | 1k virtual users, 50 RPS step | 0.112 s / 0.238 s | n/a | k6 run `benchmarks/api_caselist.json`, Grafana `web_http_latency_seconds` |
+| Guardian judgment decision | 2025-10-05 | 500 concurrent submissions, 5k/day | 48 s / 242 s | n/a | Synthetic job `guardian_slo.yaml`, `guardian_judgment_latency_seconds` |
+| Compose client deliverable | 2025-10-11 | Transcript 9k tokens, default templates | 8.3 min / 21.4 min | 58k tokens | LangGraph harness `compose_benchmark.py`, `llm_cost_estimate_total` |
+| Analyze summary lane | 2025-10-11 | Transcript 9k tokens, 4 exhibits | 6.1 min / 13.7 min | 42k tokens | LangGraph harness `analyze_benchmark.py`, `agent_lane_duration_seconds` |
+| Portal DOCX download 25 MB | 2025-09-28 | 500 clients, CDN disabled | 310 ms / 480 ms TTFB | n/a | Locust scenario `portal_download.py`, Nginx access logs |
 
 Benchmarks run at least quarterly and after significant infra upgrades using the dedicated synthetic suite (`tests/synthetic/perf/*`). Results update App.L and dashboards referenced in §12.6; deviations ≥10% trigger review prior to release, with raw outputs archived under `ops/perf/<date>/`.
 
@@ -3807,18 +3285,18 @@ ______________________________________________________________________
 
 *Purpose: Document supported platform versions per environment and upgrade cadence.*
 
-| Component                | Dev/Staging | Production | Upgrade policy                                                | Notes                                                                                                                                                       |
-| ------------------------ | ----------- | ---------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Kubernetes               | 1.29        | 1.28       | Minor upgrades every 6 months; patch monthly                  | Managed AKS clusters with PodSecurity restricted profile; next prod upgrade Q1 2026; baseline CIS AKS v1.29                                                 |
-| Docker Compose (dev)     | 2.24.x      | n/a        | Follow Docker Desktop GA; pin via `.docker/compose-version`   | Required for local parity stack (`docker compose up --build`); validated weekly via CI smoke; includes Postgres, Redis, Guardian, Signer, Settings, workers |
-| Service mesh (Istio)     | 1.21.1      | 1.20.4     | N-1 support; canary namespace before prod rollout             | mTLS enforced cluster-wide; cert TTL 24h; last prod bump Jul 2025; next cadence review Apr 2026                                                             |
-| Postgres                 | 15.6        | 15.6 HA    | Major every 18 months; logical replication for blue/green     | Patroni-managed; statement pooling disabled; HA failover drills quarterly                                                                                   |
-| Redis                    | 7.2         | 7.2        | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; last review Aug 2025; next review Feb 2026                                                                        |
-| Python runtime           | 3.12.x      | 3.12.x     | Security releases within 30 days                              | Pinned in `Dockerfile` & dependency locks; min supported 3.11 for tooling; deprecation notice 90 days prior                                                 |
-| Node.js (build)          | 20.x LTS    | 20.x LTS   | Upgrade within 45 days of LTS patch                           | Build-time only; no runtime exposure; Node 18 blocked since 2025-07                                                                                         |
-| Terraform                | 1.8.x       | 1.8.x      | Upgrade quarterly with module pin review                      | State stored in Terraform Cloud; nightly drift detection; drift incidents logged in Appendix H                                                              |
-| Nginx ingress controller | 1.11.x      | 1.10.x     | Patch monthly; major with Kubernetes cadence                  | TLS 1.3 preferred; OCSP stapling enabled; Mar 2025 upgrade closed; next upgrade window Jan 2026                                                             |
-| Base OS images           | Debian 12   | Debian 12  | Rebuild monthly or on critical CVE                            | Images signed; SBOM generated per build; CIS benchmark level 1 enforced                                                                                     |
+| Component | Dev/Staging | Production | Upgrade policy | Notes |
+|---|---|---|---|---|
+| Kubernetes | 1.29 | 1.28 | Minor upgrades every 6 months; patch monthly | Managed AKS clusters with PodSecurity restricted profile; next prod upgrade Q1 2026; baseline CIS AKS v1.29 |
+| Docker Compose (dev) | 2.24.x | n/a | Follow Docker Desktop GA; pin via `.docker/compose-version` | Required for local parity stack (`docker compose up --build`); validated weekly via CI smoke; includes Postgres, Redis, Guardian, Signer, Settings, workers |
+| Service mesh (Istio) | 1.21.1 | 1.20.4 | N-1 support; canary namespace before prod rollout | mTLS enforced cluster-wide; cert TTL 24h; last prod bump Jul 2025; next cadence review Apr 2026 |
+| Postgres | 15.6 | 15.6 HA | Major every 18 months; logical replication for blue/green | Patroni-managed; statement pooling disabled; HA failover drills quarterly |
+| Redis | 7.2 | 7.2 | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; last review Aug 2025; next review Feb 2026 |
+| Python runtime | 3.12.x | 3.12.x | Security releases within 30 days | Pinned in `Dockerfile` & dependency locks; min supported 3.11 for tooling; deprecation notice 90 days prior |
+| Node.js (build) | 20.x LTS | 20.x LTS | Upgrade within 45 days of LTS patch | Build-time only; no runtime exposure; Node 18 blocked since 2025-07 |
+| Terraform | 1.8.x | 1.8.x | Upgrade quarterly with module pin review | State stored in Terraform Cloud; nightly drift detection; drift incidents logged in Appendix H |
+| Nginx ingress controller | 1.11.x | 1.10.x | Patch monthly; major with Kubernetes cadence | TLS 1.3 preferred; OCSP stapling enabled; Mar 2025 upgrade closed; next upgrade window Jan 2026 |
+| Base OS images | Debian 12 | Debian 12 | Rebuild monthly or on critical CVE | Images signed; SBOM generated per build; CIS benchmark level 1 enforced |
 
 Upgrade windows recorded in the change calendar; App.M supports audit inquiries regarding environment parity and upcoming rollouts.
 
@@ -3828,15 +3306,15 @@ ______________________________________________________________________
 
 *Purpose: Provide a single view from regulatory obligations to settings, gates, and evidence.*
 
-| Obligation (Reg / Article)                  | Settings / gates                                                                                            | Enforcement point                                          | Evidence artifacts                                                                      |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Data residency (PIPEDA s.17, GDPR Art.44)   | `regions.allowlist.*`, `integrity.downstream_action`                                                        | Guardian residency checks (§3.8, §7.1.1)                   | AuthorizationPolicy manifests, ops `RESIDENCY_POLICY_BLOCK` logs, App.O waivers         |
-| DPIA / RoPA maintenance (GDPR Art.35/30)    | `privacy.dpia.*`, `privacy.ropa.*`                                                                          | Privacy activation workflow (§9.3)                         | DPIA/ROPA artifacts, audit seals, App.K mapping                                         |
-| HIPAA override mode (HIPAA section 164.312) | `privacy.hipaa.enabled`, `security.mfa.webauthn_required_roles`, `evidence_store.redacted_excerpts.enabled` | Dual approval (§9.11), Guardian/portal guards              | HIPAA manifest entries, audit events, QA logs                                           |
-| Legal hold & retention (GDPR Art.5, CPPA)   | `privacy.legal.matrix_version`, `compliance.erasure_mode`                                                   | Destruction job approval (§14.2), DSAR scheduler (§14.2.1) | `DESTRUCTION_CERT`, `ERASURE_JOURNAL`, secure views showing masked reasons              |
-| DSAR / erasure fulfillment (GDPR Art.17)    | `compliance.subject_hkdf_salt`, `compliance.erasure_mode`                                                   | DSAR operations runbook (§14.2.1)                          | Ops logs, audit events `DSAR_ERASURE_EXECUTED`, Appendix H drills                       |
-| Masking & field protection (SOC2 CC6.6)     | `field_mask_rule`, `security.field_encryption.*`                                                            | Secure views (§4.5) and encryption routines (§4.5)         | Masking helper tests, encryption key rotation records                                   |
-| Client portal delivery (PIPEDA Safeguards)  | `portal.download.rate_limits.*`, `compose.policy.forbidden_patterns[]`                                      | Guardian readiness + portal invalidation (§11.2.1)         | Portal invalidation SSE events, QA reports, `../ops/runbooks/index.md (RB-ETAG)` output |
+| Obligation (Reg / Article) | Settings / gates | Enforcement point | Evidence artifacts |
+|---|---|---|---|
+| Data residency (PIPEDA s.17, GDPR Art.44) | `regions.allowlist.*`, `integrity.downstream_action` | Guardian residency checks (§3.8, §7.1.1) | AuthorizationPolicy manifests, ops `RESIDENCY_POLICY_BLOCK` logs, App.O waivers |
+| DPIA / RoPA maintenance (GDPR Art.35/30) | `privacy.dpia.*`, `privacy.ropa.*` | Privacy activation workflow (§9.3) | DPIA/ROPA artifacts, audit seals, App.K mapping |
+| HIPAA override mode (HIPAA section 164.312) | `privacy.hipaa.enabled`, `security.mfa.webauthn_required_roles`, `evidence_store.redacted_excerpts.enabled` | Dual approval (§9.11), Guardian/portal guards | HIPAA manifest entries, audit events, QA logs |
+| Legal hold & retention (GDPR Art.5, CPPA) | `privacy.legal.matrix_version`, `compliance.erasure_mode` | Destruction job approval (§14.2), DSAR scheduler (§14.2.1) | `DESTRUCTION_CERT`, `ERASURE_JOURNAL`, secure views showing masked reasons |
+| DSAR / erasure fulfillment (GDPR Art.17) | `compliance.subject_hkdf_salt`, `compliance.erasure_mode` | DSAR operations runbook (§14.2.1) | Ops logs, audit events `DSAR_ERASURE_EXECUTED`, Appendix H drills |
+| Masking & field protection (SOC2 CC6.6) | `field_mask_rule`, `security.field_encryption.*` | Secure views (§4.5) and encryption routines (§4.5) | Masking helper tests, encryption key rotation records |
+| Client portal delivery (PIPEDA Safeguards) | `portal.download.rate_limits.*`, `compose.policy.forbidden_patterns[]` | Guardian readiness + portal invalidation (§11.2.1) | Portal invalidation SSE events, QA reports, `../ops/runbooks/index.md (RB-ETAG)` output |
 
 Matrix reviewed quarterly with Privacy & Security; updates required whenever referenced settings or obligations change.
 
@@ -3846,9 +3324,9 @@ ______________________________________________________________________
 
 *Purpose: Track approved temporary deviations (residency, security, privacy) with expiry and owners.*
 
-| Waiver ID | Category | Scope | Approved by | Effective / Expiry | Conditions | Status            |
-| --------- | -------- | ----- | ----------- | ------------------ | ---------- | ----------------- |
-| (none)    | —        | —     | —           | —                  | —          | No active waivers |
+| Waiver ID | Category | Scope | Approved by | Effective / Expiry | Conditions | Status |
+|---|---|---|---|---|---|---|
+| (none) | — | — | — | — | — | No active waivers |
 
 Process: waiver requests originate via Settings activation metadata or incident response; Security + Architecture approvals required. Entries mirror App.K controls evidence and must include remediation plans before expiry. Stale waivers trigger §12.3 incident workflow.
 
@@ -3876,9 +3354,9 @@ Waiver template (JSON, all fields required)
 
 *Purpose: Track temporary risk acceptances, owners, and expiry dates.*
 
-| Acceptance ID | Risk description | Owner | Mitigation / Monitoring | Accepted until | Status                   |
-| ------------- | ---------------- | ----- | ----------------------- | -------------- | ------------------------ |
-| (none)        | —                | —     | —                       | —              | No open risk acceptances |
+| Acceptance ID | Risk description | Owner | Mitigation / Monitoring | Accepted until | Status |
+|---|---|---|---|---|---|
+| (none) | — | — | — | — | No open risk acceptances |
 
 Risk acceptances capture deviations such as pending CVE remediation or temporary SLO relaxations. Entries require Security + Product approval, explicit expiry, and linkage to incident/problem tickets. Items auto-escalate to leadership if not reviewed 7 days before expiry.
 
@@ -3888,15 +3366,15 @@ ______________________________________________________________________
 
 *Purpose: Centralize licensing, attribution, and notice obligations for distributed software.*
 
-| Component / Package      | License      | Notice location              | Additional obligations                                |
-| ------------------------ | ------------ | ---------------------------- | ----------------------------------------------------- |
-| Django                   | BSD-3-Clause | `licenses/django/LICENSE`    | Include copyright notice in customer-facing docs      |
-| Celery                   | BSD-3-Clause | `licenses/celery/LICENSE`    | Provide acknowledgement in operator manual            |
-| Azure SDKs               | MIT          | `licenses/azure-sdk/LICENSE` | No attribution required; note data use terms in App.Q |
-| LangGraph                | Apache-2.0   | `licenses/langgraph/LICENSE` | Preserve NOTICE text in redistributed binaries        |
-| ffmpeg                   | LGPL-2.1     | `licenses/ffmpeg/NOTICE`     | Dynamic linking only; provide source offer on request |
-| openpyxl                 | MIT          | `licenses/openpyxl/LICENSE`  | None                                                  |
-| Company-specific scripts | Proprietary  | `licenses/custom/README.md`  | Internal use only; no redistribution without approval |
+| Component / Package | License | Notice location | Additional obligations |
+|---|---|---|---|
+| Django | BSD-3-Clause | `licenses/django/LICENSE` | Include copyright notice in customer-facing docs |
+| Celery | BSD-3-Clause | `licenses/celery/LICENSE` | Provide acknowledgement in operator manual |
+| Azure SDKs | MIT | `licenses/azure-sdk/LICENSE` | No attribution required; note data use terms in App.Q |
+| LangGraph | Apache-2.0 | `licenses/langgraph/LICENSE` | Preserve NOTICE text in redistributed binaries |
+| ffmpeg | LGPL-2.1 | `licenses/ffmpeg/NOTICE` | Dynamic linking only; provide source offer on request |
+| openpyxl | MIT | `licenses/openpyxl/LICENSE` | None |
+| Company-specific scripts | Proprietary | `licenses/custom/README.md` | Internal use only; no redistribution without approval |
 
 Process: SBOM generation (§13.6) cross-checks license metadata nightly; discrepancies raise `LICENSE_GAP` alerts. Updated notices shipped in `NOTICE.md` alongside release artifacts.
 
@@ -3906,14 +3384,14 @@ ______________________________________________________________________
 
 *Purpose: List sanctioned data processors, residency posture, and contractual guarantees.*
 
-| Provider                       | Service                          | Region(s) in scope                              | Data classes processed                     | DPA/Terms highlights                                                                                               |
-| ------------------------------ | -------------------------------- | ----------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Microsoft Azure Speech         | Transcription (batch/on-demand)  | Org allowlisted Azure regions (e.g., eu-west-2) | Audio uploads, transcript text             | DPA §3 forbids training on customer data; residency pinned to selected region; 30-day deletion                     |
-| Microsoft Azure OpenAI         | LLM inference                    | Org allowlisted Azure regions (mirror Speech)   | Prompt excerpts (redacted), generated text | Enterprise agreement disables logging & training; retention ≤ 24h; residency anchored to allowlist                 |
-| Entrust TSA / OCSP             | Timestamping & revocation        | Global (per org trust bundle)                   | Hashes, certificate metadata               | No content retention; logs retained 90 days for audits; trust roots mapped to Appendix F                           |
-| Twilio SendGrid (optional)     | Email delivery                   | Org-selected sub-account region (NA/EU/APAC)    | Notification metadata, recipient email     | Data residency restriction via regional sub-account; logs 30 days                                                  |
-| Telnyx                         | SMS delivery                     | Org-selected region (NA/EU/APAC)                | Phone numbers, message metadata            | Opt-out enforcement, no content mining; residency documented in waiver ledger                                      |
-| Speechmatics Canada (fallback) | Automated transcription fallback | ca-central-1 (org allowlisted)                  | Audio uploads, transcript text             | DPA mirrors Azure terms; retention ≤ 24 h; audited equivalence harness ensures WER/diarization parity with primary |
+| Provider | Service | Region(s) in scope | Data classes processed | DPA/Terms highlights |
+|---|---|---|---|---|
+| Microsoft Azure Speech | Transcription (batch/on-demand) | Org allowlisted Azure regions (e.g., eu-west-2) | Audio uploads, transcript text | DPA §3 forbids training on customer data; residency pinned to selected region; 30-day deletion |
+| Microsoft Azure OpenAI | LLM inference | Org allowlisted Azure regions (mirror Speech) | Prompt excerpts (redacted), generated text | Enterprise agreement disables logging & training; retention ≤ 24h; residency anchored to allowlist |
+| Entrust TSA / OCSP | Timestamping & revocation | Global (per org trust bundle) | Hashes, certificate metadata | No content retention; logs retained 90 days for audits; trust roots mapped to Appendix F |
+| Twilio SendGrid (optional) | Email delivery | Org-selected sub-account region (NA/EU/APAC) | Notification metadata, recipient email | Data residency restriction via regional sub-account; logs 30 days |
+| Telnyx | SMS delivery | Org-selected region (NA/EU/APAC) | Phone numbers, message metadata | Opt-out enforcement, no content mining; residency documented in waiver ledger |
+| Speechmatics Canada (fallback) | Automated transcription fallback | ca-central-1 (org allowlisted) | Audio uploads, transcript text | DPA mirrors Azure terms; retention ≤ 24 h; audited equivalence harness ensures WER/diarization parity with primary |
 
 All sub-processors contractually commit to “no training on customer prompts/outputs” clauses. Annual review ensures residency alignment; updates trigger customer notification per §12.3.
 
@@ -3948,18 +3426,18 @@ ______________________________________________________________________
 
 *Purpose: Clarify accountability for each major area documented in this TDD.*
 
-| Domain / Section           | Responsible                | Accountable             | Consulted                    | Informed                  |
-| -------------------------- | -------------------------- | ----------------------- | ---------------------------- | ------------------------- |
-| Agent pipelines (§6)       | Platform AI Lead           | Director of Engineering | QA Lead, Product             | Support, Customer Success |
-| Guardian & Signer (§7)     | Security Engineering Lead  | CISO                    | Platform Architecture, Legal | Support, Customer Success |
-| LLM governance (§8)        | AI Governance Lead         | CTO                     | Security, Privacy Officer    | Product, Customer Success |
-| Settings platform (§9)     | Platform Architecture Lead | Director of Engineering | Security, QA                 | Support                   |
-| APIs & Integrations (§10)  | API Engineering Manager    | Director of Engineering | Product, Support             | Customers (release notes) |
-| Frontend & Portal (§11)    | UX Engineering Manager     | VP Product              | Accessibility SME, Support   | Customer Success          |
-| Observability & Ops (§12)  | SRE Manager                | VP Engineering          | Security, Product            | Support, Customers        |
-| Quality & Compliance (§13) | QA Manager                 | VP Engineering          | Security, Privacy            | Product, Customers        |
-| Operations lifecycle (§14) | Operations Lead            | COO                     | Security, Legal              | Customer Success          |
-| Roadmap & governance (§15) | Product Strategy Lead      | VP Product              | Architecture, Security       | All teams                 |
+| Domain / Section | Responsible | Accountable | Consulted | Informed |
+|---|---|---|---|---|
+| Agent pipelines (§6) | Platform AI Lead | Director of Engineering | QA Lead, Product | Support, Customer Success |
+| Guardian & Signer (§7) | Security Engineering Lead | CISO | Platform Architecture, Legal | Support, Customer Success |
+| LLM governance (§8) | AI Governance Lead | CTO | Security, Privacy Officer | Product, Customer Success |
+| Settings platform (§9) | Platform Architecture Lead | Director of Engineering | Security, QA | Support |
+| APIs & Integrations (§10) | API Engineering Manager | Director of Engineering | Product, Support | Customers (release notes) |
+| Frontend & Portal (§11) | UX Engineering Manager | VP Product | Accessibility SME, Support | Customer Success |
+| Observability & Ops (§12) | SRE Manager | VP Engineering | Security, Product | Support, Customers |
+| Quality & Compliance (§13) | QA Manager | VP Engineering | Security, Privacy | Product, Customers |
+| Operations lifecycle (§14) | Operations Lead | COO | Security, Legal | Customer Success |
+| Roadmap & governance (§15) | Product Strategy Lead | VP Product | Architecture, Security | All teams |
 
 RACI reviewed every release train; updates recorded in decision log (§15.3) and mirrored in internal handbook.
 
@@ -3971,17 +3449,17 @@ ______________________________________________________________________
 
 *Purpose: Tie requirements to validation, observability, and operational response so audits stay frictionless.*
 
-| Requirement (section)                                                                | Tests / validation artifacts                                                                                                                                                                                 | Monitors / alerts                                                                                                                       | Runbook / response                                                                                                                                        |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guardian judgments deterministic & parent-aware (§7.1)                               | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job                                                                                | `guardian_cleared_ratio`, `guardian_judgment_latency_seconds`, `guardian_parent_block_total`                                            | Appendix B.1, Appendix B.2                                                                                                                                |
-| API versioning & Sunset policy enforced (§10.0, §10.5)                               | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist                                                                             | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds`                                                                 | `../ops/runbooks/index.md` standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft)                                                  |
-| FinOps guardrails prevent runaway spend (§8.7, §12.9)                                | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula`                                                                                                      | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total`                                                                            | [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003)                                                                                                 |
-| Logging pipeline retains structured records (§12.1)                                  | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema                                                                                                              | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct`                                                  | `../ops/runbooks/index.md (RB-LOG-007)`                                                                                                                   |
-| Advisory locks stay healthy during approvals (§5.4)                                  | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs`                                      | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95`                                                                            | [Runbook RB-LOCK-006](../ops/runbooks/index.md#rb-lock-006)                                                                                               |
-| Portal downloads honor ETag / If-Match (§10.6, `../ops/runbooks/index.md (RB-ETAG)`) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets`                                                                                                                                 | `portal_412_precondition_total`, `alert_portal_412_spike`                                                                               | `../ops/runbooks/index.md (RB-ETAG)`                                                                                                                      |
-| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9)                    | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | [Runbook RB-RES-BLOCK](../ops/runbooks/index.md#rb-res-block) (residency), `../ops/runbooks/index.md (RB-ETAG)`, `docs/runbooks/security/abuse_triage.md` |
-| Masking profiles map to FORCE RLS policies (§4.4.1)                                  | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries`                                                       | `rls_context_missing_total`, `mask_profile_mismatch_total`                                                                              | [Runbook RB-GOV-008](../ops/runbooks/index.md#rb-gov-008) (settings rollback), [Runbook RB-LOCK-006](../ops/runbooks/index.md#rb-lock-006)                |
-| LLM/vector residency guard prevents out-of-region fallback (§8.1.1)                  | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml`   | `llm_region_fallback_total`, `vector_region_fallback_total`                                                                             | [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003), [Runbook RB-RES-BLOCK](../ops/runbooks/index.md#rb-res-block)                                  |
-| CSP nonce & HIPAA cache enforcement (§11.5, §10.6)                                   | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n`    | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total`                                                                       | `../ops/runbooks/index.md (RB-PORTAL-005)`, Appendix H security headers checklist                                                                         |
+| Requirement (section) | Tests / validation artifacts | Monitors / alerts | Runbook / response |
+|---|---|---|---|
+| Guardian judgments deterministic & parent-aware (§7.1) | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job | `guardian_cleared_ratio`, `guardian_judgment_latency_seconds`, `guardian_parent_block_total` | Appendix B.1, Appendix B.2 |
+| API versioning & Sunset policy enforced (§10.0, §10.5) | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0003 change review checklist | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds` | `../ops/runbooks/index.md` standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft) |
+| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003) |
+| Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | `../ops/runbooks/index.md (RB-LOG-007)` |
+| Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | [Runbook RB-LOCK-006](../ops/runbooks/index.md#rb-lock-006) |
+| Portal downloads honor ETag / If-Match (§10.6, `../ops/runbooks/index.md (RB-ETAG)`) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | `../ops/runbooks/index.md (RB-ETAG)` |
+| Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | [Runbook RB-RES-BLOCK](../ops/runbooks/index.md#rb-res-block) (residency), `../ops/runbooks/index.md (RB-ETAG)`, `docs/runbooks/security/abuse_triage.md` |
+| Masking profiles map to FORCE RLS policies (§4.4.1) | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | `rls_context_missing_total`, `mask_profile_mismatch_total` | [Runbook RB-GOV-008](../ops/runbooks/index.md#rb-gov-008) (settings rollback), [Runbook RB-LOCK-006](../ops/runbooks/index.md#rb-lock-006) |
+| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | [Runbook RB-LLM-003](../ops/runbooks/index.md#rb-llm-003), [Runbook RB-RES-BLOCK](../ops/runbooks/index.md#rb-res-block) |
+| CSP nonce & HIPAA cache enforcement (§11.5, §10.6) | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total` | `../ops/runbooks/index.md (RB-PORTAL-005)`, Appendix H security headers checklist |
 
 ______________________________________________________________________

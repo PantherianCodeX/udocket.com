@@ -67,6 +67,8 @@ nav:
 - Apps:
   - Web App: apps/web-app.md
 - Services:
+  - Platform Runtime: services/platform-runtime.md
+  - Identity & Access: services/identity.md
   - Worker Cluster: services/worker-cluster.md
   - LangGraph Agents: services/langgraph-agents.md
   - Guardian: services/guardian.md

@@ -57,7 +57,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Document Signing Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -66,8 +66,8 @@ ______________________________________________________________________
 | Owners | Security Engineering; Platform Architecture |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -209,12 +209,12 @@ ______________________________________________________________________
 
 ### 3.1 External Interfaces (binding)
 
-| Endpoint / Stream               | Purpose                                          | Contract notes                                                                                         |
-| --------------------------------| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `POST /api/v1/sign`             | Submit signing job for canonical content         | Idempotent via `Idempotency-Key`; requires manifest digest + signature policy; returns signed artifact |
-| `POST /api/v1/sign/verify`      | Re-validate signatures and TSA for auditing      | Used by Guardian + QA when rehydrating deliverables                                                    |
-| `GET /api/v1/sign/certificates/{artifact_id}` | Fetch signature certificate chain / attestations | Requires reviewer or portal token; response includes platform and client certificates                  |
-| SSE `sign.status`               | Broadcast signing state transitions              | Emits `queued`, `signing`, `signed`, `soft_fail`, `quarantined`                                        |
+| Endpoint / Stream | Purpose | Contract notes |
+| --- | --- | --- |
+| `POST /api/v1/sign` | Submit signing job for canonical content | Idempotent via `Idempotency-Key`; requires manifest digest + signature policy; returns signed artifact |
+| `POST /api/v1/sign/verify` | Re-validate signatures and TSA for auditing | Used by Guardian + QA when rehydrating deliverables |
+| `GET /api/v1/sign/certificates/{artifact_id}` | Fetch signature certificate chain / attestations | Requires reviewer or portal token; response includes platform and client certificates |
+| SSE `sign.status` | Broadcast signing state transitions | Emits `queued`, `signing`, `signed`, `soft_fail`, `quarantined` |
 
 Example request (service-to-service):
 
@@ -401,7 +401,7 @@ ______________________________________________________________________
 #### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-SIGN-TSA` | TSA/OCSP outage response | Rotates TSA credentials, fails over to backup TSA, captures evidence |
 | `RB-SIGN-FIPS` | FIPS attestation recovery | Validates CMVP IDs, reinstates HSM slots, restores queue processing |
 | `RB-SIGN-ACK` | Client acknowledgement remediation | Reconciles acknowledgements, notifies stakeholders, updates App.O |
@@ -468,12 +468,12 @@ ______________________________________________________________________
 **Breadcrumbs:** Integration code `apps/platform/operations/signer_guardian_bridge.py`, Settings activation `apps/platform/settings/services/signature.py`, Portal ack controller `apps/platform/portal/client_ack.py`. **|**
 **References:** Settings spec §6, Guardian spec §5, Reference Manager spec §4. *
 
-| Dependency         | Interface / artifact                     | Responsibilities                                                                                         | Notes                                                                                      |
-| ------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| Settings Registry  | Activation bundles (`sign.*`, `privacy.*`) | Provides trust roots, policies, TSA/OCSP profiles, waiver metadata                                     | Unsafe diff blocks activations; diff artifacts stored with release checklist               |
-| Guardian           | Promotion hooks, SSE events              | Blocks deliverable release until signatures validated; records manifest digests and waiver usage      | Integration is synchronous; Guardian quarantines on signer soft-fail escalation           |
-| Portal             | Client acknowledgement UI/API            | Captures client attestations, generates auxiliary artifacts, enforces acknowledgement SLAs             | Step-up auth for attestation; portal revokes URLs on SLA breach                            |
-| Reference Manager  | Deliverable templates & metadata         | Supplies deliverable catalog, default signature policies, localization assets                          | Catalog changes go through RM publish pipeline; signer consumes bundle digests             |
+| Dependency | Interface / artifact | Responsibilities | Notes |
+| --- | --- | --- | --- |
+| Settings Registry | Activation bundles (`sign.*`, `privacy.*`) | Provides trust roots, policies, TSA/OCSP profiles, waiver metadata | Unsafe diff blocks activations; diff artifacts stored with release checklist |
+| Guardian | Promotion hooks, SSE events | Blocks deliverable release until signatures validated; records manifest digests and waiver usage | Integration is synchronous; Guardian quarantines on signer soft-fail escalation |
+| Portal | Client acknowledgement UI/API | Captures client attestations, generates auxiliary artifacts, enforces acknowledgement SLAs | Step-up auth for attestation; portal revokes URLs on SLA breach |
+| Reference Manager | Deliverable templates & metadata | Supplies deliverable catalog, default signature policies, localization assets | Catalog changes go through RM publish pipeline; signer consumes bundle digests |
 
 ______________________________________________________________________
 

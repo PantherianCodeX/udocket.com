@@ -56,7 +56,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | LLM Platform Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -65,8 +65,8 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Applied AI Programs |
 | Reviewers | QA Engineering Lead; FinOps Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -190,11 +190,11 @@ ______________________________________________________________________
 
 Binding checkpoints (sample)
 
-| Binding                   | Implementation                                                                 | Test                                                                                   | Observability                                                        |
-| ------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| HIPAA excerpt suppression | `packages/udocket_core/llm/evidence_store.py::store_excerpt`                   | `tests/udocket_core/llm/test_evidence_store.py::test_hipaa_mode_blocks_excerpts`       | Audit event `HIPAA_EXCERPT_BLOCK` (Privacy dashboard)                |
-| Prompt masking contract   | `packages/udocket_core/redaction/masking.py::mask_prompt_payload`              | `tests/udocket_core/llm/test_prompt_registry.py::test_prompts_use_masked_payloads`     | Metric `redaction_stats{kind="prompt"}`                              |
-| Prompt activation rollout | `apps/platform/settings/services/llm.py::activate_prompts`                     | `tests/platform/settings/test_llm_prompts.py::test_activation_rolls_forward_versions` | Audit log `PROMPT_VERSION_ACTIVATED`; dashboard “LLM Prompt Rollout” |
+| Binding | Implementation | Test | Observability |
+| --- | --- | --- | --- |
+| HIPAA excerpt suppression | `packages/udocket_core/llm/evidence_store.py::store_excerpt` | `tests/udocket_core/llm/test_evidence_store.py::test_hipaa_mode_blocks_excerpts` | Audit event `HIPAA_EXCERPT_BLOCK` (Privacy dashboard) |
+| Prompt masking contract | `packages/udocket_core/redaction/masking.py::mask_prompt_payload` | `tests/udocket_core/llm/test_prompt_registry.py::test_prompts_use_masked_payloads` | Metric `redaction_stats{kind="prompt"}` |
+| Prompt activation rollout | `apps/platform/settings/services/llm.py::activate_prompts` | `tests/platform/settings/test_llm_prompts.py::test_activation_rolls_forward_versions` | Audit log `PROMPT_VERSION_ACTIVATED`; dashboard “LLM Prompt Rollout” |
 
 #### 2.2.1 PII posture (binding)
 
@@ -318,12 +318,12 @@ ______________________________________________________________________
 **References:** Settings spec §2, Residency guard §2.1.1.
 **Breadcrumbs:** Settings bundles `config/llm/providers/*.json`, activation diffs `ops/settings/llm_models/`, FinOps guard reports `ops/finops/mom_guard/`.
 
-| Provider     | Model ID               | Regions                 | Max context | Notes                                                                          |
-| ------------ | ---------------------- | ----------------------- | ----------: | ------------------------------------------------------------------------------ |
-| azure_openai | gpt-4o-mini            | na-us-1, na-us-2        |      128000 | Default Analyze/Compose profile; low latency                                   |
-| azure_openai | o3-mini                | eu-west-2, eu-central-1 |      200000 | Long-context drafting; higher cost                                             |
-| azure_openai | text-embedding-3-large | ap-southeast-2          |        8192 | Embeddings for retrieval                                                       |
-| byo_private  | org.custom-hf/v1       | na-us-1, na-us-2        |       16000 | Bring-your-own HuggingFace Inference endpoint (evaluation digest `sha256-...`) |
+| Provider | Model ID | Regions | Max context | Notes |
+| --- | --- | --- | ----------: | --- |
+| azure_openai | gpt-4o-mini | na-us-1, na-us-2 | 128000 | Default Analyze/Compose profile; low latency |
+| azure_openai | o3-mini | eu-west-2, eu-central-1 | 200000 | Long-context drafting; higher cost |
+| azure_openai | text-embedding-3-large | ap-southeast-2 | 8192 | Embeddings for retrieval |
+| byo_private | org.custom-hf/v1 | na-us-1, na-us-2 | 16000 | Bring-your-own HuggingFace Inference endpoint (evaluation digest `sha256-...`) |
 
 Notes
 
@@ -462,7 +462,7 @@ ______________________________________________________________________
 #### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-LLM-003` | Provider degradation / residency drift | Executes failover validation and waiver workflow |
 | `RB-LLM-JB` | Moderation or jailbreak regression | Locks registry in safe mode, reruns golden set, coordinates with Guardian |
 | `RB-LLM-FINOPS` | Budget hold or cost breach | Pauses jobs, coordinates overrides with FinOps and App.O |
@@ -529,13 +529,13 @@ ______________________________________________________________________
 **Breadcrumbs:** Integration code `packages/udocket_core/llm/interfaces.py`, LPE PolicyContext `packages/udocket_core/lpe/policy_context.py`, Guardian bridge `packages/udocket_core/guardian/llm_bridge.py`. **|**
 **References:** Link to other service docs or appendices.
 
-| Dependency        | Interface / artifact                                                                 | Responsibilities                                                                                   | Notes                                                                                  |
-| ----------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Settings Registry | Activation bundles (`llm.providers[]`, `llm.models[]`, `llm.moderation.*`, `llm.finops.*`) | Supplies catalog metadata, moderation configs, FinOps thresholds                                     | Unsafe diffs block activation; diff artifacts stored with release checklist            |
-| LPE               | PolicyContext residency hints, waiver metadata                                        | Provides residency/compliance context consumed by registry guards                                  | Digests embedded in decision traces and evidence envelopes                             |
-| Guardian          | Moderation verdicts, quarantine reasons                                               | Blocks promotion when safety violations occur; records reviewer context                           | Quarantine reasons surface in reviewer UI and audit history                            |
-| Compose/Analyze   | Agent runtimes, LangGraph lanes                                                        | Invoke registry for model selection, rely on envelopes for reproducibility                         | Agents must pass `retry_token`/`envelope_id` for replays                                |
-| FinOps            | Budget controller, dashboards                                                         | Monitors spend, enforces overrides                                                                 | Overrides logged via App.O and release checklist                                       |
+| Dependency | Interface / artifact | Responsibilities | Notes |
+| --- | --- | --- | --- |
+| Settings Registry | Activation bundles (`llm.providers[]`, `llm.models[]`, `llm.moderation.*`, `llm.finops.*`) | Supplies catalog metadata, moderation configs, FinOps thresholds | Unsafe diffs block activation; diff artifacts stored with release checklist |
+| LPE | PolicyContext residency hints, waiver metadata | Provides residency/compliance context consumed by registry guards | Digests embedded in decision traces and evidence envelopes |
+| Guardian | Moderation verdicts, quarantine reasons | Blocks promotion when safety violations occur; records reviewer context | Quarantine reasons surface in reviewer UI and audit history |
+| Compose/Analyze | Agent runtimes, LangGraph lanes | Invoke registry for model selection, rely on envelopes for reproducibility | Agents must pass `retry_token`/`envelope_id` for replays |
+| FinOps | Budget controller, dashboards | Monitors spend, enforces overrides | Overrides logged via App.O and release checklist |
 
 ______________________________________________________________________
 

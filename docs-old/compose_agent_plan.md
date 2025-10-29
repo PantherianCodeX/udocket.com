@@ -18,7 +18,7 @@ This plan captures the responsibilities, data contracts, and LangGraph orchestra
 Compose uses LangGraph 0.6 with explicit reducers. Nodes fan out into client and lawyer “lanes” that operate independently until a join syncs them for QA.
 
 | Node | Stage names | Purpose | Notes |
-|------|-------------|---------|-------|
+| --- | --- | --- | --- |
 | `ContextAssembler` | `compose.context` | Build shared `ComposeContext` from Analyze data, intake metadata, and staff report. | Deterministic; no LLM. |
 | `ClientComposer` / `LawyerComposer` | `compose.client.draft`, `compose.client.revise`, `compose.lawyer.draft`, `compose.lawyer.revise` | Draft or revise Markdown using Azure models. | Attempts tracked per lane; revision briefs loaded when present. |
 | `ClientStructureValidator` / `LawyerStructureValidator` | `compose.client.structure`, `compose.lawyer.structure` | Check headings, minimum word counts, readability. | Deterministic guard reports. |

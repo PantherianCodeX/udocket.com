@@ -22,7 +22,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Platform Documentation Team |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -31,8 +31,8 @@ ______________________________________________________________________
 | Owners | Platform Documentation Team |
 | Reviewers | Platform Architecture |
 | Approvers | Architecture Steering Committee |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 ______________________________________________________________________
 

@@ -13,7 +13,7 @@ This guide documents the LangGraph-driven Compose agent that assembles client an
 Compose uses LangGraph 0.6 with explicit reducers to avoid in-place mutation issues. The graph fan-outs client and lawyer work into dedicated “lanes” that loop until guard and QA checks succeed.
 
 | Node | Stage name(s) | Role |
-|------|---------------|------|
+| --- | --- | --- |
 | `ContextAssembler` | `compose.context` | Build the shared `ComposeContext` from Analyze outputs, intake metadata, and staff report. |
 | `ClientComposer` / `LawyerComposer` | `compose.client.draft`, `compose.client.revise`, `compose.lawyer.draft`, `compose.lawyer.revise` | Draft (or revise) lane Markdown via Azure deployments. Attempts are capped per lane. |
 | `ClientStructureValidator` / `LawyerStructureValidator` | `compose.client.structure`, `compose.lawyer.structure` | Deterministic guard reports on headings, word counts, readability. |

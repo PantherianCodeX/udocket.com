@@ -57,7 +57,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Worker Cluster Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -66,8 +66,8 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | SRE Manager; Applied AI Programs |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -383,15 +383,15 @@ ______________________________________________________________________
 **Breadcrumbs:** Integration specs, dependency docs. **|**
 **References:** Link to other service docs or appendices.
 
-| Dependency                | Responsibility                                                             | Notes                                                                |
-| ------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Settings Registry         | Supplies queue definitions, watchdog toggles, provider metadata            | Activation diff artifacts archived with change requests              |
-| Guardian                  | Provides verdicts, quarantine actions, and backlog metrics                 | Workers escalate Guardian failures via SSE and runbooks              |
-| Notifications service     | Outbox delivery and receipt tracking for email/SMS/in-app                  | Shared queues, DLQ handling, signed download tokens                  |
-| LLM Registry & Speech     | Capability registry, parity evidence, failover orchestrators               | Workers consume controllers to enforce residency and parity          |
-| Storage subsystem         | Artifact staging, upload sessions, case import bundles                     | Workers manage lifecycle and cleanup                                 |
-| Worker infrastructure     | KEDA, Kubernetes HPA, monitoring dashboards                                | Ops Engineering maintains scaling policies                           |
-| Ops runbook catalog       | Incident response and drill references                                     | Docs lint keeps RB-\* entries current                                 |
+| Dependency | Responsibility | Notes |
+| --- | --- | --- |
+| Settings Registry | Supplies queue definitions, watchdog toggles, provider metadata | Activation diff artifacts archived with change requests |
+| Guardian | Provides verdicts, quarantine actions, and backlog metrics | Workers escalate Guardian failures via SSE and runbooks |
+| Notifications service | Outbox delivery and receipt tracking for email/SMS/in-app | Shared queues, DLQ handling, signed download tokens |
+| LLM Registry & Speech | Capability registry, parity evidence, failover orchestrators | Workers consume controllers to enforce residency and parity |
+| Storage subsystem | Artifact staging, upload sessions, case import bundles | Workers manage lifecycle and cleanup |
+| Worker infrastructure | KEDA, Kubernetes HPA, monitoring dashboards | Ops Engineering maintains scaling policies |
+| Ops runbook catalog | Incident response and drill references | Docs lint keeps RB-\* entries current |
 
 ______________________________________________________________________
 

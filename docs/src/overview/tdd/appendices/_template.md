@@ -24,7 +24,7 @@ ______________________________________________________________________
 **<< AUTOMATED AREA >>** — This table syncs from the front matter. Update values above.
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | <Owning group(s)> |
 | Version | <0.1-draft> |
 | Status | <Provisional/Implementable/Implemented> |
@@ -33,8 +33,8 @@ ______________________________________________________________________
 | Owners | <Primary owners> |
 | Reviewers | <Review groups> |
 | Approvers | <Approval authority> |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 ______________________________________________________________________
 

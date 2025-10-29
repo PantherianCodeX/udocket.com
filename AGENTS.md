@@ -116,10 +116,10 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
 To avoid future confusion, the table below captures the canonical naming conventions for every first-party agent. Always refer to the *tool* (UI panel, Celery task wrapper, job kind) separately from the *artifacts* it emits.
 
 | Tool / Agent | UI label & panel key | `job_kind` / `agent_type` | Primary artifacts (types & filenames) | Notes |
-|--------------|----------------------|---------------------------|----------------------------------------|-------|
-| Transcribe   | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
-| Analyze      | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
-| Compose      | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), bundle/QA reports, compose ops logs | LangGraph pipeline with parallel lanes, guard rails, and QA gating. |
+| --- | --- | --- | --- | --- |
+| Transcribe | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
+| Analyze | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
+| Compose | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), bundle/QA reports, compose ops logs | LangGraph pipeline with parallel lanes, guard rails, and QA gating. |
 | Timeline (future standalone) | `Timeline` / `timeline` | `timeline` | To-be-defined `timeline_v2.*` assets | When run independently, should still read latest summary outputs. |
 
 General guidelines:

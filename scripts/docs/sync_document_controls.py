@@ -164,7 +164,7 @@ def sync_file(path: Path) -> bool:
         )
         return False
 
-    new_rows = ["| Field | Value |", "| ----- | ----- |"]
+    new_rows = ["| Field | Value |", "| --- | --- |"]
     for field, expected in combined_fields.items():
         value = expected if expected or field not in OPTIONAL_FIELDS else ""
         new_rows.append(f"| {field} | {value} |")

@@ -57,7 +57,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Application Experience Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -66,8 +66,8 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Product Management |
 | Reviewers | Accessibility Program Lead; Operations Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -432,7 +432,7 @@ ______________________________________________________________________
 #### 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
 | `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
 | `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |
@@ -498,7 +498,7 @@ ______________________________________________________________________
 **References:** Notifications, Guardian, LLM Registry, LP Engine, Settings Registry, Digital Signer, Worker Cluster specs.
 
 | Dependency | Responsibility | Notes |
-| ---------- | -------------- | ----- |
+| --- | --- | --- |
 | Notifications service | In-app alerts, download tokens, escalation digests | See `../services/notifications.md`; SSE topics share infrastructure |
 | Guardian | Verdicts, quarantine enforcement, edit/assistant moderation | Guardian judgments gate approvals and portal delivery |
 | LLM Registry | Moderation & safety harness for agent edits and assistants | Settings keys `chat.*`, moderation controls |

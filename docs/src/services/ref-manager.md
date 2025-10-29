@@ -55,7 +55,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | uDocket Platform Architecture Team; Reference Programs Leadership |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -64,8 +64,8 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Reference Programs |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 

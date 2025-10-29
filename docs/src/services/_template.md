@@ -56,18 +56,18 @@ ______________________________________________________________________
 **<< AUTOMATED AREA >>** - Updates automatically on pre-commit hook.
 *Do not edit the values here. Make all updates in the frontmatter above.*
 
-| Field          | Value |
-| -------------- | ----- |
-| Authors        | <Primary authors> |
-| Version        | <0.1-draft> |
-| Status         | <Provisional/Implementable/Implemented> |
+| Field | Value |
+| --- | --- |
+| Authors | <Primary authors> |
+| Version | <0.1-draft> |
+| Status | <Provisional/Implementable/Implemented> |
 | Classification | <Confidential> |
-| Last updated   | <1970-01-01> |
-| Owners         | <Teams accountable for day-to-day ownership> |
-| Reviewers      | <Stakeholders providing technical/operational review> |
-| Approvers      | <Roles or committees that sign off on changes> |
-| Approved by    | |
-| Approved date  | |
+| Last updated | <1970-01-01> |
+| Owners | <Teams accountable for day-to-day ownership> |
+| Reviewers | <Stakeholders providing technical/operational review> |
+| Approvers | <Roles or committees that sign off on changes> |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 

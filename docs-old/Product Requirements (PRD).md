@@ -64,7 +64,6 @@ ntegrations, multilingual outputs.
 
 Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑gated artifact release; audit logs; reference engine; questionnaire; transcription (batch); real-time transcription; exhibits, court documents, financials, emails, memo ingestion (for analyze); analyze (transcript/intake/questionnaire); compose; assembly; final review; delivery; client signoff; retention & destruction with signed certificates; settings; notifications; reporting; client portal, e-filing integrations, multilingual input/output.
 
-
 **Non‑functional outcomes**
 
 * **High availability** for staff‑facing journeys.
@@ -115,7 +114,6 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
   * **Lane artifacts:** Events, Timeline, Issues, Entities, Facts (artifacts).
   * **Gaps artifact:** Cross-lane gaps summary (artifact).
   * **QA_logs:** Human-readable Markdown plus machine-readable JSON listing lane QA findings and revision directives. Persisted with the Analyze job and linked to produced artifacts for reviewer visibility and auditability.
-
 
 ### 4.5 Step 5 — Compose (agentic pipeline)
 
@@ -324,31 +322,31 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
 ## 21) Stage‑level acceptance criteria (outcome‑focused)
 
 **Intake**
-* Required fields pass jurisdiction validation; representation type captured; case UUID assigned; intake artifacts **Released**.
+    - Required fields pass jurisdiction validation; representation type captured; case UUID assigned; intake artifacts **Released**.
 
 **Transcription**
-* Audio normalized; transcript and (if available) speaker separation produced; hashes stored; hash re‑validation passes; transcription artifacts **Released**.
+    - Audio normalized; transcript and (if available) speaker separation produced; hashes stored; hash re‑validation passes; transcription artifacts **Released**.
 
 **Analyze**
-* Lane artifacts + Gaps artifact created and submitted to Guardian. QA_logs recorded (Markdown + JSON) and linked to produced artifacts; all QA pass conditions satisfied..
+    - Lane artifacts + Gaps artifact created and submitted to Guardian. QA_logs recorded (Markdown + JSON) and linked to produced artifacts; all QA pass conditions satisfied..
 
 **Compose**
-* All sections pass QA; section artifacts submitted to Guardian. QA_logs recorded per section and linked for review.
+    - All sections pass QA; section artifacts submitted to Guardian. QA_logs recorded per section and linked for review.
 
 **Assembly**
-* Final documents render successfully; metadata and hashes present; assembled document artifacts **Released**.
+    - Final documents render successfully; metadata and hashes present; assembled document artifacts **Released**.
 
 **Final Review**
-* Reviewers approve **Released** documents with rationale; approvals are auditable.
+    - Reviewers approve **Released** documents with rationale; approvals are auditable.
 
 **Delivery**
-* Only **Released** documents are delivered; delivery receipts are recorded.
+    - Only **Released** documents are delivered; delivery receipts are recorded.
 
 **Client Signoff**
-* Digital signature captured; verification report available; signature certificate artifact **Released** and linked to the case.
+    - Digital signature captured; verification report available; signature certificate artifact **Released** and linked to the case.
 
 **Destruction**
-* Eligibility confirmed; **destruction certificate** created and **Released**; deletion receipts stored; case marked accordingly.
+    - Eligibility confirmed; **destruction certificate** created and **Released**; deletion receipts stored; case marked accordingly.
 
 ---
 
@@ -357,29 +355,29 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
 **Purpose:** Single source of truth for system, organization, and case-scoped settings that control behavior across all modules. Settings are versioned, audited, and enforce per-org **region allowlists**. They are distinct from secrets.
 
 **Scope**
-* **Hierarchy & precedence:** `System Defaults → Organization → Case (optional)` with explicit override rules. No user-level overrides.
-* **Domains:** Regions/Residency, Notifications (channels/providers/templates), Guardian policy selection, Analyze/Compose retry limits, LLM/provider knobs, Retention periods, Template selection defaults, Feature flags (enable/disable modules), Quotas (concurrency, storage), Client portal options, Signature policies.
-* **Change control:** Draft → Review → Activate, with effective date/time and rollback to prior version.
-* **Validation:** Type-safe (boolean, integer, enum, duration, region code, URL, JSON schema) with cross-field rules (e.g., if email is enabled, at least one provider must be configured).
-* **Auditability:** Every change captures who/when/where, old/new values, justification, and approval (if required).
-* **Discovery:** Read-only views for Operators and Reviewers showing effective values that impacted a job or artifact.
+    - **Hierarchy & precedence:** `System Defaults → Organization → Case (optional)` with explicit override rules. No user-level overrides.
+    - **Domains:** Regions/Residency, Notifications (channels/providers/templates), Guardian policy selection, Analyze/Compose retry limits, LLM/provider knobs, Retention periods, Template selection defaults, Feature flags (enable/disable modules), Quotas (concurrency, storage), Client portal options, Signature policies.
+    - **Change control:** Draft → Review → Activate, with effective date/time and rollback to prior version.
+    - **Validation:** Type-safe (boolean, integer, enum, duration, region code, URL, JSON schema) with cross-field rules (e.g., if email is enabled, at least one provider must be configured).
+    - **Auditability:** Every change captures who/when/where, old/new values, justification, and approval (if required).
+    - **Discovery:** Read-only views for Operators and Reviewers showing effective values that impacted a job or artifact.
 
 **RBAC**
-* **SysAdmin:** Define system defaults; manage global setting definitions.
-* **Admin:** Create/change organization settings; schedule activation; manage feature flags and quotas.
-* **Manager/Reviewer/Operator:** Read effective settings; cannot modify.
-* **Auditor:** Read all versions and change history.
+    - **SysAdmin:** Define system defaults; manage global setting definitions.
+    - **Admin:** Create/change organization settings; schedule activation; manage feature flags and quotas.
+    - **Manager/Reviewer/Operator:** Read effective settings; cannot modify.
+    - **Auditor:** Read all versions and change history.
 
 **Behavior**
-* **Consistency:** Running jobs use a snapshot of effective settings at job start.
-* **Blocking:** Invalid settings fail closed (e.g., non-allowed region), surfacing clear errors.
-* **Export/Import:** Admin can export org settings bundle and import into another org (with validations).
+    - **Consistency:** Running jobs use a snapshot of effective settings at job start.
+    - **Blocking:** Invalid settings fail closed (e.g., non-allowed region), surfacing clear errors.
+    - **Export/Import:** Admin can export org settings bundle and import into another org (with validations).
 
 **Acceptance**
-* Effective value resolution follows precedence.
-* Changes are versioned, auditable, and can be rolled back.
-* Jobs record the settings snapshot used.
-* Region allowlists are enforced platform-wide.
+    - Effective value resolution follows precedence.
+    - Changes are versioned, auditable, and can be rolled back.
+    - Jobs record the settings snapshot used.
+    - Region allowlists are enforced platform-wide.
 
 ---
 
@@ -388,24 +386,24 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
 **Purpose:** Intake non-audio materials (exhibits, court documents, financials, emails, memos) to produce **Released** artifacts consumable by Analyze.
 
 **Inputs & Outputs**
-* **Inputs:** PDFs, images, office docs, emails (RFC 5322/EML), spreadsheets.
-* **Outputs (artifacts):**
-  * `EXHIBIT_RAW`, `EXHIBIT_TEXT` (OCR/parse),
-  * `COURT_DOC_RAW`, `COURT_DOC_TEXT`,
-  * `EMAIL_RFC822`, `EMAIL_TEXT`, `EMAIL_ATTACHMENTS`,
-  * `FINANCIALS_RAW`, `FINANCIALS_TABLE`,
-  * `MEMO_TEXT`.
+    - **Inputs:** PDFs, images, office docs, emails (RFC 5322/EML), spreadsheets.
+    - **Outputs (artifacts):**
+        - `EXHIBIT_RAW`, `EXHIBIT_TEXT` (OCR/parse),
+        - `COURT_DOC_RAW`, `COURT_DOC_TEXT`,
+        - `EMAIL_RFC822`, `EMAIL_TEXT`, `EMAIL_ATTACHMENTS`,
+        - `FINANCIALS_RAW`, `FINANCIALS_TABLE`,
+        - `MEMO_TEXT`.
 
 **Requirements**
-* OCR and layout retention for PDFs/images; table extraction for financials; email parsing with attachments; de-duplication by hash; chain-of-custody metadata.
-* Per-org file type allow/deny lists from **Centralized Settings**.
-* All outputs are **Guardian-gated**; only **Released** artifacts flow to Analyze.
+    - OCR and layout retention for PDFs/images; table extraction for financials; email parsing with attachments; de-duplication by hash; chain-of-custody metadata.
+    - Per-org file type allow/deny lists from **Centralized Settings**.
+    - All outputs are **Guardian-gated**; only **Released** artifacts flow to Analyze.
 
 **Acceptance**
-* Each upload yields hashed raw artifact and a parsed/text artifact.
-* Emails preserve headers/attachments and produce structured text/attachments artifacts.
-* Financial tables extracted to machine-readable form.
-* All artifacts pass Guardian to be available to Analyze.
+    - Each upload yields hashed raw artifact and a parsed/text artifact.
+    - Emails preserve headers/attachments and produce structured text/attachments artifacts.
+    - Financial tables extracted to machine-readable form.
+    - All artifacts pass Guardian to be available to Analyze.
 
 ---
 
@@ -414,20 +412,20 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
 **Purpose:** Client-facing experience for delivery, corrections, and signoff.
 
 **Capabilities**
-* View **Released** deliverables; submit factual corrections; track status; perform digital signoff; download verification reports.
-* Device/browser fingerprint captured at signoff (stored in manifest).
-* Region compliance enforced by **Centralized Settings**.
-* Notifications route client back to portal for any actions.
+    - View **Released** deliverables; submit factual corrections; track status; perform digital signoff; download verification reports.
+    - Device/browser fingerprint captured at signoff (stored in manifest).
+    - Region compliance enforced by **Centralized Settings**.
+    - Notifications route client back to portal for any actions.
 
 **RBAC**
-* **Client:** Access own case artifacts and actions.
-* **External Counsel:** Access granted deliverables.
-* **Admin/Manager:** Configure portal preferences per org.
+    - **Client:** Access own case artifacts and actions.
+    - **External Counsel:** Access granted deliverables.
+    - **Admin/Manager:** Configure portal preferences per org.
 
 **Acceptance**
-* Only Released artifacts are visible.
-* Signoff produces a signature certificate artifact and links to the case.
-* Corrections create reviewable items and, once accepted, trigger new Analyze/Compose.
+    - Only Released artifacts are visible.
+    - Signoff produces a signature certificate artifact and links to the case.
+    - Corrections create reviewable items and, once accepted, trigger new Analyze/Compose.
 
 ---
 
@@ -436,13 +434,13 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
 **Purpose:** Prevent destruction for cases or artifacts under hold.
 
 **Behavior**
-* Legal Hold flag at **case** and **artifact** levels.
-* Destruction workflows skip held items and surface rationale.
-* Hold requires reason, owner, and review cadence; all changes are audited.
+    - Legal Hold flag at **case** and **artifact** levels.
+    - Destruction workflows skip held items and surface rationale.
+    - Hold requires reason, owner, and review cadence; all changes are audited.
 
 **Acceptance**
-* Destruction jobs exclude held items.
-* Hold state and rationale are visible in case overview.
+    - Destruction jobs exclude held items.
+    - Hold state and rationale are visible in case overview.
 
 ---
 
@@ -451,21 +449,23 @@ Full lifecycle (Steps 1–11); versioning & hashing; artifact model; Guardian‑
 **Purpose:** Enforce per-org limits and provide visibility.
 
 **Quotas**
-* Concurrent jobs, daily transcription hours, storage footprint, notification volumes.
+    - Concurrent jobs, daily transcription hours, storage footprint, notification volumes.
 
 **Metering**
-* Counters and usage windows surfaced to Admin; overages block new submissions with clear errors.
+    - Counters and usage windows surfaced to Admin; overages block new submissions with clear errors.
 
 **Acceptance**
-* Quotas enforced consistently across job types.
-* Usage metrics available per org.
+    - Quotas enforced consistently across job types.
+    - Usage metrics available per org.
 
 ---
 
 ### Appendix A — Data classification & retention defaults
 
-* **Default retention:** **90 days** per organization setting (case‑wide), with early destruction on request; audit logs retained at least as long as case data and designed to minimize personally identifiable information.
-* **Certificates:** No statutory format is required; uDocket standardizes on **PDF/A with embedded digital signature and manifest** for signoff and destruction certificates.
+* **Default retention:**
+  * **90 days** per organization setting (case‑wide), with early destruction on request; audit logs retained at least as long as case data and designed to minimize personally identifiable information.
+* **Certificates:**
+  * No statutory format is required; uDocket standardizes on **PDF/A with embedded digital signature and manifest** for signoff and destruction certificates.
 
 ### Appendix B — Representative domain enums
 

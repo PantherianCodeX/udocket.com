@@ -15,7 +15,7 @@
 ### Digital Signer — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-SIGN-TSA` | TSA/OCSP outage response | Rotates TSA credentials, fails over to backup TSA, captures evidence |
 | `RB-SIGN-FIPS` | FIPS attestation recovery | Validates CMVP IDs, reinstates HSM slots, restores queue processing |
 | `RB-SIGN-ACK` | Client acknowledgement remediation | Reconciles acknowledgements, notifies stakeholders, updates App.O |
@@ -80,6 +80,47 @@
 - Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to confirm coverage of Guardian runbooks.
 
+## Identity & Access — 8.3 Runbooks & Drills (binding)
+
+**Purpose:** Keep operational playbooks aligned with alerts and exercised on schedule. **|**
+**Contract:** Runbooks must exist, link to alerts, and produce evidence per cadence. **|**
+**State:** Runbook files, automation outputs `ops/identity/<date>/`. **|**
+**Failures & handling:** Missing or stale runbooks block releases until refreshed. **|**
+**Observability:** Runbook execution tracker, drill logs. **|**
+**Breadcrumbs:** Ops catalog, automation scripts. **|**
+**References:** Ops runbook catalog, drill tracker.
+
+### Identity & Access — 8.3.1 Runbook Index (informative)
+
+| Signal / Scenario | Runbook | Notes |
+| --- | --- | --- |
+| IdP outage / federation drift | `RB-IDP-FAILOVER` | Switch to Keycloak-native auth, rollback steps |
+| RLS context failures | `RB-RLS-CONTEXT` | Middleware/PgBouncer remediation |
+| Device fingerprint surge | `RB-DEVICE-FP` | Rotate tokens, update trusted proxies |
+| Masking violation | `RB-MASK` | Detokenization audit and remediation |
+| Break-glass governance gap | `RB-BREAK-GLASS` | Close events, capture retrospectives |
+
+### Identity & Access — 8.3.2 Primary Runbooks (binding)
+
+**Purpose:** Summarize the critical runbooks responders execute during incidents. **|**
+**Contract:** Each runbook must remain current and linked from alert definitions. **|**
+**State:** Runbook Markdown files, automation scripts, evidence directories. **|**
+**Failures & handling:** Gaps discovered during drills trigger immediate updates and retrospective notes. **|**
+**Observability:** Runbook execution tracker, drill reports. **|**
+**Breadcrumbs:** Ops runbook catalog (`docs/src/ops/runbooks/identity/*.md`). **|**
+**References:** Ops runbook catalog, incident retrospectives.
+
+- `RB-IDP-FAILOVER` — federation failover/rollback with evidence capture.  
+- `RB-RLS-CONTEXT` — diagnose missing GUCs or pooling drift.  
+- `RB-DEVICE-FP` — investigate compromised sessions, rotate credentials.  
+- `RB-MASK` — remediate PII leakage, update scrubber coverage.  
+- `RB-BREAK-GLASS` — dual approval workflow, retrospective documentation.
+
+### Identity & Access — 8.3.3 Drill Cadence & Evidence (informative)
+
+- Quarterly drills cover IdP failover, RLS failure, and masking breach; evidence stored under `ops/identity/drills/<date>/`.  
+- Automation validates runbook execution dates each release; failures raise `identity_runbook_outdated_total`.
+
 ## LangGraph Agent Orchestration — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Ensure operators have actionable playbooks for agent degradations, activation failures, and QA regressions. **|**
@@ -135,7 +176,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 ### LLM Registry & Runtime Governance — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-LLM-003` | Provider degradation / residency drift | Executes failover validation and waiver workflow |
 | `RB-LLM-JB` | Moderation or jailbreak regression | Locks registry in safe mode, reruns golden set, coordinates with Guardian |
 | `RB-LLM-FINOPS` | Budget hold or cost breach | Pauses jobs, coordinates overrides with FinOps and App.O |
@@ -213,7 +254,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 ### Notifications Service — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-NOTIFY-OUTAGE` | Provider outage / degraded delivery | Provider escalation paths, failover to backup channel |
 | `RB-NOTIFY-WEBHOOK` | Webhook signature drift / compromise | Key rotation, backlog replay, SIEM coordination |
 | `RB-NOTIFY-SMS` | STOP/HELP surge & regulatory response | Compliance scripts, opt-in reinstatement |
@@ -239,6 +280,47 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Quarterly drills cover provider failover, webhook compromise, STOP/HELP surge, and token abuse scenarios with evidence stored in `ops/notifications/drills/<date>/`.
 - Drill scheduler `ops/scripts/notifications/schedule_drills.py` tracks cadence; missed drills block change approvals until evidence uploaded.
 - Docs lint and Ops governance dashboards verify runbook freshness and drill completion ahead of production changes.
+
+## Platform Runtime — 8.3 Runbooks & Drills (binding)
+
+**Purpose:** Keep operational playbooks aligned with alerts and exercised on schedule. **|**
+**Contract:** Runbooks must exist, include automation evidence, and be rehearsed per cadence. **|**
+**State:** Runbook files and automation outputs under `ops/platform-runtime/<date>/`. **|**
+**Failures & handling:** Missing or stale runbooks block releases until updated. **|**
+**Observability:** Runbook execution tracker, drill summaries. **|**
+**Breadcrumbs:** Ops catalog, automation scripts. **|**
+**References:** Ops runbook catalog, drill scheduler documentation.
+
+### Platform Runtime — 8.3.1 Runbook Index (informative)
+
+| Signal / Scenario | Runbook | Notes |
+| --- | --- | --- |
+| TLS expiry | `RB-TLS-LEGACY` | Temporary TLS 1.2 fallback, validation, rollback |
+| Residency drift | `RB-RES-BLOCK` | Mesh policy hardening and waiver review |
+| Pod security violation | `RB-K8S-FENCE` | Admission webhook remediation |
+| Region outage | `RB-REGION-CUTOVER` | DR failover/failback workflow |
+| Flux/Helm rollout stuck | `RB-FLUX-ROLLBACK` | Flux sync investigation and rollback |
+
+### Platform Runtime — 8.3.2 Primary Runbooks (binding)
+
+**Purpose:** Summarize the critical runbooks responders execute during incidents. **|**
+**Contract:** Each runbook must remain up to date and linked from alert definitions. **|**
+**State:** Runbook Markdown files, automation scripts, evidence directories. **|**
+**Failures & handling:** Missing steps discovered during drills trigger immediate updates and retro documentation. **|**
+**Observability:** Runbook execution tracker, drill reports. **|**
+**Breadcrumbs:** Runbook catalog entries (`docs/src/ops/runbooks/*.md`). **|**
+**References:** Ops runbook catalog, incident retrospectives.
+
+- `RB-TLS-LEGACY` — enable/disable TLS 1.2 fallback, confirm scanners, capture evidence.  
+- `RB-RES-BLOCK` — tighten mesh allowlists, coordinate Reference Manager/LPE updates, review waivers.  
+- `RB-K8S-FENCE` — remediate PodSecurity violations or admission webhook outages.  
+- `RB-REGION-CUTOVER` — execute disaster-recovery cutover and failback within approved region pairs.  
+- `RB-FLUX-ROLLBACK` — handle Flux/Helm deployment failures, ensure service availability.
+
+### Platform Runtime — 8.3.3 Drill Cadence & Evidence (informative)
+
+- Quarterly drills rehearse TLS fallback, residency drift remediation, and region cutover; evidence stored in `ops/platform-runtime/drills/<date>/summary.md`.  
+- Buildkite “platform-runtime-guardrails” step verifies runbook execution dates and evidence directories; failures page ownership teams.
 
 ## Reference Manager — 8.3 Runbooks & Drills (binding)
 
@@ -367,7 +449,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 ### Web Application & Portal — 8.3.1 Runbook Index (informative)
 
 | Runbook code | Scenario | Notes |
-| ------------ | -------- | ----- |
+| --- | --- | --- |
 | `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
 | `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
 | `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |

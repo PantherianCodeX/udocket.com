@@ -3,7 +3,7 @@
 This directory hosts the canonical JSON Schema definitions that drive OpenAPI components, Pydantic model generation, and contract tests.
 
 | Schema | Purpose |
-| ------ | ------- |
+| --- | --- |
 | `api_error.schema.json` | Shared error envelope for all REST services. |
 | `policy_context.schema.json` | Localization & Policy Engine response payload. |
 | `locale.schema.json` | Locale pack describing CLDR/ICU resources and attribution. |

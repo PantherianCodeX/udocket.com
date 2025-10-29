@@ -59,7 +59,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | uDocket Platform Architecture Team; Localization & Policy Program Leads |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -68,8 +68,8 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Localization & Policy Program |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -156,14 +156,14 @@ ______________________________________________________________________
 
 - **Managed domains**
 
-| Domain                        | Examples / keys                                                                                                                                                               | Primary consumers                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Localization packs            | Approval banners, invalidation copy, intake flows, accessibility copy, formatting helpers (date/time, number, currency, measurement units), legal disclaimers keyed by locale | Staff UI, client portal, notifications, Compose/Analyze agents |
-| Residency policies            | Compute/storage/vector region allowlists, waiver metadata, deployment type annotations                                                                                        | Guardian, workers, storage adapters, Search/Vector             |
-| Privacy frameworks            | HIPAA/PHIPA/PIPA/GDPR toggles, retention defaults, DSAR requirements, PHI posture                                                                                             | Guardian, workers, Portal, Settings activation                 |
-| Court catalogs                | Jurisdiction hierarchies, court names, filing instructions, identifier crosswalks                                                                                             | Web/Portal selection UIs, Compose agents                       |
-| Masking profiles              | `default`, `hipaa_strict`, `legal_hold` plus column mask instructions                                                                                                         | Database RLS enforcement, audit redaction                      |
-| Logging & observability hints | Never-log keys, sampling budgets, FinOps hints                                                                                                                                | Observability fabric, FinOps dashboards                        |
+| Domain | Examples / keys | Primary consumers |
+| --- | --- | --- |
+| Localization packs | Approval banners, invalidation copy, intake flows, accessibility copy, formatting helpers (date/time, number, currency, measurement units), legal disclaimers keyed by locale | Staff UI, client portal, notifications, Compose/Analyze agents |
+| Residency policies | Compute/storage/vector region allowlists, waiver metadata, deployment type annotations | Guardian, workers, storage adapters, Search/Vector |
+| Privacy frameworks | HIPAA/PHIPA/PIPA/GDPR toggles, retention defaults, DSAR requirements, PHI posture | Guardian, workers, Portal, Settings activation |
+| Court catalogs | Jurisdiction hierarchies, court names, filing instructions, identifier crosswalks | Web/Portal selection UIs, Compose agents |
+| Masking profiles | `default`, `hipaa_strict`, `legal_hold` plus column mask instructions | Database RLS enforcement, audit redaction |
+| Logging & observability hints | Never-log keys, sampling budgets, FinOps hints | Observability fabric, FinOps dashboards |
 
 - Locale packs derive from Unicode CLDR releases and store ICU tags, fallback chains, MessageFormat 2 payloads, attribution metadata, and accessibility copy. Missing locales create `LOCALIZATION_MISSING_LOCALE` tasks until resolved.
 - `i18n.fallback_chain` enforces deterministic order `requested_locale` → base_language → platform_default (default `en-CA`, overridable per org)` with org overrides applied before fallback evaluation.
@@ -388,11 +388,11 @@ ______________________________________________________________________
 **Observability:** Dashboards “LPE – Enforcement & Residency”, “LPE Compiler”, metrics `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_bundle_sign_total`; synthetic tests `tests/synthetics/test_lpe_runtime_topology.py`. **|**
 **Breadcrumbs:** Manifests `infra/kubernetes/lpe/`, Helm charts `infra/helm/lpe/`, tests `tests/synthetics/test_lpe_runtime_topology.py`.
 
-| Component     | Runtime             | Responsibilities                                                             | Scaling & notes                                                         | Observability anchors                                                             |
-| ------------- | ------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| LPE API       | FastAPI             | PolicyContext lookup, localization pack retrieval, court/jurisdiction search | Horizontally replicated Deployment; caches warmed via activation events | `lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_policy_context_version` |
-| Compiler jobs | Celery/worker cron  | Compile policy contexts, localization packs, OPA bundles                     | Auto-scales on activation queue depth; throttled to deployment window   | `lpe_compiler_duration_seconds`, `lpe_policy_block_total`                         |
-| Bundle signer | Managed HSM clients | Dual-sign Ed25519 + ECDSA bundles, rotate keys                               | Runs on demand with queue depth alerts                                  | `lpe_bundle_sign_total`, `lpe_bundle_signature_error_total`                       |
+| Component | Runtime | Responsibilities | Scaling & notes | Observability anchors |
+| --- | --- | --- | --- | --- |
+| LPE API | FastAPI | PolicyContext lookup, localization pack retrieval, court/jurisdiction search | Horizontally replicated Deployment; caches warmed via activation events | `lpe_lookup_latency_seconds`, `lpe_cache_hit_ratio`, `lpe_policy_context_version` |
+| Compiler jobs | Celery/worker cron | Compile policy contexts, localization packs, OPA bundles | Auto-scales on activation queue depth; throttled to deployment window | `lpe_compiler_duration_seconds`, `lpe_policy_block_total` |
+| Bundle signer | Managed HSM clients | Dual-sign Ed25519 + ECDSA bundles, rotate keys | Runs on demand with queue depth alerts | `lpe_bundle_sign_total`, `lpe_bundle_signature_error_total` |
 
 Settings-driven compiler runs as part of activation; background cron validates digests against RM bundles and Settings snapshots to ensure parity.
 
@@ -682,12 +682,12 @@ ______________________________________________________________________
 - Upstream: Reference Manager (catalogs, localization, licensing), Settings (activation payloads), OPA discovery infrastructure, HSM signing services.
 - Downstream: Guardian/portal/workers/Compose rely on PolicyContext digests; Observability consumes logging directives; FinOps uses cost hints.
 
-| Dependency         | Runtime / interface                | Responsibilities                                                                                                   | Integration notes                                                                                 | Observability anchors                                                   |
-| ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Reference Manager  | RM publish events + signed bundles | Provides jurisdiction catalogs, residency metadata, localization strings, licensing attestations                  | Adoption lag SLO P95 ≤ 10 min; unsigned bundles rejected; diff artefacts stored with activations  | `reference_manager_bundle_adoption_seconds`, `reference_bundle_stale_total` |
-| Settings Service   | Activation API + Celery workers    | Supplies `localization.*`, `privacy.*`, `regions.*`, waiver manifests, feature flags                               | Unsafe diffs require Architecture + Security approvals; emits activation events for cache invalid | `settings_activation_duration_seconds`, diff artefact checks             |
-| Policy Agent (OPA) | Sidecar / centralized OPA cluster  | Evaluates signed bundles for residency, HIPAA, egress, attachment rules; emits decision logs                       | Bundles dual-signed (Ed25519 + ECDSA); clients poll discovery with ETag; failures trigger fail-closed | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total`   |
-| Guardian           | REST + gRPC integrations           | Applies `POLICY_BLOCK`, `HIPAA_REQUIRED`, waiver enforcement, residency judgments                                  | Must log `policy_context_version`/digest per judgment; requires fresh contexts before processing  | `guardian_policy_context_version_mismatch_total`, `guardian_judgment_latency_seconds` |
+| Dependency | Runtime / interface | Responsibilities | Integration notes | Observability anchors |
+| --- | --- | --- | --- | --- |
+| Reference Manager | RM publish events + signed bundles | Provides jurisdiction catalogs, residency metadata, localization strings, licensing attestations | Adoption lag SLO P95 ≤ 10 min; unsigned bundles rejected; diff artefacts stored with activations | `reference_manager_bundle_adoption_seconds`, `reference_bundle_stale_total` |
+| Settings Service | Activation API + Celery workers | Supplies `localization.*`, `privacy.*`, `regions.*`, waiver manifests, feature flags | Unsafe diffs require Architecture + Security approvals; emits activation events for cache invalid | `settings_activation_duration_seconds`, diff artefact checks |
+| Policy Agent (OPA) | Sidecar / centralized OPA cluster | Evaluates signed bundles for residency, HIPAA, egress, attachment rules; emits decision logs | Bundles dual-signed (Ed25519 + ECDSA); clients poll discovery with ETag; failures trigger fail-closed | `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` |
+| Guardian | REST + gRPC integrations | Applies `POLICY_BLOCK`, `HIPAA_REQUIRED`, waiver enforcement, residency judgments | Must log `policy_context_version`/digest per judgment; requires fresh contexts before processing | `guardian_policy_context_version_mismatch_total`, `guardian_judgment_latency_seconds` |
 
 ______________________________________________________________________
 

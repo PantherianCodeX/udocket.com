@@ -57,7 +57,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Agent Platform Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -66,8 +66,8 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Applied AI Engineering |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -540,7 +540,7 @@ ______________________________________________________________________
 **References:** Settings spec §5, TDD §6 summary, Ops runbooks `RB-SETTINGS-ACTIVATION`.
 
 | Key | Scope | Description |
-| --- | ----- | ----------- |
+| --- | --- | --- |
 | `agents.pipeline.definitions[]` | SYSTEM | Canonical pipeline catalog (see §3.2). |
 | `agents.pipeline.assignments[]` | SYSTEM\|ORG | Maps org/case to pipeline + version. |
 | `agents.pipeline.overrides[]` | SYSTEM\|ORG | Lane enablement, template overrides within validator bounds. |

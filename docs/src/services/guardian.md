@@ -58,7 +58,7 @@ ______________________________________________________________________
 ## Document Controls
 
 | Field | Value |
-| ----- | ----- |
+| --- | --- |
 | Authors | Guardian Service Working Group |
 | Version | 0.1-draft |
 | Status | implementable |
@@ -67,8 +67,8 @@ ______________________________________________________________________
 | Owners | Security Engineering; Platform Architecture |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by |  |
-| Approved date |  |
+| Approved by | |
+| Approved date | |
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -141,12 +141,12 @@ ______________________________________________________________________
 **References:** §2.2 Status mapping, §8.3 runbooks, TDD §7.3. **|**
 **Breadcrumbs:** Enum definitions `packages/udocket_core/guardian/judgment.py`, tests `tests/platform/guardian/test_judgment_enums.py`.
 
-| Judgment | Description                                          | Default actions                                               |
-| -------- | ---------------------------------------------------- | ------------------------------------------------------------- |
-| PASS     | Requirements satisfied; artifact is safe to proceed. | Unlocks WP → `CLEARED_FOR_USE`, CD → `OPERATOR_PREP`.         |
-| WARN     | Minor issues; proceed with operator banners.         | Same transitions as PASS; UI surfaces warnings.               |
-| BLOCK    | Artifact violates policy, integrity, or residency.   | Sets status to `QUARANTINED`; requires remediation or waiver. |
-| WAIVED   | Dual-approved override to treat as PASS.             | Same transitions as PASS; records waiver manifest entry.      |
+| Judgment | Description | Default actions |
+| --- | --- | --- |
+| PASS | Requirements satisfied; artifact is safe to proceed. | Unlocks WP → `CLEARED_FOR_USE`, CD → `OPERATOR_PREP`. |
+| WARN | Minor issues; proceed with operator banners. | Same transitions as PASS; UI surfaces warnings. |
+| BLOCK | Artifact violates policy, integrity, or residency. | Sets status to `QUARANTINED`; requires remediation or waiver. |
+| WAIVED | Dual-approved override to treat as PASS. | Same transitions as PASS; records waiver manifest entry. |
 
 ### 2.2 Status mapping
 
@@ -158,21 +158,21 @@ ______________________________________________________________________
 **References:** TDD Appendix H, §3.4 Review integration, §8.3. **|**
 **Breadcrumbs:** Workflow code `apps/platform/workflows/status_transitions.py`, tests `tests/platform/workflows/test_status_transitions.py`.
 
-| Artifact class        | Prior status       | Guardian outcome | Next status       | Notes                             |
-| --------------------- | ------------------ | ---------------- | ----------------- | --------------------------------- |
-| Work Product          | `PENDING_JUDGMENT` | PASS/WARN/WAIVED | `CLEARED_FOR_USE` | WARN adds operator banner.        |
-| Work Product          | `PENDING_JUDGMENT` | BLOCK            | `QUARANTINED`     | Remediation tracked via manifest. |
-| Candidate Deliverable | `PENDING_JUDGMENT` | PASS/WARN/WAIVED | `OPERATOR_PREP`   | Entry point into review workflow. |
-| Candidate Deliverable | `PENDING_JUDGMENT` | BLOCK            | `QUARANTINED`     | Prevents review queue admission.  |
+| Artifact class | Prior status | Guardian outcome | Next status | Notes |
+| --- | --- | --- | --- | --- |
+| Work Product | `PENDING_JUDGMENT` | PASS/WARN/WAIVED | `CLEARED_FOR_USE` | WARN adds operator banner. |
+| Work Product | `PENDING_JUDGMENT` | BLOCK | `QUARANTINED` | Remediation tracked via manifest. |
+| Candidate Deliverable | `PENDING_JUDGMENT` | PASS/WARN/WAIVED | `OPERATOR_PREP` | Entry point into review workflow. |
+| Candidate Deliverable | `PENDING_JUDGMENT` | BLOCK | `QUARANTINED` | Prevents review queue admission. |
 
-| Condition                                             | Org policy posture    | Guardian judgment                  | Artifact status impact                        | Notes                                                                              |
-| ----------------------------------------------------- | --------------------- | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------- |
-| PHI present while HIPAA mode **off**                  | Forbid PHI            | BLOCK (`HIPAA_REQUIRED`)           | `QUARANTINED`                                 | Requires enabling HIPAA mode or removing PHI before progression.                   |
-| PHI present, HIPAA mode **on**, spans masked          | Allow masked          | PASS/WARN                          | `CLEARED_FOR_USE` (WP) / `OPERATOR_PREP` (CD) | WARN adds reviewer banner with span highlights.                                    |
-| PHI present, HIPAA mode **on**, restoration requested | Allow full            | PASS                               | `APPROVED → SIGNED`                           | Compose detokenizes spans under vault policy; manifest records restoration intent. |
-| Detector low confidence on high-risk entity           | Any                   | WARN (`CLASSIFIER_LOW_CONFIDENCE`) | Normal flow with banner                       | Reviewers verify spans before approval.                                            |
-| Provider flags category Guardian tiers missed         | Any                   | WARN (`PROVIDER_CRITICAL_HINT`)    | Normal flow                                   | Advisory only; also files detector gap ticket.                                     |
-| Parent artifact not cleared                           | Enforce parent gating | BLOCK (`PARENT_NOT_APPROVED`)      | `QUARANTINED`                                 | Deterministic parent locking prevents stale approvals.                             |
+| Condition | Org policy posture | Guardian judgment | Artifact status impact | Notes |
+| --- | --- | --- | --- | --- |
+| PHI present while HIPAA mode **off** | Forbid PHI | BLOCK (`HIPAA_REQUIRED`) | `QUARANTINED` | Requires enabling HIPAA mode or removing PHI before progression. |
+| PHI present, HIPAA mode **on**, spans masked | Allow masked | PASS/WARN | `CLEARED_FOR_USE` (WP) / `OPERATOR_PREP` (CD) | WARN adds reviewer banner with span highlights. |
+| PHI present, HIPAA mode **on**, restoration requested | Allow full | PASS | `APPROVED → SIGNED` | Compose detokenizes spans under vault policy; manifest records restoration intent. |
+| Detector low confidence on high-risk entity | Any | WARN (`CLASSIFIER_LOW_CONFIDENCE`) | Normal flow with banner | Reviewers verify spans before approval. |
+| Provider flags category Guardian tiers missed | Any | WARN (`PROVIDER_CRITICAL_HINT`) | Normal flow | Advisory only; also files detector gap ticket. |
+| Parent artifact not cleared | Enforce parent gating | BLOCK (`PARENT_NOT_APPROVED`) | `QUARANTINED` | Deterministic parent locking prevents stale approvals. |
 
 Guardian respects downstream approval invariants (ExclusiveSwap) and ensures deliverables only advance from `APPROVED` onward once Guardian history marks the latest edit as cleared.
 
@@ -205,18 +205,18 @@ ______________________________________________________________________
 
 ### 3.1 External Interfaces (binding)
 
-| Endpoint / Stream                  | Purpose                                    | Contract notes                                                                                                  |
-| ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `GET /readyz`                      | Liveness/readiness                         | No auth required inside cluster; used by HPA and incident playbooks.                                            |
-| `GET /synthetic/status`            | Synthetic probing                          | Exercises read/write health after deployments (`guardian_slo.yaml`).                                            |
-| `GET /api/v1/guardian/<id>`        | Retrieve judgment + manifest               | Requires service-to-service mTLS + RLS; returns deterministic manifest snapshot identifiers.                    |
-| `GET /api/v1/guardian?artifact_id=`| List latest judgment                       | Same auth as above; pagination deterministic on `decided_at`.                                                    |
-| `POST /api/v1/guardian/quarantine` | Manual quarantine/unquarantine             | Validates parent-child integrity and records reviewer metadata.                                                 |
-| `POST /guardian/detect-and-mask`   | Span detection + masking                   | Returns `{detected_entities[], masked_spans[], provider_flags[], judgment}` with UUIDv7 span IDs.               |
-| `GET /guardian/policy`             | Retrieve effective policy bundle metadata  | Surfaces `{policy_bundle_id, masking_defaults[], restoration_intents[]}` for UI/workers.                        |
-| `POST /guardian/judgments:enqueue` | Administrative replay (internal tooling)   | Idempotent on `{resource_urn, reason}`; reuses submission bus; audited under `ops/guardian/batch_submit.jsonl`. |
-| `POST /vault/detokenize`           | Restore masked spans (Compose/Signer only) | Requires `guardian_judgment_id`, purpose, and mTLS; Guardian never logs plaintext.                              |
-| `SSE GUARDIAN.JUDGMENT.*`          | Broadcast PASS/WARN/BLOCK/WAIVED outcomes  | Carries `guardian_judgment_id`, reason codes, waiver IDs, `settings_snapshot_sha256`, span evidence hashes.     |
+| Endpoint / Stream | Purpose | Contract notes |
+| --- | --- | --- |
+| `GET /readyz` | Liveness/readiness | No auth required inside cluster; used by HPA and incident playbooks. |
+| `GET /synthetic/status` | Synthetic probing | Exercises read/write health after deployments (`guardian_slo.yaml`). |
+| `GET /api/v1/guardian/<id>` | Retrieve judgment + manifest | Requires service-to-service mTLS + RLS; returns deterministic manifest snapshot identifiers. |
+| `GET /api/v1/guardian?artifact_id=`| List latest judgment | Same auth as above; pagination deterministic on `decided_at`. |
+| `POST /api/v1/guardian/quarantine` | Manual quarantine/unquarantine | Validates parent-child integrity and records reviewer metadata. |
+| `POST /guardian/detect-and-mask` | Span detection + masking | Returns `{detected_entities[], masked_spans[], provider_flags[], judgment}` with UUIDv7 span IDs. |
+| `GET /guardian/policy` | Retrieve effective policy bundle metadata | Surfaces `{policy_bundle_id, masking_defaults[], restoration_intents[]}` for UI/workers. |
+| `POST /guardian/judgments:enqueue` | Administrative replay (internal tooling) | Idempotent on `{resource_urn, reason}`; reuses submission bus; audited under `ops/guardian/batch_submit.jsonl`. |
+| `POST /vault/detokenize` | Restore masked spans (Compose/Signer only) | Requires `guardian_judgment_id`, purpose, and mTLS; Guardian never logs plaintext. |
+| `SSE GUARDIAN.JUDGMENT.*` | Broadcast PASS/WARN/BLOCK/WAIVED outcomes | Carries `guardian_judgment_id`, reason codes, waiver IDs, `settings_snapshot_sha256`, span evidence hashes. |
 
 ### 3.2 Internal Interfaces (binding)
 
@@ -451,18 +451,18 @@ ______________________________________________________________________
 **References:** §5 Failure modes, §8.3 Runbooks & drills, infra monitoring configs. **|**
 **Breadcrumbs:** Metric definitions `packages/udocket_core/guardian/metrics.py`, Prometheus rules `infra/monitoring/guardian-prometheus-rules.yaml`.
 
-| Metric                                                       | Description                                                                         |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `guardian_judgment_latency_seconds`                          | Distribution of evaluation latency; SLO ≤ 5 minutes P95.                            |
-| `guardian_cleared_ratio`                                     | Ratio of PASS/WARN/WAIVED to total judgments.                                       |
-| `guardian_pending_total`                                     | Queue depth derived from `guardian_submission_queue`.                               |
-| `guardian_pending_oldest_seconds`                            | Age of oldest pending submission; alerts at `guardian.queue.backlog_alert_minutes`. |
-| `guardian_submission_timeout_total`                          | Worker watchdog count when Guardian exceeds `submission_timeout_seconds`.           |
-| `guardian_enqueue_conflict_total`                            | Idempotency conflict counter.                                                       |
-| `guardian_policy_block_total`                                | BLOCK outcomes by reason code.                                                      |
-| `guardian_parent_block_total`                                | Child artifacts blocked due to parent quarantine.                                   |
-| `guardian_quarantine_false_positive_total`                   | Recovered quarantines with same hash; governance tracks ≤ 5 % objective.            |
-| `review_queue_backlog_total` / `review_queue_oldest_seconds` | Downstream readiness; alerts coordinate with Guardian backlog.                      |
+| Metric | Description |
+| --- | --- |
+| `guardian_judgment_latency_seconds` | Distribution of evaluation latency; SLO ≤ 5 minutes P95. |
+| `guardian_cleared_ratio` | Ratio of PASS/WARN/WAIVED to total judgments. |
+| `guardian_pending_total` | Queue depth derived from `guardian_submission_queue`. |
+| `guardian_pending_oldest_seconds` | Age of oldest pending submission; alerts at `guardian.queue.backlog_alert_minutes`. |
+| `guardian_submission_timeout_total` | Worker watchdog count when Guardian exceeds `submission_timeout_seconds`. |
+| `guardian_enqueue_conflict_total` | Idempotency conflict counter. |
+| `guardian_policy_block_total` | BLOCK outcomes by reason code. |
+| `guardian_parent_block_total` | Child artifacts blocked due to parent quarantine. |
+| `guardian_quarantine_false_positive_total` | Recovered quarantines with same hash; governance tracks ≤ 5 % objective. |
+| `review_queue_backlog_total` / `review_queue_oldest_seconds` | Downstream readiness; alerts coordinate with Guardian backlog. |
 
 ### 6.2 Logs & audits
 
@@ -708,19 +708,19 @@ ______________________________________________________________________
 **References:** §3.5 Detection & masking payloads, §4 State management, §8.3.3 RB-GUARD-QUAR. **|**
 **Breadcrumbs:** Schema source `packages/udocket_core/guardian/contracts/payloads.py`, tests `tests/platform/guardian/test_detection_payloads.py`.
 
-| Field                   | Type    | Required    | Description                                                                                |
-| ----------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------ |
-| `span_id`               | UUIDv7  | Yes         | Deterministic identifier for the detected span.                                            |
-| `type`                  | String  | Yes         | Guardian entity classification (for example, `PHI.MRN`, `SPI.BIOMETRIC`).                  |
-| `offset_start`          | Integer | Yes         | Byte offset (UTF-8) marking span start.                                                    |
-| `offset_end`            | Integer | Yes         | Byte offset marking span end (exclusive).                                                  |
-| `source`                | Enum    | Yes         | Detection tier identifier (`TIER0_SCHEMA`, `TIER1_REGEX`, `TIER2_ML`, `TIER3_CONTEXTUAL`). |
-| `confidence`            | Float   | Conditional | Present for probabilistic sources; omitted for deterministic hits.                         |
-| `locale`                | String  | Yes         | BCP 47 locale for policy alignment.                                                        |
-| `attributes`            | Object  | No          | Detector-specific metadata (checksum booleans, normalization hints).                       |
-| `policy_context_digest` | String  | Yes         | SHA-256 digest tying the span to the evaluated policy context.                             |
-| `masking_profile`       | String  | Conditional | Applied masking profile name when Guardian masked the span.                                |
-| `restorable`            | Boolean | Conditional | Indicates whether detokenization is allowed under policy/waiver.                           |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `span_id` | UUIDv7 | Yes | Deterministic identifier for the detected span. |
+| `type` | String | Yes | Guardian entity classification (for example, `PHI.MRN`, `SPI.BIOMETRIC`). |
+| `offset_start` | Integer | Yes | Byte offset (UTF-8) marking span start. |
+| `offset_end` | Integer | Yes | Byte offset marking span end (exclusive). |
+| `source` | Enum | Yes | Detection tier identifier (`TIER0_SCHEMA`, `TIER1_REGEX`, `TIER2_ML`, `TIER3_CONTEXTUAL`). |
+| `confidence` | Float | Conditional | Present for probabilistic sources; omitted for deterministic hits. |
+| `locale` | String | Yes | BCP 47 locale for policy alignment. |
+| `attributes` | Object | No | Detector-specific metadata (checksum booleans, normalization hints). |
+| `policy_context_digest` | String | Yes | SHA-256 digest tying the span to the evaluated policy context. |
+| `masking_profile` | String | Conditional | Applied masking profile name when Guardian masked the span. |
+| `restorable` | Boolean | Conditional | Indicates whether detokenization is allowed under policy/waiver. |
 
 ### B.2 Reference JSON payload
 
