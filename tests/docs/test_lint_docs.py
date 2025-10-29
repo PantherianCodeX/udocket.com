@@ -39,6 +39,19 @@ def test_run_task_optional_missing(monkeypatch: pytest.MonkeyPatch, capsys: pyte
     assert "Skipping optional task" in captured.out
 
 
+def test_run_task_required_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    def fake_run(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise FileNotFoundError
+
+    monkeypatch.setattr(ld.subprocess, "run", fake_run)  # type: ignore[arg-type]
+    task = ld.Task(name="required", cmd=["missing"], optional=False, install_hint="install me")
+
+    assert ld.run_task(task) is False
+    captured = capsys.readouterr()
+    assert "command not found" in captured.out
+    assert "install me" in captured.out
+
+
 def test_run_task_failure(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     def fake_run(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise ld.subprocess.CalledProcessError(returncode=7, cmd=["fail"])  # type: ignore[attr-defined]

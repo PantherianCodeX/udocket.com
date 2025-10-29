@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -39,6 +40,28 @@ _placeholder_
     (build_dir / "alpha-flow-v1.svg").write_text("<svg/>", encoding="utf-8")
     (build_dir / "alpha-other-v2.svg").write_text("<svg/>", encoding="utf-8")
 
+    beta_dir = src_dir / "services" / "beta" / "diagrams"
+    beta_dir.mkdir(parents=True, exist_ok=True)
+    (beta_dir / "beta-graph.mmd").write_text(
+        "%% note without colon\n%% version: v3\n\nflowchart LR; C-->D;\n",
+        encoding="utf-8",
+    )
+    (src_dir / "build" / "mermaid" / "services" / "beta" / "diagrams").mkdir(parents=True, exist_ok=True)
+    (src_dir / "build" / "mermaid" / "services" / "beta" / "diagrams" / "beta-graph.svg").write_text(
+        "<svg/>", encoding="utf-8"
+    )
+
+    root_diagram = src_dir / "diagrams"
+    root_diagram.mkdir(parents=True, exist_ok=True)
+    (root_diagram / "root-only.mmd").write_text(
+        "%% id: root-only\n%%  \n%% comment-without-colon\nflowchart LR; E-->F;\n",
+        encoding="utf-8",
+    )
+    (src_dir / "build" / "mermaid" / "diagrams").mkdir(parents=True, exist_ok=True)
+    (src_dir / "build" / "mermaid" / "diagrams" / "root-only.svg").write_text("<svg/>", encoding="utf-8")
+
+    (src_dir / "build" / "ignored.mmd").write_text("flowchart LR; G-->H;\n", encoding="utf-8")
+
 
 def test_build_content_renders_tables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _setup_diagram_env(tmp_path)
@@ -54,6 +77,7 @@ def test_build_content_renders_tables(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "alpha-flow" in result
     assert "| `alpha-flow` | v1 |" in result
     assert "| `alpha-other-v2` | v2 |" in result
+    assert "| `root-only` | — |" in result
     assert 'class="glightbox"' in result
 
 
@@ -75,3 +99,41 @@ def test_main_updates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     rc_check = bdi.main(["--check"])
     assert rc_check == 0
 
+
+def test_collect_diagrams_covers_orphans(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _setup_diagram_env(tmp_path)
+    src_dir = tmp_path / "docs" / "src"
+    monkeypatch.setattr(bdi, "SRC_DIR", src_dir)
+
+    diagrams = bdi.collect_diagrams()
+
+    assert any(key is None for key in diagrams.keys())
+    assert len(diagrams) >= 2
+
+
+def test_render_groups_handles_empty() -> None:
+    rendered = bdi.render_groups([])
+    assert "_No diagrams detected._" in rendered
+
+
+def test_main_flags_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    _setup_diagram_env(tmp_path)
+    src_dir = tmp_path / "docs" / "src"
+    appendix = src_dir / "overview" / "tdd" / "appendices" / "diagrams.md"
+
+    monkeypatch.setattr(bdi, "SRC_DIR", src_dir)
+    monkeypatch.setattr(bdi, "APPENDIX_FILE", appendix)
+    monkeypatch.setattr(bdi, "APPENDIX_DIR", appendix.parent)
+
+    # Leave file stale so check should fail
+    rc = bdi.main(["--check"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "stale" in captured.err
+
+
+def test_ensure_root_on_path_invoked(monkeypatch: pytest.MonkeyPatch) -> None:
+    path = str(bdi.ROOT_DIR)
+    monkeypatch.setattr(sys, "path", [path, "other"])
+    bdi._ensure_root_on_path()
+    assert sys.path[0] == path
