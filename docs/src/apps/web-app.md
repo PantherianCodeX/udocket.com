@@ -133,7 +133,7 @@ ______________________________________________________________________
 - Approvals panel enforces multi-step review with optimistic concurrency; UI surfaces reviewer counts, Guardian reason codes, backlog age warnings, and links to runbooks.
 - Job tiles display watchdog warnings with tooltips summarizing latest heartbeat, lane, and remediation guidance.
 - Analytics widgets expose LLM spend, artifact coverage, and QA issues, sourcing data from audit logs and FinOps metrics.
-- Live status widget follows the accessible SSE pattern in App.U.5: `aria-live="polite"`, deterministic status badges (`data-status` mapped to design tokens), token-bound credentials, and retry backoff through shared `useConnectivity`.
+- Live status widget follows the accessible SSE pattern in Appendix A.2: `aria-live="polite"`, deterministic status badges (`data-status` mapped to design tokens), token-bound credentials, and retry backoff through shared `useConnectivity`.
 - SSE stream delivers `job.accepted`, `job.running`, `job.update`, `job.blocked`, `job.completed`, `job.failed`, and `job.canceled` events; each payload carries `schema_version`, `emitted_at`, Guardian verdict snapshots, and `provider_progress` so operators can reconcile status without polling.
 
 ### 2.2 Client portal (binding)
@@ -165,7 +165,7 @@ ______________________________________________________________________
 **References:** LP Engine spec §2, Ops runbook index (LPE locale gap).
 
 - Pseudolocale builds run pre-merge; Vale lint enforces accessibility wording.
-- `aria-live`, focus trapping, and keyboard outreach patterns follow App.U guidelines; components failing contrast budgets require design review.
+- `aria-live`, focus trapping, and keyboard outreach patterns follow Appendix A.2 guidelines; components failing contrast budgets require design review.
 - Nightly axe/Playwright suites capture snapshots for core flows (staff approvals, portal delivery, chat assistant); regressions block deploy until evidence restored in ops appendices.
 - Localization activation refuses enabling a locale unless LP Engine bundles include translations and QA recordings with sign-off artifacts attached.
 
@@ -517,3 +517,236 @@ ______________________________________________________________________
 - LLM Registry specification — `../services/llm-registry.md §2.3`.
 - Digital Signer specification — `../services/digital-signer.md`.
 - Ops runbook catalog — `../ops/runbooks/index.md`.
+
+______________________________________________________________________
+
+## Appendix A — Real-time payloads & components (binding)
+
+**Purpose:** Capture canonical SSE payloads and UI implementations the web app must honour. **|**
+**Contract:** SSE publishers emit these shapes; UI components consume them without divergence. **|**
+**State:** Schemas live in `packages/udocket_core/events/schemas.py`, fixtures under `tests/platform/events/fixtures/`. **|**
+**Failures & handling:** Schema drift fails UI contract tests; mismatched payloads trigger `UI_SSE_SCHEMA_MISMATCH` alerts. **|**
+**Observability:** SSE schema version dashboards, Playwright SSE contract tests, UI telemetry `ui_event_sse_payload_validation_total`. **|**
+**Breadcrumbs:** Publishers `apps/platform/events/*.py`, UI widget `packages/udocket_ui/components/job_status_ticker.tsx`, tests `tests/e2e/test_job_status_widget.py`. **|**
+
+### A.1 SSE event payloads (JSON)
+
+- `job.update`
+
+  ```json
+  {
+    "id": "1024",
+    "event": "job.update",
+    "data": {
+      "schema_version": "1",
+      "emitted_at": "2025-10-19T21:11:58Z",
+      "job_id": "...",
+      "case_id": "...",
+      "org_id": "...",
+      "status": "RUNNING",
+      "progress": 64,
+      "warning": null
+    }
+  }
+  ```
+
+- `job.canceling`
+
+  ```json
+  {
+    "id": "1025",
+    "event": "job.canceling",
+    "data": {
+      "schema_version": "1",
+      "emitted_at": "2025-10-19T21:12:02Z",
+      "job_id": "...",
+      "case_id": "...",
+      "org_id": "...",
+      "actor_id": "...",
+      "reason": "Operator requested cancel"
+    }
+  }
+  ```
+
+- `job.canceled`
+
+  ```json
+  {
+    "id": "1026",
+    "event": "job.canceled",
+    "data": {
+      "schema_version": "1",
+      "emitted_at": "2025-10-19T21:12:08Z",
+      "job_id": "...",
+      "case_id": "...",
+      "org_id": "...",
+      "actor_id": "...",
+      "reason": "Operator requested cancel",
+      "provider_outcome": "azure_speech:deleted"
+    }
+  }
+  ```
+
+- Optional fields include `progress` (0-100), `warning` (`"NO_PROGRESS"`, `"CAPACITY_THROTTLED"`, `"BUDGET_HELD"`, etc.), and `provider_progress` (`{ "phase": "transcribing", "percent_complete": 42, "estimated_remaining_seconds": 310 }`) when adapters surface granular provider telemetry.
+
+- `artifact.status`
+
+  ```json
+  {
+    "id": "1030",
+    "event": "artifact.status",
+    "data": {
+      "schema_version": "1",
+      "emitted_at": "2025-10-19T21:12:00Z",
+      "artifact_id": "...",
+      "case_id": "...",
+      "org_id": "...",
+      "type": "SUMMARY_MD",
+      "status": "APPROVED",
+      "previous_status": "APPROVAL_REQUESTED"
+    }
+  }
+  ```
+
+- `portal_link_invalidated`
+
+  ```json
+  {
+    "id": "1035",
+    "event": "portal_link_invalidated",
+    "data": {
+      "schema_version": "1",
+      "emitted_at": "2025-10-19T21:14:00Z",
+      "artifact_id": "...",
+      "case_id": "...",
+      "reason": "APPROVAL_SWAP"
+    }
+  }
+  ```
+
+- Snapshot bootstrap payload (truncated)
+
+  ```json
+  {
+    "id": "snapshot",
+    "event": "artifact.snapshot",
+    "data": {
+      "schema_version": "1",
+      "emitted_at": "2025-10-19T21:14:00Z",
+      "watermark_ts": "2025-10-19T21:14:00Z",
+      "events": [
+        { "schema_version": "1", "emitted_at": "2025-10-19T21:10:00Z", "artifact_id": "...", "status": "OPERATOR_PREP" },
+        { "schema_version": "1", "emitted_at": "2025-10-19T21:11:00Z", "artifact_id": "...", "status": "APPROVAL_REQUESTED" },
+        { "schema_version": "1", "emitted_at": "2025-10-19T21:11:30Z", "artifact_id": "...", "status": "QUEUED_FOR_REVIEW" },
+        { "schema_version": "1", "emitted_at": "2025-10-19T21:12:00Z", "artifact_id": "...", "status": "APPROVED" }
+      ]
+    }
+  }
+  ```
+
+- `provider.health`
+
+  ```json
+  {
+    "id": "1040",
+    "event": "provider.health",
+    "data": {
+      "schema_version": "1",
+      "provider": "azure_speech",
+      "region": "canadacentral",
+      "status": "HEALTHY",
+      "latency_ms_p95": 2100,
+      "last_heartbeat": "2025-10-19T21:13:00Z"
+    }
+  }
+  ```
+
+- Aggregates `ProviderProgressAdapter` heartbeats so operators see upstream availability next to job progress.
+
+### A.2 Staff job status widget (TypeScript/React)
+
+```tsx
+import { useEffect, useState } from "react";
+
+type JobStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "PAUSED"
+  | "PAUSED_AWAITING_PROVIDER"
+  | "PAUSED_AWAITING_BUDGET"
+  | "CANCELING"
+  | "FAILED"
+  | "COMPLETED"
+  | "CANCELED";
+
+interface JobUpdatePayload {
+  schema_version: string;
+  emitted_at: string;
+  job_id: string;
+  status: JobStatus;
+  progress?: number;
+  warning?: string | null;
+}
+
+interface JobCancelPayload {
+  schema_version: string;
+  emitted_at: string;
+  job_id: string;
+  actor_id?: string;
+  reason: string;
+}
+
+export function JobStatusTicker({ jobId }: { jobId: string }) {
+  const [status, setStatus] = useState<JobStatus>("PENDING");
+  const [progress, setProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    const source = new EventSource(`/api/v1/jobs/${jobId}/events`, { withCredentials: true });
+
+    const onEvent = (event: MessageEvent<string>) => {
+      const payload = JSON.parse(event.data) as Partial<JobUpdatePayload & JobCancelPayload>;
+      if (payload.job_id !== jobId) return;
+
+      switch (event.type) {
+        case "job.update": {
+          const update = payload as JobUpdatePayload;
+          setStatus(update.status);
+          setProgress(typeof update.progress === "number" ? update.progress : null);
+          break;
+        }
+        case "job.canceling": {
+          setStatus("CANCELING");
+          setProgress(null);
+          break;
+        }
+        case "job.canceled": {
+          setStatus("CANCELED");
+          setProgress(null);
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    source.addEventListener("job.update", onEvent);
+    source.addEventListener("job.canceling", onEvent);
+    source.addEventListener("job.canceled", onEvent);
+    source.onerror = () => source.close();
+
+    return () => {
+      source.removeEventListener("job.update", onEvent);
+      source.removeEventListener("job.canceling", onEvent);
+      source.removeEventListener("job.canceled", onEvent);
+      source.close();
+    };
+  }, [jobId]);
+
+  return (
+    <output role="status" aria-live="polite" data-status={status.toLowerCase()}>
+      <strong>{status}</strong>
+      {progress !== null ? ` — ${progress}%` : ""}
+    </output>
+  );
+}
+```

@@ -442,25 +442,90 @@ ______________________________________________________________________
 **Failures & handling:** Schema drift fails CI; unknown error codes block merges via lint; manifests lacking schema versions trigger `E_INTEGRITY_MISMATCH`. **|**
 **Observability:** Schema lints in CI, error code coverage dashboards, QA harness logs. **|**
 **Breadcrumbs:** Models `packages/udocket_core/agents/models.py`, schemas `spec/schemas/agents/`, tests `tests/agents/test_schema_consistency.py`. **|**
-**References:** TDD App.U, Compose spec Appendix B, Analyze spec Appendix A.
+**References:** Compose spec Appendix B, Analyze spec Appendix A, Platform TDD §6.
 
-- Analyze lane models:
+### A.1 Analyze agent schema (binding)
+
+```python
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class SourceSpan(BaseModel):
+    start_ms: int
+    end_ms: int
+
+
+class AnalyzeEvent(BaseModel):
+    id: UUID
+    title: str
+    datetime: datetime | None = None
+    participants: list[UUID] = Field(default_factory=list)
+    source_spans: list[SourceSpan] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class AnalyzeIssue(BaseModel):
+    id: UUID
+    label: str
+    description: str
+    related_events: list[UUID] = Field(default_factory=list)
+    risk: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
+```
+
+### A.2 Compose agent schema (binding)
+
+```python
+from __future__ import annotations
+
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class ComposeSection(BaseModel):
+    key: str
+    title: str
+    body_md: str
+    references: list[UUID] = Field(default_factory=list)
+
+
+class ComposeDocument(BaseModel):
+    doc_type: Literal["CLIENT", "LAWYER"]
+    language: str | None = None
+    sections: list[ComposeSection]
+    outline: list[str]
+    analyze_refs: dict[str, list[UUID]] = Field(default_factory=dict)
+```
+
+### A.3 Additional lane models
+
+- Analyze outputs:
   - `SummaryJSON { uuid, sections[], word_count, tone, highlights[], source_refs[] }`
   - `OutlineJSON { uuid, version, nodes[] }`
   - `TimelineSeed { uuid, timestamp, speaker, summary, evidence_refs[] }`
   - `EntityHint { uuid, entity_type, display_name, attributes{}, evidence_refs[] }`
   - `StaffReport { uuid, risk_rating, questionnaire_score, gaps[], discrepancies[] }`
-- Compose lane models:
+- Compose QA artifacts:
   - `SectionOutput { uuid, section_id, role, text_md, envelope_id, issues[] }`
   - `ComposeQAReport { uuid, status, issues[{code, level, message, section_ref?}] }`
-- Error codes:
-  - `E_TRANSIENT_PROVIDER` → class `TRANSIENT`
-  - `E_POLICY_FORBIDDEN` → class `POLICY`
-  - `E_INPUT_INVALID` → class `INPUT`
-  - `E_INTEGRITY_MISMATCH` → class `INTEGRITY`
-  - `E_CONFLICT` → class `CONCURRENCY`
-  - `E_REGION_POLICY` → class `REGION_POLICY`
-- Mapping: Ops JSON includes `{code, class, message, attempt, final}` for every failure; UI shows human-friendly error string mapped from this table.
+
+### A.4 Error codes
+
+- `E_TRANSIENT_PROVIDER` → class `TRANSIENT`
+- `E_POLICY_FORBIDDEN` → class `POLICY`
+- `E_INPUT_INVALID` → class `INPUT`
+- `E_INTEGRITY_MISMATCH` → class `INTEGRITY`
+- `E_CONFLICT` → class `CONCURRENCY`
+- `E_REGION_POLICY` → class `REGION_POLICY`
+
+Ops JSON includes `{code, class, message, attempt, final}` for every failure; UI shows human-friendly error strings mapped from this table.
 
 ______________________________________________________________________
 

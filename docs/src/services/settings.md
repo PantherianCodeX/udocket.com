@@ -725,6 +725,25 @@ ______________________________________________________________________
 **References:** §2 Responsibilities, Appendix C seed inventory. **|**
 **Breadcrumbs:** Script `scripts/docs/check_settings_keys.py`, tests `tests/docs/test_check_settings_keys.py`, dashboard “Docs – Settings Coverage”.
 
+### A.0 SettingDefinition model (binding)
+
+```python
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel
+
+
+class SettingDefinition(BaseModel):
+    key: str
+    datatype: Literal["BOOL", "INT", "FLOAT", "STRING", "DURATION", "ENUM", "JSON", "REGION", "PERCENT"]
+    enum_values: list[str] | None = None
+    default_value: Any
+    mutable_scope: list[Literal["SYSTEM", "ORG", "CASE"]]
+    validation_schema: dict[str, Any] | None = None
+```
+
 ### A.1 Key catalog (binding)
 
 **Purpose:** Provide authoritative coverage of SR keys, scopes, defaults, and enforcement hooks. **|**

@@ -227,7 +227,7 @@ Binding checkpoints (sample)
 **State:** Settings keys `analyze|compose.token_ceiling`, `llm.finops.monthly_cap_usd`, `llm.finops.guard.threshold_pct`, `llm.finops.guard.trailing7d_pct`, and override metadata live in Settings; controllers log actions via audit events and Guardian quarantine reasons. **|**
 **Failures & handling:** Budget breaches set jobs to `PAUSED_AWAITING_BUDGET`, emit `FINOPS_BUDGET_HELD`, and require override or cap adjustment; MoM guard failures block deploys until mitigated (§2.4.1). **|**
 **Observability:** Dashboard “FinOps – LLM Cost & Circuit” tracks `llm_cost_estimate_total`, `finops_budget_hold_active_total`, `finops_budget_hold_duration_seconds`; deploy gate reports live in `ops/finops/mom_guard/`. **|**
-**References:** Ops runbook RB-LLM-FINOPS, FinOps governance App.U. **|**
+**References:** Ops runbook RB-LLM-FINOPS, TDD §8.7 FinOps guard. **|**
 **Breadcrumbs:** Budget controller `packages/udocket_core/finops/guard.py`, management command `apps/platform/operations/management/commands/set_finops_override.py`, tests `tests/udocket_core/finops/test_guard.py`, `tests/platform/finops/test_override_roles.py`.
 
 - Pre-call guards enforce tokens-in ≤ configured ceilings and verify projected spend + month-to-date ≤ cap; violations return `429 RATE_LIMIT` with reasons `TOKEN_CEILING` or `BUDGET_EXCEEDED`.
@@ -243,7 +243,7 @@ Binding checkpoints (sample)
 **State:** Reports written to `ops/finops/mom_guard/<release>.json`; Settings key `llm.finops.override_until` stores temporary bypass windows. **|**
 **Failures & handling:** Gate failure blocks release until mitigation or approved override; results documented in App.O decision log. **|**
 **Observability:** Metric `finops_mom_regression_flag{org}`, dashboard “FinOps Guard”, alert `finops_deploy_gate_failed_total`. **|**
-**References:** FinOps governance App.U, Ops runbook RB-LLM-FINOPS. **|**
+**References:** TDD §8.7 FinOps guard, Ops runbook RB-LLM-FINOPS. **|**
 **Breadcrumbs:** Guard implementation `packages/udocket_core/finops/guard.py::projected_regression_pct`, override tooling `apps/platform/operations/management/commands/set_finops_override.py`, tests `tests/udocket_core/finops/test_guard.py`.
 
 - Regression formula: `(projected_month_end - prior_month_actual) / prior_month_actual ≥ llm.finops.guard.threshold_pct` after smoothing.
@@ -384,7 +384,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing metrics or stale dashboards block releases until Observability sign-off; docs lint validates references. **|**
 **Observability:** Dashboards “LLM Residency & Failover”, “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”; Alertmanager routes `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_deploy_gate_failed_total`. **|**
 **Breadcrumbs:** Dashboard configs `infra/observability/dashboards/llm_residency.json`, `llm_safety.json`, `finops_llm.json`; alert rules `infra/monitoring/llm-prometheus-rules.yaml`. **|**
-**References:** Ops monitoring catalog App.U, FinOps governance App.U. *
+**References:** TDD §12 Observability dashboards, TDD §8.7 FinOps guard. *
 
 ______________________________________________________________________
 
