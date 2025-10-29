@@ -6,9 +6,17 @@
   var MAX_WIDTH_PX = 1400;
   var MAX_WIDTH_VW = 95;
   var MAX_HEIGHT_VH = 90;
-  var MIN_SCALE = 1;
+  var MIN_SCALE = 0.1;
   var MAX_SCALE = 6;
   var SCALE_STEP = 0.25;
+  var IMAGE_GROWTH_RATIO = 0.6;
+
+  function computeDisplayScale(scale) {
+    if (scale <= 1) {
+      return Math.max(scale, MIN_SCALE);
+    }
+    return 1 + (scale - 1) * IMAGE_GROWTH_RATIO;
+  }
 
   function applySizing(img) {
     if (!img) {
@@ -58,7 +66,14 @@
       startScale: 1,
       startX: 0,
       startY: 0,
-      touchAction: 'none'
+      touchAction: 'none',
+      setTransform: function (element, state) {
+        var displayScale = computeDisplayScale(state.scale);
+        element.style.transform = 'scale(' + displayScale + ') translate(' + state.x + 'px, ' + state.y + 'px)';
+        if (state.isSVG) {
+          element.setAttribute('transform', 'scale(' + displayScale + ') translate(' + state.x + ',' + state.y + ')');
+        }
+      }
     });
     img.__panzoomInstance = panzoom;
     stage.__panzoomInstance = panzoom;
@@ -74,11 +89,6 @@
         }
         stage.style.width = baseSize.width + 'px';
         stage.style.height = baseSize.height + 'px';
-      };
-
-      var clearStageSizing = function () {
-        stage.style.width = '';
-        stage.style.height = '';
       };
 
       var updateStageSize = function (scale) {
@@ -99,13 +109,12 @@
           if (iw <= 0 || ih <= 0) {
             return;
           }
-          var ar = iw / ih;
-          var targetW = Math.min(iw, vw);
-          var targetH = targetW / ar;
-          if (targetH > vh) {
-            targetH = Math.min(ih, vh);
-            targetW = targetH * ar;
+          var scale = Math.min(vw / iw, vh / ih);
+          if (!isFinite(scale) || scale <= 0) {
+            scale = 1;
           }
+          var targetW = Math.min(iw * scale, vw);
+          var targetH = Math.min(ih * scale, vh);
           baseSize = { width: targetW, height: targetH };
           applyBaseSize();
           updateStageSize(1);
