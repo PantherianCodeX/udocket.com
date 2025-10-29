@@ -91,7 +91,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/apps/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
 - **Change protocol:** UX-affecting PRs update this spec and cite ADR-0003 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
 - **References:** TDD §11 summary, Guardian spec §5, Notifications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks `RB-PORTAL-INVALIDATION` and `RB-JOB-WATCHDOG`.
 - **Contacts:** Platform Engineering (frontend owners), Product Management (experience roadmap), Accessibility guild, `#web-app` Slack channel, on-call rotation `webapp-oncall@`.
@@ -260,6 +260,51 @@ Portal downloads exchange signed tokens issued by the Notifications service; `If
 ### 3.2 Internal Interfaces
 
 The UI coordinates with internal controllers for portal messaging, edit manifests, and assistant orchestration. SSE publishers in `apps/platform/events/*.py` broadcast state transitions to the front-end, while background jobs in the worker cluster hydrate downloads, regenerate manifests, and backfill presence events. Layout builders in `apps/platform/ui/views/*.py` assemble React component payloads from secure views (`*_secure`) governed by the Settings registry.
+
+### 3.3 Interaction Topology (informative)
+
+**Purpose:** Visualise how staff and portal surfaces collaborate with backend services in real time. **|**
+**Contract:** Staff and client flows rely on API, Channels, Guardian, Settings, and Notifications integrations depicted below; changes must preserve these linkages. **|**
+**State:** Diagram source `apps/web-app/diagrams/ui-interaction-topology-v1.mmd` renders to build artifacts for docs/site and PDFs. **|**
+**Failures & handling:** Drift between diagram and implementation is treated as documentation debt and must be reconciled during UI changes. **|**
+**Observability:** Docs CI (`render_mermaid.sh`) renders SVG artifacts and alerts when sources are missing. **|**
+**Breadcrumbs:** API controllers `apps/platform/api/*.py`, Channels gateway `apps/platform/ui/channels.py`, Notifications integration `apps/platform/notifications/*`, Guardian verdict publisher `apps/platform/events/guardian.py`. **|**
+**References:** Guardian spec §2, Notifications spec §2, Settings spec §3.
+
+```mermaid
+%% source: apps/web-app/diagrams/ui-interaction-topology-v1.mmd
+%% owner: apps/web-app.md
+flowchart LR
+    subgraph Staff_Workspace
+        StaffUI[Staff Workspace UI]
+    end
+    subgraph Client_Portal
+        ClientUI[Client Portal UI]
+    end
+    subgraph Platform_Core
+        API[Web App API Layer]
+        Channels[Channels / SSE Gateway]
+        Guardian[Guardian Verdict Service]
+        Settings[Settings Registry]
+        Notifications[Notifications Service]
+    end
+
+    StaffUI -->|GraphQL & REST| API
+    ClientUI -->|REST| API
+    API -->|PolicyContext lookup| Guardian
+    API -->|Feature toggles| Settings
+    API -->|Messages & alerts| Notifications
+    API -->|Presence / edits| Channels
+    Channels -->|Live updates| StaffUI
+    Channels -->|Portal SSE| ClientUI
+    Guardian -->|Verdict events| Channels
+    Notifications -->|Portal delivery| ClientUI
+```
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
+  <figcaption style="font-size: 0.9em; color: #555;">Web app staff and portal interaction topology</figcaption>
+</figure>
 
 ______________________________________________________________________
 

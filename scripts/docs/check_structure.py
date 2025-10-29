@@ -15,7 +15,7 @@ By default the checker inspects service specifications under
 Typical usage (CLI/CI friendly):
 
     python scripts/docs/check_structure.py
-    python scripts/docs/check_structure.py docs/src/services/web-app.md
+    python scripts/docs/check_structure.py docs/src/apps/web-app.md
     python scripts/docs/check_structure.py docs/src/services docs/src/overview
 """
 

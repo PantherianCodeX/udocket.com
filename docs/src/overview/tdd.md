@@ -1990,7 +1990,7 @@ ______________________________________________________________________
 
 ## 11) Frontend & client experience
 
-See [`../services/web-app.md`](../services/web-app.md) for the authoritative specification of the staff workspace, reviewer consoles, and client portal. Platform components depend on the following integration points:
+See [`../apps/web-app.md`](../apps/web-app.md) for the authoritative specification of the staff workspace, reviewer consoles, and client portal. Platform components depend on the following integration points:
 
 - **Staff workspace & approvals:** Compose/Analyze outputs, Guardian verdicts, and job watchdog signals feed the operator UI; reviews must surface SSE status, backlog metrics, and RB-JOB-WATCHDOG links.
 - **Client portal delivery:** Download tokens, invalidation flows, phishing reporting, and secure portal messaging reuse notifications service APIs (`portal.link_invalidated`, signed URLs, abuse logging) while enforcing RLS and masking policies.
