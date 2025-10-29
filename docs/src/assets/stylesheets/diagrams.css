@@ -63,6 +63,34 @@
 .glightbox-container.glb-zoomed .gslide-image {
   max-width: 100vw !important;
   max-height: 95vh !important;
+  overflow: hidden !important;
+}
+
+/* Panzoom stage wrapper to stabilize transforms */
+.glightbox-container .pz-stage {
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+  transform-origin: center center !important;
+}
+.glightbox-container .pz-stage > img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.glightbox-container.glb-zoomed .pz-stage {
+  width: auto;
+  height: auto;
+}
+
+/* Allow glightbox inner container to grow when zoomed */
+.glightbox-container.glb-zoomed .ginner-container {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: 95vh !important;
 }
 
 .glightbox-container .gslide-image img.is-panning {

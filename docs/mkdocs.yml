@@ -38,7 +38,7 @@ plugins:
 - glightbox:
     width: 95vw
     height: 90vh
-    zoomable: true
+    zoomable: false
     draggable: false
     effect: none
     slide_effect: none

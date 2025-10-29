@@ -39,41 +39,82 @@
       return img.__panzoomInstance;
     }
 
+    // Wrap image into a stable stage container so transforms don't fight layout
+    var stage = img.parentElement && img.parentElement.classList.contains('pz-stage') ? img.parentElement : null;
+    if (!stage) {
+      stage = document.createElement('div');
+      stage.className = 'pz-stage';
+      img.parentElement.insertBefore(stage, img);
+      stage.appendChild(img);
+    }
+
     var panzoom = Panzoom(img, {
       cursor: 'grab',
-      contain: 'outside',
       maxScale: MAX_SCALE,
       minScale: MIN_SCALE,
       step: SCALE_STEP,
       animate: true,
-      panOnlyWhenZoomed: false,
+      panOnlyWhenZoomed: true,
       startScale: 1,
       startX: 0,
       startY: 0,
       touchAction: 'none'
     });
     img.__panzoomInstance = panzoom;
+    stage.__panzoomInstance = panzoom;
 
-    var container = img.closest('.gslide-image');
+    var container = stage.closest('.gslide-image');
     if (container) {
-      var sizeToViewport = function () {
+      var root = container.closest('.glightbox-container') || document.body;
+      var baseSize = null;
+
+      var applyBaseSize = function () {
+        if (!baseSize) {
+          return;
+        }
+        stage.style.width = baseSize.width + 'px';
+        stage.style.height = baseSize.height + 'px';
+      };
+
+      var clearStageSizing = function () {
+        stage.style.width = '';
+        stage.style.height = '';
+      };
+
+      var updateStageSize = function (scale) {
+        if (!baseSize) {
+          return;
+        }
+        var appliedScale = Math.max(1, scale);
+        stage.style.width = baseSize.width * appliedScale + 'px';
+        stage.style.height = baseSize.height * appliedScale + 'px';
+      };
+
+      var sizeToViewport = function (opts) {
         requestAnimationFrame(function () {
-          var vw = window.innerWidth * 0.95;
-          var vh = window.innerHeight * 0.90;
+          var vw = Math.min(window.innerWidth * (MAX_WIDTH_VW / 100), MAX_WIDTH_PX);
+          var vh = window.innerHeight * (MAX_HEIGHT_VH / 100);
           var iw = img.naturalWidth || img.getBoundingClientRect().width || vw;
           var ih = img.naturalHeight || img.getBoundingClientRect().height || vh;
-          if (iw <= 0 || ih <= 0) return;
-          var ar = iw / ih;
-          var targetW = vw;
-          var targetH = vw / ar;
-          if (targetH > vh) {
-            targetH = vh;
-            targetW = vh * ar;
+          if (iw <= 0 || ih <= 0) {
+            return;
           }
-          img.style.width = targetW + 'px';
-          img.style.height = targetH + 'px';
-          // Reset any transforms; container flex will center
-          panzoom.reset({ animate: false });
+          var ar = iw / ih;
+          var targetW = Math.min(iw, vw);
+          var targetH = targetW / ar;
+          if (targetH > vh) {
+            targetH = Math.min(ih, vh);
+            targetW = targetH * ar;
+          }
+          baseSize = { width: targetW, height: targetH };
+          applyBaseSize();
+          updateStageSize(1);
+          img.style.width = '100%';
+          img.style.height = '100%';
+          if (!opts || opts.reset !== false) {
+            root.classList.remove('glb-zoomed');
+            panzoom.reset({ animate: false });
+          }
         });
       };
 
@@ -81,27 +122,44 @@
       if (img.complete) sizeToViewport();
       else img.addEventListener('load', function onload() { img.removeEventListener('load', onload); sizeToViewport(); });
 
-      var root = container.closest('.glightbox-container') || document.body;
       var updateZoomed = function () {
+        if (!baseSize) {
+          return;
+        }
         var s = panzoom.getScale();
-        if (s > 1.01) root.classList.add('glb-zoomed'); else root.classList.remove('glb-zoomed');
+        if (s > 1.01) {
+          root.classList.add('glb-zoomed');
+        } else {
+          root.classList.remove('glb-zoomed');
+        }
+        updateStageSize(s);
+        if (s <= 1.01) {
+          // keep transforms but ensure stage is aligned to base size
+          applyBaseSize();
+        }
       };
+      img.addEventListener('panzoomzoom', updateZoomed);
+      img.addEventListener('panzoomreset', updateZoomed);
 
-      container.addEventListener('wheel', function (event) {
+      stage.addEventListener('wheel', function (event) {
         if (event.ctrlKey) return;
         event.preventDefault();
+        event.stopPropagation();
         try {
           panzoom.zoomWithWheel(event, { step: SCALE_STEP, maxScale: MAX_SCALE, minScale: MIN_SCALE, animate: false });
         } catch (e) {
+          var rect = img.getBoundingClientRect();
           var scale = panzoom.getScale();
           var dir = event.deltaY < 0 ? 1 : -1;
           var target = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + dir * SCALE_STEP));
-          panzoom.zoom(target, { animate: false, focal: { clientX: event.clientX, clientY: event.clientY } });
+          panzoom.zoom(target, { animate: false, focal: { clientX: event.clientX - rect.left, clientY: event.clientY - rect.top } });
         }
         updateZoomed();
       }, { passive: false });
 
-      container.addEventListener('pointerdown', function () {
+      var pointerTarget = img;
+      pointerTarget.addEventListener('pointerdown', function (e) {
+        e.stopPropagation();
         img.classList.add('is-panning');
       });
       window.addEventListener('pointerup', function () {
@@ -111,15 +169,27 @@
         img.classList.remove('is-panning');
       });
 
-      container.addEventListener('dblclick', function (event) {
+      img.addEventListener('dblclick', function (event) {
         event.preventDefault();
+        event.stopPropagation();
+        var rect = img.getBoundingClientRect();
         var scale = panzoom.getScale();
-        var targetScale = scale > 1 ? 1 : Math.min(MAX_SCALE, 2);
-        panzoom.zoom(targetScale, {
-          animate: true,
-          focal: { clientX: event.clientX, clientY: event.clientY }
-        });
-        if (targetScale === 1) sizeToViewport();
+        var targetScale;
+        if ((event.ctrlKey || event.metaKey) && scale > 1.01) {
+          targetScale = 1;
+        } else if (scale < 1.01) {
+          targetScale = Math.min(MAX_SCALE, 2);
+        } else if (scale >= MAX_SCALE - 0.01) {
+          targetScale = MAX_SCALE;
+        } else {
+          targetScale = Math.min(MAX_SCALE, scale * 1.5);
+        }
+        panzoom.zoom(targetScale, { animate: true, focal: { clientX: event.clientX - rect.left, clientY: event.clientY - rect.top } });
+        updateZoomed();
+      });
+
+      window.addEventListener('resize', function () {
+        sizeToViewport({ reset: false });
         updateZoomed();
       });
     }
