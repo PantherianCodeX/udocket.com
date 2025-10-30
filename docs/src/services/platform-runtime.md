@@ -183,6 +183,153 @@ curl -i -X OPTIONS \
   https://platform.local/api/v1/artifacts/$A/download
 ```
 
+#### 3.1.3 API error schema (binding)
+
+**Purpose:** Keep HTTP error envelopes aligned with the shared schema so SDKs and dashboards remain consistent. **|**
+**Contract:** Responses conform to `spec/schemas/api_error.schema.json`; services emit one of the enumerated `ApiError.code` values. **|**
+**State:** Schema lives in `spec/schemas/api_error.schema.json`; generated clients (Python/TypeScript) consume it; Spectral rules lint OpenAPI bundles. **|**
+**Failures & handling:** Divergent error codes fail the docs lint and Spectral checks; releases block until fixed. **|**
+**Observability:** Metrics `api_error_total{code}` and audit events record frequency; dashboards alert on unknown codes. **|**
+**Breadcrumbs:** Schema `spec/schemas/api_error.schema.json`, lint rules `ops/openapi/rules/apierror-enum.yaml`, tests `tests/platform/api/test_api_error_schema.py`.
+
+| Code | Description |
+|---|---|
+| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
+| `QUARANTINED` | Artifact is quarantined and unavailable. |
+| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
+| `VALIDATION_ERROR` | Input payload failed validation. |
+| `AUTH_ERROR` | Authentication error (legacy umbrella code). |
+| `AUTH_CLOCK_SKEW` | HMAC timestamp outside allowed skew window. |
+| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch. |
+| `NOT_FOUND` | Resource not found or not visible. |
+| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
+| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
+| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
+
+#### 3.1.4 Rate-limit response (normative)
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 60
+X-RateLimit-Limit: 600
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 2025-10-19T21:15:00Z
+X-Request-ID: 09c2d6c0-2bdc-4f8e-9f2d-4f64cb9f2e30
+{
+  "code": "RATE_LIMIT",
+  "message": "Per-organization API request ceiling reached.",
+  "details": {"retry_after_ms": 60000},
+  "correlation_id": "09c2d6c0-2bdc-4f8e-9f2d-4f64cb9f2e30"
+}
+```
+
+**Purpose:** Provide an authoritative example for SDKs and monitoring. **|**
+**Contract:** Services must emit `Retry-After`, rate-limit headers, and the structured body when throttling requests. **|**
+**Observability:** Metrics `api_rate_limit_header_miss_total` and synthetic checks ensure headers remain present; SDK regressions trigger CI failures. **|**
+**References:** Settings keys `api.rate_limits.*`, Portal/Web App §2.5.
+
+#### 3.1.5 Deprecation response (normative)
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
+Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
+Sunset: Mon, 01 Jun 2026 00:00:00 GMT
+Link: </api/v1/migrations/2026-06-case-export>; rel="deprecation"; type="text/html"
+X-uDocket-API-Version: 2025-01
+
+{ "id": "...", "status": "deprecated", "sunset_at": "2026-06-01T00:00:00Z" }
+```
+
+**Purpose:** Demonstrate the RFC 8594/RFC 9333 headers clients must respect when an endpoint approaches end-of-life. **|**
+**Contract:** Deprecations require paired `Deprecation`, `Sunset`, and `Link` headers plus a machine-readable payload. **|**
+**Observability:** Metric `api_sunset_header_missing_total` and Spectral rule `sunset-header` enforce compliance. **|**
+**References:** ADR-0002, Portal spec §2.5 (UI cues).
+
+#### 3.1.6 Required response headers (binding)
+
+| Category | Header(s) | Enforcement & reference | Notes |
+|---|---|---|---|
+| Exposed response headers | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset` | `config/settings.py::CORS_EXPOSE_HEADERS`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 expectations; deviations require Security approval. |
+| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py` | Nonce headers support CSP requirements (§11.5 Web App). |
+| Security baseline | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | Middleware `apps/platform/ui/security/csp.py`; tests `tests/e2e/test_security_headers.py` | CSP enforces per-response script/style nonces. |
+| Download guard contract | `If-Match`, `If-None-Match`, `Range`, `If-Range` | Download handler `apps/platform/portal/downloads.py::enforce_if_match` | Clients must echo `If-Match` ETag; mismatches return `412`. |
+| Rate-limit headers | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | Middleware `apps/platform/api/middleware/rate_limiting.py`; monitored via `api_rate_limit_header_miss_total` | Contract referenced in §3.1.4. |
+
+#### 3.1.7 REST and WebSocket conventions (binding)
+
+**Purpose:** Standardize cross-service behaviour for REST resources, pagination, idempotency, and real-time channels. **|**
+**Contract:** All platform APIs expose plural resource paths under `/api/v1/`, enforce optimistic concurrency via `version`, and require `Idempotency-Key` headers for mutating operations. **|**
+**State:** OpenAPI components (`ops/openapi/**/*.yaml`), shared middleware (`apps/platform/api/middleware/*.py`), and generated clients consume the same conventions. **|**
+**Failures & handling:** Spectral lint (`make lint-openapi`) and contract tests fail when responses deviate; runtime emits `Idempotency-Status` on replays and raises `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` for hash drift. **|**
+**Observability:** Metrics `api_request_total{method}`, `idempotency_replay_total`, `api_pagination_page_total`, SSE health monitors `job_sse_schema_mismatch_total`; dashboards “API Gateway” and “Job SSE Health”. **|**
+**Breadcrumbs:** Middleware `apps/platform/api/middleware/idempotency.py`, pagination helpers `apps/platform/api/pagination.py`, SSE publisher `apps/platform/events/jobs.py`, tests `tests/platform/api/test_pagination.py`, `tests/platform/events/test_jobs_sse.py`.
+
+- **Base paths:** `/api/v1/<resource>` with plural nouns (`/cases`, `/artifacts`, `/jobs`). RPC-style controls append `:action` (`POST /api/v1/jobs/{id}:cancel`).
+- **Idempotency:** Mutations (`POST`, `PUT`, `PATCH`, `DELETE`) require UUIDv7 `Idempotency-Key` headers (TTL ≥ 24 h). Servers replay cached responses on identical payloads and emit `Idempotency-Status: replay`.
+- **Optimistic concurrency:** Payloads include `version`; mismatches raise `409 CONFLICT` with `details.reason="REVISION_CONFLICT"`.
+- **Pagination:** Envelope `{items, page, page_size, total, next_page}`; sorting uses `?sort=field:asc`. Invalid fields or masked columns return `400`.
+- **Filtering:** Query params map to whitelisted fields; masked columns remain non-filterable.
+- **Error envelope:** Conforms to `spec/schemas/api_error.schema.json`; clients rely on deterministic `code` values.
+
+Example error payload:
+
+```json
+{
+  "error": {
+    "code": "CASE_NOT_FOUND",
+    "message": "Case 22222222-2222-2222-2222-222222222222 is archived",
+    "details": [{"field": "case_id", "message": "archived cases are read-only"}]
+  },
+  "trace_id": "4f4c9f7d09e141d8be6d1f8d0d6d88e4"
+}
+```
+
+- **Real-time:** Jobs and cases stream progress via SSE; each event carries `{schema_version, emitted_at, id, payload}`. Clients reconnect with `Last-Event-ID` to resume. Channels/WebSockets support collaborative editing with OIDC-authenticated topics scoped by case/job.
+- **RBAC & masking:** API serializers only read from secure views (`*_secure`); the gateway rejects spoofed headers (`X-Org-ID`, `X-Active-Roles`).
+- **Examples:** `?sort=created_at:desc,type:asc&page=2&page_size=50`, `?case_id=<uuid>&type=SUMMARY_MD`.
+
+#### 3.1.8 Artifact endpoints (binding)
+
+**Purpose:** Document the canonical artifact CRUD flows exposed by the platform API. **|**
+**Contract:** Artifact endpoints enforce RLS, optimistic concurrency, and Guardian gating while delegating job orchestration to worker services. **|**
+**State:** Controller `apps/platform/artifacts/views.py`, serializers `apps/platform/artifacts/serializers.py`, OpenAPI components `ops/openapi/components/artifacts.yaml`. **|**
+**Failures & handling:** Integrity failures raise `INTEGRITY_ERROR`; Guardian blocks raise `POLICY_BLOCK`; SSE `artifact.status` broadcasts keep UI in sync. **|**
+**Observability:** Metrics `artifact_request_total{action}`, `artifact_download_total{cache_state}`, audit events `ARTIFACT_CREATED`, `ARTIFACT_STATUS_CHANGED`. **|**
+**Breadcrumbs:** Tests `tests/platform/artifacts/test_artifact_api.py`, download guard `apps/platform/portal/downloads.py`, manifest helpers `packages/udocket_core/artifacts/service.py`.
+
+- `GET /api/v1/artifacts?case_id=&type=&class=&status=&archived=&page=&page_size=` — lists artifacts with RLS; `scope=org` query leverages `active_org_id`.
+- `POST /api/v1/cases/{case_id}/artifacts` — creates artifacts from uploads or generated content; derived artifacts start in `status='PROCESSING'` until workers complete content writes.
+- `GET /api/v1/artifacts/{artifact_id}` — retrieves metadata/manifests; response filtered via masking.
+- `GET /api/v1/artifacts/{artifact_id}/download` — enforces conditional requests (If-Match/If-None-Match), signed URLs, and Guardian checks (`status='APPROVED'` for CDs, `status='RELEASED'` for DLs).
+
+- Mutations emit audit events, append to `ops_<agent>.jsonl`, and trigger Guardian or Signer workflows as appropriate.
+
+#### 3.1.9 ApiError code catalog (binding)
+
+**Purpose:** Keep API consumers, SDKs, and monitoring dashboards aligned on the standardized `ApiError.code` values. **|**
+**Contract:** All REST and GraphQL surfaces emit one of the enumerated codes below; additions require Spectral rule updates and SDK releases. **|**
+**State:** Authoritative schema lives at `spec/schemas/api_error.schema.json`; Spectral rule `ops/openapi/rules/apierror-enum.yaml` enforces parity across OpenAPI specs. **|**
+**Failures & handling:** Unknown codes fail lint and block deploys; runtime emitting an unexpected code triggers `api_error_unknown_total` alerts and requires hotfix. **|**
+**Observability:** Metrics `api_error_total{code}`, dashboards “API Gateway – Errors”, and synthetic probes replay canonical scenarios. **|**
+**Breadcrumbs:** Schema file `spec/schemas/api_error.schema.json`, middleware `apps/platform/api/errors.py`, tests `tests/platform/api/test_api_error_schema.py`.
+
+| Code | Description |
+|---|---|
+| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
+| `QUARANTINED` | Artifact is quarantined and unavailable. |
+| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
+| `VALIDATION_ERROR` | Input payload failed validation. |
+| `AUTH_ERROR` | Authentication error (legacy umbrella code). |
+| `AUTH_CLOCK_SKEW` | HMAC timestamp outside allowed skew window. |
+| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch. |
+| `NOT_FOUND` | Resource not found or not visible. |
+| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
+| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
+| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
+
 ### 3.2 Internal Interfaces (binding) {#32-reference-manifests}
 
 #### 3.2.1 Mesh egress allowlist (illustrative)
@@ -262,6 +409,52 @@ metadata:
 ```
 
 Mesh and ingress templates consume the same Settings bundles so routing surfaces stay consistent across services.
+
+### 3.4 Service-to-service request signing (binding) {#34-service-to-service-request-signing}
+
+**Purpose:** Authenticate privileged inter-service calls that traverse trust boundaries. **|**
+**Contract:** All mutating requests between platform services (Guardian, Signer, Settings activation, worker control APIs, etc.) MUST include the HMAC headers defined here; receivers validate the signature, enforce timestamp skew, and pair the request with an `Idempotency-Key` when present. **|**
+**State:** Shared secrets reside in managed stores (Key Vault/Vault) and mirror Settings keys under `security.hmac.*`; Settings activation distributes key IDs to clients and services. Canonicalization uses `{method, path, timestamp, body_sha256}` scoped to the requesting service/tenant. **|**
+**Failures & handling:** Timestamp drift greater than `security.hmac.max_clock_skew_seconds` returns `401 AUTH_CLOCK_SKEW`; digest mismatches raise `401 AUTH_SIGNATURE_INVALID`; missing headers fail closed. Clients retry after syncing clocks and recomputing the signature; repeated violations escalate via Security runbook `RB-HMAC-ROTATE`. **|**
+**Observability:** Metrics `auth_request_signed_total`, `auth_signature_invalid_total`, and `auth_clock_skew_total` feed the “API Gateway – Auth” dashboard; audit events `AUTH_SIGNATURE_INVALID` include the offending key ID for forensics. **|**
+**Breadcrumbs:** Signature middleware `apps/platform/api/middleware/hmac_signature.py`, helpers `packages/udocket_core/security/hmac.py`, tests `tests/platform/api/test_hmac_signature.py`, Settings schema `packages/udocket_core/settings/security.py`.
+
+Required headers for signed requests:
+
+- `X-Signature-Key-Id` — identifies the shared secret (for example, `svc-guardian/current`).
+- `X-Timestamp` — RFC3339 timestamp in UTC; services reject absolute skew greater than `security.hmac.max_clock_skew_seconds` (default 120 seconds).
+- `X-Request-Signature` — Base64-encoded HMAC over the canonical request string.
+- `Idempotency-Key` — required for mutating operations to guarantee replay safety; the value is included in the canonical string when supplied.
+
+Canonical string (pseudocode):
+
+```pseudocode
+canonical = [
+  request.method.upper(),
+  request.path,
+  timestamp_iso8601,
+  sha256_hex(request.body or "")
+].join("\n")
+```
+
+Receivers recompute the digest with the secret referenced by `X-Signature-Key-Id`, compare using constant-time equality, and record signature metrics. Replay protection combines the `Idempotency-Key` with a short-lived cache (default TTL 24 hours) so identical requests return cached responses.
+
+#### 3.4.1 Key rotation flows (binding) {#341-hmac-key-rotation}
+
+**Purpose:** Rotate HMAC credentials without interrupting signed traffic. **|**
+**Contract:** Rotations follow a dual-publish → cutover → revoke pattern; evidence lands in `ops/security/key_rotation/` alongside Grafana snapshots. **|**
+**State:** Secrets live under `{service}/current` and `{service}/next` in the secret store; Settings activation advertises active key IDs so clients can dual-publish signatures. **|**
+**Failures & handling:** Spikes in `auth_signature_invalid_total` or canary failures trigger rollback (restore the previous key) and open a Security incident; compromised keys are denylisted immediately. **|**
+**Observability:** Metrics `hmac_key_rotation_total`, `hmac_key_rotation_failure_total`, and synthetic canary job `scripts/security/key_rotation_canary.py`; dashboards show rotation status and failure ratios.
+
+Rotation steps:
+
+1. **Dual publish:** Generate a new secret, store it under `{service}/next`, and update Settings to advertise both `current` and `next` IDs. Canary requests sign with the new key while production continues with the current secret.
+2. **Cutover:** After canaries succeed, swap pointers so `{service}/current` references the new secret and create a fresh `{service}/next`. Monitor signature error metrics for anomalies.
+3. **Revoke:** Retire the previous secret, prune denylisted IDs, and archive rotation evidence (`key_rotation_report.json`) with Grafana snapshots.
+4. **Emergency revoke:** If compromise is suspected, denylist the affected key ID immediately, rotate secrets, and verify error rates return to baseline before closing the incident.
+
+Cadence: API HMAC keys rotate quarterly, Guardian/Signer service keys rotate semi-annually, and customer-supplied keys rotate per contract (≤90 days). Overdue keys page Security Engineering; the platform change calendar tracks upcoming rotations.
 
 ______________________________________________________________________
 

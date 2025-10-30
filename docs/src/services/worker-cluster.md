@@ -202,7 +202,7 @@ ______________________________________________________________________
 
 <a id="worker-api-idempotency"></a>
 
-### 3.3 Idempotency store & replay headers (binding)
+### 3.3 Idempotency store & replay headers (binding) {#33-idempotency-store-replay-headers}
 
 **Purpose:** Capture the shared idempotency table and replay semantics so every worker-facing API behaves consistently. **|**
 **Contract:** Requests persist entries before side effects, reuse stored responses on replays, and raise explicit collisions when payload hashes drift. **|**
@@ -340,6 +340,29 @@ paths:
         - oidc: []
         - hmacSignature: []
 ```
+
+### 3.6 Job lifecycle endpoints (binding)
+
+**Purpose:** Capture the deterministic behaviour for job creation, control actions, and cancellation so workers, UI, and API clients stay in sync. **|**
+**Contract:** Job APIs enforce OCC, idempotency, and Guardian/SSE signalling; cancellation follows a three-step contract that blocks partial artifacts from persisting unnoticed. **|**
+**State:** Job rows (`apps/platform/jobs/models.py`), control handlers (`apps/platform/jobs/views.py`), SSE publisher `apps/platform/events/jobs.py`, audit events `JOB_*`. **|**
+**Failures & handling:** Missing idempotency headers return `400`; stale versions raise `409`; provider abort failures emit warnings and retry until the watchdog intervenes. **|**
+**Observability:** Metrics `job_control_request_total{action}`, `job_cancel_latency_seconds`, `job_retry_total`, SSE monitors; runbooks `RB-JOB-WATCHDOG`, `RB-LOCK-006`. **|**
+**Breadcrumbs:** API tests `tests/platform/jobs/test_job_controls.py`, provider adapters `packages/udocket_core/agents/*`, cancellation helpers `apps/platform/jobs/service.py`.
+
+- `POST /api/v1/cases/{case_id}/jobs/{kind}` — requires `Idempotency-Key`; returns `{id, retry_token, version}`. Replays with the same payload reuse the existing job; mismatches raise `IDEMPOTENCY_SIGNATURE_MISMATCH`.
+- `GET /api/v1/jobs/{id}` — reads job state plus manifest/checkpoint digests.
+- Control RPCs `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` — require OCC `version`, `Idempotency-Key`, and propagate `retry_token` when applicable. Responses include updated status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and the new `retry_generation`.
+- Cancellation contract:
+  1. Transition eligible jobs (`PENDING|QUEUED|RUNNING|PAUSED|PAUSED_AWAITING_BUDGET|PAUSED_AWAITING_PROVIDER`) to `CANCELING`. Emit SSE `job.accepted` (if previously queued) followed by `job.canceling {schema_version, emitted_at, job_id, actor_id, reason}` so clients stop optimistic UI updates.
+  1. Invoke provider-specific aborts (Azure Speech Batch delete, streaming stop, LangGraph lane cancel). Azure Speech revokes SAS URLs and purges staging blobs; LangGraph lanes abort tool execution and release advisory locks. Providers have a 60-second grace period before the platform marks them canceled.
+  1. Finalize `CANCELING → CANCELED`, emit SSE `job.canceled` and downstream `artifact.status` updates, append audit `JOB_CANCELED` (`reason`, `actor_id`, `provider_outcome`), and write auxiliary `JOB_CANCELLATION_REPORT` artifacts capturing checkpoints, partial outputs, and cleanup actions. Artifacts linked to the job persist with `depends_on_canceled_job=true` for operator review. Repeat cancels are idempotent.
+- Retries require the stored `retry_token`; Guardian and Settings snapshots remain identical across attempts to guarantee reproducibility. Tool invocations declared in `agents.tools.catalog[]` include `idempotent` metadata and optional `tool_idempotency_key` so LangGraph runners can dedupe external calls when resuming checkpoints.
+- SSE replay: `GET /api/v1/jobs/{id}/events` honours `Last-Event-ID` and `If-None-Match` (manifest digest). Servers return `ETag` headers and emit the schema enumerated in `spec/schemas/job_event.schema.json` (`job.accepted`, `job.running`, `job.update`, `job.complete`, `job.canceled`, policy holds). Clients must store the cursor and resume from the last event on reconnect.
+- Provider progress normalization: `ProviderProgressAdapter` implementations wrap Azure Speech Batch, Azure OpenAI, and future providers to produce `{phase, percent_complete, estimated_remaining_seconds}` snapshots. Workers include snapshots in `job.update` SSE payloads (`provider_progress`) and persist them under `job_checkpoint.progress_meta`. Pause/resume/cancel calls fan out through the adapters to keep provider state aligned; failed provider-side pauses do not advance internal state machines.
+- Provider health endpoint: `GET /api/v1/providers/health` aggregates the latest adapter heartbeat per `{provider, region}` with `{status, latency_ms_p95, error_rate, observed_at}`. Responses cache for 10 seconds and drive the `provider.health` SSE topic used by operator dashboards; degradation raises alerts even when queues are idle.
+- Watchdog integration: heartbeat table `job_progress_heartbeat` records `{job_id, last_heartbeat_at, progress_pct}` updates. If age exceeds `jobs.watchdog.no_progress_minutes`, workers emit `job.watchdog_warning` SSE events and increment `job_watchdog_warning_total`. Exceeding `jobs.watchdog.timeout_minutes` transitions the job to `FAILED`, files audit `JOB_WATCHDOG_TIMEOUT`, and triggers [RB-JOB-WATCHDOG](../ops/runbooks.md#rb-job-watchdog).
+- Overlap guard: advisory lock `jobkind:{case_id}/{kind}` prevents concurrent executions of mutually exclusive jobs, returning `409 JOB_KIND_BUSY` when a conflicting job is still active.
 
 ______________________________________________________________________
 

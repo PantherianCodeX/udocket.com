@@ -30,7 +30,7 @@ ROOT_DIR = SCRIPT_DIR.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
-from scripts.docs import doc_utils  # type: ignore  # noqa: E402
+from scripts.docs import doc_utils  # noqa: E402
 
 FieldMapping = Tuple[str, Tuple[str, ...]]
 

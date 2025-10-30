@@ -175,7 +175,74 @@ ______________________________________________________________________
 
 Guardian respects downstream approval invariants (ExclusiveSwap) and ensures deliverables only advance from `APPROVED` onward once Guardian history marks the latest edit as cleared.
 
-### 2.3 Waiver & quarantine policies
+### 2.3 Review reason catalogs (binding)
+
+**Purpose:** Keep the canonical review reason enumerations aligned with Reference Manager so reviewers, automation, and analytics interpret decisions consistently. **|**
+**Contract:** Guardian ships the authoritative `RejectReason` and `QuarantineReason` enums; additions flow through Reference Manager bundle promotions and API schema updates. **|**
+**State:** Enum definitions live in `packages/udocket_core/guardian/review.py`, Reference Manager publishes them in `reference.review_reasons` bundles, and downstream consumers pin to those digests. **|**
+**Failures & handling:** Drift between Guardian and Reference Manager emits `guardian_reason_enum_mismatch_total`, blocks bundle activation, and opens an incident with Content Ops. **|**
+**Observability:** Weekly health job `ops/reference/suggest_reason_enum.py` reports candidate additions, while dashboards track reviewer usage and “other” write-ins. **|**
+**References:** Reference Manager §2.7 (reason bundle governance), TDD §5.2 (overview). **|**
+**Breadcrumbs:** Enum source `packages/udocket_core/guardian/review.py`, tests `tests/platform/guardian/test_review_reason_enums.py`, bundle schema `spec/schemas/guardian_review_reasons.schema.json`.
+
+`RejectReason` values accepted by Guardian and surfaced to reviewers:
+
+```text
+{ACCURACY_ISSUE, INCOMPLETE_CONTENT, FORMATTING_LAYOUT, TONE_STYLE_QUALITY,
+ SCOPE_MISMATCH, SOURCE_MISMATCH, REDACTION_REQUIRED, DUPLICATE_OBSOLETE,
+ DATA_QUALITY_INPUT, POLICY_CONCERN, OTHER}
+```
+
+`QuarantineReason` values for escalations routed back through Guardian:
+
+```text
+{RESIDENCY_POLICY_BLOCK, HIPAA_REQUIRED, PII_UNMASKED, DLP_VIOLATION,
+ SAFETY_CONTENT, MALWARE_DETECTED, LEGAL_HOLD, FINOPS_BUDGET_EXCEEDED,
+ HASH_MISMATCH_TAMPER, PROVIDER_REGION_UNVERIFIED, CLASSIFIER_LOW_CONFIDENCE,
+ REQUESTED_BY_ADMIN, OTHER}
+```
+
+- “OTHER” selections mandate `*_other_text` payloads. Guardian aggregates write-ins weekly and forwards candidates to Reference Manager; accepted values appear in the next bundle publish.
+- Reference Manager tracks proposal SLAs (triage ≤ 14 days, resolution ≤ 30 days) and publishes adoption status. Guardian blocks new enum enforcement until bundles propagate to the UI, API, and schema validators.
+- Downstream analytics consume the same enums to ensure dashboards, runbooks, and audits remain consistent.
+
+### 2.4 Review modes & risk overrides (binding)
+
+**Purpose:** Document the deterministic review-mode contract Guardian enforces so workflow services and reviewers share the same expectations. **|**
+**Contract:** Settings `review.mode`, `review.approval_type.default`, and `review.risk_overrides[]` originate from the Settings Registry; Guardian evaluates them after a PASS/WARN judgment and records the outcome in manifests and audit logs. **|**
+**State:** Guardian persists the active review mode and override flags in `guardian_judgment_history`; Review services read those values to drive workflow transitions. **|**
+**Failures & handling:** Missing settings trigger `GUARDIAN_REVIEW_MODE_MISSING`, while conflicting overrides open RB-GUARD-MANUAL incidents. **|**
+**Observability:** Metrics `guardian_review_mode_total{mode}`, `guardian_override_forced_total`, and SSE payloads expose mode decisions; dashboards highlight override frequency. **|**
+**References:** Settings Registry §6.1 (review keys), Web App §2.4 (UI workflow cues), TDD §5.2 (summary). **|**
+**Breadcrumbs:** Mode resolver `packages/udocket_core/guardian/review_mode.py`, tests `tests/platform/guardian/test_review_modes.py`.
+
+Allowed `review.mode` values:
+
+```text
+{MANUAL, SKIP_OPERATOR_PREP, SKIP_REVIEW, SKIP_ALL}
+```
+
+Risk overrides Guardian evaluates before honoring skip modes:
+
+```text
+{PHI_DETECTED, LEGAL_HOLD, CLASSIFIER_LOW_CONFIDENCE, NEW_MODEL_OR_PROMPT, QUARANTINE_HISTORY}
+```
+
+Guardian applies review modes as follows:
+
+| Mode | Post PASS/WARN status (CD) | Subsequent path |
+|---|---|---|
+| `MANUAL` | `OPERATOR_PREP` | Operator submits → `APPROVAL_REQUESTED → QUEUED_FOR_REVIEW` → reviewer outcome |
+| `SKIP_OPERATOR_PREP` | `QUEUED_FOR_REVIEW` | Reviewer outcome (`APPROVED`/`CHANGES_REQUESTED`/`QUARANTINED`) |
+| `SKIP_REVIEW` | `APPROVED` (`approval_type=SKIPPED_REVIEW`) | ExclusiveSwap promotes DL → `SIGNED → RELEASED` |
+| `SKIP_ALL` | `APPROVED` (`approval_type=SKIPPED_REVIEW`) | Same as `SKIP_REVIEW`; workspace optional |
+
+- Overrides force the artifact through `APPROVAL_REQUESTED → QUEUED_FOR_REVIEW` even when mode requests a skip. Guardian emits `REVIEW.SKIPPED` events including `{review_mode, overrides_applied}` so auditors can trace automation versus manual intervention.
+- `review.approval_type.default` must remain `HUMAN` unless a skip mode is configured; Guardian validates this during Settings activation.
+- `org.guardian.pre_operator_gates[]` enumerates artifact classes hidden from operators until Guardian returns PASS/WARN (commonly `SA`, `WP`, and `CD`). The Web App surfaces “Guardian pending” banners when operators attempt to open gated artifacts.
+- App.A state diagrams in the TDD illustrate these branches; Guardian schema versioning ensures SSE consumers coordinate when modes or overrides change.
+
+### 2.5 Waiver & quarantine policies
 
 **Purpose:** Explain how waivers and quarantines operate so reviewers and automation enforce the correct controls. **|**
 **Contract:** Waivers require dual approval and manifest stamping; quarantines propagate to dependent artifacts until Guardian clears them. **|**
@@ -312,7 +379,19 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 - Canonical field definitions, validation rules, and the reference JSON example live in Appendix B (binding); clients must validate against that schema before submitting detection feedback.
 - Provider telemetry (speech/LLM safety APIs) lands in `guardian_provider_flags[]`; severe categories Guardian missed elevate the outcome to WARN (`PROVIDER_CRITICAL_HINT`) and auto-file detector gap tickets.
 
-______________________________________________________________________
+### 3.6 Review REST endpoints (binding)
+
+**Purpose:** Document the shared REST endpoints staff tooling uses to approve, request changes, or quarantine artifacts under Guardian governance. **|**
+**Contract:** Endpoints enforce optimistic concurrency (`expected_version`), idempotency, and the ExclusiveSwap invariant when promoting deliverables. **|**
+**State:** API handlers `apps/platform/guardian/views.py`, approval service `packages/udocket_core/approvals/service.py`, audit events `REVIEW_APPROVED`, `REVIEW_CHANGES_REQUESTED`, `REVIEW_QUARANTINED`. **|**
+**Failures & handling:** Stale versions raise `409 REVISION_CONFLICT`; missing reason codes return `400 VALIDATION_ERROR`; repeated submissions replay prior results with `Idempotency-Status: replay`. **|**
+**Observability:** Metrics `guardian_review_action_total{action}`, structured logs with reviewer metadata, dashboards “Guardian Manual Review”. **|**
+**Breadcrumbs:** Tests `tests/platform/guardian/test_manual_review.py`, ExclusiveSwap logic `packages/udocket_core/approvals/service.py::approve_artifact`, runbooks `RB-GUARD-MANUAL`.
+
+- `POST /api/v1/reviews/{artifact_id}/approve` — body `{note?, expected_version}`. Acquires advisory lock `case-approval:{org}/{case}/{type}`, archives prior `APPROVED` CDs, invokes ExclusiveSwap to revoke prior DL, signs/promotes the new deliverable, emits SSE/audit events, and returns idempotent `200` when already approved with the same version.
+- `POST /api/v1/reviews/{artifact_id}/changes` — body `{reject_reason, note, expected_version}`. Requires enum from the review reason catalog; transitions artifact to `status='CHANGES_REQUESTED'`, records reviewer metadata, and emits audit `REVIEW_CHANGES_REQUESTED`.
+- `POST /api/v1/reviews/{artifact_id}/quarantine` — body `{quarantine_reason, note, expected_version}`. Routes through Guardian quarantine workflow, records reason, enforces waiver policies, and sets `status='QUARANTINED'`.
+- `POST /api/v1/artifacts/{artifact_id}:resubmit` — body `{retry_token}`. Requeues `CHANGES_REQUESTED` or policy-unblocked `QUARANTINED` artifacts; requires matching `retry_token` from the prior manifest to guarantee idempotent retries before transitioning back to `PROCESSING → PENDING_JUDGMENT`.
 
 ## 4) State Management (binding)
 

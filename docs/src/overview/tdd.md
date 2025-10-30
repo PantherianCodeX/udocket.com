@@ -157,7 +157,7 @@ Use this checklist to jump to the right sections on a first read:
 | Stakeholder role | Start here | Must-review highlights |
 |---|---|---|
 | Architecture / Security | §3 (platform architecture), §4 (tenancy & access), §7 (Guardian/Signer), §12 (observability/DR) | §3.8 residency, §4.4–§4.5 masking/RLS, §7.1 judgments, §12.5 resilience |
-| Engineering (agents & API) | §6 (agent ecosystem), §10 (APIs), App.D (artifact schemas) | §6.2–§6.4 pipelines, §10.3 idempotency, Appendix F API contracts |
+| Engineering (agents & API) | §6 (agent ecosystem), §10 (APIs), App.D (artifact schemas) | §6.2–§6.4 pipelines, §10.3 idempotency, Platform Runtime §3 (API contracts) |
 | Product / Operations | §1 (executive summary), §11 (UX), §14 (retention & compliance) | §11.1 workspace/portal behaviors, §14.2 DSAR flows, §15 roadmap checkpoints |
 | QA / Compliance | §5 (lifecycle), §13 (testing & governance), App.K (controls map) | §5.2 status vocabulary, §13.3 detection QA, §13.5 deployment gates |
 | SRE / Platform Ops | §3 (infra context), §8 (LLM runtime), §12 (observability/DR), [Runbook catalog](../ops/runbooks.md) | §8.7 FinOps guard, §12.4–§12.6 DR & dashboards, `../ops/runbooks.md` |
@@ -438,7 +438,7 @@ ______________________________________________________________________
 | Web & Channels (staff + portal) | Browser ↔ ASGI over TLS (`Spoofing`, `Tampering`, `Information disclosure`) | mTLS terminates at ingress; HSTS/CSP (§11.5); SSE token binding (§10.8); RLS GUC canaries (§4.4); App.B Spoofing mitigations |
 | Worker cluster (Celery) | Jobs ↔ storage/LLM providers (`Tampering`, `Repudiation`, `DoS`) | Settings snapshots (§6.1), audit JSONL (§6.3/§6.4), advisory locks (§5.4/[Runbook RB-LOCK-006](../ops/runbooks.md#rb-lock-006)), FinOps guard (§8.7/§13.5) |
 | Guardian & Signer services | Artifact promotion, digital seals (`Tampering`, `Repudiation`) | FOR SHARE parent guard (§7.1), immutable audit sink (§12.1), OCSP/TSA verification (§7.2), ADR-0001 (judgment & waiver scope) |
-| Settings service + policy compiler | Config activation across tenants (`Spoofing`, `Elevation of privilege`) | HMAC-signed requests (§7.3), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8) |
+| Settings service + policy compiler | Config activation across tenants (`Spoofing`, `Elevation of privilege`) | HMAC-signed requests ([Platform Runtime §3.4](../services/platform-runtime.md#34-service-to-service-request-signing)), dual approval (§9.3/§9.11), compiled RLS tables (§4.4), activation lock advisory key (§9.8) |
 | External providers (Azure Speech/OpenAI/TSA) | Controlled egress (`Information disclosure`, `DoS`) | Mesh AuthorizationPolicy (§3.8), residency waivers (App.O), LLM safety harness (§8.4), provider circuit breakers (§8.1, [Runbook RB-LLM-003](../ops/runbooks.md#rb-llm-003)) |
 
 - Threat reviews must reference both the container diagram and DFD; new services may not progress past **Provisional** until they document ingress/egress paths, STRIDE analysis, and mitigations in Appendix B.
@@ -608,98 +608,21 @@ Tombstones persist in primary storage until the retention evidence window in §1
 
 Full detection schemas, queue semantics, replay tooling, and manual quarantine workflows remain documented with the Guardian service. Events for these transitions remain enumerated in §10.3.
 
-#### 5.2.4 Human review (tri-outcome) with enumerated reasons
+#### 5.2.4 Human review workflow (summary)
 
-*Purpose: Outline human review states, reasons, and queue behavior.*
+Guardian is the system of record for review outcomes. Candidate deliverables progress from **QUEUED_FOR_REVIEW** to one of three states (**APPROVED**, **CHANGES_REQUESTED**, **QUARANTINED**) and always record reviewer notes, reason codes, and audit evidence. See [`../services/guardian.md §2.3`](../services/guardian.md#23-review-reason-catalogs-binding) for the authoritative reason catalogs and workflow contracts; UI behaviour remains aligned with those enums.
 
-When a **CD** is **QUEUED_FOR_REVIEW**, reviewers must pick exactly one outcome:
+#### 5.2.5 Review modes & overrides (summary)
 
-1. **APPROVE** → status **APPROVED** (optional comment).
-1. **REJECT (CHANGES_REQUESTED)** → status **CHANGES_REQUESTED**, mandatory `reject_reason` + free text.
-1. **QUARANTINE** → status **QUARANTINED**, mandatory `quarantine_reason` + free text; routed via Guardian for single source of record.
-
-`RejectReason` enum:
-
-{ ACCURACY_ISSUE, INCOMPLETE_CONTENT, FORMATTING_LAYOUT, TONE_STYLE_QUALITY, SCOPE_MISMATCH, SOURCE_MISMATCH, REDACTION_REQUIRED, DUPLICATE_OBSOLETE, DATA_QUALITY_INPUT, POLICY_CONCERN, OTHER }
-
-`QuarantineReason` enum:
-
-{ RESIDENCY_POLICY_BLOCK, HIPAA_REQUIRED, PII_UNMASKED, DLP_VIOLATION, SAFETY_CONTENT, MALWARE_DETECTED, LEGAL_HOLD, FINOPS_BUDGET_EXCEEDED, HASH_MISMATCH_TAMPER, PROVIDER_REGION_UNVERIFIED, CLASSIFIER_LOW_CONFIDENCE, REQUESTED_BY_ADMIN, OTHER, }
-
-“OTHER” selections require `*_other_text` payloads and feed a weekly clustering job (`ops/reference/suggest_reason_enum.py`). The job publishes candidate enum additions to Reference Manager; accepted values propagate through the LPE bundle workflow. Operations uphold an SLO to triage new candidates within 14 calendar days and either promote or close them (with rationale) within 30 days, with status tracked in the Reference Manager queue dashboard. When a candidate is promoted, Guardian ships the new enum in the next release, bumps the SSE/event schema version noted in §10.3, and publishes an upgrade notice so API consumers can deploy the updated enum set before enforcement.
-
-<figure class="full-width-diagram">
-  <img class="diagram" data-scale="0.4" src="../build/mermaid/services/guardian/diagrams/approvals-edit-flows-v1.svg" alt="Manual and agent edit approval flows">
-  <figcaption style="font-size: 0.9em; color: #555;">Manual and agent edit approval flows</figcaption>
-</figure>
-
-#### 5.2.5 Review modes & risk overrides
-
-*Purpose: Compare review modes and document when risk overrides are permitted.*
-
-Settings surface the following:
-
-```pseudocode
-review.mode ∈ {
-  MANUAL,             # PASS/WARN → OPERATOR_PREP → APPROVAL_REQUESTED (operator submits)
-  SKIP_OPERATOR_PREP, # PASS/WARN → QUEUED_FOR_REVIEW (system enqueues immediately)
-  SKIP_REVIEW,        # PASS/WARN → APPROVED (record REVIEW.SKIPPED if no overrides apply)
-  SKIP_ALL            # PASS/WARN → APPROVED (operator workspace optional; REVIEW.SKIPPED emitted)
-}
-
-review.risk_overrides:
-  - PHI_DETECTED
-  - LEGAL_HOLD
-  - CLASSIFIER_LOW_CONFIDENCE
-  - NEW_MODEL_OR_PROMPT
-  - QUARANTINE_HISTORY
-```
-
-Guardian judgments always run **before** these modes and gate whether operators can access the artifact. `review.mode` defaults to `MANUAL` per organization (case overrides allowed) and determines the deterministic state transitions after a PASS/WARN judgment:
-
-| Mode | After Guardian PASS/WARN | Next transitions |
-|---|---|---|
-| **MANUAL** | **OPERATOR_PREP** | Operator requests review → **APPROVAL_REQUESTED → QUEUED_FOR_REVIEW** → reviewer outcome |
-| **SKIP_OPERATOR_PREP** | **QUEUED_FOR_REVIEW** | Reviewer outcome (**APPROVED** / **CHANGES_REQUESTED** / **QUARANTINED**) |
-| **SKIP_REVIEW** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
-| **SKIP_ALL** | **APPROVED** (`approval_type=SKIPPED_REVIEW`, emit `REVIEW.SKIPPED`) | Sign → **SIGNED** → **RELEASED** |
-
-PASS/WARN transitions follow the table above: WP always enters **CLEARED_FOR_USE** while CD jumps to the next state dictated by `review.mode` (OPERATOR_PREP, QUEUED_FOR_REVIEW, or APPROVED).
-
-Risk overrides force the artifact back through human review regardless of mode: if any listed condition is true, the system transitions to **APPROVAL_REQUESTED → QUEUED_FOR_REVIEW** even when the configured mode would skip the queue. `REVIEW.SKIPPED` events include `{review_mode, overrides_applied}` so auditors can confirm when automation made the decision versus when overrides intervened. App.A’s state diagrams annotate each branch so the default, queue-first, and skip flows remain visually distinct. Portal fetch-time checks continue to block revoked deliverables regardless of mode.
-
-Guardian enforces `org.guardian.pre_operator_gates[]` by blocking operator visibility until PASS/WARN occurs for each listed class (commonly `SA`, `WP`, and `CD` in regulated orgs); UI surfaces a “Guardian pending” banner when operators attempt to open gated artifacts.
+Review automation is controlled by Settings (`review.mode`, `review.approval_type.default`, `review.risk_overrides[]`). Guardian evaluates these after PASS/WARN judgments and either advances the artifact automatically or requeues it for human review. Modes, override semantics, and telemetry live in [`../services/guardian.md §2.4`](../services/guardian.md#24-review-modes-risk-overrides-binding); stakeholders should consult that spec before altering review posture.
 
 #### 5.2.6 Deliverable replacement policy
 
-*Purpose: Define replacement rules when new deliverables supersede prior approvals.*
+Exclusive deliverables continue to rely on the **ExclusiveSwap** invariant (§5.4.1). Promotion atomically revokes the prior **DL**, signs the new deliverable, and emits audit events. Detailed signer responsibilities and signature policies stay in [`../services/digital-signer.md`](../services/digital-signer.md).
 
-Exclusive deliverables use **approval swap** semantics:
+#### 5.2.7 Cross-object controls and audit surface (summary)
 
-- Promoting a new **APPROVED** candidate deliverable of an exclusive type automatically revokes the previously released **DL** (`status → REVOKED`) and invalidates portal links/ETags.
-- Revoked deliverables remain retained for audit, replay, and manifest comparison; retention jobs eventually archive per policy.
-- Compliance-driven takedowns still use explicit revocations (`revocation_reason` records initiator + rationale).
-
-#### 5.2.7 Cross-object controls and audit surface
-
-*Purpose: Summarize cross-object controls and audit signals tied to each artifact.*
-
-- Hashing: `content_hash` is SHA-256 for every object; multi-file bundles publish Merkle roots as **AR** “hash manifest” records (JWS signed).
-- Signatures: **DL** (and signature-bearing **AR**) require PAdES B-LTA for PDF, JWS RS256 or COSE_Sign1 for JSON, plus RFC-3161 TSA tokens. Metadata includes signer chain, TSA info, `content_hash`, `model_run_id`, `guardian_judgment_id`, settings snapshot hash, `approval_type`, `approved_by`, `fips_mode` (`true|false`), and when true the `{fips_module_cert_id, fips_validation_level, fips_drbg_source}` reported by the performing module.
-- Optional client counter-signatures produce linked **AR** records.
-- Policy & controls matrix (excerpt):
-
-| Control | SA | WP | CD | DL | AR |
-|---| --- | --- | --- | --- | --- |
-| SHA-256 on create | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Content-addressed storage | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Guardian judgment | (limited) | **Selective** | **Mandatory** | **Fetch-time re-check** | — |
-| Operator prep workspace | — | — | **Default** | — | — |
-| Human review | — | — | per `review.mode` / overrides | — | — |
-| Digital signature + TSA | — | — | — | **✓** | **✓** (manifests/receipts) |
-| Client counter-sign | — | — | — | **Optional** | — |
-| Residency enforcement | **Strict** | **Strict** | **Strict** | **Strict** | **Strict** |
-| Portal visibility | ✗ | ✗ | ✗ | **Only latest RELEASED** | ✗ |
+Artifacts must retain deterministic hashes, Guardian judgments, and, for deliverables, signature metadata. The Digital Signer spec documents signature formats, TSA/OCSP requirements, and auxiliary artifacts; Guardian’s spec covers QA and quarantine signalling. Portal visibility rules map to `status` (`APPROVED` for CDs in staff surfaces, `RELEASED` for DLs in the portal). Refer to [`../services/digital-signer.md`](../services/digital-signer.md) and [`../services/guardian.md`](../services/guardian.md) for full control matrices and audit expectations.
 
 #### 5.2.8 Schema & configuration guardrails
 
@@ -1035,23 +958,13 @@ Example
 - FIPS compliance: `security.crypto.fips_requirement` and deliverable policies dictate FIPS mode. Startup attestation, algorithm enforcement, waiver governance, and monitoring live in §7.
 - APIs: Signing, verification, and certificate retrieval endpoints plus acknowledgement flows are formalised in signer §3. Integrators MUST use HMAC headers and Idempotency keys per that contract.
 
-### 7.3 Request signing and verification (HMAC)
+### 7.3 Request signing and verification (summary)
 
-*Purpose: Authenticate inter-service calls crossing trust boundaries.*
+*Purpose: Highlight the shared inter-service authentication contract without restating the gateway implementation.*\
+*Contract: All privileged service-to-service calls adopt the HMAC request signing model documented in [`../services/platform-runtime.md §3.4`](../services/platform-runtime.md#34-service-to-service-request-signing).*
 
-- All mutating APIs (Guardian, Signer, Settings activation) require HMAC headers: `X-Signature-Key-Id`, `X-Timestamp` (RFC3339), `X-Request-Signature`, plus `Idempotency-Key` when supported.
-- Signature computed over canonical request components (`method`, `path`, `timestamp`, `body hash`) with org/service-specific shared keys stored in managed secrets.
-- Receiver validates timestamp skew (absolute difference ≤ 120 seconds configurable via `security.hmac.max_clock_skew_seconds`), looks up key ID, recomputes signature, and rejects mismatches with `401 AUTH_CLOCK_SKEW` when the timestamp is out of range or `401 AUTH_SIGNATURE_INVALID` for digest mismatch. Clients should keep system clocks within ±60 seconds; retries near the boundary add ±30 seconds random jitter to avoid flapping. Replay protection uses `Idempotency-Key` + short-lived cache.
-- Rotation handled via dual-publish of keys; clients send new key ID with overlap window. Appendix F includes request/response examples.
-
-#### 7.3.1 Key rotation flows (normative)
-
-*Purpose: Ensure safe rollovers without request loss.*
-
-- Dual-publish: maintain `{current, next}` keys; announce rotation window; accept both for N days.
-- Cutover: flip `current=next`; generate new `next`; revoke old with grace; update service configs via Settings activation.
-- Audit: record rotation events; correlate with error spikes; roll back if verification failures increase.
-- Emergency revoke: push denylist for compromised key IDs; page on-call; rotate immediately; verify traffic returns to normal.
+- Guardian, Signer, Settings activation, worker control APIs, and other mutating surfaces sign requests with the headers defined there; receivers validate signatures, enforce timestamp skew, and reuse the shared idempotency store for replay protection.
+- Key rotation (dual-publish → cutover → revoke), deny lists, and canary expectations follow [`../services/platform-runtime.md §3.4.1`](../services/platform-runtime.md#341-hmac-key-rotation) and the Security runbooks; Settings activation and alerting consume the same rotation events.
 
 ### 7.4 Audit trails and judgment history models
 
@@ -1113,72 +1026,13 @@ ______________________________________________________________________
 - Deprecation headers follow RFC 9745 structured-field syntax (e.g., `Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) and always pair with `Link: rel="deprecation"` to machine-readable migration notes plus RFC 8594 `Sunset` headers; Spectral rule `sunset-header` enforces the trio.
 - Stripe-style public docs and code samples render directly from the OpenAPI bundle so that examples, schemas, and error contracts stay synchronized with the source of truth.
 
-### 10.1 REST and WebSocket conventions (naming, pagination, errors)
+### 10.1 REST and WebSocket conventions (summary)
 
-*Purpose: Standardize interface behavior across services for ease of integration.*
+Platform runtime owns the authoritative REST, pagination, idempotency, and SSE/WebSocket contracts (see [`../services/platform-runtime.md §3.1.7`](../services/platform-runtime.md#317-rest-and-websocket-conventions-binding)). All API changes must reference that spec, reuse the shared middleware, and update OpenAPI components to keep generated clients in sync.
 
-- REST base path `/api/v1/` per service; plural resources (`/cases`, `/artifacts`). Mutations use optimistic concurrency (`version`) for idempotent semantics.
+### 10.2 Artifact/job/review endpoints (summary)
 
-- Mutating operations (`POST`, `PUT`, `PATCH`, `DELETE`) require an `Idempotency-Key` header (UUIDv7, 24h TTL minimum) so retries remain side-effect free across deployments; servers reject missing or replayed keys with `409 CONFLICT` (`details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`) and surface the original response payload when possible.
-
-- Pagination envelope `{items, page, page_size, total, next_page}`; sorting `?sort=field:asc`. Invalid sort or masked fields → 400.
-
-- Error envelope conforms to `spec/schemas/api_error.schema.json`; servers always include `X-Request-ID` and reuse the schema-generated models in runtime code. Rate-limit headers exposed to browsers (see §10.5 CORS contract).
-
-  ```json
-  {
-    "error": {
-      "code": "CASE_NOT_FOUND",
-      "message": "Case 22222222-2222-2222-2222-222222222222 is archived",
-      "details": [{"field": "case_id", "message": "archived cases are read-only"}]
-    },
-    "trace_id": "4f4c9f7d09e141d8be6d1f8d0d6d88e4"
-  }
-  ```
-
-- Real-time:
-
-  - SSE for jobs/cases; every payload includes `schema_version` (string) and `emitted_at` (RFC3339). Servers emit `progress|status|error|artifact_status` only after committing DB transactions. Monotonic event IDs via Redis `sse:case:{case_id}:seq`. Breaking changes bump `schema_version`; clients must branch on the value, and CI fixtures cover each schema version (see `../apps/web-app.md#appendix-a-real-time-payloads-components`).
-  - Channels (WebSocket) for collaborative editing and controls; OIDC-authenticated; topics namespaced per case/job.
-
-- RBAC/masking: all reads select from `*_secure` views; serializers never “unmask” redacted fields. Gateway rejects spoof headers (`X-Org-ID`, `X-Active-Roles`); authorization derives solely from OIDC claims.
-
-List contracts (normative)
-
-- Sorting: only on whitelisted fields; multiple fields separated by comma; direction with `:asc|:desc` (default asc). Invalid field/direction → 400.
-- Filtering: query params match exact fields; masked fields are not filterable; server may return 400 if filter would breach masking.
-- Examples: `?sort=created_at:desc, type:asc&page=2&page_size=50`; `?case_id=<uuid>&type=SUMMARY_MD`.
-
-### 10.2 Artifact/job/review endpoints
-
-*Purpose: Document key CRUD operations and state transitions.*
-
-- Artifacts
-
-  - List: `GET /api/v1/artifacts?case_id=&type=&class=&status=&archived=&page=&page_size=` (RLS-scoped). Org-wide listing via `scope=org` uses token `active_org_id`; `org_id` param not supported.
-  - Create: `POST /api/v1/cases/{case_id}/artifacts` with `{type, class?, file|json, manifest}`. Source uploads finalize to `status='STORED'`; derived outputs enter `status='PROCESSING'` until workers flush content and set `status='PENDING_JUDGMENT'`.
-  - Get: `GET /api/v1/artifacts/{artifact_id}`; Download: `GET /api/v1/artifacts/{artifact_id}/download` (requires `status='APPROVED'` for CDs or `status='RELEASED'` for DLs; other classes are never exposed to portal clients).
-
-- Jobs
-
-  - Create: `POST /api/v1/cases/{case_id}/jobs/{kind}` with `Idempotency-Key` (TTL default 24h) → returns job id. Responses embed a stable `retry_token` that replays the same run when passed to `POST /api/v1/jobs/{id}:retry` after remediation.
-  - Get: `GET /api/v1/jobs/{id}`; Control endpoints use RPC-style suffixes: `POST /api/v1/jobs/{id}:pause`, `POST /api/v1/jobs/{id}:resume`, `POST /api/v1/jobs/{id}:cancel`, `POST /api/v1/jobs/{id}:retry`. Each call requires OCC on `version` plus an `Idempotency-Key` header (and optional payload `idempotency_key` for provider propagation). Cancellation is a three-step contract shared across producers:
-    1. Transition `PENDING|QUEUED|RUNNING|PAUSED|PAUSED_AWAITING_BUDGET|PAUSED_AWAITING_PROVIDER → CANCELING`, emit SSE `job.accepted` (if the job was queued) followed immediately by `job.canceling` `{schema_version, emitted_at, job_id, actor_id, reason}` so clients cease optimistic progress polling.
-    1. Invoke provider-specific aborts (Azure Speech Batch delete, Azure Speech streaming stop, LangGraph lane abort). Azure Speech/SAS uploads revoke signed URLs, purge staging containers, and log `azure_batch_job_deleted`; LangGraph lanes cancel tool execution and release advisory locks. Providers have a 60-second grace period before the platform force-marks them canceled.
-    1. Finalize `CANCELING → CANCELED`, emit SSE `job.canceled` and `artifact.status` updates for affected artifacts, append audit event `JOB_CANCELED` (`reason`, `actor_id`, `provider_outcome`), and write a tombstone auxiliary record (`class='AR'`, `type='JOB_CANCELLATION_REPORT'`) capturing checkpoints, partial outputs, and cleanup actions. Downstream artifact creation halts; any partially staged artifacts persist with `depends_on_canceled_job=true` so operators can inspect context before retrying. Repeated cancels are idempotent; only the states enumerated above accept the transition.
-  - Provider-specific retry semantics: each manifest stores `retry_token` and `retry_generation`. Workers MUST include that token when re-queuing failed runs so at-least-once retries remain idempotent. Tool invocations obtained through `agents.tools.catalog[]` declare `idempotent=true|false` and expose an optional `tool_idempotency_key` so GraphRunner can dedupe external calls when recovering from job restarts.
-  - Progress SSE: clients subscribe to `GET /api/v1/jobs/{id}/events` with `If-None-Match` (digest of last processed manifest). Servers respond with `ETag` headers and emit the event grammar defined in §10.8 (`job.accepted`, `job.running`, progress updates, policy holds, completion, cancellation).
-  - Provider progress normalization: `ProviderProgressAdapter` implementations wrap Azure Speech Batch, Azure OpenAI, and future providers to emit `{phase, percent_complete, estimated_remaining_seconds}` snapshots. Workers surface these snapshots via `job.update` SSE payloads (`provider_progress` field) and persist them in `job_checkpoint.progress_meta`. Pause/resume/cancel commands call into the adapters to ensure idempotent provider control; a failed provider-side pause never advances the internal state machine. Each adapter implements the `cleanup()` hook invoked during cancellation step 2 above (revoke SAS URLs, purge temporary blobs, finalize manifests). Tests live in `tests/platform/jobs/test_provider_progress_adapter.py`.
-  - Provider health endpoint: `GET /api/v1/providers/health` aggregates the latest adapter heartbeats per `{provider, region}`. Responses are cacheable for 10 s, include `status`, `latency_ms_p95`, `error_rate`, and the timestamp of the freshest signal, and drive the `provider.health` SSE tick for operator dashboards. Health degradation raises `provider.health` events even when no jobs are active.
-  - Progress watchdog (binding): the `job_progress_heartbeat` table records `{job_id, last_heartbeat_at, progress_pct}` updates from workers. A dedicated watchdog task scans for `RUNNING` jobs whose heartbeat age exceeds `jobs.watchdog.no_progress_minutes`; it emits `job_watchdog_warning_total`, raises SSE `job.update` with `status="RUNNING"`, `warning="NO_PROGRESS"`, and annotates the job record. If the heartbeat age exceeds `jobs.watchdog.timeout_minutes`, the watchdog transitions the job to `FAILED`, increments `job_watchdog_timeout_total`, files audit event `JOB_WATCHDOG_TIMEOUT`, and invokes [Runbook RB-JOB-WATCHDOG](../ops/runbooks.md#rb-job-watchdog). Watchdog actions never mutate jobs already `COMPLETED|FAILED|CANCELING|CANCELED`; recoverable jobs remain resumable thanks to checkpoint metadata (§6.2, §6.3, §6.4).
-  - Overlap guard: advisory lock `jobkind:{case_id}/{kind}`; conflicts → 409 `JOB_KIND_BUSY`.
-
-- Reviews (OCC + swap lock)
-
-  - Approve: `POST /api/v1/reviews/{artifact_id}/approve {note?, expected_version}`; acquires `case-approval:{org}/{case}/{type}`, archives prior `APPROVED` CDs, and transitions `QUEUED_FOR_REVIEW → APPROVED`. Returns 200 idempotent when already approved with matching version.
-  - Request changes: `POST /api/v1/reviews/{artifact_id}/changes {reject_reason, note, expected_version}`; sets `status='CHANGES_REQUESTED'` and records reviewer metadata. Mandatory `reject_reason` enumerated in §5.2.4.
-  - Quarantine: `POST /api/v1/reviews/{artifact_id}/quarantine {quarantine_reason, note, expected_version}`; records reviewer choice, routes through Guardian for logging, and sets `status='QUARANTINED'`. UI-facing “review phase” filters are derived from `status` only.
-  - Resubmit: `POST /api/v1/artifacts/{artifact_id}:resubmit {retry_token}` re-queues a `CHANGES_REQUESTED` or policy-unblocked `QUARANTINED` artifact. The endpoint requires matching `retry_token` from the prior manifest to guarantee idempotent retries and transitions the artifact back to `PROCESSING → PENDING_JUDGMENT` with a new version.
+Artifact CRUD semantics, download guards, and approval workflows live in [`../services/platform-runtime.md §3.1.8`](../services/platform-runtime.md#318-artifact-endpoints-binding) alongside Guardian/Digital Signer responsibilities. Job creation/control behaviour—including cancellation and retry contracts—is defined in [`../services/worker-cluster.md §3.6`](../services/worker-cluster.md#36-job-lifecycle-endpoints-binding). Review endpoints continue to defer to Guardian’s approval rules (`../services/guardian.md §3`).
 
 ### 10.3 Upload lifecycle & idempotency model
 
@@ -1268,7 +1122,7 @@ Handler pattern
 - Reference Manager: REST, SSE, and automation surfaces documented in `../services/reference-manager.md §4.1`; this platform TDD defers detailed endpoint contracts to that specification.
 - Digital Signer: `POST /api/v1/sign`, `POST /api/v1/sign/verify`, `GET /api/v1/sign/certificates/{artifact_id}`.
 - Privacy & governance: `POST /api/v1/privacy/dpia`, `POST /api/v1/privacy/ropa`, list/read endpoints (`GET /api/v1/privacy/dpia`, `/api/v1/privacy/ropa`), entitlement history (`GET /api/v1/admin/entitlements/history`). All responses include `X-Request-ID` and follow the ApiError schema; OpenAPI specs tag operations with `privacy` and enforce auditor-only access.
-- Security: HMAC signing required for all mutating operations; examples in Appendix F. SSE under `/api/v1/jobs/{id}/events`.
+- Security: HMAC signing required for all mutating operations; examples in Platform Runtime §3.1.4–§3.1.9. SSE under `/api/v1/jobs/{id}/events`.
 
 ### 10.5 OpenAPI governance, linting, and example requirements
 
@@ -1277,17 +1131,17 @@ Handler pattern
 - Authoring rules (binding): new operations must reuse shared components (`ApiError`, pagination envelope, security schemes), declare response examples for 2xx/4xx, include tag + summary, document every required header, and map path parameters to UUID formats where applicable. Specs are edited via `ops/openapi/*.yaml`; commits must update corresponding changelog entries.
 - Specs: OpenAPI 3.1 with `x-stability` tags (`stable|beta|experimental`); deprecations emit RFC 9745-compliant `Deprecation` headers (e.g., `Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"`) alongside RFC 8594 `Sunset` headers (≥90 days) in accordance with §10.0 policy.
 - Spectral rules (`ops/openapi/spectral.yaml`): enforce `oidc`, `hmacSignature` on mutating ops, error envelope on 4xx/5xx, shared pagination, forbid org/role spoof headers, and fail any spec whose `openapi` field is not `3.1.*` via the `openapi-version` rule.
-- Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Appendix F.
-- CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Appendix F.11 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Appendix F.11 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
+- Examples must not include real PII; Spectral rule `no-pii-examples` enforces masking, and rate-limit responses (429) must include `Retry-After`/`X-RateLimit-*` headers as shown in Platform Runtime §3.1.4–§3.1.9.
+- CORS exposure (binding): expose `X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, ETag, Deprecation, Sunset`. Preflight MUST allow the header set defined in Platform Runtime §3.1.6 (`Authorization, Content-Type, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match, If-None-Match, If-Range, X-Style-Nonce, X-Script-Nonce`); update Platform Runtime §3.1.6 first and mirror it here to avoid drift. Add `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`.
 - Rate limits & antifraud: per-org and per-IP thresholds; portal download caps with anomaly trip expiring active links; 429 includes rate-limit headers and `Retry-After`. Binding defaults (`api.rate_limits.web.rpm_per_org=600`, `api.rate_limits.web.rpm_per_ip=300`, `portal.download.rate_limits.user_rpm=60`, `portal.download.rate_limits.org_rpm=200`) live in [`../services/settings-registry.md Appendix A`](../services/settings.md#appendix-a-settings-key-map-traceability-index); overrides must stay within the 10-2000 RPM guardrails enforced by Settings validation.
 - Idempotency TTL (binding): default 24h; reusing keys after TTL executes anew; conflicting reuse returns 409.
-- CI: `spectral lint` and schema diff checks gate merges; examples validate. Appendix F holds canonical payloads.
+- CI: `spectral lint` and schema diff checks gate merges; examples validate. Platform Runtime §3.1.4–§3.1.9 hold the canonical payloads.
 
 **Acceptance:**
 
 - Unit: `make lint-openapi` (`npx spectral lint`) enforces Spectral rules (including `openapi-version`) and shared component usage.
-- Integration: `tests/e2e/test_rate_limit_headers.py::test_429_headers` runs in staging to assert rate-limit/Retry-After headers match Appendix F.11.
-- Security: `scripts/security/verify_cors_headers.py` validates the CORS exposure list in Appendix F.11 and fails on regressions; OWASP ZAP smoke confirms no over-exposed headers.
+- Integration: `tests/e2e/test_rate_limit_headers.py::test_429_headers` runs in staging to assert rate-limit/Retry-After headers match Platform Runtime §3.1.6.
+- Security: `scripts/security/verify_cors_headers.py` validates the CORS exposure list in Platform Runtime §3.1.6 and fails on regressions; OWASP ZAP smoke confirms no over-exposed headers.
 
 Binding breadcrumbs:
 
@@ -2099,7 +1953,7 @@ ______________________________________________________________________
 
 - Spoofing (identity):
   - Vector: forged inter‑service calls
-  - Mitigations: mTLS, HMAC signing (§7.3), short‑lived tokens, audience scoping
+  - Mitigations: mTLS, HMAC signing ([Platform Runtime §3.4](../services/platform-runtime.md#34-service-to-service-request-signing)), short‑lived tokens, audience scoping
   - Validation: synthetic signed/unsigned request tests in staging
 - Tampering (data at rest/in transit):
   - Vector: object storage overwrite or man‑in‑the‑middle
@@ -2402,114 +2256,15 @@ See [`../services/settings-registry.md Appendix A`](../services/settings.md#appe
 
 ______________________________________________________________________
 
-## Appendix F — API reference snippets & examples (normative)
+## Appendix F — API reference pointers (informative)
 
-*Purpose: Provide signed, idempotent examples to guide integrations.*
+*Purpose: Direct integrators to the canonical service specifications that now host API payloads, header contracts, and signing examples.*
 
-### F.0 `ApiError.code` values
-
-| Code | Description |
-|---|---|
-| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
-| `QUARANTINED` | Artifact is quarantined and unavailable. |
-| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
-| `VALIDATION_ERROR` | Input payload failed validation. |
-| `AUTH_ERROR` | Authentication error (legacy umbrella code). |
-| `AUTH_CLOCK_SKEW` | HMAC timestamp outside allowed skew window. |
-| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch. |
-| `NOT_FOUND` | Resource not found or not visible. |
-| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
-| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
-| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
-
-The authoritative schema for these payloads lives at `spec/schemas/api_error.schema.json`. Spectral rule `ops/openapi/rules/apierror-enum.yaml` lints OpenAPI specs to keep responses aligned with this list.
-
-### F.1 Idempotency contract & Guardian enqueue (binding)
-
-**Breadcrumbs:** Implementation `apps/platform/operations/guardian.py::enqueue_with_idempotency`, Tests `tests/platform/operations/test_guardian_enqueue.py::test_idempotent_submit`, Observability Grafana “Guardian Queue” dashboard (metric `guardian_enqueue_conflict_total`).
-
-See [Worker Cluster §3.3](../services/worker-cluster.md#worker-api-idempotency) for the canonical idempotency schema, collision handling rules, and replay header contract that every job API shares.
-
-### F.2 Reviews approve (binding)
-
-Manual approval semantics—including optimistic locking and audit evidence—live in [Guardian §3.1.1](../services/guardian.md#guardian-review-approval). Staff tooling and automations must follow that contract when approving or waiving artifacts.
-
-### F.3 Signing request (binding)
-
-Service-to-service signing flows, required HMAC headers, and waiver handling are documented in [Digital Signer §3.1](../services/digital-signer.md#digital-signer-external-interfaces). Refer to that section for the canonical example.
-
-### F.4 Job SSE replay (binding)
-
-Workers stream deterministic progress events; client reconnect behaviour is specified in [Worker Cluster §3.4](../services/worker-cluster.md#worker-api-sse). Consumers must pass `Last-Event-ID` to receive the replayed event safely.
-
-### F.5 Artifact downloads & conditional requests (binding)
-
-Conditional download and range semantics are maintained in [Platform Runtime §3.1.1](../services/platform-runtime.md#platform-runtime-conditional-download). Portal and API clients rely on that contract for caching and integrity validation.
-
-### F.6 CORS preflight (binding)
-
-CORS behaviour for browser clients is documented in [Platform Runtime §3.1.2](../services/platform-runtime.md#platform-runtime-cors-preflight). Downstream teams should extend Settings-based allowlists rather than duplicating policy in service code.
-
-### F.7 Upload finalize schema (binding)
-
-The JSON schema, headers, and security requirements for session finalisation are managed in [Worker Cluster §3.5](../services/worker-cluster.md#worker-api-upload-finalize). Clients and SDKs must stay in sync with that definition.
-
-### F.8 Rate limit response example (normative)
-
-```http
-HTTP/1.1 429 Too Many Requests
-Content-Type: application/json
-Retry-After: 60
-X-RateLimit-Limit: 600
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 2025-10-19T21:15:00Z
-X-Request-ID: 09c2d6c0-2bdc-4f8e-9f2d-4f64cb9f2e30
-{
-  "code": "RATE_LIMIT",
-  "message": "Per-organization API request ceiling reached.",
-  "details": {"retry_after_ms": 60000},
-  "correlation_id": "09c2d6c0-2bdc-4f8e-9f2d-4f64cb9f2e30"
-}
-```
-
-Illustrative payload; redact or mask as needed to comply with §10.5 rules prohibiting PII in examples.
-
-Notes
-
-- Headers exposed to browsers per §10.5 CORS; examples avoid PII.
-- Full components (security schemes, shared headers/params) live in service-local specs; CI lints enforce shared rules.
-
-### F.9 Deprecation response with `Sunset` header (normative)
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-X-Request-ID: 7d1f1dba-1d6f-4f6a-a7ef-2d2f1c2e9bd3
-Deprecation: @1780272000; sunset="Mon, 01 Jun 2026 00:00:00 GMT"
-Sunset: Mon, 01 Jun 2026 00:00:00 GMT
-Link: </api/v1/migrations/2026-06-case-export>; rel="deprecation"; type="text/html"
-X-uDocket-API-Version: 2025-01
-
-{ "id": "...", "status": "deprecated", "sunset_at": "2026-06-01T00:00:00Z" }
-```
-
-- Every response advertises the scheduled removal date via `Sunset` and links to migration notes under `/api/v1/migrations/<version>`. Clients pinned to older versions receive the same headers; monitoring (`api_sunset_header_missing_total`) ensures deprecations remain compliant with §10.0.
-
-### F.10 Header obligations (normative)
-
-*Purpose: Record mandatory HTTP headers and deprecation signals for external APIs.*
-
-| Category | Header(s) | Enforcement & reference | Notes |
-|---|---|---|---|
-| Exposed response headers | `X-Request-ID`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`, `ETag`, `Deprecation`, `Sunset` | `config/settings.py::CORS_EXPOSE_HEADERS`; Settings bundle `security.cors.expose_headers`; validated by `scripts/security/verify_cors_headers.py` | Aligns with §10.5 acceptance; deviations require dual approval. |
-| Allowed preflight headers | `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Request-Signature`, `X-Signature-Key-Id`, `X-Timestamp`, `If-Match`, `If-None-Match`, `If-Range`, `X-Style-Nonce`, `X-Script-Nonce` | Settings bundle `security.cors.allowed_headers`; test `scripts/security/verify_cors_headers.py` | Nonce headers support CSP enforcement per §11.5. |
-| Security baseline | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | Generated by `apps/platform/ui/security/csp.py` + middleware; asserted in `tests/e2e/test_security_headers.py::test_csp_header_enforced` | CSP requires per-response script/style nonces; see §11.5. |
-| Download guard contract | `If-Match`, `If-None-Match`, `Range`, `If-Range` | `apps/platform/portal/downloads.py::enforce_if_match`; tests in §10.6 acceptance | Clients must echo `If-Match` ETag; violations return 412 `INTEGRITY_ERROR`. |
-| Rate-limit headers | `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | `apps/platform/api/middleware/rate_limiting.py::append_rate_limit_headers`; monitored via `api_rate_limit_header_miss_total` | Contract referenced in §10.5 acceptance and Appendix F.9. |
-
-Refer to §10.5, §10.6, §11.2.2, and §11.5 for narrative requirements tied to these headers.
-
-______________________________________________________________________
+- [Platform Runtime §3.1](../services/platform-runtime.md#31-environment-topology) keeps the authoritative `ApiError.code` catalog, rate-limit and deprecation response examples, and the required header matrices for REST and CORS interactions.
+- [Platform Runtime §3.4](../services/platform-runtime.md#34-service-to-service-request-signing) documents the HMAC request-signing contract (headers, canonical string, replay safeguards) and [§3.4.1](../services/platform-runtime.md#341-hmac-key-rotation) captures key rotation flows and denial procedures.
+- [Worker Cluster §3.3–§3.6](../services/worker-cluster.md#33-idempotency-store-replay-headers) define the idempotency store, job SSE replay behaviour, and upload finalization schema used by SDKs and operators.
+- [Guardian §3.6](../services/guardian.md#36-review-rest-endpoints-binding) owns the review REST endpoints and associated optimistic-locking rules.
+- [Digital Signer §3.1](../services/digital-signer.md#digital-signer-external-interfaces) provides the canonical signing and verification request examples.
 
 ## Appendix G — ERD & schema migrations history
 
@@ -2719,7 +2474,7 @@ ______________________________________________________________________
 |---|---|---|---|---|
 | Microsoft Azure Speech | Transcription (batch/on-demand) | Org allowlisted Azure regions (e.g., eu-west-2) | Audio uploads, transcript text | DPA §3 forbids training on customer data; residency pinned to selected region; 30-day deletion |
 | Microsoft Azure OpenAI | LLM inference | Org allowlisted Azure regions (mirror Speech) | Prompt excerpts (redacted), generated text | Enterprise agreement disables logging & training; retention ≤ 24h; residency anchored to allowlist |
-| Entrust TSA / OCSP | Timestamping & revocation | Global (per org trust bundle) | Hashes, certificate metadata | No content retention; logs retained 90 days for audits; trust roots mapped to Appendix F |
+| Entrust TSA / OCSP | Timestamping & revocation | Global (per org trust bundle) | Hashes, certificate metadata | No content retention; logs retained 90 days for audits; trust roots mapped to Platform Runtime §3.4 |
 | Twilio SendGrid (optional) | Email delivery | Org-selected sub-account region (NA/EU/APAC) | Notification metadata, recipient email | Data residency restriction via regional sub-account; logs 30 days |
 | Telnyx | SMS delivery | Org-selected region (NA/EU/APAC) | Phone numbers, message metadata | Opt-out enforcement, no content mining; residency documented in waiver ledger |
 | Speechmatics Canada (fallback) | Automated transcription fallback | ca-central-1 (org allowlisted) | Audio uploads, transcript text | DPA mirrors Azure terms; retention ≤ 24 h; audited equivalence harness ensures WER/diarization parity with primary |
