@@ -141,6 +141,48 @@ ______________________________________________________________________
 - Container runtime: production runs on AKS with Flux CD applying Helm releases; PodSecurity admission enforces the restricted baseline (no privileged pods, `readOnlyRootFilesystem` where feasible), and cosign attestations gate image promotion. Local development uses `docker compose` to mirror service topology and health checks, sharing the `.env` schema.
 - Multi-region posture: each environment operates within a primary/secondary region pair. Database replicas, blob replication, and queue failover respect organization allowlists. Disaster recovery runbooks document region cut-over and data rehydration using only approved regions (§8).
 
+<a id="platform-runtime-conditional-download"></a>
+
+#### 3.1.1 Artifact download conditional requests (binding)
+
+**Purpose:** Ensure artifact downloads honour caching and integrity requirements while protecting evidence. **|**
+**Contract:** Clients send `If-None-Match`/`Range` headers and respect `ETag` responses; servers enforce signed URLs and residency before streaming content. **|**
+**State:** Artifact metadata (`artifact.etag`, `artifact.sha256`) and staging buckets back conditional requests; audit logs capture download attempts with headers. **|**
+**Failures & handling:** Stale or mismatched `ETag` values return `412 PRECONDITION_FAILED`; unauthorized downloads respond with `403` and log `DOWNLOAD_TOKEN_DENIED`. **|**
+**Observability:** Metrics `artifact_download_total{cache_state}`, `artifact_download_bandwidth_bytes`, and audit JSONL monitor usage. **|**
+**Breadcrumbs:** Download handler `apps/platform/artifacts/views.py::download`, tests `tests/platform/artifacts/test_download.py`. **|**
+**References:** Settings keys `artifact.download.*`, Ops runbook `RB-ETAG`.
+
+```bash
+curl -I -H "Authorization: Bearer $TOKEN" \
+  https://platform.local/api/v1/artifacts/$A/download
+
+curl -L -H "Authorization: Bearer $TOKEN" \
+  -H "If-None-Match: \"$ETAG\"" \
+  -H "Range: bytes=0-1048575" \
+  https://platform.local/api/v1/artifacts/$A/download
+```
+
+<a id="platform-runtime-cors-preflight"></a>
+
+#### 3.1.2 CORS preflight (binding)
+
+**Purpose:** Document the preflight flow portal clients use when calling authenticated APIs behind the platform ingress. **|**
+**Contract:** Preflight requests advertise required headers (including HMAC and idempotency headers); ingress responds with allowlists derived from Settings. **|**
+**State:** CORS policy templates render from `settings.cors.*` keys; responses include `Access-Control-Allow-*` headers recorded in access logs. **|**
+**Failures & handling:** Requests missing required headers (`Authorization`, signature fields) receive `403`; misconfigured origins trigger alerts in the CORS dashboard. **|**
+**Observability:** Metrics `cors_preflight_total`, `cors_preflight_denied_total`, and structured logs track origin/header mismatches. **|**
+**Breadcrumbs:** Ingress templates `infra/kubernetes/ingress/cors.tpl`, tests `tests/platform/web/test_cors.py`. **|**
+**References:** Settings spec §6 (CORS), Portal spec §4.
+
+```bash
+curl -i -X OPTIONS \
+  -H "Origin: https://portal.local" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: Authorization, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match" \
+  https://platform.local/api/v1/artifacts/$A/download
+```
+
 ### 3.2 Internal Interfaces (binding) {#32-reference-manifests}
 
 #### 3.2.1 Mesh egress allowlist (illustrative)

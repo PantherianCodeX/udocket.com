@@ -217,6 +217,26 @@ ______________________________________________________________________
 | `POST /vault/detokenize` | Restore masked spans (Compose/Signer only) | Requires `guardian_judgment_id`, purpose, and mTLS; Guardian never logs plaintext. |
 | `SSE GUARDIAN.JUDGMENT.*` | Broadcast PASS/WARN/BLOCK/WAIVED outcomes | Carries `guardian_judgment_id`, reason codes, waiver IDs, `settings_snapshot_sha256`, span evidence hashes. |
 
+<a id="guardian-review-approval"></a>
+
+#### 3.1.1 Review approval example (binding)
+
+**Purpose:** Provide a canonical example for staff approvals so client tooling and services share the same headers and optimistic locking semantics. **|**
+**Contract:** Calls MUST include bearer auth, an `expected_version` guard, and idempotency headers when invoked from automation. **|**
+**State:** Reviewer notes append to `guardian_manual_review`, judgements update `guardian_history`, and audit events capture before/after state. **|**
+**Failures & handling:** Version mismatches return `409` with reason `IDEMPOTENCY_SIGNATURE_MISMATCH` or `REVISION_CONFLICT`; callers should refetch current state. **|**
+**Observability:** Metrics `guardian_manual_approve_total`, structured logs containing `reviewer_id`, and audit JSONL track usage. **|**
+**Breadcrumbs:** API handler `apps/platform/guardian/views.py::approve`, tests `tests/platform/guardian/test_manual_review.py::test_approve`. **|**
+**References:** Appendix B payload schema, Ops runbook `RB-GUARD-MANUAL`.
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  https://platform.local/api/v1/reviews/$ARTIFACT_ID/approve \
+  -d '{"note":"Looks good", "expected_version":3}'
+```
+
 ### 3.2 Internal Interfaces (binding)
 
 - Internal workers call `apps/platform/operations/guardian.py::enqueue_with_idempotency` with `artifact_id`, `artifact_class`, `payload_sha256`, `policy_context`, and `source_artifacts[]`.

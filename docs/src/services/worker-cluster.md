@@ -200,6 +200,147 @@ ______________________________________________________________________
 - `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` enforce OCC on `version`, require `Idempotency-Key`, and propagate `retry_token` to keep retries idempotent.
 - Responses include current status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and updated `retry_generation`.
 
+<a id="worker-api-idempotency"></a>
+
+### 3.3 Idempotency store & replay headers (binding)
+
+**Purpose:** Capture the shared idempotency table and replay semantics so every worker-facing API behaves consistently. **|**
+**Contract:** Requests persist entries before side effects, reuse stored responses on replays, and raise explicit collisions when payload hashes drift. **|**
+**State:** Postgres table `idempotency_keys` plus supporting indices store canonical hashes, status, and replay metadata; helpers live in `packages.udocket_core.idem.*`. **|**
+**Failures & handling:** Mismatched payload hashes return `409 CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` and do not mutate downstream state. **|**
+**Observability:** Metrics `idempotency_replay_total`, `idempotency_conflict_total`, and structured logs include `idempotency_status`; dashboards pair with Alertmanager burn-rate alerts. **|**
+**Breadcrumbs:** Store helpers `packages/udocket_core/idem/store.py`, API mixins `apps/platform/api/mixins/idempotency.py`, tests `tests/platform/operations/test_guardian_enqueue.py::test_idempotent_submit`. **|**
+**References:** TDD §10 (job APIs), Settings Registry keys `api.idempotency.*`.
+
+Schema excerpt:
+
+```sql
+CREATE TABLE idempotency_keys (
+  org_id UUID NOT NULL,
+  scope  TEXT NOT NULL,
+  key    TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  case_id UUID NULL,
+  request_hash BYTEA NOT NULL,
+  status TEXT NOT NULL DEFAULT 'in_progress',
+  result_ref TEXT NULL,
+  response_code INTEGER NULL,
+  response_hash BYTEA NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (org_id, scope, key)
+);
+
+CREATE UNIQUE INDEX idempotency_request_dedupe_idx
+    ON idempotency_keys (org_id, scope, endpoint, request_hash);
+CREATE INDEX idempotency_keys_expiry_idx
+    ON idempotency_keys (expires_at);
+```
+
+Scope dimensions:
+
+| Column | Description |
+| --- | --- |
+| `scope` | Logical action bucket (for example `job:create`, `artifact:approve`, `upload:finalize`); constants live in `packages.udocket_core.idem.constants`. |
+| `endpoint` | Canonical `METHOD:/api/...` string preventing cross-route collisions. |
+| `case_id` | Optional discriminator for case-scoped flows (null for global jobs). |
+| `request_hash` | `sha256` of the canonical payload (body + sorted query + idempotency key). |
+| `status` | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs. |
+| `result_ref` | Identifier returned to the caller (artifact ID, job ID, etc.). |
+| `response_hash` | `sha256` of the serialized response body for auditability. |
+| `response_code` | HTTP status associated with the stored response. |
+| `last_seen_at` / `expires_at` | Replay window accounting; default TTL set by `api.idempotency.ttl_hours`. |
+
+Replay headers:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Idempotency-Key: 6d2fdc4c-483f-4f5b-9f4d-0f514c214766
+Idempotency-Status: replay
+X-Request-ID: 4f1a9c8c-0da5-4b27-9acd-6b6ddfd402c2
+
+{ "artifact_id": "a7b9495c-4a5c-4e3b-91c6-5adef1d22264" }
+```
+
+Workers MUST update `last_seen_at` on every replay, echo the stored payload when `Idempotency-Status: replay`, and return `Idempotency-Status: conflict` when the canonical hash changes.
+
+<a id="worker-api-sse"></a>
+
+### 3.4 Job SSE replay contract (binding)
+
+**Purpose:** Define the Server-Sent Events pattern workers use to stream job progress so clients can resume consumption safely. **|**
+**Contract:** SSE endpoints honour `Last-Event-ID`, emit monotonically increasing IDs, and replay the most recent event on reconnect. **|**
+**State:** Job manifests persist the last emitted event ID; SSE publisher `apps/platform/events/jobs.py` reads from that cursor. **|**
+**Failures & handling:** Missing IDs return the latest cursor with `event: heartbeat`; stale IDs older than retention raise `410 GONE` and instruct clients to refetch job state. **|**
+**Observability:** Metrics `job_sse_connection_total`, `job_sse_replay_total`, and structured logs capture reconnect behaviour. **|**
+**Breadcrumbs:** SSE implementation `apps/platform/events/jobs.py`, tests `tests/platform/events/test_jobs_sse.py`. **|**
+**References:** Portal spec §4, Notifications spec §4 (in-app streams).
+
+```bash
+curl -N -H "Authorization: Bearer $TOKEN" \
+  -H "Last-Event-ID: $LAST_ID" \
+  https://platform.local/api/v1/jobs/$JOB_ID/events
+```
+
+<a id="worker-api-upload-finalize"></a>
+
+### 3.5 Upload finalize endpoint (binding)
+
+**Purpose:** Capture the JSON contract workers expect when a client finalizes an upload session. **|**
+**Contract:** Clients provide the SHA-256 digest, optional manifest metadata, and `Idempotency-Key`; mismatched hashes return `412 PRECONDITION_FAILED`. **|**
+**State:** Upload manifests persist in `upload_session` and `upload_manifest`; staging blobs remain until workers verify digests. **|**
+**Failures & handling:** Expired sessions return `409`, integrity mismatches emit `INTEGRITY_ERROR`, and automation retries reuse the stored idempotency record. **|**
+**Observability:** Metrics `upload_finalize_total{status}`, integrity dashboards, and audit logs monitor success rates. **|**
+**Breadcrumbs:** API handler `apps/platform/files/views.py::finalize_upload`, schema `spec/schemas/upload_finalize.schema.json`, tests `tests/platform/files/test_upload_finalize.py`. **|**
+**References:** Settings keys `upload.scan.*`, Ops runbook `RB-UPLOAD-SCAN`.
+
+```yaml
+openapi: 3.1.0
+paths:
+  /api/v1/uploads/{upload_session_id}/finalize:
+    post:
+      parameters:
+        - in: header
+          name: X-Signature-Key-Id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Timestamp
+          required: true
+          schema: { type: string, format: date-time }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sha256]
+              properties:
+                sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+                manifest: { type: object }
+                auto_submit_guardian: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Finalized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifact_id: { type: string, format: uuid }
+        "409": { description: Conflict (expired/aborted/idempotency mismatch) }
+        "412": { description: INTEGRITY_ERROR (hash mismatch) }
+      security:
+        - oidc: []
+        - hmacSignature: []
+```
+
 ______________________________________________________________________
 
 ## 4) State Management

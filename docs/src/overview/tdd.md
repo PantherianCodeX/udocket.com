@@ -2428,221 +2428,33 @@ The authoritative schema for these payloads lives at `spec/schemas/api_error.sch
 
 **Breadcrumbs:** Implementation `apps/platform/operations/guardian.py::enqueue_with_idempotency`, Tests `tests/platform/operations/test_guardian_enqueue.py::test_idempotent_submit`, Observability Grafana “Guardian Queue” dashboard (metric `guardian_enqueue_conflict_total`).
 
-Idempotency store schema (restated from §10.3.1 for quick reference)
+See [Worker Cluster §3.3](../services/worker-cluster.md#worker-api-idempotency) for the canonical idempotency schema, collision handling rules, and replay header contract that every job API shares.
 
-```sql
-CREATE TABLE idempotency_keys (
-  org_id UUID NOT NULL,
-  scope  TEXT NOT NULL,
-  key    TEXT NOT NULL,
-  endpoint TEXT NOT NULL,
-  case_id UUID NULL,
-  request_hash BYTEA NOT NULL,
-  status TEXT NOT NULL DEFAULT 'in_progress',
-  result_ref TEXT NULL,
-  response_code INTEGER NULL,
-  response_hash BYTEA NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (org_id, scope, key)
-);
-CREATE INDEX idempotency_keys_expiry_idx
-    ON idempotency_keys (expires_at);
-CREATE UNIQUE INDEX idempotency_request_dedupe_idx
-    ON idempotency_keys (org_id, scope, endpoint, request_hash);
-```
+### F.2 Reviews approve (binding)
 
-Scope dimensions
+Manual approval semantics—including optimistic locking and audit evidence—live in [Guardian §3.1.1](../services/guardian.md#guardian-review-approval). Staff tooling and automations must follow that contract when approving or waiving artifacts.
 
-| Column | Description |
-|---|---|
-| `scope` | Logical action bucket (`job:create`, `artifact:approve`, etc.); shared constants in `packages.udocket_core.idem.constants`. |
-| `endpoint` | Canonical `METHOD:/api/...` string preventing cross-route collisions. |
-| `case_id` | Optional discriminator for case-scoped flows (null for global jobs). |
-| `request_hash` | `sha256` of the canonicalised request payload (body + sorted query + idempotency key). |
-| `status` | `in_progress` during execution, `succeeded` after persistence, `conflict` when a mismatched replay occurs. |
-| `result_ref` | Identifier returned to the caller (artifact ID, job ID, etc.). |
-| `response_hash` | `sha256` of the serialized response body for auditability. |
-| `response_code` | HTTP status associated with the stored response (used for `Idempotency-Status`). |
-| `last_seen_at`/`expires_at` | Replay window accounting (default TTL = `api.idempotency.ttl_hours`). |
+### F.3 Signing request (binding)
 
-Collision handling & headers
+Service-to-service signing flows, required HMAC headers, and waiver handling are documented in [Digital Signer §3.1](../services/digital-signer.md#digital-signer-external-interfaces). Refer to that section for the canonical example.
 
-- Services MUST compute `request_hash` using the shared helper and raise `409 CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` when an existing `(scope, key)` stores a different hash.
-- Replay successes update `last_seen_at`, return the stored `result_ref`, and echo `Idempotency-Key` plus `Idempotency-Status: replay`. First-run success emits `Idempotency-Status: fresh`; conflicts return 409 with `Idempotency-Status: conflict`.
-- `Idempotency-Status` joins structured logging (`idempotency_status` field) so SREs can track replay rates; metrics `idempotency_replay_total` and `idempotency_conflict_total` back deploy gates.
+### F.4 Job SSE replay (binding)
 
-Header example (success replay)
+Workers stream deterministic progress events; client reconnect behaviour is specified in [Worker Cluster §3.4](../services/worker-cluster.md#worker-api-sse). Consumers must pass `Last-Event-ID` to receive the replayed event safely.
 
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-Idempotency-Key: 6d2fdc4c-483f-4f5b-9f4d-0f514c214766
-Idempotency-Status: replay
-X-Request-ID: 4f1a9c8c-0da5-4b27-9acd-6b6ddfd402c2
+### F.5 Artifact downloads & conditional requests (binding)
 
-{ "artifact_id": "a7b9495c-4a5c-4e3b-91c6-5adef1d22264" }
-```
+Conditional download and range semantics are maintained in [Platform Runtime §3.1.1](../services/platform-runtime.md#platform-runtime-conditional-download). Portal and API clients rely on that contract for caching and integrity validation.
 
-Idempotency scopes
+### F.6 CORS preflight (binding)
 
-```js
-IDEMPOTENCY_SCOPES = {
-  "job:create",
-  "job:checkpoint",
-  "artifact:approve",
-  "artifact:upload",
-  "upload:finalize"
-}
-```
+CORS behaviour for browser clients is documented in [Platform Runtime §3.1.2](../services/platform-runtime.md#platform-runtime-cors-preflight). Downstream teams should extend Settings-based allowlists rather than duplicating policy in service code.
 
-Guardian submissions now route through internal RPC queues; external clients never call the service directly. Admin tooling reuses the same RPC helpers with HMAC-authenticated service accounts and records evidence under `ops/guardian/batch_submit.jsonl`.
+### F.7 Upload finalize schema (binding)
 
-### F.2 Reviews approve (OCC lock implied)
+The JSON schema, headers, and security requirements for session finalisation are managed in [Worker Cluster §3.5](../services/worker-cluster.md#worker-api-upload-finalize). Clients and SDKs must stay in sync with that definition.
 
-```bash
-curl -sS -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  https://platform.local/api/v1/reviews/$ARTIFACT_ID/approve \
-  -d '{"note":"Looks good", "expected_version":3}'
-```
-
-### F.3 Signing request (HMAC)
-
-```bash
-curl -sS -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "X-Signature-Key-Id: $KEY_ID" \
-  -H "X-Timestamp: $(date -u +%FT%TZ)" \
-  -H "X-Request-Signature: $(./scripts/sign.sh body.json)" \
-  https://platform.local/api/v1/sign \
-  -d '{"artifact_id":"...", "content_uri":"..."}'
-```
-
-### F.4 SSE events with Last-Event-ID
-
-```bash
-curl -N -H "Authorization: Bearer $TOKEN" \
-  -H "Last-Event-ID: $LAST_ID" \
-  https://platform.local/api/v1/jobs/$JOB_ID/events
-```
-
-Notes
-
-- Headers exposed to browsers per §10.5 CORS; examples avoid PII.
-- OpenAPI snippets below are normative; service implementations must keep them in sync with Spectral rules.
-
-### F.5 Conditional GET with ETag and range
-
-```bash
-curl -I -H "Authorization: Bearer $TOKEN" \
-  https://platform.local/api/v1/artifacts/$A/download
-
-curl -L -H "Authorization: Bearer $TOKEN" \
-  -H "If-None-Match: \"$ETAG\"" \
-  -H "Range: bytes=0-1048575" \
-  https://platform.local/api/v1/artifacts/$A/download
-```
-
-### F.6 CORS preflight
-
-```bash
-curl -i -X OPTIONS \
-  -H "Origin: https://portal.local" \
-  -H "Access-Control-Request-Method: GET" \
-  -H "Access-Control-Request-Headers: Authorization, Idempotency-Key, X-Request-Signature, X-Signature-Key-Id, X-Timestamp, If-Match" \
-  https://platform.local/api/v1/artifacts/$A/download
-```
-
-### F.7 Upload Finalize
-
-```yaml
-openapi: 3.1.0
-paths:
-  /api/v1/uploads/{upload_session_id}/finalize:
-    post:
-      parameters:
-        - in: header
-          name: X-Signature-Key-Id
-          required: true
-          schema: { type: string }
-        - in: header
-          name: X-Timestamp
-          required: true
-          schema: { type: string, format: date-time }
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [sha256]
-              properties:
-                sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
-                manifest: { type: object }
-                auto_submit_guardian: { type: boolean, default: true }
-      responses:
-        "200":
-          description: Finalized
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  artifact_id: { type: string, format: uuid }
-        "409": { description: Conflict (expired/aborted/idempotency mismatch) }
-        "412": { description: INTEGRITY_ERROR (hash mismatch) }
-      security:
-        - oidc: []
-        - hmacSignature: []
-```
-
-### F.8 Review Approve (OCC)
-
-```yaml
-openapi: 3.1.0
-paths:
-  /api/v1/reviews/{artifact_id}/approve:
-    post:
-      parameters:
-        - in: path
-          name: artifact_id
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [expected_version]
-              properties:
-                note: { type: string }
-                expected_version: { type: integer, minimum: 0 }
-      responses:
-        "200":
-          description: Approved
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [artifact_id, state]
-                properties:
-                  artifact_id: { type: string, format: uuid }
-                  state: { type: string, enum: [APPROVED] }
-                  version: { type: integer, minimum: 0 }
-        "409":
-          description: Conflict (stale version or illegal state)
-```
-
-### F.9 Rate limit response example (normative)
+### F.8 Rate limit response example (normative)
 
 ```http
 HTTP/1.1 429 Too Many Requests
@@ -2667,7 +2479,7 @@ Notes
 - Headers exposed to browsers per §10.5 CORS; examples avoid PII.
 - Full components (security schemes, shared headers/params) live in service-local specs; CI lints enforce shared rules.
 
-### F.10 Deprecation response with `Sunset` header (normative)
+### F.9 Deprecation response with `Sunset` header (normative)
 
 ```http
 HTTP/1.1 200 OK
@@ -2683,7 +2495,7 @@ X-uDocket-API-Version: 2025-01
 
 - Every response advertises the scheduled removal date via `Sunset` and links to migration notes under `/api/v1/migrations/<version>`. Clients pinned to older versions receive the same headers; monitoring (`api_sunset_header_missing_total`) ensures deprecations remain compliant with §10.0.
 
-### F.11 Header obligations (normative)
+### F.10 Header obligations (normative)
 
 *Purpose: Record mandatory HTTP headers and deprecation signals for external APIs.*
 
@@ -2728,14 +2540,12 @@ This glossary has moved to a dedicated appendix page. See: tdd/appendices/glossa
 
 ## Appendix J — SQL policy patterns (normative)
 
-*Purpose:* Keep the platform TDD aligned with the domain specifications that own enforcement SQL while summarizing the cross-cutting obligations.
+*Purpose:* Provide quick references for cross-cutting SQL governance while directing readers to the owning specs.
 
-- Identity & Access (`../services/identity.md#appendix-a--sql-policy-patterns-binding`) governs GUC setup, helper functions, deny-by-default permissions (`udocket_can`), secure views, and operational canaries. Every request that touches tenant data MUST establish this context before issuing queries.
-- Notifications (`../services/notifications.md#appendix-b--database-enforcement-patterns`) owns portal messaging RLS, messaging table contracts, delivery receipt partitioning, and download token enforcement. Services integrating with messaging or download flows MUST reuse those definitions.
-- Guardian (`../services/guardian.md#appendix-c--integrity-scan-queue`) documents integrity sweep queues and quarantine workflows; integrity jobs across the platform MUST interact with Guardian through that contract.
-- Platform Runtime (§3.4) covers audit/event partition strategy and rotation jobs that keep global tables (`audit_event`, `guardian_history`) healthy; follow that section when extending retention or adding partitions.
-
-Cross-service documentation may reference this appendix for quick navigation, but the authoritative SQL snippets now reside in the service specifications above. Update both the service spec and this summary when enabling new resources or altering enforcement logic.
+- Identity & Access (`identity.md#appendix-a--sql-policy-patterns-binding`) owns RLS helpers, masking, and canary guards.
+- Notifications (`notifications.md#appendix-b--database-enforcement-patterns`) documents download token and messaging RLS requirements.
+- Guardian (`guardian.md#appendix-c--integrity-scan-queue`) covers quarantine workflows and integrity sweeps.
+- Platform Runtime (`platform-runtime.md#4-service-catalog`) tracks partition/retention governance.
 
 ______________________________________________________________________
 

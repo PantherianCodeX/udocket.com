@@ -21,4 +21,9 @@ repos:
         entry: python scripts/typing/check_strict.py --tool both --stop-on-first
         language: system
         pass_filenames: false
+      - id: docs-lint
+        name: docs lint (src)
+        entry: python scripts/docs/lint_docs.py
+        language: system
+        pass_filenames: false
 
