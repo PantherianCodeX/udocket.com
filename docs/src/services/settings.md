@@ -856,15 +856,15 @@ class SettingDefinition(BaseModel):
 | `storage.remote_hash.enabled` | ORG\|CASE   | false | Record remote hashes for batch inputs; §5.3. |
 | `storage.remote_hash.max_mb` | ORG\|CASE   | 50 | Max remote bytes to hash; §5.3. |
 | `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
-| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; §12.1. |
-| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); §12.1.2.                                                                                  |
-| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; §12.1.6. |
-| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; §12.1.6. |
-| `logging.level.default` | SYSTEM | "INFO" | Default production log level; §12.1.6. |
-| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; §12.1.6. |
-| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; §12.1.5. |
+| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../services/logging.md#4-log-schema--redaction-binding). |
+| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §6`](../services/logging.md#6-access-control--auditing-binding). |
+| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding). |
+| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding). |
+| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding). |
+| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding). |
+| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Logging §4.2`](../services/logging.md#42-client--portal-telemetry-binding). |
 | `evidence_store.redacted_excerpts.enabled` | ORG | true | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2. |
-| `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, §12.1). |
+| `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, [`Audit §4`](../services/audit.md#4-immutable-storage--replication-binding)). |
 | `llm.finops.guard.threshold_pct` | SYSTEM\|ORG | 10 | MoM regression ceiling for deploy gate; §8.7, §13.5. |
 | `llm.finops.guard.trailing7d_pct` | SYSTEM\|ORG | 25 | Trailing 7-day burn ceiling (% of monthly cap) for deploy gate; §8.7, §13.5. |
 | `llm.finops.override_until` | SYSTEM | null | Optional timestamp (max +72h) to temporarily relax FinOps guard (dual approval required); §8.7. |

@@ -751,3 +751,31 @@ ______________________________________________________________________
 ```
 
 Guardian validates payloads against this schema before persisting evidence in `guardian_span_detection`. Ingestion failures raise `SCHEMA_POLICY_BLOCK` errors and emit audit events for follow-up.
+
+______________________________________________________________________
+
+## Appendix C — Integrity scan queue (binding)
+
+*Purpose:* Document the queue schema and operations that back artifact integrity sweeps.*
+
+```sql
+CREATE TABLE integrity_scan_queue (
+  org_id UUID NOT NULL,
+  artifact_id UUID NOT NULL,
+  enqueued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, artifact_id)
+);
+
+INSERT INTO integrity_scan_queue (org_id, artifact_id)
+VALUES (:org_id, :artifact_id)
+ON CONFLICT DO NOTHING;
+
+SELECT artifact_id
+  FROM integrity_scan_queue
+ FOR UPDATE SKIP LOCKED
+ LIMIT :batch;
+```
+
+- Workers quarantine artifacts via `POST /api/v1/guardian/quarantine` and remove rows once reconciled; metrics `integrity_scan_queue_depth` and `integrity_quarantine_total` track backlog size and outcomes.
+- Rotation job `ops/scripts/guardian/rotate_integrity_queue.py` expires stale entries (default 7 days) and re-enqueues cases flagged by Signer or Compose audits.
+- Settings `guardian.integrity.batch_size` and `guardian.integrity.quarantine_after_minutes` control worker behaviour; changes require Security + SRE approval.

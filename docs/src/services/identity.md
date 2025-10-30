@@ -150,13 +150,13 @@ ______________________________________________________________________
 **Failures & handling:** Drift or unauthorized changes route through `RB-RLS-CONTEXT`, `RB-MASK`, or `RB-BREAK-GLASS`. **|**
 **Observability:** Metrics `rls_context_missing_total`, `masking_transformation_total`, `break_glass_event_total`; dashboards “RLS Context Guards”, “Masking Vault & Profiles”. **|**
 **Breadcrumbs:** `packages/udocket_core/permissions/`, `packages/udocket_core/masking/`, migrations under `apps/platform/db/`. **|**
-**References:** TDD §4, Appendix J, Settings spec §2.4.
+**References:** TDD §4 summary, Appendix A, Settings spec §2.4.
 
 ### 4.1 Authorization lattice & data access (binding)
 
 - Tenancy model: `organization` as root, `case.org_id` referencing the tenant. `case_member(user_id, case_id, role)` scopes access (default “own cases”; Settings may widen to “all org cases”).  
 - Effective permissions compile from Settings into `effective_permission` and feed `udocket_can` (deny-by-default; only `sysadmin` bypasses).  
-- Secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, `delivery_receipt_secure`, …) expose only masked data; `ALTER TABLE ... FORCE ROW LEVEL SECURITY` enforces policies even for table owners.  
+- Secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, `entitlement_snapshot_secure`, …) expose only masked data; `ALTER TABLE ... FORCE ROW LEVEL SECURITY` enforces policies even for table owners. Deliverable receipt views live with the Notifications specification.  
 - Example policy:
 
 ```sql
@@ -388,3 +388,199 @@ SELECT id,
 - Guardian specification — `../services/guardian.md`.  
 - Worker Cluster specification — `../services/worker-cluster.md`.  
 - Ops runbook catalog — `../ops/runbooks/index.md`.
+
+______________________________________________________________________
+
+## Appendix A — SQL policy patterns (binding)
+
+*Purpose: Preserve authoritative SQL patterns for row-level security, masking, and operational guards used by identity-aware services.*
+
+- SQL detailed in Notifications Appendix A covers portal messaging RLS and download token enforcement.
+- Guardian Appendix C records integrity queue rotation and quarantine workflows.
+
+### A.1 Per-request GUC setup
+
+```sql
+SELECT set_config('udocket.active_org',    :active_org_uuid::text, true);
+SELECT set_config('udocket.active_user',   :active_user_uuid::text, true);
+SELECT set_config('udocket.active_roles',  :active_roles_csv, true);
+SELECT set_config('udocket.realm_roles',   :realm_roles_csv, true);
+SELECT set_config('udocket.operator_scope', :operator_scope, true); -- 'own_cases' | 'all_org_cases'
+```
+
+### A.2 Helper functions (realm role, case membership)
+
+```sql
+CREATE OR REPLACE FUNCTION udocket_has_realm_role(role text)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT position(', ' || role || ', ' IN ', ' || coalesce(current_setting('udocket.realm_roles', true), '') || ', ') > 0
+$$;
+
+CREATE OR REPLACE FUNCTION udocket_is_case_member(p_case uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  WITH v_user AS (
+    SELECT NULLIF(current_setting('udocket.active_user', true), '')::uuid AS uid
+  )
+  SELECT EXISTS (
+    SELECT 1 FROM case_member cm, v_user u
+     WHERE cm.case_id = p_case AND cm.user_id = u.uid
+  );
+$$;
+```
+
+### A.3 Central allow function (deny-by-default; sysadmin bypass)
+
+```sql
+CREATE OR REPLACE FUNCTION udocket_can(p_resource text, p_action text, p_case uuid, p_artifact uuid, p_field text DEFAULT NULL)
+RETURNS boolean LANGUAGE plpgsql STABLE AS $$
+DECLARE v_org uuid := NULLIF(current_setting('udocket.active_org', true), '')::uuid;
+DECLARE v_roles text := coalesce(current_setting('udocket.active_roles', true), '');
+DECLARE v_scope text := coalesce(current_setting('udocket.operator_scope', true), 'own_cases');
+DECLARE r text;
+BEGIN
+  IF v_org IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- Sysadmin bypass
+  IF position(', sysadmin,' IN ', ' || v_roles || ',') > 0 THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Default deny
+  r := packages.udocket_core.permissions.can_route(p_resource, p_action);
+  IF r IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN packages.udocket_core.permissions.can_enforce(
+    route          => r,
+    case_id        => p_case,
+    artifact_id    => p_artifact,
+    field          => p_field,
+    scope          => v_scope,
+    active_roles   => v_roles
+  );
+END;
+$$;
+```
+
+### A.4 Secure views (binding)
+
+Identity maintains secure Postgres views for tenant-scoped tables. Each view enforces masking rules and delegates domain-specific behaviour to the owning service specification.
+
+#### A.4.1 Case directory view
+
+```sql
+CREATE VIEW case_secure WITH (security_barrier=true) AS
+SELECT id,
+       org_id,
+       status,
+       type,
+       tenant_case_id,
+       guardian_status,
+       guardian_judgment_id,
+       guardian_policy_version,
+       created_at,
+       updated_at,
+       owner_id,
+       deactivated_at
+  FROM "case";
+```
+
+#### A.4.2 Artifact manifest view
+
+```sql
+CREATE VIEW artifact_secure WITH (security_barrier=true) AS
+SELECT id,
+       org_id,
+       case_id,
+       type,
+       class,
+       status,
+       udocket_mask(
+         'ARTIFACT',
+         'content_uri',
+         org_id,
+         case_id,
+         id,
+         content_uri,
+         (SELECT mode
+            FROM field_mask_rule r
+           WHERE r.org_id = artifact.org_id
+             AND r.profile = COALESCE(NULLIF(current_setting('udocket.mask_profile', true), ''), 'default')
+             AND r.resource = 'ARTIFACT'
+             AND r.field = 'content_uri'
+           LIMIT 1)
+       ) AS content_uri,
+       manifest
+  FROM artifact;
+```
+
+#### A.4.3 QA log view
+
+```sql
+CREATE VIEW qa_log_secure WITH (security_barrier=true) AS
+SELECT id,
+       org_id,
+       case_id,
+       job_id,
+       scope,
+       lane_or_section,
+       notes_md,
+       issues_json,
+       source_artifacts,
+       created_by,
+       created_at
+  FROM qa_log;
+```
+
+#### A.4.4 Entitlement snapshot view
+
+```sql
+CREATE VIEW entitlement_snapshot_secure WITH (security_barrier=true) AS
+SELECT id,
+       org_id,
+       user_id,
+       token_id,
+       active_org_roles,
+       realm_roles,
+       device_fp,
+       ip,
+       ua_hash,
+       minted_at
+  FROM entitlement_snapshot;
+```
+
+#### A.4.5 Privilege wiring
+
+```sql
+REVOKE SELECT ON TABLE "case", artifact, qa_log, entitlement_snapshot FROM udocket_app;
+GRANT  SELECT ON case_secure,
+                  artifact_secure,
+                  qa_log_secure,
+                  entitlement_snapshot_secure
+       TO udocket_app;
+GRANT USAGE ON SCHEMA public TO udocket_app;
+```
+
+`delivery_receipt_secure` is defined alongside the Notifications database enforcement patterns to keep channel-specific governance in one place.
+
+### A.5 Operational canaries (fail-closed)
+
+```sql
+-- Connect guard: verify all GUCs present
+SELECT current_setting('udocket.active_org', true) IS NOT NULL
+   AND current_setting('udocket.active_user', true) IS NOT NULL
+   AND current_setting('udocket.active_roles', true) IS NOT NULL AS rls_context_ok;
+
+-- Boot probe for PgBouncer pooling
+-- Expect ERROR unless transaction/session pooling is in use
+SELECT 1 FROM "case" WHERE org_id = current_setting('udocket.active_org', true)::uuid;
+
+-- Search-path and timeout guard
+SHOW search_path;   -- expect exactly: pg_catalog, public
+SHOW statement_timeout; -- expect >= 30s
+```
+
+- Integrity queue monitoring lives with Guardian (§4.3, Appendix C). Notifications Appendix A covers download-token single-use enforcement.

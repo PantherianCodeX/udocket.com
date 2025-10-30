@@ -236,7 +236,7 @@ ______________________________________________________________________
 **Failures & handling:** Schema drift or RLS misconfiguration blocks deploys (lint), partitions auto-rotate via ops scripts. **|**
 **Observability:** Metrics `notifications_partition_lag_days`, `notifications_rls_violation_total`; CLI `python ops/db/rotate_partitions.py` monitors rotation. **|**
 **Breadcrumbs:** Migrations `db/migrations/notifications/001_outbox_delivery.sql`, `db/migrations/notifications/002_delivery_receipt.sql`, secure view `db/migrations/security/015_delivery_receipt_secure.sql`, partition rotation script `ops/db/rotate_partitions.py`, tests `tests/platform/db/test_notifications_schema.py`. **|**
-**References:** Appendix J (DB governance), Settings Registry §5 (notifications keys).
+**References:** Appendix B (DB enforcement patterns), Settings Registry §5 (notifications keys).
 
 ### 4.1 Outbox schema (binding)
 
@@ -557,3 +557,150 @@ Each payload includes `schema_version` and `emitted_at` (RFC3339 with timezone) 
 ### A.4 Payload hints
 
 `data.meta` may include `{phase, percent, next_action, badges[]}` aligned with UI progress widgets (e.g., `phase="Judgment"`, `badges=["WARN:PII detector"]`). Providers pipe region/latency metrics into `provider.health`; finance signals surface via `job.blocked` with `warning="BUDGET_HELD"`.
+
+______________________________________________________________________
+
+## Appendix B — Database enforcement patterns (binding)
+
+*Purpose:* Capture authoritative SQL for portal messaging row-level security, delivery receipt partitioning, and download token enforcement.
+
+### B.1 Portal messaging RLS
+
+```sql
+CREATE POLICY msg_thread_vis ON message_thread
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_THREAD', 'read', case_id, NULL, NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_THREAD', 'write', case_id, NULL, NULL)
+);
+
+CREATE POLICY msg_vis ON message
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE', 'read', case_id, NULL, NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE', 'write', case_id, NULL, NULL)
+);
+
+CREATE POLICY msg_att_vis ON message_attachment
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_ATTACHMENT', 'read', case_id, NULL, NULL)
+)
+WITH CHECK (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND udocket_can('MESSAGE_ATTACHMENT', 'write', case_id, NULL, NULL)
+);
+
+CREATE POLICY msg_read_vis ON message_read_receipt
+USING (
+  org_id = NULLIF(current_setting('udocket.active_org', true), '')::uuid
+  AND EXISTS (
+    SELECT 1 FROM message m
+    WHERE m.id = message_read_receipt.message_id
+      AND udocket_can('MESSAGE', 'read', m.case_id, NULL, NULL)
+  )
+);
+```
+
+### B.2 Messaging tables (illustrative DDL)
+
+```sql
+CREATE TABLE message_thread (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  title text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE message (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  thread_id uuid NOT NULL REFERENCES message_thread(id) ON DELETE CASCADE,
+  author_id uuid NOT NULL,
+  body text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE message_attachment (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  message_id uuid NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+  content_uri text NOT NULL,
+  content_sha256 text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE message_read_receipt (
+  id uuid PRIMARY KEY,
+  org_id uuid NOT NULL,
+  message_id uuid NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+  reader_id uuid NOT NULL,
+  read_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+### B.3 Receipt partitioning
+
+```sql
+ALTER TABLE delivery_receipt PARTITION BY RANGE (created_at);
+CREATE TABLE delivery_receipt_2025_01 PARTITION OF delivery_receipt
+  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+```
+
+- Rotation job `ops/db/rotate_partitions.py` creates upcoming partitions, seals old partitions, and refreshes indexes. `audit_event` partitioning remains documented in the Platform Runtime specification.
+
+### B.4 Download tokens (single-use enforcement)
+
+```sql
+CREATE TABLE download_token (
+  id UUID PRIMARY KEY,
+  artifact_id UUID NOT NULL,
+  org_id UUID NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  single_use BOOLEAN NOT NULL DEFAULT FALSE,
+  consumed_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX download_token_lookup
+  ON download_token (artifact_id, expires_at);
+
+UPDATE download_token
+   SET consumed_at = now()
+ WHERE id = :token_id
+   AND single_use = TRUE
+   AND consumed_at IS NULL
+   AND expires_at > now()
+RETURNING 1;
+```
+
+- Validation logic must succeed before streaming artifacts, then verify Guardian status, storage region allowlists, and audit logging. Metrics `download_token_validation_total{outcome}` and `download_stream_started_total` monitor enforcement.
+
+### B.5 Delivery receipt secure view
+
+```sql
+CREATE VIEW delivery_receipt_secure WITH (security_barrier=true) AS
+SELECT id,
+       artifact_id,
+       org_id,
+       channel,
+       recipient,
+       status,
+       details,
+       created_at,
+       provider_event_id
+  FROM delivery_receipt;
+
+REVOKE SELECT ON TABLE delivery_receipt FROM udocket_app;
+GRANT  SELECT ON delivery_receipt_secure TO udocket_app;
+```
+
+- View enforces org-scoped access and pairs with Settings-driven masking/retention policies. Identity’s Appendix A covers the shared `udocket_can` enforcement that this view relies on.
