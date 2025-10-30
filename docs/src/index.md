@@ -12,16 +12,20 @@ pip install -r requirements-docs.txt
 # Requires Node.js 22.x (see .nvmrc)
 npm ci
 
-# Run the full lint suite
+# Run the full lint suite (or `make lint-docs` if your venv is active)
 python scripts/docs/lint_docs.py
 ```
 
 The aggregator runs:
 
-1. `mdformat --check --wrap no docs/src/overview/tdd.md`
-1. `markdownlint-cli2 docs/src/overview/tdd.md` (skipped if the CLI is not on `PATH`)
-1. `scripts/docs/check_settings_keys.py` to ensure Appendix E only lists keys that actually exist in the codebase
-1. `scripts/docs/link_check.py` for appendix/diagram/section sanity checks
+1. `scripts/docs/build_runbook_catalog.py --check` to ensure the ops catalog matches the latest runbook sections
+1. `scripts/docs/build_diagram_index.py --check` for Mermaid inventory freshness
+1. `scripts/docs/check_structure.py docs/src/services docs/src/apps docs/src/ops` to enforce template compliance
+1. `scripts/docs/check_appendices.py` for appendix numbering and references
+1. `npx markdownlint-cli2 --config docs/.markdownlint.json 'docs/src/**/*.md'` plus an optional global `markdownlint-cli2` invocation when available
+1. `scripts/docs/check_settings_keys.py` to keep Appendix E aligned with shipped settings
+1. `scripts/docs/link_check.py` (with `STRICT_DOCS=1`) for anchor and cross-document validation
+1. `python scripts/docs/build_mkdocs.py --dry-run` for a strict MkDocs build in a disposable site directory
 
 All steps are wired into the `Docs Validation` GitHub workflow, so a clean run locally mirrors CI.
 
@@ -58,7 +62,7 @@ Open the workspace and install the recommended extensions when prompted:
 - `yzhang.Markdown-All-in-One` for TOC generation and keybindings
 - `bierner.markdown-preview-github-styles` to preview with GitHub styling
 
-The `.vscode/settings.json` file does not force a formatter, so you can delegate formatting to `mdformat` by running `mdformat docs/src/overview/tdd.md` manually or via the lint script above.
+The `.vscode/settings.json` file does not force a formatter, so you can delegate formatting to `mdformat` by running `mdformat docs/src/overview/tdd.md` manually before committing.
 
 ## Tips
 

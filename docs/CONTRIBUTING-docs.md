@@ -51,9 +51,10 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   - `apt-get install -y chromium` (or `brew install chromium` on macOS) so the Mermaid CLI can launch a headless browser
   - Vale CLI ships in the devcontainer; when running locally, download v3.7.1 from the official releases if you want parity.
 - Node tooling expects Node.js 22.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
-- Run the aggregate lint script:
+- Run the aggregate lint script (or `make lint-docs` if you already activated the project virtualenv):
   - `python scripts/docs/lint_docs.py` (lints entire `docs/src/`)
   - Optional: pass one or more targets, e.g. `python scripts/docs/lint_docs.py docs/src/services/settings.md docs/src/overview/tdd.md`
+- The lint runner executes (in order): `build_runbook_catalog.py --check`, `build_diagram_index.py --check`, `check_structure.py` (services/apps/ops), `check_appendices.py`, `markdownlint-cli2` (npx + optional global), `check_settings_keys.py`, `link_check.py` with `STRICT_DOCS=1`, and a strict MkDocs build via `scripts/docs/build_mkdocs.py --dry-run`.
 - Validate service specs against the template: `python scripts/docs/check_structure.py docs/src/services`
 - Lint markdown: `npx markdownlint-cli2 'docs/src/**/*.md'`.
 - Style checks (Vale):
@@ -63,6 +64,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Build TDD PDF:
   - `bash scripts/docs/render_mermaid.sh --all`
   - `bash scripts/docs/build_pdf_tdd.sh` (outputs to `docs/build/pdf/tdd.pdf`).
+  - The MkDocs wrapper also supports a dry run: `python scripts/docs/build_mkdocs.py --dry-run`.
 
 ## Cross-linking and single-source rules
 
