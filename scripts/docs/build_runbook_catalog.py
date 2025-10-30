@@ -16,7 +16,12 @@ ROOT_DIR = SCRIPT_DIR.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
-from scripts.docs import doc_utils  # type: ignore  # noqa: E402
+from scripts.docs.doc_utils import (  # noqa: E402
+    parse_front_matter,
+    derive_doc_label,
+    stringify,
+    slugify,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
@@ -96,14 +101,14 @@ def iter_source_files() -> Iterable[Path]:
 def read_doc_label(lines: Sequence[str], path: Path) -> str:
     """Return a short label derived from the document title/front matter."""
 
-    front = doc_utils.parse_front_matter(lines)
+    front = parse_front_matter(lines)
     if front:
-        title = doc_utils.stringify(front.get("title", ""))
+        title = stringify(front.get("title", ""))
     else:
         title = ""
 
     fallback = path.stem.replace("tdd-", "").replace("-", " ").title()
-    return doc_utils.derive_doc_label(title, fallback=fallback)
+    return derive_doc_label(title, fallback=fallback)
 
 
 def extract_runbook_sections(lines: Sequence[str]) -> list[list[str]]:
@@ -165,14 +170,14 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
                     anchors_added.add(anchor_id)
             if output and output[-1].strip():
                 output.append("")
-            slug = doc_utils.slugify(prefixed_text)
+            slug = slugify(prefixed_text)
             heading_line = f"{'#' * normalized_level} {prefixed_text}"
             if slug:
                 heading_line += f" {{#{slug}}}"
             output.append(heading_line)
             pending_blank_after_heading = True
             headings.append(
-                Heading(level=normalized_level, text=prefixed_text, slug=doc_utils.slugify(prefixed_text))
+                Heading(level=normalized_level, text=prefixed_text, slug=slugify(prefixed_text))
             )
         else:
             if pending_blank_after_heading:

@@ -313,7 +313,25 @@ ______________________________________________________________________
 - Policy Agent (OPA) deployments: sidecars colocated with Guardian, Portal, and workers for low latency; centralized cluster distributes discovery bundles. Metrics `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` feed the “OPA Policy Plane” dashboard.
 - Local hot-reload tooling (`scripts/dev/run_lpe_hot_reload.py`) compiles sandbox bundles, pushes to a developer OPA, and diffs PolicyContext digests without staging deploys; snapshots attach to PRs modifying policy or locale packs.
 
-### 3.3 Downstream service integrations (normative)
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Enumerate LPE-specific `ApiError.code` values so downstream services and automation interpret failures consistently. **|**
+**Contract:** LPE APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below describe how those codes manifest during policy compilation and evaluation. **|**
+**State:** Error envelopes originate from `/api/v1/lpe/policy-contexts`, `/api/v1/lpe/compile`, and `/api/v1/lpe/evaluate`; schema parity maintained via `spec/schemas/api_error.schema.json`. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/policy/test_api_errors.py`; runtime emissions trigger `lpe_api_error_total{code="unknown"}` alerts. **|**
+**Observability:** Dashboards “LPE – Compilation” and “LPE – Policy Evaluation” track `lpe_api_error_total{code}`, `lpe_compiler_duration_seconds`; synthetic evaluations verify waivers/residency scenarios. **|**
+**Breadcrumbs:** Controllers `apps/platform/policy/views.py`, compiler `packages/udocket_core/policy/compiler.py`, runtime `packages/udocket_core/policy/runtime.py`, tests `tests/platform/policy/test_compile_api.py`, `tests/platform/policy/test_evaluate_api.py`. **|**
+**References:** Platform Runtime §3.3, Reference Manager spec §3.4, Settings spec §3.4, Guardian spec §2.2.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `POLICY_BLOCK` | Evaluation detected residency, waiver, or privacy violations that must block the requested action. | Present `policy_block_code`/waiver metadata to operators, remediate configuration, or obtain waiver before retrying. |
+| `VALIDATION_ERROR` | Policy bundle or context payload failed schema or semantic validation. | Inspect `details[]`, correct inputs (missing locales, duplicate rules), and resubmit compile/evaluate. |
+| `CONFLICT` | Concurrent activation changed the same PolicyContext version/hash. | Refresh digests via conditional GET, merge changes, and retry with updated `If-Match`/`Idempotency-Key`. |
+| `PROVIDER_DEGRADED` | Reference Manager or policy bundle fetch unavailable; fallback chain exhausted. | Pause rollouts, retry once dependencies healthy, and notify Ops of degraded state. |
+| `RATE_LIMIT` | Org exceeded compilation/evaluation budget or concurrency ceiling. | Honor `Retry-After`, stagger batch compiles, and request higher limits through governance. |
+
+### 3.4 Downstream service integrations (normative)
 
 **Purpose:** Map LPE touchpoints across the platform. **|**
 **Contract:** Downstream services must consume PolicyContext digests, honor residency/masking directives, and record versions in audit logs. **|**
@@ -329,7 +347,7 @@ ______________________________________________________________________
 - Settings UI: renders diff previews and unsafe-change warnings produced by the compiler.
 - Storage adapters: enforce residency choices and annotate manifests with waiver usage.
 
-### 3.4 Reference Manager alignment (normative)
+### 3.5 Reference Manager alignment (normative)
 
 **Purpose:** Describe bundle adoption and editorial feedback loops. **|**
 **Contract:** LPE rejects bundles lacking license metadata, sanitization attestations, or signatures; adoption lag SLO P95 ≤ 10 minutes between RM publish and LPE compile. **|**
@@ -341,7 +359,7 @@ ______________________________________________________________________
 - Localization coverage heatmaps from RM feed completeness checks; missing locales open tasks for Content Ops and freeze activations until closed.
 - Deprecations record replacements and effective dates; contexts surface deprecation hints until the effective date passes.
 
-### 3.5 Tools & developer workflows (informative)
+### 3.6 Tools & developer workflows (informative)
 
 **Purpose:** Capture local testing and hot-reload harnesses. **|**
 **Contract:** Developers must attach hot-reload manifest snapshots to PRs touching policy or locale packs; local tooling mirrors production validation. **|**

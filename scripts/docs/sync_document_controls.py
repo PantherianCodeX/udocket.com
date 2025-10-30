@@ -30,7 +30,11 @@ ROOT_DIR = SCRIPT_DIR.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
-from scripts.docs import doc_utils  # noqa: E402
+from scripts.docs.doc_utils import (  # noqa: E402
+    parse_front_matter,
+    stringify,
+    yaml,
+)
 
 FieldMapping = Tuple[str, Tuple[str, ...]]
 
@@ -92,7 +96,7 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
 def _select_first(front_matter: Dict[str, object], keys: Sequence[str]) -> str:
     for candidate in keys:
         if candidate in front_matter:
-            return doc_utils.stringify(front_matter[candidate])
+            return stringify(front_matter[candidate])
     return ""
 
 
@@ -110,7 +114,7 @@ def _additional_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]
         if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
             continue
         label = key.replace("_", " ").replace("-", " ").title()
-        additional[label] = doc_utils.stringify(value)
+        additional[label] = stringify(value)
     return additional
 
 
@@ -118,7 +122,7 @@ def sync_file(path: Path) -> bool:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     try:
-        front = doc_utils.parse_front_matter(lines)
+        front = parse_front_matter(lines)
     except Exception as exc:  # pragma: no cover - hi-level warning only
         print(f"[sync-document-controls] warning: failed to parse front matter ({exc})", file=sys.stderr)
         return False
@@ -193,7 +197,7 @@ def main() -> int:
         print("[sync-document-controls] no markdown targets found", file=sys.stderr)
         return 0
 
-    if doc_utils.yaml is None:
+    if yaml is None:
         print("[sync-document-controls] warning: PyYAML not available; cannot sync document controls", file=sys.stderr)
         return 0
 

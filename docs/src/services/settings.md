@@ -106,7 +106,7 @@ ______________________________________________________________________
 **State:** Bundles, versions, activations, and advisory lock records reside in Postgres; caches mirror effective configuration for hot reads. **|**
 **Failures & handling:** Unsafe activations drop SR into read-only mode until validators pass; existing jobs continue with embedded snapshots. **|**
 **Observability:** Request/error counters, activation metrics, and traces capture throughput and failure reasons. **|**
-**References:** §2 Responsibilities, §4 State management, Appendix A. **|**
+**References:** §2 Responsibilities, §4 State management, Appendix A.
 **Breadcrumbs:** Service bootstrap `apps/platform/settings/service.py`, schema `packages/udocket_core/settings/schema.py`, tests `tests/platform/settings/test_charter.py`.
 
 - Governs inheritance rules, scope guardrails, and immutable keys (for example residency) that lower scopes cannot relax.
@@ -120,7 +120,7 @@ ______________________________________________________________________
 **State:** Adoption telemetry in `settings_consumer_adoption` tracks bundle/version uptake; integration sync jobs persist status in `settings_integration_status`. **|**
 **Failures & handling:** Missed invalidations trigger drift detectors and synthetic fetches; consumers block risky operations until snapshots refresh. **|**
 **Observability:** “Settings Registry – Consumer Adoption” dashboard charts `settings_snapshot_issued_total`, `settings_snapshot_stale_total`, and invalidation latency. **|**
-**References:** §2 Responsibilities, §6 Dependencies, Appendix B. **|**
+**References:** §2 Responsibilities, §6 Dependencies, Appendix B.
 **Breadcrumbs:** Client library `apps/platform/settings/clients.py`, adoption jobs `apps/platform/settings/tasks.py`, tests `tests/platform/settings/test_client_contract.py`.
 
 - Guardian enforces judgment flows using SR-configured policies and waivers.
@@ -135,7 +135,7 @@ ______________________________________________________________________
 **State:** Error budget tracking persists in `sre_error_budget` with monthly burn-rate snapshots; release gates consult these metrics. **|**
 **Failures & handling:** Burn rate > 1.0 for 60 minutes halts blue/green promotion; SLO breaches invoke RB-GOV-008 (§8.3). **|**
 **Observability:** Synthetic monitors exercise read and activation APIs per deploy; alerts `settings_availability_breach` and `settings_activation_delay` gate releases. **|**
-**References:** §6 Observability, Appendix B, §8.3. **|**
+**References:** §6 Observability, Appendix B, §8.3.
 **Breadcrumbs:** Helm chart `infra/kubernetes/settings/`, SLO tests `tests/synthetics/test_settings_slo.py`, Grafana “Settings Registry – SLO”.
 
 ______________________________________________________________________
@@ -157,7 +157,7 @@ ______________________________________________________________________
 **State:** Effective values materialize into `setting_effective` with foreign keys to contributing bundle versions; ancestry is persisted for audit drill-down. **|**
 **Failures & handling:** Invalid overrides (for example, CASE relaxing residency) raise `SETTINGS_INVALID_OVERRIDE`; activations fail until corrected. **|**
 **Observability:** Metric `settings_scope_resolution_total` tracks override mix; traces include contributing scope chains. **|**
-**References:** Appendix A key catalog, §4 State management. **|**
+**References:** Appendix A key catalog, §4 State management.
 **Breadcrumbs:** Implementation `apps/platform/settings/models.py::Scope`, tests `tests/platform/settings/test_scope_precedence.py`.
 
 - Sensitive keys (secrets, trust roots) remain encrypted at rest; read APIs redact secrets while activation history retains digests.
@@ -171,7 +171,7 @@ ______________________________________________________________________
 **State:** Definitions load from `config/settings_definitions.json` and compile into versioned JSON Schema artifacts stored in `setting_definition_schema`. **|**
 **Failures & handling:** Missing or malformed definitions fail `python scripts/docs/check_settings_keys.py` and production activations; authors must update schema before merging. **|**
 **Observability:** Metric `settings_validation_failure_total` categorizes error reasons; audit logs attach schema version IDs. **|**
-**References:** Appendix A key catalog, Appendix C seed bundles. **|**
+**References:** Appendix A key catalog, Appendix C seed bundles.
 **Breadcrumbs:** Schema implementation `packages/udocket_core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
 
 - Case-scoped keys include agent prompt overrides, retry ceilings, visibility toggles, and portal expiry limits.
@@ -185,7 +185,7 @@ ______________________________________________________________________
 **State:** Snapshot records reside in `settings_snapshot` and attach to jobs, artifacts, and policy contexts via foreign keys; digests mirror compiled outputs. **|**
 **Failures & handling:** Snapshot mismatches trigger drift incidents; workers block new jobs until refreshed snapshots arrive or incidents are resolved. **|**
 **Observability:** Dashboard “Settings – Snapshot Integrity” tracks `settings_snapshot_mismatch_total` and `settings_snapshot_stale_total`. **|**
-**References:** §4 State management, Appendix B metrics. **|**
+**References:** §4 State management, Appendix B metrics.
 **Breadcrumbs:** Implementation `packages/udocket_core/settings/snapshot.py`, tests `tests/platform/settings/test_snapshot_contract.py`.
 
 - Every job manifest includes `settings_snapshot_sha256` and `settings_version_id` for replay.
@@ -198,7 +198,7 @@ ______________________________________________________________________
 **State:** Residency metadata persists in `settings_residency_profile` cross-linked to RM bundles and waiver records. **|**
 **Failures & handling:** Missing catalog entries raise `RESIDENCY_ENDPOINT_NEW`; activations stay blocked until RM ingestion completes or waiver approved. **|**
 **Observability:** Audit events `RESIDENCY_ENDPOINT_NEW`, metric `settings_residency_violation_total`, and nightly drift scans enforce compliance. **|**
-**References:** §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-\* runbooks. **|**
+**References:** §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-\* runbooks.
 **Breadcrumbs:** Validators `apps/platform/settings/validators/residency.py`, tests `tests/platform/settings/test_residency_validators.py`.
 
 - Change detection opens Security tickets (`SEC-RESIDENCY-ENDPOINT`) and requires dual approval for temporary waivers.
@@ -211,7 +211,7 @@ ______________________________________________________________________
 **State:** Pipeline definitions live in `settings_pipeline_definition`; rollouts track in `settings_pipeline_rollout` with wave metadata and change tickets. **|**
 **Failures & handling:** Invalid prompt references, tool IDs, or ceiling relaxations raise validation errors; activations remain blocked until corrected. **|**
 **Observability:** “Agent Pipeline Rollouts” dashboard charts rollout state, prompt revisions, and cost ceilings; job telemetry logs `pipeline_definition_version`. **|**
-**References:** Appendix C seed bundles, §4 State management. **|**
+**References:** Appendix C seed bundles, §4 State management.
 **Breadcrumbs:** Implementation `apps/platform/settings/services/pipeline_bundle.py`, tests `tests/platform/settings/test_pipeline_bundle.py`.
 
 - Assistant knobs (`assistant.retrieval.sources[]`, `assistant.moderation.tiers[]`, `assistant.citation.style`) share validator framework ensuring alignment with shared assets.
@@ -224,7 +224,7 @@ ______________________________________________________________________
 **State:** Catalog entries persist in `settings_tool_catalog`; allowlists live in `settings_tool_allowlist` per scope with waiver metadata. **|**
 **Failures & handling:** Schema mismatches or attempts to widen residency/cost ceilings raise validation errors; forced overrides demand waiver records. **|**
 **Observability:** “Agent Tooling” panel tracks invocation counts, error rates, and cost estimates; audit logs live under `ops/tools/ops_tools.jsonl`. **|**
-**References:** §6 Dependencies, Appendix A tool catalog. **|**
+**References:** §6 Dependencies, Appendix A tool catalog.
 **Breadcrumbs:** Catalog sync `apps/platform/settings/services/tool_catalog.py`, tests `tests/platform/settings/test_tool_catalog.py`.
 
 - `GET /api/v1/settings/tools/catalog` returns effective catalog JSON for operators and editors.
@@ -236,7 +236,7 @@ ______________________________________________________________________
 **State:** Provider/model metadata resides in `settings_llm_profile`; BYO endpoints cross-reference Reference Manager catalogs and residency policies. **|**
 **Failures & handling:** Version drift or missing evaluation IDs block activations; moderation thresholds outside guardrails require waiver review. **|**
 **Observability:** “LLM Profile Adoption” dashboard tracks `llm_profile_assignment_total`, moderation enforcement, and BYO utilization. **|**
-**References:** §6 Dependencies, Appendix C seed bundles. **|**
+**References:** §6 Dependencies, Appendix C seed bundles.
 **Breadcrumbs:** Implementation `apps/platform/settings/services/llm_profiles.py`, tests `tests/platform/settings/test_llm_profiles.py`.
 
 ### 2.8 Seed bundles & no-code configuration (binding)
@@ -246,7 +246,7 @@ ______________________________________________________________________
 **State:** Seeds live under `config/` with metadata `{version, source_commit, checksum}`; ingestion records persist in `settings_seed_history`. **|**
 **Failures & handling:** Seeds referencing unknown keys or out-of-range values fail validation; CI (`settings-seed-validate`) blocks merges until corrected. **|**
 **Observability:** CI artifacts capture validation reports; deployment automation logs ingestion status and checksum verification. **|**
-**References:** Appendix C seed inventory, §4 Activation pipeline. **|**
+**References:** Appendix C seed inventory, §4 Activation pipeline.
 **Breadcrumbs:** Bootstrap script `ops/scripts/bootstrap_platform.py`, tests `tests/platform/settings/test_seed_bundles.py`.
 
 ______________________________________________________________________
@@ -271,24 +271,45 @@ ______________________________________________________________________
 - Clients avoid `.env` usage beyond bootstrapping; runtime relies on SR for truth.
 - SDK exports helpers for dry-run validation and diff preview consumption.
 
-### 3.3 Authentication & request signing (binding)
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Enumerate Settings-specific `ApiError.code` values so platform consumers can build deterministic retry logic. **|**
+**Contract:** Settings Registry reuses the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and supplements it with the service-specific codes below. Mutating endpoints surface the same envelope schema and echo `Idempotency-Key` when supplied. **|**
+**State:** Codes map directly to validation branches in `apps/platform/settings/api.py` and activation services. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and contract tests; runtime mis-emissions trigger `settings_error_unknown_total` alerts. **|**
+**Observability:** Metrics `settings_error_total{code}` and `settings_auth_failure_total{reason}` feed the “Settings Registry – Availability” dashboard; synthetic activations assert error semantics before release. **|**
+**Breadcrumbs:** API handlers `apps/platform/settings/api.py`, security helpers `apps/platform/settings/security.py`, tests `tests/platform/settings/test_auth.py`, `tests/platform/settings/test_activation_flow.py`, schema `spec/schemas/api_error.schema.json`. **|**
+**References:** Platform Runtime §3.3, Guardian spec §2.2, Reference Manager spec §3.4, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-HMAC-ROTATE`.
+
+| Code | Scenario | Client guidance |
+|---|---|---|
+| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch on mutating requests (`X-Request-Signature` wrong or key revoked). | Recompute signature, rotate credentials via RB-HMAC-ROTATE if repeated. |
+| `AUTH_CLOCK_SKEW` | `X-Timestamp` outside ±120 seconds tolerance. | Sync clocks, retry with corrected timestamp. |
+| `SECRET_DISCLOSURE_BLOCKED` | Attempt to export masked secret fields through diff previews or read APIs. | Remove secret fields from request; fetch redacted values only. |
+| `VALIDATION_ERROR` | Bundle schema violation, unsafe override, or diff failing semantic guard. | Inspect `details[]`, remediate configuration, rerun validation. |
+| `CONFLICT` | Activation `expected_version` mismatch or replayed `Idempotency-Key`. | Re-fetch activation state, regenerate idempotency token, retry. |
+| `POLICY_BLOCK` | Residency, waiver, or governance policy rejected the activation. | Obtain waiver/approval, update policy inputs, resubmit activation. |
+
+Settings surfaces continue to emit `POLICY_BLOCK`, `QUARANTINED`, `INTEGRITY_ERROR`, and other shared codes as defined in the Platform Runtime catalog.
+
+### 3.4 Authentication & request signing (binding)
 
 **Purpose:** Enforce secure access to mutating endpoints. **|**
 **Contract:** Mutations require service tokens plus HMAC signing; actors supply `X-Signature-Key-Id`, `X-Timestamp`, and Idempotency headers with ±30 second skew tolerance. **|**
 **State:** Key metadata stores in `settings_hmac_key`; rotations link to activation records and audit trails. **|**
 **Failures & handling:** Signature mismatches return `401`; clients refresh keys or resync clocks before retrying. **|**
 **Observability:** “Settings Auth” dashboard segments `settings_auth_failure_total` by reason (signature_mismatch, expired_timestamp, disabled_key); audit events capture actor and bundle IDs. **|**
-**References:** §7 Security & compliance, §8.3 Runbooks & drills. **|**
+**References:** §7 Security & compliance, §8.3 Runbooks & drills.
 **Breadcrumbs:** Security helpers `apps/platform/settings/security.py`, tests `tests/platform/settings/test_auth.py`.
 
-### 3.4 Privacy & redaction (normative)
+### 3.5 Privacy & redaction (normative)
 
 **Purpose:** Protect sensitive configuration when displayed or exported. **|**
 **Contract:** SR redacts secret values in API responses, CLI exports, and diff previews; activation history stores hashed digests only. **|**
 **State:** Secret metadata tracked in `settings_secret_meta` including scope, rotation cadence, and masking policy. **|**
 **Failures & handling:** Attempts to expose secrets trigger `SECRET_DISCLOSURE_BLOCKED`; Security reviews audit trails before re-enabling access. **|**
 **Observability:** “Settings – Secret Access” panel tracks `settings_secret_read_total` by actor role; anomaly detection alerts on spikes. **|**
-**References:** §7 Security & compliance, Appendix A. **|**
+**References:** §7 Security & compliance, Appendix A.
 **Breadcrumbs:** Redaction helpers `apps/platform/settings/redaction.py`, tests `tests/platform/settings/test_redaction.py`.
 
 ______________________________________________________________________
@@ -310,7 +331,7 @@ ______________________________________________________________________
 **State:** Pipeline stages record in `setting_activation_stage`; lock state maintained per org/bundle. **|**
 **Failures & handling:** Validator failures mark activations unsafe; operators remediate and resubmit. Rollback replays previous bundles with preserved audit metadata. **|**
 **Observability:** “Settings Activation” dashboard tracks `settings_activation_duration_seconds`, unsafe counts, and rollback frequency; traces link to change tickets. **|**
-**References:** §5 Failure modes, §8.3.2 RB-GOV-008. **|**
+**References:** §5 Failure modes, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Activation service `apps/platform/settings/services/activation.py`, tests `tests/platform/settings/test_activation_flow.py`.
 
 - Diff previews produce human-readable and machine JSON artifacts for reviewers.
@@ -323,7 +344,7 @@ ______________________________________________________________________
 **State:** Diff artifacts persist in `settings_activation_diff` with SHA-256 digests and reviewer annotations. **|**
 **Failures & handling:** Missing diff or compilation errors block approval; remediate data and rerun pipeline. **|**
 **Observability:** “Settings Diff” panel charts `settings_diff_generated_total` by bundle type; alerts fire when diff generation fails repeatedly. **|**
-**References:** Appendix A traceability map, §8.3.2 RB-GOV-008. **|**
+**References:** Appendix A traceability map, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Diff renderer `apps/platform/settings/services/diff.py`, tests `tests/platform/settings/test_diff_preview.py`.
 
 ### 4.3 Dual approval & waiver workflow (binding)
@@ -333,7 +354,7 @@ ______________________________________________________________________
 **State:** Approval records persist in `settings_activation_approval`; waivers track in `settings_waiver` referencing App.O decision log entries. **|**
 **Failures & handling:** Missing approvals keep activations pending; expired waivers trigger alerts and block reactivation until renewed. **|**
 **Observability:** “Settings Governance” dashboard charts `settings_dual_approval_total`, waiver counts, and decision latency; audit events `SETTINGS_CHANGE_REQUESTED` and `SETTINGS_WAIVER_APPLIED` broadcast outcomes. **|**
-**References:** §7 Security & compliance, §8.3.2 RB-GOV-008. **|**
+**References:** §7 Security & compliance, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Governance service `apps/platform/settings/services/approvals.py`, tests `tests/platform/settings/test_governance.py`.
 
 ### 4.4 Locking & concurrency control (normative)
@@ -343,7 +364,7 @@ ______________________________________________________________________
 **State:** Lock metadata lives in `settings_activation_lock` with timestamps and holder IDs. **|**
 **Failures & handling:** Lock timeouts surface `ACTIVATION_CONFLICT`; clients retry after backoff once lock releases. **|**
 **Observability:** “Settings Lock” panel highlights `settings_activation_lock_wait_seconds`; alerts trigger when waits exceed 30 seconds. **|**
-**References:** §5 Failure modes, §8.3.5 RB-LOCK-006. **|**
+**References:** §5 Failure modes, §8.3.5 RB-LOCK-006.
 **Breadcrumbs:** Lock utilities `apps/platform/settings/services/locks.py`, tests `tests/platform/settings/test_locks.py`.
 
 ### 4.5 Caching & invalidation (normative)
@@ -353,7 +374,7 @@ ______________________________________________________________________
 **State:** Redis pub/sub stores event history for one hour; adoption trackers confirm refresh success. **|**
 **Failures & handling:** Missed events trigger fallback pollers; repeated misses raise incident `SETTINGS_INVALIDATION_STALLED`. **|**
 **Observability:** “Settings Cache” dashboard monitors `settings_cache_invalidation_lag_seconds`; synthetic fetches confirm propagation within 60 seconds. **|**
-**References:** §3.2 SDK usage, §6 Observability. **|**
+**References:** §3.2 SDK usage, §6 Observability.
 **Breadcrumbs:** Cache manager `apps/platform/settings/cache.py`, tests `tests/platform/settings/test_invalidation.py`.
 
 ______________________________________________________________________
@@ -375,7 +396,7 @@ ______________________________________________________________________
 **State:** Unsafe details recorded in `settings_activation_validation`; approvers annotate mitigation steps. **|**
 **Failures & handling:** Runbook RB-GOV-008 outlines rollback, manual review, and dual approval flow; automation freezes subsequent activations until the incident closes. **|**
 **Observability:** Alerts `settings_activation_unsafe_total` and SLO burn-rate alarms escalate to Architecture/Security. **|**
-**References:** §4.1 Activation pipeline, §4.3 Dual approval, §8.3.2 RB-GOV-008. **|**
+**References:** §4.1 Activation pipeline, §4.3 Dual approval, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Validation services `apps/platform/settings/services/validation.py`, tests `tests/platform/settings/test_activation_flow.py::test_pipeline_rejects_invalid`.
 
 ### 5.2 Snapshot mismatch & drift (binding)
@@ -385,7 +406,7 @@ ______________________________________________________________________
 **State:** Drift findings persist in `settings_drift_finding` with remediation tickets and timestamps. **|**
 **Failures & handling:** RB-RES-ENDPOINT and RB-JOB-WATCHDOG guide reconciliation; SR may replay last known good bundle or regenerate snapshots. **|**
 **Observability:** “Settings Drift” dashboard, alerts `settings_snapshot_mismatch_total`, and synthetic fetches confirm when drift resolves. **|**
-**References:** §2.3 Snapshot contract, §6 Observability, §8.3.3 RB-RES-ENDPOINT / §8.3.7 RB-JOB-WATCHDOG. **|**
+**References:** §2.3 Snapshot contract, §6 Observability, §8.3.3 RB-RES-ENDPOINT / §8.3.7 RB-JOB-WATCHDOG.
 **Breadcrumbs:** Telemetry module `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_drift.py`.
 
 ### 5.3 Residency enforcement incident (binding)
@@ -395,7 +416,7 @@ ______________________________________________________________________
 **State:** Residency findings recorded in `settings_residency_profile` and incident logs; waivers tracked with expiry. **|**
 **Failures & handling:** RB-RES-BLOCK and RB-RES-ENDPOINT guide containment, catalog sync, and waiver approval; Guardian cross-checks waivers before judgments resume. **|**
 **Observability:** Alerts `settings_residency_violation_total`, audit events `RESIDENCY_ENDPOINT_NEW`, and Security tickets `SEC-RESIDENCY-ENDPOINT` drive follow-up. **|**
-**References:** §2.4 Residency & egress, §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-\* runbooks. **|**
+**References:** §2.4 Residency & egress, §7 Security & compliance, §8.3.3–§8.3.4 RB-RES-\* runbooks.
 **Breadcrumbs:** Validators `apps/platform/settings/validators/residency.py`, tests `tests/platform/settings/test_residency_validators.py`.
 
 ______________________________________________________________________
@@ -415,15 +436,15 @@ ______________________________________________________________________
 **Purpose:** Capture registry availability, activation latency, cache freshness, and residency enforcement guarantees. **|**
 **Contract:** API availability, activation duration, cache invalidation, and residency checks must satisfy the thresholds below before new settings are promoted. **|**
 **State:** Metrics `settings_request_total`, `settings_error_total`, `settings_activation_duration_seconds`, `settings_cache_invalidation_lag_seconds`, `settings_residency_violation_total`; dashboards “Settings Registry – SLO”, “Settings Cache”, “Settings Drift”. **|**
-**Failures & handling:** Breaches invoke RB-GOV-008, RB-SETTINGS-CACHE, or RB-RES-* prior to resuming activations. **|**
+**Failures & handling:** Breaches invoke RB-GOV-008, RB-SETTINGS-CACHE, or RB-RES-\* prior to resuming activations. **|**
 **Observability:** Grafana dashboards, synthetic activation tests, and burn-rate alerts supply evidence. **|**
 **Breadcrumbs:** Prometheus rules `infra/monitoring/settings-prometheus-rules.yaml`, synthetic configs `ops/synthetics/settings_slo.yaml`, runbooks `docs/src/ops/runbooks/settings/*.md`. **|**
 **References:** TDD §12, Logging spec §6, Audit spec §5.
 
-- **API availability:** ≥99.9% monthly success rate for read/write operations (`settings_request_total` vs `settings_error_total`). Breaches trigger RB-GOV-008 and freeze releases until the budget recovers. **|**
-- **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw. **|**
-- **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys. **|**
-- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-* and requires waiver or remediation before continuing. **|**
+- **API availability:** ≥99.9% monthly success rate for read/write operations (`settings_request_total` vs `settings_error_total`). Breaches trigger RB-GOV-008 and freeze releases until the budget recovers.
+- **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw.
+- **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys.
+- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-\* and requires waiver or remediation before continuing.
 
 ### 6.2 Metrics
 
@@ -432,7 +453,7 @@ ______________________________________________________________________
 **State:** Metrics originate from application instrumentation and activation pipeline hooks; error budget tracking stores monthly summaries in `sre_error_budget`. **|**
 **Failures & handling:** Threshold breaches drive runbooks in §5; burn-rate alarms freeze activations. **|**
 **Observability:** Grafana “Settings Registry – SLO” and “Settings Drift” dashboards chart trends; alert definitions live in `infra/monitoring/settings-prometheus-rules.yaml`. **|**
-**References:** Appendix B. **|**
+**References:** Appendix B.
 **Breadcrumbs:** Telemetry helpers `apps/platform/settings/telemetry.py`, Prometheus rules `infra/monitoring/settings-prometheus-rules.yaml`.
 
 ### 6.3 Logs & audits
@@ -442,7 +463,7 @@ ______________________________________________________________________
 **State:** Logs persist in `setting_activation`, `setting_activation_diff`, `settings_activation_approval`, `settings_drift_finding`, and case-scoped ops directories under `storage/media/settings/`. **|**
 **Failures & handling:** Missing artifacts or retention gaps trigger compliance incidents; responders follow §8.3.2 RB-GOV-008 and RB-LOCK-006. **|**
 **Observability:** Audit pipeline metrics, partition age checks, and log retention alerts verify coverage. **|**
-**References:** §4 State management, §7 Security & compliance, Appendix A traceability. **|**
+**References:** §4 State management, §7 Security & compliance, Appendix A traceability.
 **Breadcrumbs:** Logging config `infra/logging/settings.json`, rotation script `ops/db/rotate_partitions.py`, tests `tests/platform/settings/test_audit_trail.py`.
 
 ### 6.4 Synthetic monitoring
@@ -452,7 +473,7 @@ ______________________________________________________________________
 **State:** Synthetic definitions live in `ops/synthetics/settings_slo.yaml`; results archive to incident dashboards and CI logs. **|**
 **Failures & handling:** Failures escalate via RB-GOV-008; subsequent activations freeze until synthetic success. **|**
 **Observability:** Grafana panels and PagerDuty integrations track synthetic success rates and latency. **|**
-**References:** §4 Activation pipeline, §5 Failure modes, §8.3.2 RB-GOV-008. **|**
+**References:** §4 Activation pipeline, §5 Failure modes, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Synthetic scripts `ops/synthetics/`, tests `tests/synthetics/test_settings_slo.py`.
 
 ### 6.5 Drift detection (binding)
@@ -462,7 +483,7 @@ ______________________________________________________________________
 **State:** Findings persist in `settings_drift_finding` with remediation steps and linked tickets. **|**
 **Failures & handling:** Unresolved drift escalates to Security and §8.3.3 RB-RES-ENDPOINT; SR may regenerate snapshots or rollback bundles. **|**
 **Observability:** “Settings Drift” dashboard charts `settings_snapshot_drift_total` and severity; alerts integrate with on-call rotations. **|**
-**References:** §2.3 Snapshot contract, §5.2 Snapshot mismatch. **|**
+**References:** §2.3 Snapshot contract, §5.2 Snapshot mismatch.
 **Breadcrumbs:** Drift detector `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_drift.py`.
 
 ______________________________________________________________________
@@ -475,7 +496,7 @@ ______________________________________________________________________
 **Failures & handling:** Auth violations, residency breaches, or secret exposure escalate through §8.3 Runbooks & drills and Security incident workflows. **|**
 **Observability:** Dashboards “Settings Auth”, “Settings Governance”, and “Residency Compliance” plus audit alerts surface violations. **|**
 **Breadcrumbs:** IAM policies `infra/iam/settings/`, RLS definitions `apps/platform/settings/models.py`, security tests `tests/platform/settings/test_security.py`. **|**
-**References:** §2.4 Residency, §3.3 Authentication, §5 Failure modes, §8.3.3–§8.3.4 RB-RES-\*/RB-GOV-008.
+**References:** §2.4 Residency, §3.4 Authentication, §5 Failure modes, §8.3.3–§8.3.4 RB-RES-\*/RB-GOV-008.
 
 ### 7.1 Access control & RLS (binding)
 
@@ -484,7 +505,7 @@ ______________________________________________________________________
 **State:** Access grants persist in `setting_permission` referencing roles and resources; policy compilation aligns with Appendix A traceability. **|**
 **Failures & handling:** Unauthorized attempts raise `403`; audit logs record actor, scope, and requested action for SIEM ingestion. **|**
 **Observability:** “Settings Access” dashboard charts `settings_access_violation_total`; anomalies route to security analysts. **|**
-**References:** §3.3 Authentication, Appendix A key catalog. **|**
+**References:** §3.4 Authentication, Appendix A key catalog.
 **Breadcrumbs:** Access policy implementation `apps/platform/settings/models.py::SettingAccessPolicy`, tests `tests/platform/settings/test_access_control.py`.
 
 - Field masking rules compile into `field_mask_rule` tables refreshed per activation.
@@ -496,7 +517,7 @@ ______________________________________________________________________
 **State:** Audit events stream to `ops/settings/ops_settings.jsonl` and warehouse tables; manifest digests link to Appendix A traceability. **|**
 **Failures & handling:** Immutable sink toggles are blocked; fallback storage engages if sinks are unavailable, triggering incident escalation. **|**
 **Observability:** “Settings Audit Trail” dashboard tracks `settings_audit_event_total`; completeness monitors alert if events lag beyond five minutes. **|**
-**References:** §6.2 Logs & audits, Appendix B metrics. **|**
+**References:** §6.2 Logs & audits, Appendix B metrics.
 **Breadcrumbs:** Audit writer `apps/platform/settings/audit.py`, tests `tests/platform/settings/test_audit_log.py`.
 
 ### 7.3 Incident response & rollback (binding)
@@ -506,7 +527,7 @@ ______________________________________________________________________
 **State:** Automation stores rollback checkpoints and evidence attachments alongside incident tickets. **|**
 **Failures & handling:** Rollback failures escalate to the incident commander; automation retries with exponential backoff before manual intervention. **|**
 **Observability:** “Settings Incidents” panel tracks `settings_incident_open_total`; postmortems reference activation IDs and audit digests. **|**
-**References:** §5 Failure modes, §8.3.2 RB-GOV-008/RB-LOCK-006. **|**
+**References:** §5 Failure modes, §8.3.2 RB-GOV-008/RB-LOCK-006.
 **Breadcrumbs:** Runbook scripts `ops/runbooks/settings_rollback.py`, tests `tests/platform/settings/test_rollback.py`.
 
 ### 7.4 Compliance & privacy obligations (normative)
@@ -516,7 +537,7 @@ ______________________________________________________________________
 **State:** Compliance profile metadata lives in `settings_compliance_profile` and links to Reference Manager legal matrices. **|**
 **Failures & handling:** Missing keys or invalid values block activation; forced overrides demand dual approval and §8.3 documentation. **|**
 **Observability:** “Settings Compliance” dashboard monitors `settings_compliance_violation_total`; alerts highlight expiring HIPAA bundles or DSAR configuration drift. **|**
-**References:** §2 Responsibilities, §5.3 Residency incidents, §8.3.4 RB-RES-BLOCK. **|**
+**References:** §2 Responsibilities, §5.3 Residency incidents, §8.3.4 RB-RES-BLOCK.
 **Breadcrumbs:** Compliance enforcement `apps/platform/settings/compliance.py`, tests `tests/platform/settings/test_compliance.py`.
 
 ______________________________________________________________________
@@ -629,7 +650,7 @@ ______________________________________________________________________
 **State:** Deployment metadata recorded in GitHub Actions artifacts and `settings_activation` history (`change_ticket`, `release_channel`). **|**
 **Failures & handling:** Failed deploys auto-roll back to previous release; configuration freezes remain active until SLOs stabilize. **|**
 **Observability:** Release dashboards show deployment status, activation backlog, and freeze indicators. **|**
-**References:** §4 Activation pipeline, §8.1 Operational posture, §8.3.2 RB-GOV-008. **|**
+**References:** §4 Activation pipeline, §8.1 Operational posture, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Deployment script `ops/scripts/settings_deploy.py`, tests `tests/platform/settings/test_release_workflow.py`.
 
 #### 8.5.2 Tooling & automation checks (normative)
@@ -639,7 +660,7 @@ ______________________________________________________________________
 **State:** CI workflows enforce linting, seed bundle validation, and OpenAPI drift detection; runbook catalog renders the runbook index. **|**
 **Failures & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks. **|**
 **Observability:** CI dashboards display job history; governance board reviews automation health monthly. **|**
-**References:** §2 Responsibilities, Appendix C seed inventory, §8.3 Runbooks & drills. **|**
+**References:** §2 Responsibilities, Appendix C seed inventory, §8.3 Runbooks & drills.
 **Breadcrumbs:** Scripts under `scripts/docs/`, CI definitions `.github/workflows/docs-ci.yml`.
 
 ______________________________________________________________________
@@ -661,7 +682,7 @@ ______________________________________________________________________
 **State:** Enforcement registry stored in `settings_enforcement_point` with required bundles and validation hooks. **|**
 **Failures & handling:** Runtime detection of stale snapshots blocks operations until refreshed; lint failures must be resolved before merge. **|**
 **Observability:** “Settings Enforcement” dashboard tracks `settings_enforcement_lookup_total` and stale detection alerts. **|**
-**References:** §4 State management, §5 Failure modes. **|**
+**References:** §4 State management, §5 Failure modes.
 **Breadcrumbs:** Enforcement helpers `apps/platform/settings/services/enforcement.py`, tests `tests/platform/settings/test_enforcement_points.py`.
 
 - API enforcement covers RBAC writes, CORS, rate limits, portal downloads, HIPAA/PHIPA banners, and residency gating.
@@ -676,7 +697,7 @@ ______________________________________________________________________
 **State:** Integration metadata persists in `settings_integration_status` referencing RM bundle IDs and LPE compile versions. **|**
 **Failures & handling:** Missing RM bundles or failed LPE compiles flag activations unsafe; teams remediate before approval proceeds. **|**
 **Observability:** “Settings Integration” dashboard captures sync success, waiver usage, and compile durations; alerts open Security tickets when residency endpoints change. **|**
-**References:** §2.4 Residency, §5.3 Residency incidents, §8.3.3 RB-RES-ENDPOINT. **|**
+**References:** §2.4 Residency, §5.3 Residency incidents, §8.3.3 RB-RES-ENDPOINT.
 **Breadcrumbs:** Integration service `apps/platform/settings/services/integration.py`, tests `tests/platform/settings/test_lpe_guardian_bridge.py`.
 
 - Residency endpoint changes open Security tickets; waivers demand dual approval and manifest stamping until replacement endpoints validated.
@@ -689,7 +710,7 @@ ______________________________________________________________________
 **State:** Portal profile snapshots store in `settings_portal_profile` with `portal_visible=true` filters. **|**
 **Failures & handling:** Exposing masked fields triggers validation errors; portal blocks rendering until resolved. **|**
 **Observability:** “Portal Settings” dashboard monitors lookup counts and cache hit ratios; alerts fire on mismatch between SR and portal caches. **|**
-**References:** §2.5 Pipeline bundles, Appendix C seed bundles. **|**
+**References:** §2.5 Pipeline bundles, Appendix C seed bundles.
 **Breadcrumbs:** Portal profile service `apps/platform/settings/services/portal_profile.py`, tests `tests/platform/settings/test_portal_profile.py`.
 
 - Chat assistants mirror SR rate limits and token budgets; Settings updates propagate to portal warnings and UI pickers.
@@ -701,7 +722,7 @@ ______________________________________________________________________
 **State:** Snapshot references stored alongside job records and artifact manifests; drift detection cross-checks manifests. **|**
 **Failures & handling:** Failed fetches block job start; backlog alerts fire when retrieval exceeds retry windows. **|**
 **Observability:** “Worker Settings” panel tracks `settings_snapshot_job_total` and stale-snapshot alerts. **|**
-**References:** §2.3 Snapshot contract, §5.2 Snapshot mismatch. **|**
+**References:** §2.3 Snapshot contract, §5.2 Snapshot mismatch.
 **Breadcrumbs:** Worker tasks `apps/platform/operations/tasks.py::hydrate_settings_snapshot`, tests `tests/platform/operations/test_settings_snapshot.py`.
 
 ______________________________________________________________________
@@ -723,7 +744,7 @@ ______________________________________________________________________
 **State:** Maintained in version control; automation compares against `config/settings_definitions.json`, runtime validators, and seed bundles. **|**
 **Failures & handling:** Missing mappings fail `python scripts/docs/check_settings_keys.py`; authors update definitions and this appendix together. **|**
 **Observability:** Docs lint metrics raise alerts on coverage gaps; release checklists block promotion when lint fails. **|**
-**References:** §2 Responsibilities, Appendix C seed inventory. **|**
+**References:** §2 Responsibilities, Appendix C seed inventory.
 **Breadcrumbs:** Script `scripts/docs/check_settings_keys.py`, tests `tests/docs/test_check_settings_keys.py`, dashboard “Docs – Settings Coverage”.
 
 ### A.0 SettingDefinition model (binding)
@@ -752,7 +773,7 @@ class SettingDefinition(BaseModel):
 **State:** Source-of-truth definitions live in `config/settings_definitions.json`; effective settings surface through `setting_effective` and `settings_snapshot` tables. **|**
 **Failures & handling:** Divergence between documentation and schema blocks CI; activations referencing undocumented keys are rejected. **|**
 **Observability:** Validators emit `settings_definition_gap_total`; lint dashboards flag omissions. **|**
-**References:** §2 Responsibilities, §4 State management. **|**
+**References:** §2 Responsibilities, §4 State management.
 **Breadcrumbs:** Schema `packages/udocket_core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
 
 | Key | Scope | Default | Description / Enforcement |
@@ -774,10 +795,10 @@ class SettingDefinition(BaseModel):
 | `sign.trust_roots[]` | SYSTEM\|ORG | \[\] | Trust roots for signing; §7.2. |
 | `sign.tsa.endpoint` | SYSTEM\|ORG | null | TSA API endpoint; §7.2. |
 | `sign.tsa.max_time_drift_secs` | SYSTEM | 5 | NTP drift tolerance; §7.2, [`platform-runtime §3.1`](../services/platform-runtime.md#31-environment-topology). |
-| `security.tls.min_version` | SYSTEM | TLSv1.3 | Minimum TLS version for ingress; [`platform-runtime §3.3`](../services/platform-runtime.md#33-tls-posture). |
-| `security.tls.cipher_profile` | SYSTEM | default | TLS cipher profile for ingress; [`platform-runtime §3.3`](../services/platform-runtime.md#33-tls-posture). |
-| `security.tls.fips_mode` | SYSTEM | false | Enforce FIPS-approved cipher suites and modules; [`platform-runtime §3.3`](../services/platform-runtime.md#33-tls-posture), §7.2. |
-| `security.tls.legacy_exceptions[]` | SYSTEM | \[\] | Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); [`platform-runtime §3.3`](../services/platform-runtime.md#33-tls-posture), §9.2. |
+| `security.tls.min_version` | SYSTEM | TLSv1.3 | Minimum TLS version for ingress; [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture). |
+| `security.tls.cipher_profile` | SYSTEM | default | TLS cipher profile for ingress; [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture). |
+| `security.tls.fips_mode` | SYSTEM | false | Enforce FIPS-approved cipher suites and modules; [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture), §7.2. |
+| `security.tls.legacy_exceptions[]` | SYSTEM | \[\] | Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture), §9.2. |
 | `db.pgbouncer.pool_mode` | SYSTEM | transaction | Allowed PgBouncer pooling mode (`transaction` default, `session` optional); [`platform-runtime §3.2`](../services/platform-runtime.md#32-reference-manifests). |
 | `llm.providers[]` | SYSTEM\|ORG | \[\] | Provider catalog; §8.1. |
 | `llm.models[]` | SYSTEM\|ORG | \[\] | Model catalog and fallback priorities; §8.1. |
@@ -877,7 +898,7 @@ class SettingDefinition(BaseModel):
 **State:** Enforcement registry stored in `settings_enforcement_point` with bundle-to-service mappings. **|**
 **Failures & handling:** Missing mappings trigger lint failures and synthetic alert `settings_enforcement_lookup_total{status="missing"}`. **|**
 **Observability:** Adoption dashboards display bundle coverage per service. **|**
-**References:** §9.1 Enforcement touchpoints, Appendix B metrics. **|**
+**References:** §9.1 Enforcement touchpoints, Appendix B metrics.
 **Breadcrumbs:** Enforcement registry `apps/platform/settings/services/enforcement.py`, tests `tests/platform/settings/test_enforcement_points.py`.
 
 - Agents → `analyze.*`, `compose.*`, `llm.*` (TDD §6, §8).
@@ -895,7 +916,7 @@ class SettingDefinition(BaseModel):
 **State:** Lint scripts load this appendix, inspect OpenAPI/spec/config usage, and compare against registry definitions. **|**
 **Failures & handling:** Any mismatch fails `settings:lint-keys`; update definitions, tests, and this appendix atomically. **|**
 **Observability:** CI dashboards track lint duration and failure rate. **|**
-**References:** §2 Responsibilities, §8.3 Tooling & automation. **|**
+**References:** §2 Responsibilities, §8.3 Tooling & automation.
 **Breadcrumbs:** Script `scripts/docs/check_settings_keys.py`, tests `tests/docs/test_lint_rules.py`.
 
 - Regions & residency → `regions.allowlist.*`, `privacy.*`; validated by residency scanners and RM catalog ingest.
@@ -911,7 +932,7 @@ class SettingDefinition(BaseModel):
 **State:** Activation metadata resides in `settings_activation`, approvals in `settings_activation_approval`, waivers in `settings_waiver` with App.O decision log links. **|**
 **Failures & handling:** Missing checklist items mark the activation `unsafe`; promotion halts until evidence supplied. **|**
 **Observability:** Governance dashboard highlights incomplete activations; alert `settings_governance_override_total` pages owners. **|**
-**References:** §4 State management, §5 Failure modes, §8.3.2 RB-GOV-008. **|**
+**References:** §4 State management, §5 Failure modes, §8.3.2 RB-GOV-008.
 **Breadcrumbs:** Activation service `apps/platform/settings/services/activation.py`, tests `tests/platform/settings/test_activation_flow.py`.
 
 Checklist items:
@@ -929,7 +950,7 @@ Checklist items:
 **State:** Change log lives beside this document (`ops/settings/change_log.md`) and mirrors into App.O decision logs. **|**
 **Failures & handling:** Missing change-log entries trigger release checklist failures; add entries with backdated evidence before closing the change. **|**
 **Observability:** Weekly docs lint verifies latest activations appear in the log. **|**
-**References:** §4 Activation pipeline, §8 Operational notes. **|**
+**References:** §4 Activation pipeline, §8 Operational notes.
 **Breadcrumbs:** Change log `ops/settings/change_log.md`, tests `tests/platform/settings/test_change_log.py`.
 
 ## Appendix B — Metrics & alerts
@@ -939,7 +960,7 @@ Checklist items:
 **State:** Metrics emit via OpenTelemetry exporters from the Settings service and background jobs; alerts live in Grafana OnCall. **|**
 **Failures & handling:** Missing metrics or stale thresholds block release checklists; on-call reviews incidents weekly to confirm coverage. **|**
 **Observability:** Dashboards — “Settings Registry – Availability”, “Settings Governance”, “Settings Compliance”, “Settings Integrations”. **|**
-**References:** §6 Observability, tables below. **|**
+**References:** §6 Observability, tables below.
 **Breadcrumbs:** Telemetry module `apps/platform/settings/telemetry.py`, tests `tests/platform/settings/test_metrics.py`.
 
 ### B.1 Service health (binding)
@@ -979,7 +1000,7 @@ Alert hooks include `settings_availability_breach`, `settings_activation_delay`,
 **State:** Bundles live under `config/` and `config/agents.pipeline/` with checksums recorded in `settings_seed_history`. **|**
 **Failures & handling:** Validation failures block merges and deployments; update bundles, validators, and associated tests together. **|**
 **Observability:** CI job `settings-seed-validate` reports status; dashboards track bundle ingestion and checksum drift. **|**
-**References:** §2.8 Seed bundles, Appendix C inventory table below. **|**
+**References:** §2.8 Seed bundles, Appendix C inventory table below.
 **Breadcrumbs:** Seed scripts `ops/scripts/bootstrap_platform.py`, tests `tests/platform/settings/test_seed_bundles.py`.
 
 | Bundle | Location | Purpose | Validation |

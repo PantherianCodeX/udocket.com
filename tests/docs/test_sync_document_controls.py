@@ -316,7 +316,7 @@ def test_main_aborts_without_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     doc = _write_doc(tmp_path)
     monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
-    monkeypatch.setattr(doc_utils, "yaml", None)
+    monkeypatch.setattr(sdc, "yaml", None)
     def _fail(*args: object, **kwargs: object) -> None:
         raise AssertionError("should not run")
     monkeypatch.setattr(sdc.subprocess, "run", _fail)

@@ -142,6 +142,24 @@ ______________________________________________________________________
 - Watchdog jobs (`ops/scripts/identity/watch_device_fingerprint.py`) reconcile device mismatch counts, break-glass expiries, and federation lint results, emitting SSE warnings to the UI.  
 - PgBouncer health probe `/healthz/pgbouncer-mode` asserts pooling remains `transaction` or approved `session` so per-request GUCs stay intact.
 
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Record the `ApiError.code` values emitted by identity and session APIs so clients respond safely to authentication and governance failures. **|**
+**Contract:** Identity surfaces the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to identity-specific flows. **|**
+**State:** Errors arise from token issuance (`/api/v1/auth/token`), break-glass workflows, device binding checks, and portal/staff session APIs; schemas align with `spec/schemas/api_error.schema.json`. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/auth/test_api_errors.py`; runtime emissions trigger `identity_api_error_total{code="unknown"}` alerts. **|**
+**Observability:** Dashboards “Identity – API Errors” and “Session Integrity” chart `identity_api_error_total{code}`, `identity_device_fp_mismatch_total`; synthetic token flows validate MFA/clock skew guardrails. **|**
+**Breadcrumbs:** Controllers `apps/platform/auth/views.py`, session manager `apps/platform/session/binding.py`, break-glass services `apps/platform/auth/break_glass.py`, tests `tests/platform/auth/test_token_api.py`, `tests/platform/auth/test_break_glass.py`. **|**
+**References:** Platform Runtime §3.3, Settings spec §3.4, Guardian spec §2.2, Ops runbooks `RB-IDP-FAILOVER`, `RB-BREAK-GLASS`.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `AUTH_ERROR` | Invalid credentials, disabled account, or revoked session token. | Prompt user to re-authenticate, enforce MFA if required, and avoid retry loops with stale tokens. |
+| `AUTH_CLOCK_SKEW` | Signed requests outside the ±120 second tolerance. | Sync client clocks with NTP/Chrony, retry once skew corrected. |
+| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch for privileged service calls. | Regenerate canonical string, rotate keys if necessary, and retry with corrected signature. |
+| `POLICY_BLOCK` | Break-glass or residency policy forbids requested action (e.g., missing retrospective). | Surface remediation steps, complete break-glass workflow or obtain waiver before retrying. |
+| `RATE_LIMIT` | Org/actor exceeded login, password reset, or session creation quotas. | Honor `Retry-After`, enforce backoff in UI, and notify operators for sustained spikes. |
+
 ## 4) State Management (binding)
 
 **Purpose:** Maintain the data structures that enforce authorization, masking, and break-glass controls. **|**

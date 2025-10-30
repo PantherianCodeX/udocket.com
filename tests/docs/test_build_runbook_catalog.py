@@ -131,3 +131,106 @@ def test_build_catalog_skips_table_anchor_injection(tmp_path: Path, monkeypatch:
 
     row = next(line for line in catalog_lines if "RB-RES-BLOCK" in line)
     assert "<a id=" not in row
+
+
+def test_iter_source_files_skips_templates_and_missing_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    docs_root = tmp_path / "docs" / "src"
+    services = docs_root / "services"
+    apps = docs_root / "apps"
+    apps.mkdir(parents=True)
+    (apps / "portal.md").write_text("### Runbook", encoding="utf-8")
+    (apps / "_template.md").write_text("ignored", encoding="utf-8")
+    monkeypatch.setattr(brc, "SRC_DIR", docs_root)
+
+    sources = list(brc.iter_source_files())
+
+    assert sources == [apps / "portal.md"]
+
+
+def test_transform_section_requires_h2_level() -> None:
+    section = ["# Runbook Overview"]
+
+    with pytest.raises(ValueError):
+        brc.transform_section(section, "Alpha", Path("alpha.md"))
+
+
+def test_transform_section_plain_text_anchor_injection() -> None:
+    section = [
+        "## Runbook Overview",
+        "Refer to RB-ALPHA-123 for detailed steps.",
+    ]
+
+    transformed, _ = brc.transform_section(section, "Alpha", Path("alpha.md"))
+
+    assert '<a id="rb-alpha-123"></a>' in transformed
+
+
+def test_transform_section_adds_spacing_before_anchor() -> None:
+    section = [
+        "### Runbook Summary",
+        "Immediate response steps.",
+        "#### RB-ALPHA-456 — Contain Outage",
+        "Final notes.",
+    ]
+
+    transformed, headings = brc.transform_section(section, "Alpha", Path("alpha.md"))
+
+    anchor_index = transformed.index('<a id="rb-alpha-456"></a>')
+    assert transformed[anchor_index - 1] == ""
+    assert any(h.text.startswith("Alpha — RB-ALPHA-456") for h in headings)
+
+
+def test_build_catalog_adds_spacing_between_sections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    services, _ = _setup_tmp_docs(tmp_path, monkeypatch)
+    doc_path = services / "multi.md"
+    doc_path.write_text(
+        dedent(
+            """
+            ## 8) Operations
+
+            ### First Runbook
+            Step 1
+
+            ### Second Runbook
+            Step 2
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    catalog_lines, _ = brc.build_catalog()
+
+    joined = "\n".join(catalog_lines)
+    assert "First Runbook" in joined and "Second Runbook" in joined
+    assert "\n\n##" in joined
+
+
+def test_build_catalog_skips_documents_without_sections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    services, _ = _setup_tmp_docs(tmp_path, monkeypatch)
+    (services / "no-runbook.md").write_text("# Heading\n\nBody", encoding="utf-8")
+
+    catalog_lines, headings = brc.build_catalog()
+
+    assert catalog_lines == []
+    assert headings == []
+
+
+def test_main_check_missing_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    _, output = _setup_tmp_docs(tmp_path, monkeypatch)
+    if output.exists():
+        output.unlink()
+    monkeypatch.setattr(brc, "build_catalog", lambda: ([], []))
+
+    rc = brc.main(["--check"])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Runbook catalog is missing" in captured.err
+
+
+def test_main_check_up_to_date(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, output = _setup_tmp_docs(tmp_path, monkeypatch)
+    monkeypatch.setattr(brc, "build_catalog", lambda: (["Content"], []))
+
+    assert brc.main([]) == 0
+    assert brc.main(["--check"]) == 0

@@ -186,9 +186,27 @@ ______________________________________________________________________
 - `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` enforce OCC on `version`, require `Idempotency-Key`, and propagate `retry_token` to keep retries idempotent.
 - Responses include current status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and updated `retry_generation`.
 
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Enumerate worker-control `ApiError.code` values so API clients and automation react consistently. **|**
+**Contract:** Worker Cluster reuses the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and applies the scenarios below for job control, upload finalize, and pipeline orchestration requests. **|**
+**State:** Error responses originate from `apps/platform/jobs/views.py`, upload finalize controller `apps/platform/files/views.py`, and worker orchestration services; enums align with `spec/schemas/api_error.schema.json`. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/jobs/test_error_envelope.py`; runtime emissions trigger `job_api_error_total{code="unknown"}` alerts. **|**
+**Observability:** Dashboards “Worker Cluster – API” and “Upload Finalize” watch `job_api_error_total{code}`, `upload_finalize_total{status}`; synthetic controls exercise pause/resume/cancel paths. **|**
+**Breadcrumbs:** Controllers `apps/platform/jobs/views.py`, upload guard `apps/platform/files/views.py::finalize_upload`, idempotency helpers `packages/udocket_core/idem/store.py`, tests `tests/platform/jobs/test_job_controls.py`, `tests/platform/files/test_upload_finalize.py`. **|**
+**References:** Platform Runtime §3.3, Settings keys `api.idempotency.*`, Ops runbooks `RB-JOB-WATCHDOG`, `RB-UPLOAD-SCAN`.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CONFLICT` | Idempotency payload hash mismatch or stale `version` when retrying job controls. | Re-fetch job state, regenerate `Idempotency-Key`, and retry once with updated payload. |
+| `POLICY_BLOCK` | Guardian/residency guard or budget hold prevented job execution. | Surface Guardian reason or budget hold, remediate policy (waiver, quota) before retrying. |
+| `INTEGRITY_ERROR` | Upload finalize detected a hash mismatch against staged content. | Re-upload chunks with the correct digest and avoid blind retries until integrity matches. |
+| `PROVIDER_DEGRADED` | Downstream provider/queue paused (`PAUSED_AWAITING_PROVIDER`, circuit open). | Respect backoff, surface degraded status to operators, and retry when health probes recover. |
+| `RATE_LIMIT` | Org or job-kind concurrency ceiling exceeded. | Honor `Retry-After`, queue retries with exponential backoff, and reduce burst size. |
+
 <a id="worker-api-idempotency"></a>
 
-### 3.3 Idempotency store & replay headers (binding) {#33-idempotency-store-replay-headers}
+### 3.4 Idempotency store & replay headers (binding) {#34-idempotency-store-replay-headers}
 
 **Purpose:** Capture the shared idempotency table and replay semantics so every worker-facing API behaves consistently. **|**
 **Contract:** Requests persist entries before side effects, reuse stored responses on replays, and raise explicit collisions when payload hashes drift. **|**
@@ -254,7 +272,7 @@ Workers MUST update `last_seen_at` on every replay, echo the stored payload when
 
 <a id="worker-api-sse"></a>
 
-### 3.4 Job SSE replay contract (binding)
+### 3.5 Job SSE replay contract (binding)
 
 **Purpose:** Define the Server-Sent Events pattern workers use to stream job progress so clients can resume consumption safely. **|**
 **Contract:** SSE endpoints honour `Last-Event-ID`, emit monotonically increasing IDs, and replay the most recent event on reconnect. **|**
@@ -272,7 +290,7 @@ curl -N -H "Authorization: Bearer $TOKEN" \
 
 <a id="worker-api-upload-finalize"></a>
 
-### 3.5 Upload finalize endpoint (binding)
+### 3.6 Upload finalize endpoint (binding)
 
 **Purpose:** Capture the JSON contract workers expect when a client finalizes an upload session. **|**
 **Contract:** Clients provide the SHA-256 digest, optional manifest metadata, and `Idempotency-Key`; mismatched hashes return `412 PRECONDITION_FAILED`. **|**
@@ -327,7 +345,7 @@ paths:
         - hmacSignature: []
 ```
 
-### 3.6 Job lifecycle endpoints (binding)
+### 3.7 Job lifecycle endpoints (binding)
 
 **Purpose:** Capture the deterministic behaviour for job creation, control actions, and cancellation so workers, UI, and API clients stay in sync. **|**
 **Contract:** Job APIs enforce OCC, idempotency, and Guardian/SSE signalling; cancellation follows a three-step contract that blocks partial artifacts from persisting unnoticed. **|**
@@ -466,7 +484,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing annotations or silenced alerts require governance review and follow-up tasks. **|**
 **Observability:** Dashboards “Worker Queues”, “Watchdog Runner”, Alertmanager routes. **|**
 **Breadcrumbs:** Alert rule files, PagerDuty services, SIEM dashboards. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`.
+**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-\*`.
 
 - `celery_queue_depth_high` or `dlq_messages_total` breaches invoke RB-JOB-QUEUE to throttle enqueue, scale workers, and reconcile offsets.
 - `watchdog_runner_missed_total` or `watchdog_runner_lag_seconds` triggers RB-JOB-WATCHDOG to restore automation and notify portal/UI.
@@ -481,7 +499,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing drill evidence or outdated steps block automation restart after incidents. **|**
 **Observability:** Docs lint, drill scheduler reports, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, Ops governance records. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`.
+**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-\*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`.
 
 #### 8.3.1 Runbook Index (informative)
 

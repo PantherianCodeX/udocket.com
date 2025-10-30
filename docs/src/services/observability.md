@@ -134,6 +134,24 @@ ______________________________________________________________________
 - When `logging.immutable_sink.enabled=true`, Fluent Bit forks the stream to the immutable WORM bucket alongside metadata captured by Audit §4.
 - Seal runner `ops/audit/seal_runner.py` consumes immutable batches hourly; verification job `ops/audit/verify_seal_chain.py` feeds Audit §5.
 
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Enumerate Observability `ApiError.code` values so teams updating alert rules, dashboards, or telemetry exports react consistently when operations fail. **|**
+**Contract:** Observability APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to observability-specific workflows. **|**
+**State:** Errors stem from alert CRUD APIs, dashboard export tooling, and telemetry ingestion guardrails; schema parity enforced via `spec/schemas/api_error.schema.json`. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and `tests/observability/test_api_errors.py`; runtime emissions raise `observability_api_error_total{code="unknown"}` alerts. **|**
+**Observability:** Dashboards “Observability – API Errors” and “Ingestion Health” track `observability_api_error_total{code}`, `telemetry_ingest_rate_limit_total`; synthetic alert CRUD flows run per deploy. **|**
+**Breadcrumbs:** Controllers `apps/platform/observability/views.py`, alert orchestrator `apps/platform/observability/alerts.py`, ingest guard `apps/platform/observability/ingest_guard.py`, tests `tests/observability/test_alert_api.py`. **|**
+**References:** Platform Runtime §3.3, Settings spec §2, Ops runbooks `RB-OBS-ALERTS`, `RB-OBS-INGEST`.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CONFLICT` | Alert/dashboard update failed optimistic concurrency (`expected_version` mismatch). | Re-fetch configuration, merge edits, and retry with the latest `expected_version`. |
+| `POLICY_BLOCK` | Compliance policy forbade enabling an alert (missing escalation/runbook mapping). | Supply required metadata or approvals, then retry once policy passes. |
+| `RATE_LIMIT` | Telemetry ingestion or dashboard export exceeded assigned quota. | Respect `Retry-After`, throttle exporters, and coordinate capacity adjustments. |
+| `PROVIDER_DEGRADED` | Downstream telemetry pipeline (Prometheus, Loki, Tempo) degraded/unavailable. | Buffer locally where possible, alert SRE, and retry after health recovers. |
+| `VALIDATION_ERROR` | Alert/dash payload failed schema validation or referenced unknown metrics. | Correct payload (metrics, labels), rerun validation, and resubmit. |
+
 ______________________________________________________________________
 
 ## 4) State Management (binding) {#4-log-schema--redaction}

@@ -248,7 +248,24 @@ Portal downloads exchange signed tokens issued by the Notifications service; `If
 
 The UI coordinates with internal controllers for portal messaging, edit manifests, and assistant orchestration. SSE publishers in `apps/platform/events/*.py` broadcast state transitions to the front-end, while background jobs in the worker cluster hydrate downloads, regenerate manifests, and backfill presence events. Layout builders in `apps/platform/ui/views/*.py` assemble React component payloads from secure views (`*_secure`) governed by the Settings registry.
 
-### 3.3 Interaction Topology (informative)
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Document the `ApiError.code` values that the web application surfaces so UX flows handle retries and blocking states consistently. **|**
+**Contract:** Staff and portal clients reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the UI introduces the cases below for assistant and portal interactions. **|**
+**State:** Codes originate from REST responses (`/api/v1/chat/*`, `/api/v1/portal/*`) and SSE events; enum definitions live alongside the platform schema (`spec/schemas/api_error.schema.json`) with UI adapters in `apps/platform/ui/errors.py`. **|**
+**Failures & handling:** Unknown codes fail UI Spectral lint and unit tests; runtime emissions trigger `ui_api_error_unknown_total` alerts. **|**
+**Observability:** Dashboards “Web App – API Errors” and “Portal Integrity” watch `ui_api_error_total{code}`; synthetic probes cover chat availability and portal download flows. **|**
+**Breadcrumbs:** Controllers `apps/platform/api/chat.py`, portal download guard `apps/platform/portal/downloads.py`, UI error mappers `apps/platform/ui/errors.py`, tests `tests/platform/ui/test_error_adapters.py`, `tests/platform/portal/test_portal_errors.py`. **|**
+**References:** Platform Runtime §3.3, Notifications spec §2.4 (download tokens), Settings spec §11.11 (assistant toggles), TDD §10.12.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CHAT_DISABLED` | Org-level settings or Guardian policy disabled assistants for the active org/case. | Display the assistant-disabled banner, suppress retries, direct operators to review Settings or Guardian waivers. |
+| `PORTAL_DOWNLOAD_PRECONDITION` | Portal download request failed the `If-Match` guard or token validation. | Prompt the client to refresh the deliverable list, regenerate the download link, and avoid automatic retry loops. |
+| `POLICY_BLOCK` | Guardian or residency guard blocked an action invoked from the UI (approvals, compose publish, portal download). | Surface Guardian reason/details, require operator remediation before enabling another attempt. |
+| `RATE_LIMIT` | Client exceeded the configured RPM/token limits for chat or portal download APIs. | Honor `Retry-After`, show throttling guidance, and backoff additional attempts. |
+
+### 3.4 Interaction Topology (informative)
 
 **Purpose:** Visualise how staff and portal surfaces collaborate with backend services in real time. **|**
 **Contract:** Staff and client flows rely on API, Channels, Guardian, Settings, and Notifications integrations depicted below; changes must preserve these linkages. **|**
@@ -427,7 +444,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
 **Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`.
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-\*`, `RB-CHAT-ABUSE`.
 
 #### 8.3.1 Runbook Index (informative)
 
@@ -436,7 +453,7 @@ ______________________________________________________________________
 | `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
 | `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
 | `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |
-| `RB-NOTIFY-*` | Delivery incidents | Aligns portal alerts with outbound notifications |
+| `RB-NOTIFY-\*` | Delivery incidents | Aligns portal alerts with outbound notifications |
 | `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
 
 #### 8.3.2 Primary Runbooks (binding)
@@ -452,7 +469,7 @@ ______________________________________________________________________
 - `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
 - `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
 - `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artefacts.
-- `RB-NOTIFY-*` — Synchronizes portal state with outbound notifications when delivery issues surface.
+- `RB-NOTIFY-\*` — Synchronizes portal state with outbound notifications when delivery issues surface.
 - `RB-CHAT-ABUSE` — Freezes assistants, escalates to Guardian, and captures moderation evidence.
 
 #### 8.3.3 Drill Cadence & Evidence (binding)
@@ -529,7 +546,7 @@ ______________________________________________________________________
 **State:** Schemas live in `packages/udocket_core/events/schemas.py`, fixtures under `tests/platform/events/fixtures/`. **|**
 **Failures & handling:** Schema drift fails UI contract tests; mismatched payloads trigger `UI_SSE_SCHEMA_MISMATCH` alerts. **|**
 **Observability:** SSE schema version dashboards, Playwright SSE contract tests, UI telemetry `ui_event_sse_payload_validation_total`. **|**
-**Breadcrumbs:** Publishers `apps/platform/events/*.py`, UI widget `packages/udocket_ui/components/job_status_ticker.tsx`, tests `tests/e2e/test_job_status_widget.py`. **|**
+**Breadcrumbs:** Publishers `apps/platform/events/*.py`, UI widget `packages/udocket_ui/components/job_status_ticker.tsx`, tests `tests/e2e/test_job_status_widget.py`.
 
 ### A.1 SSE event payloads (JSON)
 

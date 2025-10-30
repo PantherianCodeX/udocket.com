@@ -208,8 +208,7 @@ def make_rounded_backplates(root: etree._Element, radius: float = 12.0) -> bool:
             return
         sibling_paths = [
             sibling for sibling in parent
-            if isinstance(sibling.tag, str)
-            and sibling.tag == f"{SVG}path"
+            if sibling.tag == f"{SVG}path"
             and sibling is not path
             and sibling.get("stroke") not in (None, "none")
         ]

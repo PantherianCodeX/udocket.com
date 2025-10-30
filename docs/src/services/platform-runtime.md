@@ -190,21 +190,7 @@ curl -i -X OPTIONS \
 **State:** Schema lives in `spec/schemas/api_error.schema.json`; generated clients (Python/TypeScript) consume it; Spectral rules lint OpenAPI bundles. **|**
 **Failures & handling:** Divergent error codes fail the docs lint and Spectral checks; releases block until fixed. **|**
 **Observability:** Metrics `api_error_total{code}` and audit events record frequency; dashboards alert on unknown codes. **|**
-**Breadcrumbs:** Schema `spec/schemas/api_error.schema.json`, lint rules `ops/openapi/rules/apierror-enum.yaml`, tests `tests/platform/api/test_api_error_schema.py`.
-
-| Code | Description |
-|---|---|
-| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
-| `QUARANTINED` | Artifact is quarantined and unavailable. |
-| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
-| `VALIDATION_ERROR` | Input payload failed validation. |
-| `AUTH_ERROR` | Authentication error (legacy umbrella code). |
-| `AUTH_CLOCK_SKEW` | HMAC timestamp outside allowed skew window. |
-| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch. |
-| `NOT_FOUND` | Resource not found or not visible. |
-| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
-| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
-| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
+**Breadcrumbs:** Schema `spec/schemas/api_error.schema.json`, lint rules `ops/openapi/rules/apierror-enum.yaml`, tests `tests/platform/api/test_api_error_schema.py`. Canonical code definitions live in §3.3.
 
 #### 3.1.4 Rate-limit response (normative)
 
@@ -368,7 +354,54 @@ metadata:
 
 All namespaces must declare the restricted baseline; violations are blocked by admission controllers and surfaced via `pod_security_violation_total`.
 
-### 3.3 TLS posture (binding) {#33-tls-posture}
+### 3.3 API Error Codes (binding) {#33-api-error-codes}
+
+**Purpose:** Keep API consumers, SDKs, and monitoring dashboards aligned on the standardized `ApiError.code` values. **|**
+**Contract:** All REST and GraphQL surfaces emit one of the enumerated codes below; additions require schema (`spec/schemas/api_error.schema.json`) and Spectral rule (`ops/openapi/rules/apierror-enum.yaml`) updates before deployment. **|**
+**State:** Platform Runtime owns the canonical code catalog; generated clients consume the same enumeration and raise on unknown values. **|**
+**Failures & handling:** Emitting an unknown code fails Spectral lint, triggers `api_error_unknown_total`, and blocks rollout until the catalog updates. **|**
+**Observability:** Metrics `api_error_total{code}`, synthetic probes, and alert rules `api_error_unknown_total`/`api_error_rate_spike_total` track drifts. **|**
+**Breadcrumbs:** Schema `spec/schemas/api_error.schema.json`, middleware `apps/platform/api/errors.py`, tests `tests/platform/api/test_api_error_schema.py`, dashboards “API Gateway – Errors”. **|**
+**References:** Settings spec §3.4, Guardian spec §2.2, Notifications spec §3.3, Ops runbooks `RB-API-GATEWAY-ERROR`.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `POLICY_BLOCK` | Guardian, residency, or settings policy prevented the action. | Surface `details.reason`, remediate policy or obtain an approved waiver before retrying. |
+| `QUARANTINED` | Artifact quarantined for manual review or remediation. | Hold follow-on actions until Guardian releases the artifact; do not retry automatically. |
+| `INTEGRITY_ERROR` | Hash or ETag validation failed for the submitted content. | Recompute digests, re-upload content, and avoid blind retries without correcting the payload. |
+| `VALIDATION_ERROR` | Request payload failed schema or semantic validation. | Inspect `details[]`, correct the offending fields, and resubmit the request. |
+| `AUTH_ERROR` | Caller failed authentication or presented an expired token. | Re-authenticate, ensure the correct audience, and retry with a fresh credential. |
+| `AUTH_CLOCK_SKEW` | `X-Timestamp` fell outside the permitted ±120 second window. | Synchronize system clocks (NTP/Chrony) and retry with an accurate timestamp. |
+| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch or revoked key identifier. | Regenerate the canonical string, rotate keys if necessary, and retry with a valid signature. |
+| `NOT_FOUND` | Resource missing, masked by RLS, or already archived. | Treat as terminal; refresh indices or scope before retrying with a new identifier. |
+| `CONFLICT` | Optimistic concurrency or idempotency conflict detected. | Fetch the latest state, update the payload or `Idempotency-Key`, and retry once. |
+| `RATE_LIMIT` | Rate, quota, or budget exceeded for the caller. | Honor `Retry-After`, apply exponential backoff, and present throttling feedback to operators. |
+| `PROVIDER_DEGRADED` | Downstream dependency unavailable or circuit breaker open. | Implement retry with jitter respecting `Retry-After`; surface degraded status to operators. |
+
+HTTP mapping examples (informative):
+
+- `409 CONFLICT`: `code="CONFLICT"` (stale `version`, duplicate idempotency signature).
+- `412 PRECONDITION_FAILED`: `code="INTEGRITY_ERROR"` (hash mismatch) or `code="POLICY_BLOCK"` (portal invalidation, Guardian override).
+- `429 TOO_MANY_REQUESTS`: `code="RATE_LIMIT"` (RPM/token ceiling); include `Retry-After` header and `details.retry_after_ms` when known.
+- `503 SERVICE_UNAVAILABLE`: `code="PROVIDER_DEGRADED"` (dependency outage, provider throttle).
+
+Client retry guidance (normative):
+
+| Error code | Typical cause | Client action |
+|---|---|---|
+| `CONFLICT` + stale `version` | Optimistic concurrency failure | Re-fetch state, apply latest `version`, retry mutation. |
+| `CONFLICT` + idempotency mismatch | Replayed `Idempotency-Key` with new payload | Regenerate key; ensure body matches original request before retrying. |
+| `RATE_LIMIT` | Per-org or per-user quota exceeded | Honor `Retry-After`, apply exponential backoff, surface warning to operators. |
+| `POLICY_BLOCK` | Guardian or residency guard denied action | Present Guardian reasons, resolve policy violation, retry only after remediation. |
+| `QUARANTINED` | Guardian quarantined artifact or deliverable | Require manual review/unquarantine before retry. |
+| `INTEGRITY_ERROR` | Hash/ETag mismatch on upload/download | Recompute hash, re-upload source, avoid blind retries. |
+| `AUTH_CLOCK_SKEW` | Request timestamp outside tolerance | Sync system clock; retry with corrected timestamp. |
+
+All error responses include `X-Request-ID`; callers must log the value for support. Services echo the `Idempotency-Key` header when present to aid replay diagnostics.
+
+<a id="33-tls-posture"></a>
+
+### 3.4 TLS posture (binding) {#34-tls-posture}
 
 - TLS 1.3 is the platform default (`security.tls.min_version=TLSv1.3`). TLS 1.2 appears only when `security.tls.legacy_exceptions[]` entries specify endpoint, justification, and expiry ≤ 30 days. Settings activation rejects longer windows and alerts seven days before expiry to force review.
 - FIPS mode (`security.tls.fips_mode=true`) restricts cipher suites to AES-GCM (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`). Performance mode (`security.tls.performance_mode=true`) may enable `TLS_CHACHA20_POLY1305_SHA256` but must record the exception in release checklists. Synthetic handshake job `scripts/security/check_tls_ciphers.py` runs per deploy and nightly to enforce the profile.
@@ -387,7 +420,9 @@ metadata:
 
 Mesh and ingress templates consume the same Settings bundles so routing surfaces stay consistent across services.
 
-### 3.4 Service-to-service request signing (binding) {#34-service-to-service-request-signing}
+<a id="34-service-to-service-request-signing"></a>
+
+### 3.5 Service-to-service request signing (binding) {#35-service-to-service-request-signing}
 
 **Purpose:** Authenticate privileged inter-service calls that traverse trust boundaries. **|**
 **Contract:** All mutating requests between platform services (Guardian, Signer, Settings activation, worker control APIs, etc.) MUST include the HMAC headers defined here; receivers validate the signature, enforce timestamp skew, and pair the request with an `Idempotency-Key` when present. **|**
@@ -416,7 +451,9 @@ canonical = [
 
 Receivers recompute the digest with the secret referenced by `X-Signature-Key-Id`, compare using constant-time equality, and record signature metrics. Replay protection combines the `Idempotency-Key` with a short-lived cache (default TTL 24 hours) so identical requests return cached responses.
 
-#### 3.4.1 Key rotation flows (binding) {#341-hmac-key-rotation}
+<a id="341-hmac-key-rotation"></a>
+
+#### 3.5.1 Key rotation flows (binding) {#351-hmac-key-rotation}
 
 **Purpose:** Rotate HMAC credentials without interrupting signed traffic. **|**
 **Contract:** Rotations follow a dual-publish → cutover → revoke pattern; evidence lands in `ops/security/key_rotation/` alongside Grafana snapshots. **|**

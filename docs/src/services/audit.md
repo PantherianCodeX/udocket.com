@@ -134,6 +134,24 @@ ______________________________________________________________________
 - Seal runner `ops/audit/seal_runner.py` and verifier `ops/audit/verify_seal_chain.py` operate hourly; results persisted under `AUDIT_SEAL` artifacts.
 - Retention jobs `ops/privacy/retention_runner.py` consume audit logs to build `ERASURE_JOURNAL`/`DESTRUCTION_CERT` artifacts.
 
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Document Audit & Evidence `ApiError.code` emissions so downstream services and auditors can apply the correct remediation flow. **|**
+**Contract:** Audit APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and surface the codes below for domain-specific failures. **|**
+**State:** Codes originate from `apps/platform/audit/api.py` and ledger services, with matching audit events appended to `ops/audit/ops_audit.jsonl`. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and contract tests; runtime emissions trigger `audit_api_error_total{code}` alerts. **|**
+**Observability:** Metrics `audit_api_error_total{code}` and dashboards “Audit Seal Integrity” / “Compliance Evidence” monitor error rates; synthetic DSAR drills confirm semantics. **|**
+**Breadcrumbs:** API handlers `apps/platform/audit/api.py`, waiver service `apps/platform/compliance/waiver.py`, DSAR runner `ops/privacy/dsar_runner.py`, tests `tests/platform/audit/test_api_errors.py`. **|**
+**References:** Platform Runtime §3.3, Guardian spec §2.3, Settings spec §7.3.
+
+| Code | Scenario | Client guidance |
+|---|---|---|
+| `POLICY_BLOCK` | Legal hold, residency, or waiver guard prevents evidence release or deletion. | Surface Guardian/waiver reason, engage RB-AUDIT-004 or RB-WAIVER-GOV before retrying. |
+| `QUARANTINED` | Evidence quarantined pending Guardian/manual review. | Escalate to Guardian reviewers; do not retry until quarantine cleared. |
+| `INTEGRITY_ERROR` | Seal manifest hash mismatch or immutable sink divergence detected. | Rebuild manifests via `ops/audit/rebuild_manifest.py`, regenerate seal, retry once integrity restored. |
+| `VALIDATION_ERROR` | Waiver/DSAR payload fails schema or policy validation. | Inspect `details[]`, correct input, resubmit. |
+| `NOT_FOUND` | Evidence bundle absent or redacted per retention policy. | Treat as terminal; refresh catalog or request prior version rather than retrying blindly. |
+
 ______________________________________________________________________
 
 ## 4) State Management (binding) {#4-immutable-storage--replication}

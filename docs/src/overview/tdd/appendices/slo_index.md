@@ -235,7 +235,7 @@ ______________________________________________________________________
 - **API availability:** ≥99.9% monthly success rate for read/write operations (`settings_request_total` vs `settings_error_total`). Breaches trigger RB-GOV-008 and freeze releases until the budget recovers. **|**
 - **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw. **|**
 - **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys. **|**
-- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-* and requires waiver or remediation before continuing. **|**
+- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-* and requires waiver or remediation before continuing.
 
 ### [Web Application & Portal](../../../apps/web-app.md)
 

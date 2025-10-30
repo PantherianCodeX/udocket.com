@@ -78,7 +78,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 layout with appendices for schema and error taxonomies. Per-agent responsibilities live in §2; pipeline contracts, tooling, and LangGraph runtime details live in §3; operational guardrails are in §§5–8.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/langgraph-agents.md` plus targeted lints (`scripts/docs/link_check.py --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
 - **Change protocol:** Any change that alters agent outputs, pipeline structure, or QA gating must update this spec, cite relevant ADRs, and include LangGraph acceptance test results in the PR description. Guardian/Security approvals are mandatory for policy or residency-impacting edits.
-- **References:** TDD §6 summary, Settings Registry spec §5, LLM Registry spec §2, Worker Cluster spec §3, Ops Runbooks `RB-AGENT-*`, QA harness documentation in tests README.
+- **References:** TDD §6 summary, Settings Registry spec §5, LLM Registry spec §2, Worker Cluster spec §3, Ops Runbooks `RB-AGENT-\*`, QA harness documentation in tests README.
 - **Contacts:** Applied AI Engineering (primary owners), Platform Architecture (co-owners), Operations Eng (shadow mode), Guardian (safety), `#langgraph-agents` Slack, on-call alias `agents-oncall@`.
 
 ______________________________________________________________________
@@ -183,7 +183,25 @@ ______________________________________________________________________
 - Activation safety: contract tests validate schema hashes, stage wiring, and GraphRunner compatibility before promotion. Activations follow blue/green rollout; manifests capture which orgs completed cutover.
 - Versioning: stage definitions are additive; prior versions remain callable for queued jobs & replays until Guardian signs off; deletion blocked until archival manifests exist.
 
-### 3.3 LangGraph Tool Registry & Onboarding (binding)
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Enumerate LangGraph agent `ApiError.code` values so service clients, worker orchestration, and UI flows respond deterministically. **|**
+**Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
+**State:** Responses originate from `apps/platform/agents/views.py`, pipeline runtime `packages/udocket_core/agents/runtime.py`, and Guardian adapters; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
+**Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/agents/test_agent_errors.py`; runtime emissions trigger `agent_api_error_total{code="unknown"}` alerts. **|**
+**Observability:** Dashboards “Agents – Launch API” and “Agents – Guardian Blocks” chart `agent_api_error_total{code}`, `agent_guardian_block_total`; synthetic launches follow the pause/resume flows. **|**
+**Breadcrumbs:** Controllers `apps/platform/agents/views.py`, runtime orchestrator `packages/udocket_core/agents/runtime.py`, Guardian bridge `packages/udocket_core/agents/guardian.py`, tests `tests/platform/agents/test_launch_api.py`. **|**
+**References:** Platform Runtime §3.3, Settings spec §5.4, Worker Cluster spec §3.4, Guardian spec §2.3, Ops runbooks `RB-AGENT-SHADOW`, `RB-JOB-WATCHDOG`.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `POLICY_BLOCK` | Guardian/residency guard or waiver policy rejected a pipeline launch or artifact promotion. | Present Guardian reason codes, remediate policy inputs, or seek waiver approval before retrying. |
+| `CONFLICT` | Idempotency key replay with different payload or stale manifest `version`. | Read the latest manifest, regenerate the payload, and retry with a fresh `Idempotency-Key`. |
+| `PROVIDER_DEGRADED` | LLM provider or speech service unavailable; fallback chain exhausted. | Record degraded status, halt automatic retries, and resume once health probes report recovery. |
+| `QUARANTINED` | Generated artifact or intermediate output quarantined pending Guardian review. | Route to reviewer workflow, capture remediation notes, and relaunch only after clearance. |
+| `RATE_LIMIT` | Org/agent concurrency or FinOps budget limit exceeded. | Honour `Retry-After`, shed background runs, and reschedule once budget resets. |
+
+### 3.4 LangGraph Tool Registry & Onboarding (binding)
 
 - Catalog stored in `agents.tools.catalog[]` with each entry describing `{tool_id, description, input_schema, output_schema, binding, timeout_seconds, cost_profile_id, residency_classification, pii_classification, idempotent?, tool_idempotency_key}`.
 - Validators ensure JSON Schema compliance, unique IDs, deterministic idempotency keys, and safe retry budgets. Non-idempotent tools require `max_attempts=1`.
@@ -191,14 +209,14 @@ ______________________________________________________________________
 - Activation runs schema validation, dry-run LangGraph graphs using the tool, and telemetry registration checks (`tool_invocation_total`, `tool_cost_estimate_total`).
 - Audit: tool changes recorded in ops manifests with `{tool_id, version, schema_sha256}`, linked to ADR or waiver when policy/residency impacted.
 
-### 3.4 Conversational Assistant Pipelines (binding)
+### 3.5 Conversational Assistant Pipelines (binding)
 
 - Assistant pipelines (`assistant.staff`, `assistant.client`, future variants) share the same activation flow as task agents. Nodes include retrieval, guardrails, responder lanes, moderation, and post-processing writers.
 - Settings overrides: `assistant.retrieval.sources[]`, `assistant.voice.*`, `assistant.moderation.*` allow org-level tuning within validator limits; lane structure changes remain SYSTEM-only.
 - QA: conversational replay harness replays standardized transcripts and portal conversations; acceptance tests assert retrieval scope, guardrail triggers, and moderation escalations.
 - Safety: assistant lanes inherit Guardian gating (no unreviewed deliverables), and replays ensure disclaimers + audit logs cover instructions/responses.
 
-### 3.5 LangGraph Runtime Contracts (normative)
+### 3.6 LangGraph Runtime Contracts (normative)
 
 - GraphRunner compiles LangGraph graphs to Python callables, stores compiled graphs keyed by `{pipeline_id, graph_version}`, and enforces deterministic node execution with replayable checkpoints.
 - Nodes record checkpoint digests (input + output hashes); retries compare digests to avoid duplicate work; concurrency locks ensure stage-level OCC.
@@ -429,7 +447,7 @@ ______________________________________________________________________
 - Settings spec §5 (agent configuration keys)
 - LLM Registry spec §2 (provider selection, residency)
 - Worker Cluster spec §3 (job orchestration)
-- Ops runbooks `RB-AGENT-*`
+- Ops runbooks `RB-AGENT-\*`
 - ADR-0003 Localization & Policy Engine, ADR-0001 Guardian READY/QUARANTINED
 
 ______________________________________________________________________

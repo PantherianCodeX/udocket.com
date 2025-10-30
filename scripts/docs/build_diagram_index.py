@@ -17,7 +17,13 @@ ROOT_PATH = str(SCRIPT_DIR.parent.parent)
 if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
 
-from scripts.docs import doc_utils  # type: ignore  # noqa: E402
+from scripts.docs.doc_utils import (  # noqa: E402
+    read_markdown_lines,
+    parse_front_matter,
+    derive_doc_label,
+    stringify,
+    replace_marked_section,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
@@ -116,11 +122,11 @@ def collect_diagrams() -> Dict[Path | None, list[Diagram]]:
 def owner_display(owner_doc: Path | None) -> str:
     if owner_doc is None:
         return "Unattributed"
-    lines = doc_utils.read_markdown_lines(owner_doc)
-    front = doc_utils.parse_front_matter(lines)
-    title = doc_utils.stringify(front.get("title", ""))
+    lines = read_markdown_lines(owner_doc)
+    front = parse_front_matter(lines)
+    title = stringify(front.get("title", ""))
     fallback = owner_doc.relative_to(SRC_DIR).as_posix()
-    return doc_utils.derive_doc_label(title, fallback=fallback)
+    return derive_doc_label(title, fallback=fallback)
 
 
 def build_groups(diagrams: Dict[Path | None, list[Diagram]]) -> list[OwnerGroup]:
@@ -190,7 +196,7 @@ def build_content() -> str:
     groups = build_groups(diagrams)
     appendix_text = APPENDIX_FILE.read_text(encoding="utf-8")
     generated = render_groups(groups)
-    return doc_utils.replace_marked_section(appendix_text, BEGIN_MARKER, END_MARKER, generated)
+    return replace_marked_section(appendix_text, BEGIN_MARKER, END_MARKER, generated)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

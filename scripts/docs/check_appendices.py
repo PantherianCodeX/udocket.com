@@ -15,7 +15,11 @@ ROOT_DIR = SCRIPT_DIR.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
-from scripts.docs import doc_utils  # type: ignore  # noqa: E402
+from scripts.docs.doc_utils import (  # noqa: E402
+    parse_front_matter,
+    stringify,
+    yaml,
+)
 
 DEFAULT_ROOT = Path("docs/src/overview/tdd/appendices")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
@@ -75,7 +79,7 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
 def _select_first(front_matter: dict[str, object], keys: Sequence[str]) -> str:
     for key in keys:
         if key in front_matter:
-            return doc_utils.stringify(front_matter.get(key, ""))
+            return stringify(front_matter.get(key, ""))
     return ""
 
 
@@ -83,15 +87,15 @@ def expected_fields(front_matter: dict[str, object]) -> "OrderedDict[str, str]":
     base: "OrderedDict[str, str]" = OrderedDict()
     for label, keys in FIELD_MAPPINGS:
         base[label] = _select_first(front_matter, keys)
-    base["Approved by"] = doc_utils.stringify(front_matter.get("approved_by", ""))
-    base["Approved date"] = doc_utils.stringify(front_matter.get("approved_date", ""))
+    base["Approved by"] = stringify(front_matter.get("approved_by", ""))
+    base["Approved date"] = stringify(front_matter.get("approved_date", ""))
     for key, value in front_matter.items():
         if key in EXCLUDED_FRONT_MATTER_KEYS or key in BASE_FIELD_ALIASES or key in {"approved_by", "approved_date"}:
             continue
         normalized = key.replace("_", " ").replace("-", " ").title()
         if normalized in base:
             continue
-        base[normalized] = doc_utils.stringify(value)
+        base[normalized] = stringify(value)
     return base
 
 
@@ -116,7 +120,7 @@ def locate_document_controls(lines: list[str]) -> tuple[int, list[str]] | None:
 def check_document(path: Path) -> list[str]:
     issues: list[str] = []
     text = path.read_text(encoding="utf-8")
-    front_matter = doc_utils.parse_front_matter(text.splitlines())
+    front_matter = parse_front_matter(text.splitlines())
     lines = text.splitlines()
 
     if not front_matter:
@@ -176,7 +180,7 @@ def main() -> int:
     if not targets:
         print("[check-appendices] no markdown targets found", file=sys.stderr)
         return 1
-    if doc_utils.yaml is None:
+    if yaml is None:
         print("[check-appendices] PyYAML is required to validate appendices", file=sys.stderr)
         return 1
 

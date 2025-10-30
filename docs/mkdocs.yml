@@ -63,6 +63,7 @@ nav:
   - Appendices:
     - Glossary: overview/tdd/appendices/glossary.md
     - Status Mapping: overview/tdd/appendices/status-mapping.md
+    - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
     - SLO Index: overview/tdd/appendices/slo_index.md
     - Diagrams: overview/tdd/appendices/diagrams.md
 - PRD:
@@ -72,7 +73,7 @@ nav:
   - Web App: apps/web-app.md
 - Services:
   - Platform Runtime: services/platform-runtime.md
-  - Observability: services/logging.md
+  - Observability: services/observability.md
   - Audit & Evidence: services/audit.md
   - Identity & Access: services/identity.md
   - Worker Cluster: services/worker-cluster.md

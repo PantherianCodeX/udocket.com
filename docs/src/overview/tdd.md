@@ -438,7 +438,7 @@ ______________________________________________________________________
 **State:** Tokens, org/case membership, masking profiles, secure views, and break-glass events remain governed by the identity spec. **|**
 **Failures & handling:** IdP failover, RLS GUC gaps, masking violations, and device-binding issues follow the runbooks catalogued there. **|**
 **Observability:** Dashboards and metrics (`identity.md §8`) provide the authoritative signals; other services consume them via shared telemetry. **|**
-**Breadcrumbs:** Identity spec, Settings (`security.*`, `identity.*`), Worker cluster watchdogs, Guardian policy integrations. **|**
+**Breadcrumbs:** Identity spec, Settings (`security.*`, `identity.*`), Worker cluster watchdogs, Guardian policy integrations.
 
 ### 4.1 Integration highlights (informative)
 
@@ -1018,7 +1018,7 @@ Platform runtime owns the authoritative REST, pagination, idempotency, and SSE/W
 
 ### 10.2 Artifact/job/review endpoints (summary)
 
-Artifact CRUD semantics, download guards, and approval workflows live in [`../services/platform-runtime.md §3.1.8`](../services/platform-runtime.md#318-artifact-endpoints-binding) alongside Guardian/Digital Signer responsibilities. Job creation/control behaviour—including cancellation and retry contracts—is defined in [`../services/worker-cluster.md §3.6`](../services/worker-cluster.md#36-job-lifecycle-endpoints-binding). Review endpoints continue to defer to Guardian’s approval rules (`../services/guardian.md §3`).
+Artifact CRUD semantics, download guards, and approval workflows live in [`../services/platform-runtime.md §3.1.8`](../services/platform-runtime.md#318-artifact-endpoints-binding) alongside Guardian/Digital Signer responsibilities. Job creation/control behaviour—including cancellation and retry contracts—is defined in [`../services/worker-cluster.md §3.7`](../services/worker-cluster.md#37-job-lifecycle-endpoints-binding). Review endpoints continue to defer to Guardian’s approval rules (`../services/guardian.md §3`).
 
 ### 10.3 Upload lifecycle & idempotency model
 
@@ -1175,28 +1175,12 @@ Binding breadcrumbs:
 
 ### 10.7 Error model and codes (normative)
 
-*Purpose: Provide a consistent envelope and code semantics across services.*
+*Purpose: Keep service documentation aligned on a shared error envelope while delegating canonical code ownership to the Platform Runtime specification and per-service appendices.*
 
-- Envelope (binding):
 - Envelope (binding): HTTP error payloads MUST validate against `spec/schemas/api_error.schema.json`. Runtime code in Django/FastAPI imports Pydantic models generated from that schema during the build pipeline so the schema remains the single source of truth. Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
-- HTTP mapping examples:
-  - `409 CONFLICT`: `code="CONFLICT"` (idempotency mismatch, stale OCC version, job kind busy).
-  - `412 PRECONDITION_FAILED`: `code="INTEGRITY_ERROR"` (hash mismatch) or `code="POLICY_BLOCK"` (portal invalidation).
-  - `429 TOO_MANY_REQUESTS`: `code="RATE_LIMIT"` (rate ceilings, token budgets); include `Retry-After`, rate-limit headers per §10.5 and `details.retry_after_ms` when known.
-  - `503 SERVICE_UNAVAILABLE`: `code="PROVIDER_DEGRADED"` (circuit open, dependency outage).
+- Code catalog: [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `python scripts/docs/build_api_error_index.py`.
 - Headers: always emit `X-Request-ID`; add `Retry-After`, `Deprecation`, `Sunset`, and rate-limit headers when applicable. Error payloads are included in Spectral lint checks (§10.5).
-
-Client retry guidance (normative)
-
-| Error code | Typical cause | Client action |
-|---|---|---|
-| `CONFLICT` + stale `version` | Optimistic concurrency failure | Re-fetch resource, apply latest state, retry with updated `expected_version` |
-| `CONFLICT` + idempotency mismatch | Replayed key with different payload | Generate a new `Idempotency-Key`; ensure request body matches original |
-| `RATE_LIMIT` | Per-org/IP quota exceeded | Honor `Retry-After` header; exponential backoff |
-| `POLICY_BLOCK` | Guardian/portal policy violation | Surface message to operator; resolve underlying policy issue before retrying |
-| `QUARANTINED` | Guardian rejected artifact | Present remediation reasons; require manual fix |
-| `INTEGRITY_ERROR` | Hash/ETag mismatch | Re-upload/file new hash; do not retry blindly |
-| `AUTH_CLOCK_SKEW` (401) | Request timestamp outside ±120 s | Re-sync clock; retry with corrected time |
+- Client guidance: follow the retry/stop rules documented in each service spec’s API error section; SDKs surface the same behaviour via typed exceptions.
 
 ### 10.8 Stream events & replay (normative)
 
@@ -1287,7 +1271,7 @@ ______________________________________________________________________
 
 **Purpose:** Summarize the platform-wide observability and evidence posture while delegating implementation details to dedicated specifications.\
 **Contract:** All teams follow the Logging specification for runtime telemetry and the Audit specification for immutable evidence. This TDD calls out the expectations at a glance; consult the service docs for binding mechanics.\
-**Observability & Logging spec:** [`../services/logging.md`](../services/logging.md) governs schema, pipeline topology, trace correlation, access controls, redaction, sampling and cost guardrails. Key platform metrics continue to include `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `trace_sampling_rate`, and `logging_volume_budget_violation_total`.
+**Observability & Logging spec:** [`../services/observability.md`](../services/observability.md) governs schema, pipeline topology, trace correlation, access controls, redaction, sampling and cost guardrails. Key platform metrics continue to include `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `trace_sampling_rate`, and `logging_volume_budget_violation_total`.
 **Audit & Evidence spec:** [`../services/audit.md`](../services/audit.md) defines manifest formats, append-only stores, seal verification, waiver ledgers, DSAR journals, and immutable sink requirements. Critical indicators remain `audit_worm_lag_seconds`, `audit_seal_errors_total`, and `audit_manifest_missing_total`.
 **Settings keys:** Telemetry and audit toggles surface under `logging.*`, `audit.*`, and `privacy.*`; changes require dual approvals and documentation in their respective specs.
 **Runbooks:** Operational responses reference RB-LOG-007, RB-AUDIT-004, RB-MASK, RB-COST, and RB-TRACE-CORR in `../ops/runbooks.md`.
@@ -2248,7 +2232,7 @@ ______________________________________________________________________
 
 - [Platform Runtime §3.1](../services/platform-runtime.md#31-environment-topology) keeps the authoritative `ApiError.code` catalog, rate-limit and deprecation response examples, and the required header matrices for REST and CORS interactions.
 - [Platform Runtime §3.4](../services/platform-runtime.md#34-service-to-service-request-signing) documents the HMAC request-signing contract (headers, canonical string, replay safeguards) and [§3.4.1](../services/platform-runtime.md#341-hmac-key-rotation) captures key rotation flows and denial procedures.
-- [Worker Cluster §3.3–§3.6](../services/worker-cluster.md#33-idempotency-store-replay-headers) define the idempotency store, job SSE replay behaviour, and upload finalization schema used by SDKs and operators.
+- [Worker Cluster §3.4–§3.7](../services/worker-cluster.md#34-idempotency-store-replay-headers) define the idempotency store, job SSE replay behaviour, and upload finalization schema used by SDKs and operators.
 - [Guardian §3.6](../services/guardian.md#36-review-rest-endpoints-binding) owns the review REST endpoints and associated optimistic-locking rules.
 - [Digital Signer §3.1](../services/digital-signer.md#digital-signer-external-interfaces) provides the canonical signing and verification request examples.
 

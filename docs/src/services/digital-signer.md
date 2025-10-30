@@ -78,7 +78,7 @@ ______________________________________________________________________
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py` and `python scripts/docs/link_check.py --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
 - **Change protocol:** Modifying signature policies, TSA/OCSP profiles, or trust-root rotations demands dual approval (Security + Architecture) and an update to this spec plus the relevant runbooks.
-- **References:** TDD §7.2 (summary), ADR-0001, ADR-0002, ADR-0003, Ops runbooks `RB-SIGN-*`.
+- **References:** TDD §7.2 (summary), ADR-0001, ADR-0002, ADR-0003, Ops runbooks `RB-SIGN-\*`.
 - **Contacts:** Security Engineering (service owner), Platform Architecture (co-owner), on-call list `signer-oncall@`.
 
 ______________________________________________________________________
@@ -117,7 +117,7 @@ ______________________________________________________________________
 **State:** `deliverable` rows capture `{status, signature_manifest, tsa_token_hash, policy_id}`; auxiliary tables store TSA/OCSP evidence and client acknowledgement artifacts. **|**
 **Failures & handling:** Pipeline stages failing validation leave deliverables in `PENDING_SIGNATURE`, emit `SIGNING_PIPELINE_BLOCKED`, and trigger §5.1 remediate-or-rollback steps. **|**
 **Observability:** Metrics `signer_request_latency_seconds`, `signer_queue_depth`, `signature_manifest_error_total` plus audit JSONL records; dashboards highlight pipeline stage latency and error distribution. **|**
-**References:** §3 API contract, §4 State management, `ops/runbooks/signer/pipeline_block.md`. **|**
+**References:** §3 API contract, §4 State management, `ops/runbooks/signer/pipeline_block.md`.
 **Breadcrumbs:** Implementation `apps/platform/operations/signer.py::issue_signed_document`, packager `packages/udocket_core/signer/packager.py`, tests `tests/platform/operations/test_signer_pipeline.py`.
 
 - Canonical stages:
@@ -138,7 +138,7 @@ ______________________________________________________________________
 **State:** Policies reside in Settings bundles and are denormalized into manifests; client attestations create `CLIENT_SIGNATURE_CERT` or `CLIENT_ATTESTATION` records linked to deliverables. **|**
 **Failures & handling:** Missing attestations, expired SLAs, or policy downgrades block release and route through `RB-SIGN-ACK` (§8.1). **|**
 **Observability:** Metrics `signature_policy_violation_total`, `client_ack_pending_total`, dashboards “Deliverable Signatures” and “Portal Acknowledgements”; SSE events `deliverable.client_ack_required`. **|**
-**References:** §4.2 Certificate storage, §5.3 Policy mismatch failure mode, Guardian spec §5.2. **|**
+**References:** §4.2 Certificate storage, §5.3 Policy mismatch failure mode, Guardian spec §5.2.
 **Breadcrumbs:** Policy resolver `apps/platform/operations/signer_policy.py`, portal workflow `apps/platform/portal/acknowledgement.py`, tests `tests/platform/operations/test_signature_policy.py::test_client_ack_enforced`.
 
 - Default mappings:
@@ -157,7 +157,7 @@ ______________________________________________________________________
 **State:** Certificates + key identifiers persist in Settings (`sign.trust_roots[]`, `sign.hsm.key_id`), manifest metadata, and audit artifacts `SIGN_TRUST_ROOTS@<version>`. **|**
 **Failures & handling:** Attestation failure, expired CMVP certificate, or key drift halts signing, triggers `RB-SIGN-TRUSTROTATE`, and pages Security. **|**
 **Observability:** Metrics `sign_hsm_attestation_status`, `sign_trust_root_version`, CI job `ci-fips-scan`, and runbook evidence stored under `ops/security/key_rotation/`. **|**
-**References:** §7 Security & compliance, §8 Operational notes, ADR-0002. **|**
+**References:** §7 Security & compliance, §8 Operational notes, ADR-0002.
 **Breadcrumbs:** HSM integration `apps/platform/operations/signer_hsm.py`, trust-root rotation script `ops/scripts/security/rotate_signing_keys.py`, tests `tests/platform/operations/test_signer_modes.py::test_pkcs7_and_cades`.
 
 - Settings `sign.trust_mode ∈ {internal, hybrid, external}` controls certificate exposure. Default `hybrid` issues platform signatures plus qualified provider cross-certification; `external` restricts to public PKI for regulated deployments; `internal` reserved for sandbox/private clusters.
@@ -172,7 +172,7 @@ ______________________________________________________________________
 **State:** TSA tokens and OCSP proofs persist alongside signatures in manifests; cached responses stored in Redis with TTL. **|**
 **Failures & handling:** Expired responses or unreachable responders raise `SIGN_VERIFY_SOFT_FAIL` (deliverable still available) and escalate to `SIGN_REVOKE_STATUS_UNKNOWN` after the soft window, quarantining portals (§5.1). **|**
 **Observability:** Metrics `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`; alerts `ocsp_unreachable_total`, `tsa_drift_seconds`. **|**
-**References:** §5.1 OCSP/TSA outage, §8.1 Runbooks & rotations. **|**
+**References:** §5.1 OCSP/TSA outage, §8.1 Runbooks & rotations.
 **Breadcrumbs:** Validator `packages/udocket_core/signer/verification.py`, cache `packages/udocket_core/signer/cache.py`, tests `tests/platform/operations/test_signer_verification.py`.
 
 <figure class="full-width-diagram">
@@ -223,6 +223,24 @@ curl -X POST https://platform.local/api/v1/sign \
 - Settings activation (`sign.*`) pushes trust-root, TSA/OCSP, and waiver configuration; activation lints invoke signer contract tests before enabling changes.
 - Evidence store writers, manifest generators, and ack processors share the internal API layer `packages/udocket_core/signer/*`, ensuring deterministic manifests and audit append-only logs.
 
+### 3.3 API Error Codes (binding)
+
+**Purpose:** Enumerate signer-specific `ApiError.code` values so service consumers and monitoring can distinguish signing failures from upstream transport issues. **|**
+**Contract:** Digital Signer emits the platform baseline codes (`POLICY_BLOCK`, `PROVIDER_DEGRADED`, etc.) plus the scenarios below when signature policy, manifest integrity, or replay rules fail. **|**
+**State:** Codes originate from `apps/platform/signer/api.py`, worker pipeline guards, and replay tooling; audit events append to `ops/signer/signature_ops.jsonl`. **|**
+**Failures & handling:** Unknown codes fail contract tests and block deploys; Alertmanager routes `signer_api_error_total{code}` spikes to RB-SIGN-INCIDENT. **|**
+**Observability:** Dashboards “Signer & TSA”, metrics `signer_api_error_total{code}`, `signer_signature_policy_violation_total`, and synthetic signing drills capture error distribution. **|**
+**Breadcrumbs:** API handlers `apps/platform/signer/api.py`, manifest validator `packages/udocket_core/signer/manifest.py`, replay utilities `ops/scripts/signer/replay_signature.py`, tests `tests/platform/operations/test_signer_api.py`. **|**
+**References:** Platform Runtime §3.3, Settings spec §3.4, Guardian spec §2.2.
+
+| Code | Scenario | Client guidance |
+|---|---|---|
+| `SIGNATURE_MANIFEST_INVALID` | Manifest hash mismatch, missing TSA evidence, or unsupported format detected before release. | Investigate manifest diff, regenerate evidence via `ops/signer/validate_manifests.py`, retry submission. |
+| `SIGNING_PIPELINE_BLOCKED` | Signing queue halted due to FIPS waiver expiry, trust-root drift, or Guardian quarantine. | Follow RB-SIGN-INCIDENT / RB-SIGN-TSA, refresh waivers or trust roots, resubmit once pipeline resumes. |
+| `SIGNATURE_POLICY_MISMATCH` | Requested policy does not match Settings (`sign.signature_policies[]`) or deliverable class. | Align request payload with active policy or update Settings; avoid blind retries. |
+| `SIGN_IDEMPOTENCY_CONFLICT` | Replayed signing request with differing payload or digest. | Generate new `Idempotency-Key`, ensure canonical payload remains unchanged, retry once. |
+| `SIGNATURE_REPLAY_MISMATCH` | Replay verification detected output drift versus stored manifest. | Quarantine artifact, run replay validation (`ops/scripts/signer/replay_signature.py`), remediate before reissuing. |
+
 ______________________________________________________________________
 
 ## 4) State Management
@@ -242,7 +260,7 @@ ______________________________________________________________________
 **State:** Postgres tables `deliverable`, `signatures`, `auxiliary_artifact`, plus object storage buckets `deliverables/<case>/<artifact_id>/signed.pdf`. Redis caches short-lived OCSP responses. **|**
 **Failures & handling:** Missing manifest fields or mismatched digests cause `SIGNATURE_MANIFEST_INVALID`; deliverable promotion blocked until corrected. **|**
 **Observability:** Metric `signature_manifest_invalid_total`, audits `MANIFEST_FIX_APPLIED`; nightly validators (`scripts/signer/validate_manifests.py`) ensure schema parity. **|**
-**References:** §2.1 Pipeline, §5 Failure modes, Appendix D schemas. **|**
+**References:** §2.1 Pipeline, §5 Failure modes, Appendix D schemas.
 **Breadcrumbs:** Manifest writer `packages/udocket_core/signer/manifest.py`, evidence store `packages/udocket_core/signer/evidence.py`, tests `tests/platform/operations/test_manifest_integrity.py`.
 
 ### 4.2 Key, certificate, and waiver records (binding)
@@ -252,7 +270,7 @@ ______________________________________________________________________
 **State:** Settings snapshots embed `sign.trust_roots[]`, `sign.ocsp.profiles[]`, `sign.tsa.profiles[]`; waiver ledger stored in `ops/security/waivers/signing/*.yaml` and mirrored in App.O decision logs. **|**
 **Failures & handling:** Expired waivers trigger `signature_waiver_expiring_total` alerts; signing disabled until renewed or removed. **|**
 **Observability:** Dashboard “Signer & TSA” exposes trust-root version, waiver counts; alerts `sign_trust_root_expiring_total`, `signature_waiver_active_total`. **|**
-**References:** §7 Security & compliance, §8 Operational notes. **|**
+**References:** §7 Security & compliance, §8 Operational notes.
 **Breadcrumbs:** Settings activation pipeline `apps/platform/settings/services/signature.py`, waiver automation `ops/scripts/security/check_signer_waivers.py`, tests `tests/platform/operations/test_signer_waivers.py`.
 
 ### 4.3 Caching, idempotency, and replay tooling (normative)
@@ -357,7 +375,7 @@ ______________________________________________________________________
 **Failures & handling:** Stale playbooks, missing rotation artifacts, or failed release gates block deployment until remediation and evidence capture. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
-**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks `RB-SIGN-*`.
+**References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks `RB-SIGN-\*`.
 
 ### 8.1 Operational Posture (binding)
 
@@ -377,7 +395,7 @@ ______________________________________________________________________
 ### 8.2 Incident Triggers (binding)
 
 **Purpose:** Map alerts and dashboards to signer playbooks so responders act immediately. **|**
-**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed `RB-SIGN-*` identifiers; on-call documents evidence before clearing incidents. **|**
+**Contract:** Alert definitions (`infra/monitoring/signer-prometheus-rules.yaml`) embed `RB-SIGN-\*` identifiers; on-call documents evidence before clearing incidents. **|**
 **State:** Alert payloads record activation IDs, key versions, and waiver references under `ops/security/incidents/signer_<date>.jsonl`. **|**
 **Failures & handling:** Missing annotations or misrouted alerts require follow-up tasks and lint updates. **|**
 **Observability:** Grafana “Signer & TSA”, PagerDuty routing, synthetic TSA/OCSP checks. **|**
@@ -392,7 +410,7 @@ ______________________________________________________________________
 ### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
-**Contract:** Alerts map to `RB-SIGN-*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
+**Contract:** Alerts map to `RB-SIGN-\*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
 **State:** Runbooks `ops/runbooks/signer/`, drill evidence `ops/security/key_rotation/<timestamp>/`, tabletop notes `ops/change/signer_rotations.ics`. **|**
 **Failures & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**

@@ -85,7 +85,7 @@ ______________________________________________________________________
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
 <a id="rb-sign-"></a>
-**Contract:** Alerts map to `RB-SIGN-*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
+**Contract:** Alerts map to `RB-SIGN-\*` playbooks; quarterly drills rehearse trust-root renewal, TSA failover, FIPS recovery, and client acknowledgement remediation. **|**
 **State:** Runbooks `ops/runbooks/signer/`, drill evidence `ops/security/key_rotation/<timestamp>/`, tabletop notes `ops/change/signer_rotations.ics`. **|**
 **Failures & handling:** Stale runbooks or missing drill evidence block release sign-off until refreshed. **|**
 **Observability:** Docs lint, PagerDuty analytics, Ops governance dashboards. **|**
@@ -252,7 +252,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 
 **Purpose:** Keep LLM runbooks actionable and drills on cadence. **|**
 <a id="rb-llm-"></a>
-**Contract:** Alerts map to `RB-LLM-*` runbooks; quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence scenarios. **|**
+**Contract:** Alerts map to `RB-LLM-\*` runbooks; quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence scenarios. **|**
 **State:** Runbooks `ops/runbooks/llm/*.md`, drill evidence `ops/llm/drills/<date>/summary.md`, waiver logs in App.O. **|**
 **Failures & handling:** Missing evidence or outdated steps block release sign-off until updated. **|**
 **Observability:** Docs lint, drill calendar `ops/change/llm_rotations.ics`, Ops governance dashboards. **|**
@@ -292,43 +292,6 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Quarterly drills cover provider failover, moderation outage, FinOps budget breach, and replay divergence with evidence in `ops/llm/drills/<date>/summary.md`.
 - Drill calendar `ops/change/llm_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until evidence captured.
 - Docs lint and Ops governance dashboards verify runbook freshness and evidence uploads prior to production changes.
-
-## Observability — 8.3 Runbooks & Drills (binding) {#observability-logging-8-3-runbooks-drills-binding}
-
-**Purpose:** Ensure playbooks stay current and executed. **|**
-<a id="rb-log-007"></a>
-<a id="rb-trace-corr"></a>
-<a id="rb-cost"></a>
-<a id="rb-mask"></a>
-**Contract:** Runbooks RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK reviewed quarterly; ingest/seal drills recorded as `AUDIT_DRILL` artifacts. **|**
-**State:** Runbook repo `docs/src/ops/runbooks/`, drill evidence under `ops/logging/drills/<date>/`. **|**
-**Failures & handling:** Missed reviews trigger compliance ticket and block release sign-off. **|**
-**Observability:** Drill completion dashboard, metric `logging_drill_overdue_total`. **|**
-**Breadcrumbs:** Runbook catalog, drill scripts `ops/logging/drill_runner.py`. **|**
-**References:** Audit §5, Compliance policy.
-
-### Observability — 8.3.1 Runbook Index {#observability-logging-8-3-1-runbook-index}
-
-- `logging_ingest_lag_seconds` → RB-LOG-007  
-- `trace_sampling_drift_total` → RB-TRACE-CORR  
-- `logging_volume_budget_violation_total` → RB-COST  
-- `logging_neverlog_violation_total` → RB-MASK
-
-### Observability — 8.3.2 Primary Runbooks {#observability-logging-8-3-2-primary-runbooks}
-
-**Purpose:** Summarize top-tier playbooks. **|**
-**Contract:** Maintain up-to-date steps, owners, evidence collection. **|**
-**State:** RB-LOG-007 (ingest triage), RB-TRACE-CORR (trace drift), RB-COST (budget control), RB-MASK (redaction incident). **|**
-**Failures & handling:** Stale runbooks flagged during quarterly review; blocking for release until updated. **|**
-**Observability:** Runbook freshness tracker. **|**
-**Breadcrumbs:** `docs/src/ops/runbooks/logging/`. **|**
-**References:** Incident governance policy.
-
-### Observability — 8.3.3 Drill Cadence & Evidence {#observability-logging-8-3-3-drill-cadence-evidence}
-
-- Quarterly ingest + seal tabletop; evidence stored under `ops/logging/drills/<date>/ingest.md`.
-- Semi-annual trace correlation live drill with synthetic failure.
-- Annual cost-control drill verifying sampling overrides and alerting.
 
 ## Localization & Policy Engine — 8.3 Runbooks & Drills (binding) {#localization-policy-engine-8-3-runbooks-drills-binding}
 
@@ -373,7 +336,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 
 **Purpose:** Keep playbooks executable and drills current for core notification scenarios. **|**
 <a id="rb-notify-"></a>
-**Contract:** Alerts map to `RB-NOTIFY-*` runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
+**Contract:** Alerts map to `RB-NOTIFY-\*` runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
 **State:** Runbooks `ops/runbooks/notifications/*.md`, drill evidence `ops/notifications/drills/<date>/summary.md`. **|**
 **Failures & handling:** Missing drill evidence or outdated steps block change approval until updated. **|**
 **Observability:** Docs lint, Ops governance dashboards, drill scheduler reports. **|**
@@ -413,6 +376,43 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Quarterly drills cover provider failover, webhook compromise, STOP/HELP surge, and token abuse scenarios with evidence stored in `ops/notifications/drills/<date>/`.
 - Drill scheduler `ops/scripts/notifications/schedule_drills.py` tracks cadence; missed drills block change approvals until evidence uploaded.
 - Docs lint and Ops governance dashboards verify runbook freshness and drill completion ahead of production changes.
+
+## Observability — 8.3 Runbooks & Drills (binding) {#observability-8-3-runbooks-drills-binding}
+
+**Purpose:** Ensure playbooks stay current and executed. **|**
+<a id="rb-log-007"></a>
+<a id="rb-trace-corr"></a>
+<a id="rb-cost"></a>
+<a id="rb-mask"></a>
+**Contract:** Runbooks RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK reviewed quarterly; ingest/seal drills recorded as `AUDIT_DRILL` artifacts. **|**
+**State:** Runbook repo `docs/src/ops/runbooks/`, drill evidence under `ops/logging/drills/<date>/`. **|**
+**Failures & handling:** Missed reviews trigger compliance ticket and block release sign-off. **|**
+**Observability:** Drill completion dashboard, metric `logging_drill_overdue_total`. **|**
+**Breadcrumbs:** Runbook catalog, drill scripts `ops/logging/drill_runner.py`. **|**
+**References:** Audit §5, Compliance policy.
+
+### Observability — 8.3.1 Runbook Index {#observability-8-3-1-runbook-index}
+
+- `logging_ingest_lag_seconds` → RB-LOG-007  
+- `trace_sampling_drift_total` → RB-TRACE-CORR  
+- `logging_volume_budget_violation_total` → RB-COST  
+- `logging_neverlog_violation_total` → RB-MASK
+
+### Observability — 8.3.2 Primary Runbooks {#observability-8-3-2-primary-runbooks}
+
+**Purpose:** Summarize top-tier playbooks. **|**
+**Contract:** Maintain up-to-date steps, owners, evidence collection. **|**
+**State:** RB-LOG-007 (ingest triage), RB-TRACE-CORR (trace drift), RB-COST (budget control), RB-MASK (redaction incident). **|**
+**Failures & handling:** Stale runbooks flagged during quarterly review; blocking for release until updated. **|**
+**Observability:** Runbook freshness tracker. **|**
+**Breadcrumbs:** `docs/src/ops/runbooks/logging/`. **|**
+**References:** Incident governance policy.
+
+### Observability — 8.3.3 Drill Cadence & Evidence {#observability-8-3-3-drill-cadence-evidence}
+
+- Quarterly ingest + seal tabletop; evidence stored under `ops/logging/drills/<date>/ingest.md`.
+- Semi-annual trace correlation live drill with synthetic failure.
+- Annual cost-control drill verifying sampling overrides and alerting.
 
 ## Platform Runtime — 8.3 Runbooks & Drills (binding) {#platform-runtime-8-3-runbooks-drills-binding}
 
@@ -545,7 +545,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 <a id="rb-notify-"></a>
 <a id="rb-upload-scan"></a>
 <a id="rb-case-import"></a>
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`.
+**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-\*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`.
 
 ### Worker Cluster — 8.3.1 Runbook Index (informative) {#worker-cluster-8-3-1-runbook-index-informative}
 
@@ -588,7 +588,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 <a id="rb-lpe-locale-gap"></a>
 <a id="rb-notify-"></a>
 <a id="rb-chat-abuse"></a>
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`.
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-\*`, `RB-CHAT-ABUSE`.
 
 ### Web Application & Portal — 8.3.1 Runbook Index (informative) {#web-application-portal-8-3-1-runbook-index-informative}
 
@@ -597,7 +597,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 | `RB-JOB-WATCHDOG` | SSE/worker watchdog remediation | Coordinates with worker cluster for stalled jobs |
 | `RB-PORTAL-INVALIDATION` | Token revocation / portal link cleanup | Revokes signed URLs, notifies clients, captures evidence |
 | `RB-LPE-LOCALE-GAP` | Localization/accessibility gap | Partners with LP Engine for missing locales or accessibility gaps |
-| `RB-NOTIFY-*` | Delivery incidents | Aligns portal alerts with outbound notifications |
+| `RB-NOTIFY-\*` | Delivery incidents | Aligns portal alerts with outbound notifications |
 | `RB-CHAT-ABUSE` | Assistant abuse or moderation escalation | Disables assistants, gathers evidence for Security |
 
 ### Web Application & Portal — 8.3.2 Primary Runbooks (binding) {#web-application-portal-8-3-2-primary-runbooks-binding}
@@ -614,7 +614,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - `RB-JOB-WATCHDOG` — Restores SSE sessions, resumes watchdog automation, and coordinates backlog remediation.
 - `RB-PORTAL-INVALIDATION` — Revokes signed URLs, reissues secure links, and documents evidence for auditors.
 - `RB-LPE-LOCALE-GAP` — Triages localization/accessibility deficits with LP Engine and revalidates fallback artefacts.
-- `RB-NOTIFY-*` — Synchronizes portal state with outbound notifications when delivery issues surface.
+- `RB-NOTIFY-\*` — Synchronizes portal state with outbound notifications when delivery issues surface.
 - `RB-CHAT-ABUSE` — Freezes assistants, escalates to Guardian, and captures moderation evidence.
 
 ### Web Application & Portal — 8.3.3 Drill Cadence & Evidence (binding) {#web-application-portal-8-3-3-drill-cadence-evidence-binding}

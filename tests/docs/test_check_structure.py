@@ -11,6 +11,8 @@ from scripts.docs import check_structure as cs
 from scripts.docs import doc_utils
 from scripts.docs.check_structure import (
     SectionSpec,
+    TableRowSpec,
+    TableSpec,
     build_front_matter_index,
     build_template_spec,
     check_document_controls,
@@ -67,8 +69,7 @@ approved_date:
 **Failures & handling:** Template **|**
 **Observability:** Template **|**
 **Breadcrumbs:** Template **|**
-**References:** Template **|**
-
+**References:** Template
 ## 2) Responsibilities
 **Purpose:** Template **|**
 **Contract:** Template **|**
@@ -76,8 +77,7 @@ approved_date:
 **Failures & handling:** Template **|**
 **Observability:** Template **|**
 **Breadcrumbs:** Template **|**
-**References:** Template **|**
-
+**References:** Template
 ## 3) Extras
 
 Body text.
@@ -236,8 +236,7 @@ approved_date:
 **Failures & handling:** Template **|**
 **Observability:** Template **|**
 **Breadcrumbs:** Template **|**
-**References:** Template **|**
-
+**References:** Template
 ## 2) Responsibilities
 **Purpose:** Template **|**
 **Contract:** Template **|**
@@ -245,13 +244,133 @@ approved_date:
 **Failures & handling:** Template **|**
 **Observability:** Template **|**
 **Breadcrumbs:** Template **|**
-**References:** Template **|**
-
+**References:** Template
 ## 3) Extras
 Body text.
 """
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def test_extract_tables_optional_rows() -> None:
+    lines = [
+        "| Col | Value |",
+        "| --- | --- |",
+        "| foo | bar |",
+        "| [optional] baz | qux |",
+    ]
+
+    tables = cs.extract_tables(lines, 0, len(lines), allow_optional_tags=True)
+
+    assert len(tables) == 1
+    assert tables[0].rows[0].first_cell == "foo"
+    assert tables[0].rows[1].first_cell == "baz"
+    assert tables[0].rows[1].optional is True
+
+
+def test_find_template_override_success(tmp_path: Path) -> None:
+    override = tmp_path / "override.md"
+    override.write_text("template", encoding="utf-8")
+
+    resolved = cs.find_template(tmp_path, override)
+
+    assert resolved == override.resolve()
+
+
+def test_build_template_spec_handles_trailing_heading(tmp_path: Path) -> None:
+    template = tmp_path / "_template.md"
+    template.write_text("## 1) Section\n**Purpose:** Text\n", encoding="utf-8")
+
+    specs = cs.build_template_spec(template)
+
+    assert specs[0].title.strip().startswith("1) Section")
+
+
+def test_template_with_trailing_divider_rejected(tmp_path: Path) -> None:
+    template = TEMPLATE_CONTENT.replace("**References:** Template", "**References:** Template **|**")
+    template_path = _write(tmp_path / "_template.md", template)
+
+    with pytest.raises(RuntimeError):
+        build_template_spec(template_path)
+
+
+def test_validate_sections_flags_unexpected_divider(tmp_path: Path, template_path: Path) -> None:
+    document = _write(
+        tmp_path / "service.md",
+        TEMPLATE_CONTENT.replace("**References:** Template", "**References:** Template **|**")
+    )
+
+    specs = build_template_spec(template_path)
+    issues = validate_sections(document, specs, document.read_text(encoding="utf-8").splitlines())
+
+    assert any("must not end" in issue for issue in issues)
+
+
+def test_validate_sections_flags_trailing_space_star(tmp_path: Path, template_path: Path) -> None:
+    document = _write(
+        tmp_path / "service.md",
+        TEMPLATE_CONTENT.replace("**References:** Template", "**References:** Template *")
+    )
+
+    specs = build_template_spec(template_path)
+    issues = validate_sections(document, specs, document.read_text(encoding="utf-8").splitlines())
+
+    assert any("must not end with ' *'" in issue for issue in issues)
+
+
+def test_validate_sections_table_errors() -> None:
+    spec = SectionSpec(
+        numbering=(1,),
+        level=2,
+        title="1) Section",
+        preamble_order=("Purpose",),
+        preamble_requires_marker={"Purpose": True},
+        tables=(
+            TableSpec(
+                header=("Col",),
+                rows=(TableRowSpec(first_cell="foo", optional=False),),
+            ),
+        ),
+    )
+
+    no_table_lines = ["## 1) Section", "**Purpose:** Demo **|**"]
+    issues = cs.validate_sections(Path("doc.md"), [spec], no_table_lines)
+    assert any("missing table" in issue for issue in issues)
+
+    header_only_lines = [
+        "## 1) Section",
+        "**Purpose:** Demo **|**",
+        "| Col |",
+        "| --- |",
+    ]
+    issues = cs.validate_sections(Path("doc.md"), [spec], header_only_lines)
+    assert any("must contain at least one data row" in issue for issue in issues)
+
+    wrong_row_lines = [
+        "## 1) Section",
+        "**Purpose:** Demo **|**",
+        "| Col |",
+        "| --- |",
+        "| other |",
+    ]
+    issues = cs.validate_sections(Path("doc.md"), [spec], wrong_row_lines)
+    assert any("missing row 'foo'" in issue for issue in issues)
+
+
+def test_validate_sections_heading_with_anchor() -> None:
+    spec = SectionSpec(
+        numbering=(1,),
+        level=2,
+        title="1) Heading",
+        preamble_order=("Purpose",),
+        preamble_requires_marker={"Purpose": False},
+        tables=(),
+    )
+    lines = ["## 1) Heading {#anchor}", "**Purpose:** Demo"]
+
+    issues = cs.validate_sections(Path("doc.md"), [spec], lines)
+
+    assert issues == []
 
 
 def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -413,8 +532,7 @@ def test_heading_mismatch_detected(tmp_path: Path, template_path: Path) -> None:
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -422,8 +540,7 @@ def test_heading_mismatch_detected(tmp_path: Path, template_path: Path) -> None:
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -445,8 +562,7 @@ def test_heading_level_mismatch_detected(tmp_path: Path, template_path: Path) ->
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ### 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -454,8 +570,7 @@ def test_heading_level_mismatch_detected(tmp_path: Path, template_path: Path) ->
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -477,8 +592,7 @@ def test_structure_validation_passes_with_matching_headings(tmp_path: Path, temp
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -486,8 +600,7 @@ def test_structure_validation_passes_with_matching_headings(tmp_path: Path, temp
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -509,8 +622,7 @@ def test_structure_validation_allows_binding_suffix(tmp_path: Path, template_pat
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities (informative)
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -518,8 +630,7 @@ def test_structure_validation_allows_binding_suffix(tmp_path: Path, template_pat
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -541,8 +652,7 @@ def test_structure_validation_rejects_unknown_suffix(tmp_path: Path, template_pa
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -550,8 +660,7 @@ def test_structure_validation_rejects_unknown_suffix(tmp_path: Path, template_pa
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -573,8 +682,7 @@ def test_title_case_allows_acronyms(tmp_path: Path, template_path: Path) -> None
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -582,8 +690,7 @@ def test_title_case_allows_acronyms(tmp_path: Path, template_path: Path) -> None
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -606,8 +713,7 @@ def test_title_case_rejects_lowercase_word(tmp_path: Path, template_path: Path) 
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -615,8 +721,7 @@ def test_title_case_rejects_lowercase_word(tmp_path: Path, template_path: Path) 
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -637,8 +742,7 @@ def test_preamble_missing_entry_detected(tmp_path: Path, template_path: Path) ->
 **State:** Doc **|**
 **Failures & handling:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -646,8 +750,7 @@ def test_preamble_missing_entry_detected(tmp_path: Path, template_path: Path) ->
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -670,8 +773,7 @@ def test_preamble_extra_entry_detected(tmp_path: Path, template_path: Path) -> N
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
 **References:** Doc **|**
-**Extra:** Doc **|**
-
+**Extra:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -679,8 +781,7 @@ def test_preamble_extra_entry_detected(tmp_path: Path, template_path: Path) -> N
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -702,8 +803,7 @@ def test_preamble_requires_marker(tmp_path: Path, template_path: Path) -> None:
 **Failures & handling:** Doc **|**
 **Observability:** Doc
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -711,8 +811,7 @@ def test_preamble_requires_marker(tmp_path: Path, template_path: Path) -> None:
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 Body text.
 """,
@@ -734,8 +833,7 @@ def test_no_preamble_allowed(tmp_path: Path, template_path: Path) -> None:
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 2) Responsibilities
 **Purpose:** Doc **|**
 **Contract:** Doc **|**
@@ -743,8 +841,7 @@ def test_no_preamble_allowed(tmp_path: Path, template_path: Path) -> None:
 **Failures & handling:** Doc **|**
 **Observability:** Doc **|**
 **Breadcrumbs:** Doc **|**
-**References:** Doc **|**
-
+**References:** Doc
 ## 3) Extras
 **Purpose:** Should not be here **|**
 Body text.

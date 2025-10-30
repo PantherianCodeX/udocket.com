@@ -124,6 +124,24 @@ Use this section to orient readers before they dive into the specification. It s
 
 > Capture internal modules, background jobs, or queues.
 
+### 3.3 API Error Codes
+
+**Purpose:** Summarize the app-specific API error responses exposed to clients beyond the platform baseline. **|**
+**Contract:** Describe how UI/front-end surfaces map backend `ApiError.code` values to messaging, retries, and blocking flows. **|**
+**State:** Reference shared schemas, enums, or configuration files that define these codes. **|**
+**Failures & handling:** Document how the UI reacts (retry, disable, escalate) per code. **|**
+**Observability:** Note dashboards, metrics, or synthetic tests that watch for error spikes or unknown codes. **|**
+**Breadcrumbs:** Link to controllers, view logic, and tests covering the behaviours. **|**
+**References:** Always link to Platform Runtime §3.3 and supporting service specs.
+
+> Introduce the table with context for consumers, then enumerate codes using the canonical header.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| [optional] `EXAMPLE_CODE` | Replace with a concise scenario description. | Outline whether clients retry, escalate, or abort. |
+
+> Mark optional template rows with `[optional]` so implementations can omit them while preserving structure.
+
 ## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**

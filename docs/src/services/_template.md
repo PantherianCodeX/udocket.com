@@ -124,6 +124,24 @@ Use this section to orient readers before they dive into the specification. It s
 
 > Capture intra-service modules, background jobs, or queues.
 
+### 3.3 API Error Codes
+
+**Purpose:** Summarize service-specific `ApiError.code` values beyond the platform baseline so consumers understand remediation paths. **|**
+**Contract:** Document deterministic mappings between failure scenarios and codes, including retry/stop guidance and required headers. **|**
+**State:** Reference the schema, enumerations, or configuration artifacts that own these codes. **|**
+**Failures & handling:** Highlight operational responses when the service emits each code. **|**
+**Observability:** Identify metrics, dashboards, and alerts that track error-code usage and unknown emissions. **|**
+**Breadcrumbs:** Link to implementation modules, middleware, and test coverage enforcing the contract. **|**
+**References:** Always link to Platform Runtime §3.3 (canonical catalog) plus adjacent specs or ADRs.
+
+> Provide a brief paragraph summarizing how callers should consume these codes, then enumerate them in the standard table below.
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| [optional] `EXAMPLE_CODE` | Replace with a concise scenario description. | Describe whether clients retry, escalate, or stop. |
+
+> Prefix optional template rows with `[optional]` so downstream docs may omit them without failing structure checks.
+
 ## 4) State Management
 
 **Purpose:** Explain storage and configuration strategy. **|**
