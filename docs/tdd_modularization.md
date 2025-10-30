@@ -103,7 +103,7 @@ Each service, app, or agent document will follow a shared, **standardized set of
 
 #### Phase 0 enforcement checklist
 
-* Retrofit all existing service specs (`services/guardian.md`, `services/settings.md`, `services/lp-engine.md`, `services/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`0) Reading guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
+* Retrofit all existing service specs (`services/guardian.md`, `services/settings.md`, `services/lp-engine.md`, `services/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`Reading Guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
 * Normalize `## 8) Operational Notes` to include the standard subsections (`### 8.1 Operational Posture`, `### 8.2 Incident Triggers`, `### 8.3 Runbooks & Drills` with nested index/primary/cadence, `### 8.4 Migrations & Backfills`, `### 8.5 Operational Workflows`). Relocate legacy “Appendix R” content into those subsections and call out intentional omissions in-line when a subsection does not apply.
 * Capture any missing sections, absent breadcrumbs, or deviations in a shared Phase 0 worksheet so we can resolve gaps before Phase 1 migrations.
 * Treat Guardian as the first remediation target, then sweep remaining service specs once its structure is compliant.
@@ -127,7 +127,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `0) Reading guide`, which stays free-form orientation text. Use `python scripts/docs/check_structure.py docs/src/services` to confirm compliance before submitting PRs.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python scripts/docs/check_structure.py docs/src/services` to confirm compliance before submitting PRs.
 
 #### Standardized section preamble
 

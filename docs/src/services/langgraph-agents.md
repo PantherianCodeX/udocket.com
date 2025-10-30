@@ -70,20 +70,6 @@ ______________________________________________________________________
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
-**Section Requirements (binding):**
-    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
-    - Section tags: `(binding)`, `(normative)` or `(informative)`
-    - Links resolve: §/App./ADR (`docs-link-check`)
-    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
-    - Settings keys: Document/code are in-sync
-    - All requirements are CI gated
-
-**Section tags:**
-    - `(binding)` denotes requirements that block launch until implemented and tested.
-    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
-    - `(informative)` provides background or examples.
-    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
-
 ______________________________________________________________________
 
 ## Reading Guide

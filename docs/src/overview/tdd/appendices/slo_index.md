@@ -172,7 +172,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Observability & Logging](../../../services/logging.md)
+### [Observability](../../../services/observability.md)
 
 **Purpose:** Outline ingestion, mirroring, correlation, and cost objectives that keep observability trustworthy. **|**
 **Contract:** Log ingestion, immutable mirroring, trace correlation, and cost budgets must satisfy the thresholds below before deploy gates reopen. **|**

@@ -85,20 +85,6 @@ ______________________________________________________________________
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
-**Section Requirements (binding):**
-    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
-    - Section tags: `(binding)`, `(normative)` or `(informative)`
-    - Links resolve: §/App./ADR (`docs-link-check`)
-    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
-    - Settings keys: Document/code are in-sync
-    - All requirements are CI gated
-
-**Section tags:**
-    - `(binding)` denotes requirements that block launch until implemented and tested.
-    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
-    - `(informative)` provides background or examples.
-    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
-
 ## Canonical vocabulary (binding)
 
 **Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
@@ -141,7 +127,7 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading Guide
 
 - **Scope:** Entire platform lifecycle (design → operations → governance).
 - **Structure:** Numbered sections with ≤3 levels of depth; appendices mirror section numbers for reference artifacts.
@@ -1301,7 +1287,7 @@ ______________________________________________________________________
 
 **Purpose:** Summarize the platform-wide observability and evidence posture while delegating implementation details to dedicated specifications.\
 **Contract:** All teams follow the Logging specification for runtime telemetry and the Audit specification for immutable evidence. This TDD calls out the expectations at a glance; consult the service docs for binding mechanics.\
-**Observability & Logging spec:** [`../services/logging.md`](../services/logging.md) governs schema, pipeline topology, trace correlation, access controls, redaction, sampling, and cost guardrails. Key platform metrics continue to include `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `trace_sampling_rate`, and `logging_volume_budget_violation_total`.
+**Observability spec:** [`../services/observability.md`](../services/observability.md) governs schema, pipeline topology, trace correlation, access controls, redaction, sampling, and cost guardrails. Key platform metrics continue to include `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `trace_sampling_rate`, and `logging_volume_budget_violation_total`.
 **Audit & Evidence spec:** [`../services/audit.md`](../services/audit.md) defines manifest formats, append-only stores, seal verification, waiver ledgers, DSAR journals, and immutable sink requirements. Critical indicators remain `audit_worm_lag_seconds`, `audit_seal_errors_total`, and `audit_manifest_missing_total`.
 **Settings keys:** Telemetry and audit toggles surface under `logging.*`, `audit.*`, and `privacy.*`; changes require dual approvals and documentation in their respective specs.
 **Runbooks:** Operational responses reference RB-LOG-007, RB-AUDIT-004, RB-MASK, RB-COST, and RB-TRACE-CORR in `../ops/runbooks.md`.

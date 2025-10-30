@@ -73,20 +73,6 @@ ______________________________________________________________________
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
-**Section Requirements (binding):**
-    - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`scripts/docs/lint_docs.py --check-template`)
-    - Section tags: `(binding)`, `(normative)` or `(informative)`
-    - Links resolve: §/App./ADR (`docs-link-check`)
-    - Document validation: `python scripts/docs/lint_docs.py` (see `docs/README.md` for tooling)
-    - Settings keys: Document/code are in-sync
-    - All requirements are CI gated
-
-**Section tags:**
-    - `(binding)` denotes requirements that block launch until implemented and tested.
-    - `(normative)` captures default behaviors that may evolve via waivers or roadmap.
-    - `(informative)` provides background or examples.
-    - When a subsection omits a tag it is treated as informative by default—add the explicit tag when the content carries binding or normative weight.
-
 ______________________________________________________________________
 
 ## Reading Guide
@@ -871,13 +857,13 @@ class SettingDefinition(BaseModel):
 | `storage.remote_hash.enabled` | ORG\|CASE   | false | Record remote hashes for batch inputs; §5.3. |
 | `storage.remote_hash.max_mb` | ORG\|CASE   | 50 | Max remote bytes to hash; §5.3. |
 | `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
-| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../services/logging.md#4-log-schema--redaction). |
-| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §6`](../services/logging.md#6-access-control--auditing). |
-| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../services/logging.md#7-cost-management--budgets). |
-| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../services/logging.md#7-cost-management--budgets). |
-| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Logging §7`](../services/logging.md#7-cost-management--budgets). |
-| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Logging §7`](../services/logging.md#7-cost-management--budgets). |
-| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Logging §4.2`](../services/logging.md#42-client--portal-telemetry). |
+| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../services/observability.md#4-log-schema--redaction). |
+| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §6`](../services/observability.md#6-access-control--auditing). |
+| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
+| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
+| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
+| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
+| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Logging §4.2`](../services/observability.md#42-client--portal-telemetry). |
 | `evidence_store.redacted_excerpts.enabled` | ORG | true | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2. |
 | `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, [`Audit §4`](../services/audit.md#4-immutable-storage--replication)). |
 | `llm.finops.guard.threshold_pct` | SYSTEM\|ORG | 10 | MoM regression ceiling for deploy gate; §8.7, §13.5. |
