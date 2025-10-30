@@ -79,7 +79,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading Guide
 
 - **Scope:** This spec owns immutable audit storage, structured evidence manifests, audit seals, judgment history, DSAR/waiver logging, and compliance traceability. It complements `../services/logging.md`, which focuses on runtime observability.
 - **Audience:** Compliance engineers, platform architects, Guardian/Signer teams, and auditors verifying evidence chains.

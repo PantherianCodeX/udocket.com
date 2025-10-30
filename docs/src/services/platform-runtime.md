@@ -307,29 +307,6 @@ Example error payload:
 
 - Mutations emit audit events, append to `ops_<agent>.jsonl`, and trigger Guardian or Signer workflows as appropriate.
 
-#### 3.1.9 ApiError code catalog (binding)
-
-**Purpose:** Keep API consumers, SDKs, and monitoring dashboards aligned on the standardized `ApiError.code` values. **|**
-**Contract:** All REST and GraphQL surfaces emit one of the enumerated codes below; additions require Spectral rule updates and SDK releases. **|**
-**State:** Authoritative schema lives at `spec/schemas/api_error.schema.json`; Spectral rule `ops/openapi/rules/apierror-enum.yaml` enforces parity across OpenAPI specs. **|**
-**Failures & handling:** Unknown codes fail lint and block deploys; runtime emitting an unexpected code triggers `api_error_unknown_total` alerts and requires hotfix. **|**
-**Observability:** Metrics `api_error_total{code}`, dashboards “API Gateway – Errors”, and synthetic probes replay canonical scenarios. **|**
-**Breadcrumbs:** Schema file `spec/schemas/api_error.schema.json`, middleware `apps/platform/api/errors.py`, tests `tests/platform/api/test_api_error_schema.py`.
-
-| Code | Description |
-|---|---|
-| `POLICY_BLOCK` | Guardian or settings policy prevented the action. |
-| `QUARANTINED` | Artifact is quarantined and unavailable. |
-| `INTEGRITY_ERROR` | Hash or integrity validation failed. |
-| `VALIDATION_ERROR` | Input payload failed validation. |
-| `AUTH_ERROR` | Authentication error (legacy umbrella code). |
-| `AUTH_CLOCK_SKEW` | HMAC timestamp outside allowed skew window. |
-| `AUTH_SIGNATURE_INVALID` | HMAC digest or key mismatch. |
-| `NOT_FOUND` | Resource not found or not visible. |
-| `CONFLICT` | Optimistic concurrency or idempotency conflict. |
-| `RATE_LIMIT` | Rate, quota, or budget exceeded. |
-| `PROVIDER_DEGRADED` | Downstream provider degraded/unavailable. |
-
 ### 3.2 Internal Interfaces (binding) {#32-reference-manifests}
 
 #### 3.2.1 Mesh egress allowlist (illustrative)

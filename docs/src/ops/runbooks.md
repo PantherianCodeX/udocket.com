@@ -293,7 +293,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Drill calendar `ops/change/llm_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until evidence captured.
 - Docs lint and Ops governance dashboards verify runbook freshness and evidence uploads prior to production changes.
 
-## Observability & Logging — 8.3 Runbooks & Drills (binding) {#observability-logging-8-3-runbooks-drills-binding}
+## Observability — 8.3 Runbooks & Drills (binding) {#observability-logging-8-3-runbooks-drills-binding}
 
 **Purpose:** Ensure playbooks stay current and executed. **|**
 <a id="rb-log-007"></a>
@@ -307,14 +307,14 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Breadcrumbs:** Runbook catalog, drill scripts `ops/logging/drill_runner.py`. **|**
 **References:** Audit §5, Compliance policy.
 
-### Observability & Logging — 8.3.1 Runbook Index {#observability-logging-8-3-1-runbook-index}
+### Observability — 8.3.1 Runbook Index {#observability-logging-8-3-1-runbook-index}
 
 - `logging_ingest_lag_seconds` → RB-LOG-007  
 - `trace_sampling_drift_total` → RB-TRACE-CORR  
 - `logging_volume_budget_violation_total` → RB-COST  
 - `logging_neverlog_violation_total` → RB-MASK
 
-### Observability & Logging — 8.3.2 Primary Runbooks {#observability-logging-8-3-2-primary-runbooks}
+### Observability — 8.3.2 Primary Runbooks {#observability-logging-8-3-2-primary-runbooks}
 
 **Purpose:** Summarize top-tier playbooks. **|**
 **Contract:** Maintain up-to-date steps, owners, evidence collection. **|**
@@ -324,7 +324,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Breadcrumbs:** `docs/src/ops/runbooks/logging/`. **|**
 **References:** Incident governance policy.
 
-### Observability & Logging — 8.3.3 Drill Cadence & Evidence {#observability-logging-8-3-3-drill-cadence-evidence}
+### Observability — 8.3.3 Drill Cadence & Evidence {#observability-logging-8-3-3-drill-cadence-evidence}
 
 - Quarterly ingest + seal tabletop; evidence stored under `ops/logging/drills/<date>/ingest.md`.
 - Semi-annual trace correlation live drill with synthetic failure.

@@ -1,5 +1,5 @@
 ---
-title: uDocket — Observability & Logging Specification
+title: uDocket — Observability Specification
 subtitle: Telemetry Pipeline, Log Access Controls, and Cost Guardrails
 author:
   - Observability Engineering Guild
@@ -37,7 +37,7 @@ header-includes:
         display: block;
       }
     </style>
-  - <header class="page-header">uDocket — Observability & Logging Specification <br>
+  - <header class="page-header">uDocket — Observability Specification <br>
     Telemetry Pipeline, Log Access Controls, and Cost Guardrails</header>
   - <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page
     <span class="page-number"></span> of <span class="page-count"></span></footer>
@@ -79,7 +79,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 0) Reading guide
+## Reading Guide
 
 - **Scope:** This specification governs the observability stack (logs, metrics, traces), structured logging schema, ingest pipeline, sampling and cost controls, and operator access workflows. Audit evidence, manifests, and seal pipelines are documented separately in `../services/audit.md`.
 - **Audience:** SRE, Platform, service owners, and compliance reviewers who need consistent telemetry behavior and log governance.
