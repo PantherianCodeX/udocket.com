@@ -185,7 +185,7 @@ ______________________________________________________________________
 **References:** LP Engine §2 (localization bundles), Settings §5.2 template keys.
 
 - Review timeout escalation (Settings `reviews.timeout_hours`) triggers notifications to reviewers and `org_admin`, recording audit `REVIEW_TIMEOUT_ESCALATED`.
-- Compliance templates for regulator/customer incidents tracked under `ops/runbooks/index.md`.
+- Compliance templates for regulator/customer incidents tracked under `ops/runbooks.md`.
 
 ### 2.6 In-app notifications & SSE fan-out (binding)
 
@@ -408,7 +408,7 @@ ______________________________________________________________________
 **State:** Runbooks under `ops/runbooks/notifications/`, drill evidence `ops/notifications/drills/<date>/`, DMARC onboarding reports `ops/notifications/dmarc/`, STOP/HELP audit logs in App.O. **|**
 **Failures & handling:** Stale playbooks, missed drills, or expired DMARC/SPF attestations trigger incidents and block change approvals. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Notifications Delivery” / “In-App Notifications”, alert `alert_notifications_delivery_health`. **|**
-**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, provider automation `ops/scripts/notifications/*.py`. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, drill scheduler `ops/scripts/notifications/schedule_drills.py`, provider automation `ops/scripts/notifications/*.py`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops governance policy App.N.
 
 ### 8.1 Operational Posture (binding)
@@ -528,7 +528,7 @@ ______________________________________________________________________
 - TDD overview summary — `../overview/tdd.md §11` (Notifications bullet list).
 - Settings Registry specification — `../services/settings.md §5.2` (notifications keys).
 - Localization & Policy Engine — `../services/lp-engine.md §2.1` (locale bundles for notifications).
-- Ops runbook catalog — `../ops/runbooks/index.md` (`RB-NOTIFY-*` entries).
+- Ops runbook catalog — `../ops/runbooks.md` (`RB-NOTIFY-*` entries).
 - ADR-0002 — API versioning & sunset policy for notification endpoints.
 - ADR-0003 — Localization & Policy Engine governance for templates.
 

@@ -27,7 +27,7 @@ All steps are wired into the `Docs Validation` GitHub workflow, so a clean run l
 
 ## Runbook catalog
 
-Runbook sections live in individual service specifications but are aggregated into `docs/src/ops/runbooks/index.md` for responders. To refresh the catalog:
+Runbook sections live in individual service specifications but are aggregated into `docs/src/ops/runbooks.md` for responders. To refresh the catalog:
 
 ```bash
 python scripts/docs/build_runbook_catalog.py

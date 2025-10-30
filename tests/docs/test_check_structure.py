@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+from textwrap import dedent
 
 import pytest
 
@@ -10,6 +11,7 @@ from scripts.docs import check_structure as cs
 from scripts.docs import doc_utils
 from scripts.docs.check_structure import (
     SectionSpec,
+    build_front_matter_index,
     build_template_spec,
     check_document_controls,
     ensure_template_requirements,
@@ -96,7 +98,7 @@ def test_parse_args_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
     args = cs_parse_args()
 
-    assert args.paths == [Path("docs/src/services")]
+    assert args.paths == [Path("docs/src")]
     assert args.template is None
     assert args.frontmatter is False
 
@@ -114,9 +116,17 @@ def test_find_template_override_missing(tmp_path: Path) -> None:
         cs.find_template(tmp_path, tmp_path / "missing.md")
 
 
+def test_find_template_search_failure(tmp_path: Path) -> None:
+    target = tmp_path / "docs" / "src"
+    target.mkdir(parents=True)
+    with pytest.raises(FileNotFoundError):
+        cs.find_template(target, None)
+
+
 def test_extract_numbering_variants() -> None:
     assert extract_numbering("1) Heading") == (1,)
     assert extract_numbering("2.3 Title") == (2, 3)
+    assert extract_numbering("3.1.4 Title") == (3, 1, 4)
     assert extract_numbering("Heading") is None
 
 
@@ -132,6 +142,28 @@ Paragraph text.
     lines = markdown.splitlines()
     entries = gather_preamble(lines, 1)
     assert entries[0][1] == "failure mode & handling"
+
+
+def test_build_front_matter_index_injects_primary(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = cs.key_variants
+
+    def fake_key_variants(value: str) -> Tuple[str, ...]:
+        return ("alias",)
+
+    monkeypatch.setattr(cs, "key_variants", fake_key_variants)
+    index = cs.build_front_matter_index({"Custom Key": "value"})
+    assert "custom_key" in index
+    monkeypatch.setattr(cs, "key_variants", original)
+
+
+def test_template_disabled_detection(tmp_path: Path) -> None:
+    empty_template = tmp_path / "_template.md"
+    empty_template.write_text("", encoding="utf-8")
+    assert cs.template_disabled(empty_template)
+
+    marker_template = tmp_path / "marker_template.md"
+    marker_template.write_text("<!-- template:disabled -->", encoding="utf-8")
+    assert cs.template_disabled(marker_template)
 
 
 def test_parse_front_matter_invalid_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -305,6 +337,69 @@ approved_date:
     captured = capsys.readouterr()
     assert rc == 0
     assert "synced front matter and document controls" in captured.out
+
+
+def test_main_skips_disabled_template(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    services = tmp_path / "docs" / "src" / "services"
+    services.mkdir(parents=True)
+    template = services / "_template.md"
+    template.write_text("<!-- template:disabled -->", encoding="utf-8")
+    doc = services / "service.md"
+    doc.write_text(
+        dedent(
+            """---
+            title: Sample
+            subtitle: Example
+            authors:
+              - Alice
+            version: 1.0
+            status: draft
+            classification: Confidential
+            last_updated: 2025-01-01
+            updated_by: Alice
+            owners:
+              - Team
+            reviewers:
+              - Reviewer
+            approvers:
+              - Approver
+            approved_by:
+            approved_date:
+            ---
+
+            ## Document Controls
+
+            | Field | Value |
+            | --- | --- |
+            | Authors | Alice |
+            | Version | 1.0 |
+            | Status | draft |
+            | Classification | Confidential |
+            | Last updated | 2025-01-01 |
+            | Updated by | Alice |
+            | Owners | Team |
+            | Reviewers | Reviewer |
+            | Approvers | Approver |
+            | Approved by |  |
+            | Approved date |  |
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cs,
+        "parse_args",
+        lambda: argparse.Namespace(paths=[doc], template=None, frontmatter=False),
+    )
+
+    rc = cs_main()
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "marked as disabled" in captured.err
 
 
 def test_heading_mismatch_detected(tmp_path: Path, template_path: Path) -> None:

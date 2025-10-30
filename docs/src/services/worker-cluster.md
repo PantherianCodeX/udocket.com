@@ -415,5 +415,5 @@ ______________________________________________________________________
 - LLM Registry specification — `../services/llm-registry.md`.
 - Notifications service specification — `../services/notifications.md`.
 - Transcription agent implementation — `packages/udocket_core/agents/transcribe_lib.py`.
-- Ops runbook catalog — `../ops/runbooks/index.md`.
+- Ops runbook catalog — `../ops/runbooks.md`.
 - Settings Registry specification — `../services/settings.md`.

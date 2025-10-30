@@ -401,11 +401,11 @@ SELECT id,
 - Settings Registry specification — `../services/settings.md`.  
 - Guardian specification — `../services/guardian.md`.  
 - Worker Cluster specification — `../services/worker-cluster.md`.  
-- Ops runbook catalog — `../ops/runbooks/index.md`.
+- Ops runbook catalog — `../ops/runbooks.md`.
 
 ______________________________________________________________________
 
-## Appendix A — SQL policy patterns (binding)
+## Appendix A — SQL policy patterns (binding) {#appendix-a--sql-policy-patterns-binding}
 
 *Purpose: Preserve authoritative SQL patterns for row-level security, masking, and operational guards used by identity-aware services.*
 

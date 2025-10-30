@@ -70,7 +70,13 @@ def test_build_tasks_contains_expected_entries(monkeypatch: pytest.MonkeyPatch) 
     names = [task.name for task in tasks]
     assert "build_runbook_catalog.py --check" in names
     assert "build_diagram_index.py --check" in names
+    assert "check_structure.py" in names
+    assert "mkdocs build --strict" in names
     assert any(task.env and task.env.get("STRICT_DOCS") == "1" for task in tasks)
+    check_task = next(task for task in tasks if task.name == "check_structure.py")
+    assert any("docs/src/ops" in arg for arg in check_task.cmd)
+    mkdocs_task = next(task for task in tasks if task.name == "mkdocs build --strict")
+    assert mkdocs_task.cmd[-1] == "--dry-run"
 
 
 def test_resolve_targets_filters_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

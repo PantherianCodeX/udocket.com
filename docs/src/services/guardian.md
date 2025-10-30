@@ -570,7 +570,7 @@ ______________________________________________________________________
 - `guardian_policy_block_total` spikes or synthetic job failures (`guardian_slo.yaml`) escalate via §8.3 entries RB-GUARD-001 and RB-GUARD-QUAR, depending on whether latency or policy regression drives the alert.
 - `PHI_DETECTION_DRIFT` incidents originate from classifier sampling (§6.3); §8.3.3 RB-GUARD-QUAR covers containment and follow-up requirements.
 
-### 8.3 Runbooks & Drills (binding)
+### 8.3 Runbooks & Drills (binding) {#guardian-8-3-runbooks-drills-binding}
 
 **Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures executed during incidents. **|**
 **Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders update these runbooks after every incident or drill. **|**

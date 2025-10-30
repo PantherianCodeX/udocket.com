@@ -40,7 +40,7 @@ ______________________________________________________________________
 
 ## Overview
 
-Diagram authoring guidelines live in [Docs: How To](../../../../CONTRIBUTING-docs.md#add-a-diagram). This appendix lists the current Mermaid sources and their rendered assets.
+Diagram authoring guidelines live in [Docs: How To](../../../CONTRIBUTING-docs.md#add-a-diagram). This appendix lists the current Mermaid sources and their rendered assets.
 
 <!-- BEGIN AUTO-GENERATED DIAGRAM INDEX -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_diagram_index.py` to refresh. -->

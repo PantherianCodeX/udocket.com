@@ -8,7 +8,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Keep deep technical content here; keep `docs/src/overview/tdd.md` high‑level and link to services.
 - Use consistent headings (Sentence case). Vale guides tone and terms.
 
-## Add a diagram (Mermaid)
+## Add a diagram (Mermaid) {#add-a-diagram}
 
 - Save `.mmd` under the owning doc’s local `diagrams/` folder:
   - Cross‑cutting (TDD‑owned): `docs/src/overview/tdd/diagrams/`
@@ -21,7 +21,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   graph TD; A-->B;
   ```
 
-  ![Artifact Overview](../../build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
+  ![Artifact Overview](build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
 
 - Rendered SVGs live under `docs/src/build/mermaid/` so MkDocs can serve them alongside the Markdown sources. Use `/build/mermaid/...` in image links so paths remain correct regardless of page depth.
 

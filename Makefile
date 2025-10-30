@@ -45,3 +45,6 @@ typing-ci: reports/typing
 
 typing-clean-cache:
 	rm -f .typewiz_cache.json
+
+lint-docs:
+	. ./.venv/bin/activate && python scripts/docs/lint_docs.py

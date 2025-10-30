@@ -42,6 +42,8 @@ jobs:
         run: |
           mkdir -p docs/build/pdf
           bash scripts/docs/build_pdf_tdd.sh
+      - name: lint-docs
+        run: python scripts/docs/lint_docs.py
 
   linkcheck:
     runs-on: ubuntu-latest

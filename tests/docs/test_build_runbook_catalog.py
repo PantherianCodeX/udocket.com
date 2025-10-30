@@ -14,7 +14,7 @@ def _setup_tmp_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Pa
     services.mkdir(parents=True)
     apps = docs_root / "apps"
     apps.mkdir()
-    output = docs_root / "ops" / "runbooks" / "index.md"
+    output = docs_root / "ops" / "runbooks.md"
     output.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(brc, "SRC_DIR", docs_root)
     monkeypatch.setattr(brc, "OUTPUT_FILE", output)
@@ -39,6 +39,8 @@ def test_build_catalog_transforms_sections(tmp_path: Path, monkeypatch: pytest.M
             #### RB-GRD-INCIDENT — Contain Guardian Outage
             Step A.
             Step B.
+
+            - RB-GRD-INCIDENT ensures Guardian outages fail closed.
             """
         ),
         encoding="utf-8",
@@ -54,8 +56,10 @@ def test_build_catalog_transforms_sections(tmp_path: Path, monkeypatch: pytest.M
 def test_render_handles_empty_catalog() -> None:
     result = brc.render([])
 
+    assert result.startswith("---")
+    assert brc.BEGIN_MARKER in result
+    assert brc.END_MARKER in result
     assert "_No runbook sections detected._" in result
-    assert result.endswith("\n")
 
 
 def test_main_check_detects_stale_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -80,4 +84,50 @@ def test_main_writes_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert rc == 0
     content = output.read_text(encoding="utf-8")
     assert "Line A" in content
-    assert content.startswith("# uDocket Runbook Catalog")
+    assert content.startswith("---")
+
+
+def test_build_catalog_inserts_anchors_for_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    services, _ = _setup_tmp_docs(tmp_path, monkeypatch)
+    doc_path = services / "lpe.md"
+    doc_path.write_text(
+        dedent(
+            """
+            ## 8) Operations
+
+            ### Runbook Summary
+
+            - RB-LPE-COMPILER handles compiler regressions.
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    catalog_lines, _ = brc.build_catalog()
+
+    assert any('<a id="rb-lpe-compiler"></a>' in line for line in catalog_lines)
+    assert any(line.startswith("- <a id=\"rb-lpe-compiler\"") for line in catalog_lines)
+
+
+def test_build_catalog_skips_table_anchor_injection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    services, _ = _setup_tmp_docs(tmp_path, monkeypatch)
+    doc_path = services / "runbook-table.md"
+    doc_path.write_text(
+        dedent(
+            """
+            ## 8) Operations
+
+            ### Runbook Index
+
+            | Code | Notes |
+            | --- | --- |
+            | RB-RES-BLOCK | Residency block remediation |
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    catalog_lines, _ = brc.build_catalog()
+
+    row = next(line for line in catalog_lines if "RB-RES-BLOCK" in line)
+    assert "<a id=" not in row

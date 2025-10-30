@@ -433,7 +433,7 @@ ______________________________________________________________________
 **State:** Runbooks under `ops/runbooks/llm/`, drill calendar `ops/change/llm_rotations.ics`, release checklists `ops/releases/llm_release_checklist.md`, waiver records in App.O. **|**
 **Failures & handling:** Stale runbooks, missed drills, or incomplete release evidence block deployment until refreshed. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “LLM Residency & Failover” / “LLM Safety & Moderation” / “FinOps – LLM Cost & Circuit”, alerts `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_budget_hold_active_total`. **|**
-**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, automation scripts `ops/scripts/llm/*.py`, release tooling `scripts/finops/check_mom_guard.py`. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, automation scripts `ops/scripts/llm/*.py`, release tooling `scripts/finops/check_mom_guard.py`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
 ### 8.1 Operational Posture (binding)

@@ -119,7 +119,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Transcription `packages/udocket_core/agents/transcribe_lib.py`, Analyze `packages/udocket_core/agents/analyze_pipeline.py`, Compose `packages/udocket_core/agents/compose_pipeline.py`, Timeline/Relationship prototypes `packages/udocket_core/agents/timeline_pipeline.py`, Celery wrappers `apps/platform/operations/tasks/agents.py`, manifests `packages/udocket_core/agents/manifests.py`. **|**
 **References:** TDD §6 summary, Guardian spec §2–§3, Worker Cluster spec §3, Ops runbooks `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`.
 
-### 2.1 Transcription agent (binding)
+### 2.1 Transcription agent (binding) {#21-transcription-agent}
 
 - Modes: `on-demand` (local streaming) and `batch` (Azure Batch Transcription via SAS URL). Diarisation is enabled for batch jobs only.
 - Inputs: local path or HTTPS SAS URL, language, region (`canadacentral` or `canadaeast`), diarisation flag (batch only). Guardian enforces residency restrictions before execution.
@@ -131,7 +131,7 @@ ______________________________________________________________________
 - Audio normalization: agent converts to PCM WAV 16 kHz mono via ffmpeg when needed; conversion hashes recorded in manifest for forensic review.
 - Cancellation: best-effort cancellation via provider API; local jobs stop streaming immediately, batch jobs mark manifest as `cancel_requested` and wait for provider acknowledgement.
 
-### 2.2 Analyze agent (binding)
+### 2.2 Analyze agent (binding) {#22-analyze-agent}
 
 - Lanes: `Summary`, `Outline`, `Timeline Seeds`, `Entity Hints`, `Staff Report`. Each lane produces typed Pydantic models with deterministic UUIDs (`uuid5` of canonical content when upstream UUID absent).
 - Inputs: latest transcript (or override path), intake data, Guardian manifests, Settings overrides for prompt templates and lane enablement.
@@ -141,7 +141,7 @@ ______________________________________________________________________
 - Cancellation: GraphRunner cancellation stops active nodes; resumed jobs compare checkpoint digests to guard against duplicate work before continuing.
 - Timeline seeds / entity hints: produce deterministic `uuid` fields for downstream merge; merges dedupe by UUID and canonical signature.
 
-### 2.3 Compose agent (binding)
+### 2.3 Compose agent (binding) {#23-compose-agent}
 
 - Lanes: client deliverable, lawyer deliverable, bundle excerpt, QA loops (Section QA, Final QA). Compose orchestrates SectionWriter nodes per deliverable lane before merging in `FinalWeave`.
 - Inputs: Analyze outputs, intake questionnaire, case metadata, deliverable templates (DOCX/Markdown), Settings policies (`compose.policy.*`, `guardian.policy.*`), timeline/entity seeds.
@@ -151,7 +151,7 @@ ______________________________________________________________________
 - Retry semantics: SectionWriter nodes retry within budgets; QA issues recorded with severity/refs; concurrency guard ensures OCC on artifact writes using `udlock`.
 - Cancellation: cancellation request stops graph; partial outputs remain versioned `_v{n}` and flagged `cancelled=true` in manifest for audit.
 
-### 2.4 Timeline & relationship agents (roadmap, informative)
+### 2.4 Timeline & relationship agents (roadmap, informative) {#24-timeline--relationship-agents-roadmap}
 
 - Timeline agent ingests transcripts + Analyze seeds to create normalized event timeline artifacts (`analysis/<job_id>__timeline_v2.json` to-be-defined). Relationship/graph agent produces entity relationship graph outputs with deterministic IDs.
 - Responsibilities: maintain speaker attribution, diarised offsets, event classifications, and evidence references; align with Guardian status gating before exposing to portal/UI.
@@ -160,7 +160,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API Contract
+## 3) API Contract {#3-pipeline--api-contract}
 
 **Purpose:** Govern the configurable LangGraph pipelines, tool catalog, and agent interfaces that keep jobs deterministic and auditable. **|**
 **Contract:** Pipelines are defined in Settings (`agents.pipeline.*`), tools in `agents.tools.*`, and assistant pipelines follow the same activation rules. GraphRunner enforces schema hashes, stage ordering, and deterministic manifests. **|**
@@ -221,7 +221,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State Management
+## 4) State Management {#4-state-management--artifacts}
 
 **Purpose:** Describe how agents persist manifests, artifacts, and lineage to provide forensic traceability. **|**
 **Contract:** Every agent job produces manifests capturing input hashes, settings snapshot, pipeline + graph versions, tool usage, Guardian/Signer dependencies, and resulting artifact paths. **|**
@@ -257,7 +257,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability
+## 6) Observability {#6-observability--quality}
 
 **Purpose:** Define the metrics, QA harnesses, and continuous evaluation commitments for LangGraph agents. **|**
 **Contract:** All pipelines must emit metrics for job duration, retries, QA issue density, WER (transcription), review deltas (Analyze/Compose), and FinOps cost budgets. QA harnesses replay golden datasets per release. **|**
@@ -354,7 +354,7 @@ ______________________________________________________________________
 **State:** Runbook markdown lives under `docs/src/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runbooks/evidence/agents/`. **|**
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
 **Observability:** Ops catalog build (`scripts/docs/build_runbook_catalog.py`), drill checklist dashboards, and on-call retros track preparedness. **|**
-**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks/index.md`, evidence store `ops/runbooks/evidence/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, evidence store `ops/runbooks/evidence/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
 **References:** Ops runbooks index, TDD Appendix B, Worker Cluster spec §3.5, QA governance §6.
 
 - Runbooks must cover activation rollback, shadow divergence, Guardian quarantine escalation, and QA defect surge.

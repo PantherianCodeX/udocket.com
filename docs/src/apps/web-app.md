@@ -405,7 +405,7 @@ ______________________________________________________________________
 **State:** Runbooks in `ops/runbooks/webapp/` and `ops/runbooks/notifications/`, drill evidence `ops/webapp/drills/<date>/`, freeze calendars `ops/webapp/freeze_windows.ics`. **|**
 **Failures & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
 **Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
-**Breadcrumbs:** Runbook index `docs/src/ops/runbooks/index.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
+**Breadcrumbs:** Runbook index `docs/src/ops/runbooks.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
 ### 8.1 Operational Posture (binding)
@@ -532,7 +532,7 @@ ______________________________________________________________________
 - Settings Registry specification — `../services/settings.md`.
 - LLM Registry specification — `../services/llm-registry.md §2.3`.
 - Digital Signer specification — `../services/digital-signer.md`.
-- Ops runbook catalog — `../ops/runbooks/index.md`.
+- Ops runbook catalog — `../ops/runbooks.md`.
 
 ______________________________________________________________________
 

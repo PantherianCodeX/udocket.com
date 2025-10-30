@@ -74,6 +74,8 @@ def collect_entries() -> list[SLOEntry]:
     doc_paths.extend(sorted((SRC_DIR / "apps").glob("*.md")))
 
     for doc_path in doc_paths:
+        if doc_path.name.startswith("_template"):
+            continue
         content = extract_slo_section(doc_path)
         if not content:
             continue

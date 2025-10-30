@@ -136,7 +136,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State Management (binding)
+## 4) State Management (binding) {#4-immutable-storage--replication}
 
 **Purpose:** Describe how audit data is persisted, partitioned, and retained. **|**
 **Contract:** Maintain monthly partitions for `audit_event`, append-only JSONL streams, immutable WORM mirror, and retention schedules aligned with jurisdictional requirements (HIPAA, GDPR, CPPA). **|**
@@ -165,7 +165,7 @@ ______________________________________________________________________
 **State:** Runbooks RB-AUDIT-004, RB-WAIVER-GOV, RB-PRIV-DSAR, RB-AUDIT-MANIFEST; PagerDuty services `audit-integrity`, `compliance-ledger`. **|**
 **Failures & handling:** See scenario list below. **|**
 **Observability:** Incident metrics `audit_incident_total`, `audit_incident_mttr_minutes`. **|**
-**Breadcrumbs:** Runbook catalog `../ops/runbooks/index.md`. **|**
+**Breadcrumbs:** Runbook catalog `../ops/runbooks.md`. **|**
 **References:** Logging §5, Settings §7.3.
 
 - Seal chain gap (`audit_seal_errors_total`) → pause approvals, run RB-AUDIT-004, regenerate seals.
@@ -328,5 +328,5 @@ ______________________________________________________________________
 - Guardian specification — `../services/guardian.md` §7  
 - Settings specification — `../services/settings.md` §7.3–§7.4  
 - Digital Signer specification — `../services/digital-signer.md` §4  
-- Ops runbook catalog — `../ops/runbooks/index.md` (RB-AUDIT-004, RB-WAIVER-GOV, RB-PRIV-DSAR, RB-AUDIT-MANIFEST)  
+- Ops runbook catalog — `../ops/runbooks.md` (RB-AUDIT-004, RB-WAIVER-GOV, RB-PRIV-DSAR, RB-AUDIT-MANIFEST)  
 - ADR index — `../adr/README.md` (ADR-0001, ADR-0006, ADR-0011)

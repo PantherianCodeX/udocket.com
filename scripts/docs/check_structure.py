@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Validate documentation structure against the canonical template.
 
-By default the checker inspects service specifications under
-``docs/src/services`` and ensures:
+By default the checker inspects source documents under
+``docs/src`` and ensures:
 
-* Numeric sections (``## 1``, ``### 3.1`` …) appear in the same order as
-  ``docs/src/services/_template.md``.
+* Numeric sections (``## 1``, ``### 3.1`` …) appear in the same order as 
+  their accompanying ``_template.md`` file.
 * Each section contains the preamble entries declared in the template, in the
   same order, with every entry ending in ``**|**`` (and never duplicated).
 * No unexpected preamble entries are present.
@@ -63,6 +63,7 @@ REQUIRED_FRONT_MATTER_KEYS = {
 }
 
 LOWERCASE_WORDS = {"and", "or", "the", "a", "an", "of", "in", "on", "for", "to", "with", "by"}
+DISABLED_TEMPLATE_MESSAGES: set[Path] = set()
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,16 @@ def build_front_matter_index(front_matter: Dict[str, Any]) -> Dict[str, List[str
     return index
 
 
+def template_disabled(template_path: Path) -> bool:
+    content = template_path.read_text(encoding="utf-8")
+    stripped = content.strip()
+    if not stripped:
+        return True
+    if "template:disabled" in stripped.lower():
+        return True
+    return False
+
+
 def find_section_header(lines: Sequence[str], header: str) -> int:
     for idx, line in enumerate(lines):
         if line.strip().lower() == header.lower():
@@ -166,8 +177,8 @@ def parse_args() -> argparse.Namespace:
         "paths",
         nargs="*",
         type=Path,
-        default=[Path("docs/src/services")],
-        help="Markdown files or directories to validate (defaults to docs/src/services)",
+        default=[Path("docs/src")],
+        help="Markdown files or directories to validate (defaults to docs/src)",
     )
     parser.add_argument(
         "--template",
@@ -196,9 +207,6 @@ def find_template(start: Path, override: Path | None) -> Path:
         if candidate.is_file():
             return candidate.resolve()
         current = current.parent
-    fallback = Path("docs/src/services") / TEMPLATE_NAME
-    if fallback.is_file():
-        return fallback.resolve()
     raise FileNotFoundError(f"Could not locate {TEMPLATE_NAME} starting from {start}")
 
 
@@ -446,6 +454,9 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
         # Ensure heading title matches template exactly, allowing optional binding suffix
         def _strip_suffix(value: str) -> Tuple[str, Optional[str]]:
             stripped = value.strip()
+            if stripped.endswith('}') and '{#' in stripped:
+                attr_index = stripped.rfind('{#')
+                stripped = stripped[:attr_index].rstrip()
             for suffix in (" (binding)", " (informative)", " (normative)"):
                 if stripped.endswith(suffix):
                     return stripped[: -len(suffix)].rstrip(), suffix.strip()
@@ -521,19 +532,32 @@ def main() -> int:
         print("No markdown targets found.", file=sys.stderr)
         return 1
 
-    template_specs: List[SectionSpec] = []
-    if args.frontmatter:
-        template_path = None
-    else:
-        template_path = find_template(targets[0], args.template)
-        ensure_template_requirements(template_path)
-        template_specs = build_template_spec(template_path)
-
     issues: List[str] = []
+    template_cache: Dict[Path, Tuple[bool, List[SectionSpec]]] = {}
     for target in targets:
         lines = target.read_text(encoding="utf-8").splitlines()
         issues.extend(check_document_controls(target, lines))
+        disabled_template = False
+        template_specs: List[SectionSpec] = []
         if not args.frontmatter:
+            template_path = find_template(target, args.template)
+            if template_path in template_cache:
+                disabled_template, template_specs = template_cache[template_path]
+            else:
+                if template_disabled(template_path):
+                    disabled_template = True
+                    if template_path not in DISABLED_TEMPLATE_MESSAGES:
+                        print(
+                            f"warning: template {template_path} marked as disabled; skipping section validation.",
+                            file=sys.stderr,
+                        )
+                        DISABLED_TEMPLATE_MESSAGES.add(template_path)
+                    template_cache[template_path] = (True, [])
+                else:
+                    ensure_template_requirements(template_path)
+                    template_specs = build_template_spec(template_path)
+                    template_cache[template_path] = (False, template_specs)
+        if not args.frontmatter and not disabled_template:
             issues.extend(validate_sections(target, template_specs, lines))
 
     if issues:

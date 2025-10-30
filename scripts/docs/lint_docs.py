@@ -66,7 +66,7 @@ def build_tasks(targets: list[Path]) -> list[Task]:
     py = sys.executable
     markdownlint_config = str((ROOT / "docs" / ".markdownlint.json").relative_to(ROOT))
     markdownlint_glob = "docs/src/**/*.md"
-    return [
+    tasks = [
         Task(
             name="build_runbook_catalog.py --check",
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_runbook_catalog.py"), "--check"],
@@ -76,8 +76,14 @@ def build_tasks(targets: list[Path]) -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_diagram_index.py"), "--check"],
         ),
         Task(
-            name="check_structure.py (services)",
-            cmd=[py, str(ROOT / "scripts" / "docs" / "check_structure.py"), str(ROOT / "docs" / "src" / "services")],
+            name="check_structure.py",
+            cmd=[
+                py,
+                str(ROOT / "scripts" / "docs" / "check_structure.py"),
+                str(ROOT / "docs" / "src" / "services"),
+                str(ROOT / "docs" / "src" / "apps"),
+                str(ROOT / "docs" / "src" / "ops"),
+            ],
         ),
         Task(
             name="check_appendices.py",
@@ -109,7 +115,12 @@ def build_tasks(targets: list[Path]) -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "link_check.py")],
             env={"STRICT_DOCS": "1"},
         ),
+        Task(
+            name="mkdocs build --strict",
+            cmd=[py, str(ROOT / "scripts" / "docs" / "build_mkdocs.py"), "--dry-run"],
+        ),
     ]
+    return tasks
 
 
 def resolve_targets(args: list[str]) -> list[Path]:

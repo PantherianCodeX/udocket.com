@@ -20,7 +20,49 @@ from scripts.docs import doc_utils  # type: ignore  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
-OUTPUT_FILE = SRC_DIR / "ops" / "runbooks" / "index.md"
+OUTPUT_FILE = SRC_DIR / "ops" / "runbooks.md"
+BEGIN_MARKER = "<!-- BEGIN AUTO-GENERATED RUNBOOK CATALOG -->"
+END_MARKER = "<!-- END AUTO-GENERATED RUNBOOK CATALOG -->"
+
+FRONT_MATTER = """---
+title: "uDocket — Ops Appendix: Runbook Catalog"
+subtitle: "Aggregated runbooks and drill references"
+authors:
+  - "Platform Operations Team"
+version: "0.1-draft"
+status: implementable
+classification: Confidential
+last_updated: "2025-10-30"
+updated_by: "Documentation Team"
+owners:
+  - "Platform Operations Team"
+reviewers:
+  - "Platform Operations Team"
+approvers:
+  - "Operations Steering Committee"
+approved_by:
+approved_date:
+---"""
+
+DOCUMENT_CONTROLS_TABLE = """## Document Controls
+
+| Field | Value |
+| --- | --- |
+| Authors | Platform Operations Team |
+| Version | 0.1-draft |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2025-10-30 |
+| Updated by | Documentation Team |
+| Owners | Platform Operations Team |
+| Reviewers | Platform Operations Team |
+| Approvers | Operations Steering Committee |
+| Approved by |  |
+| Approved date |  |"""
+
+APPENDIX_OVERVIEW = """## Appendix Overview
+
+This appendix consolidates runbook sections from service and application specifications. Refresh it with `python scripts/docs/build_runbook_catalog.py`. The content between the markers below is generated automatically."""
 
 RUNBOOK_HEADING_RE = re.compile(r"^(#{2,6})\s+.*runbook", re.IGNORECASE)
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)")
@@ -93,6 +135,7 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
     headings: list[Heading] = []
     first_heading = True
     pending_blank_after_heading = False
+    anchors_added: set[str] = set()
 
     level_adjust = 0
     for line in section:
@@ -114,12 +157,19 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
             prefixed_text = f"{label} — {text}"
             anchor = RB_ID_RE.search(text)
             if anchor:
-                if output and output[-1].strip():
-                    output.append("")
-                output.append(f'<a id="{anchor.group(1).lower()}"></a>')
+                anchor_id = anchor.group(1).lower()
+                if anchor_id not in anchors_added:
+                    if output and output[-1].strip():
+                        output.append("")
+                    output.append(f'<a id="{anchor_id}"></a>')
+                    anchors_added.add(anchor_id)
             if output and output[-1].strip():
                 output.append("")
-            output.append(f"{'#' * normalized_level} {prefixed_text}")
+            slug = doc_utils.slugify(prefixed_text)
+            heading_line = f"{'#' * normalized_level} {prefixed_text}"
+            if slug:
+                heading_line += f" {{#{slug}}}"
+            output.append(heading_line)
             pending_blank_after_heading = True
             headings.append(
                 Heading(level=normalized_level, text=prefixed_text, slug=doc_utils.slugify(prefixed_text))
@@ -129,6 +179,29 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
                 if line.strip():
                     output.append("")
                 pending_blank_after_heading = False
+            matches = RB_ID_RE.findall(line)
+            stripped = line.lstrip()
+            if matches and stripped.startswith("|"):
+                output.append(line)
+                continue
+            if matches and any(stripped.startswith(prefix) for prefix in ("- ", "* ", "+ ")):
+                prefix_len = len(line) - len(stripped)
+                marker = stripped[:2]
+                remainder = stripped[2:]
+                anchor_html = ""
+                for match in matches:
+                    anchor_id = match.lower()
+                    if anchor_id not in anchors_added:
+                        anchor_html += f'<a id="{anchor_id}"></a>'
+                        anchors_added.add(anchor_id)
+                output.append(f"{line[:prefix_len]}{marker}{anchor_html}{remainder}")
+                continue
+            if matches:
+                for match in matches:
+                    anchor_id = match.lower()
+                    if anchor_id not in anchors_added:
+                        output.append(f'<a id="{anchor_id}"></a>')
+                        anchors_added.add(anchor_id)
             output.append(line)
 
     while output and not output[-1].strip():
@@ -160,17 +233,29 @@ def build_catalog() -> tuple[list[str], list[Heading]]:
 
 def render(catalog_lines: list[str]) -> str:
     lines: list[str] = []
-    lines.append("# uDocket Runbook Catalog")
+    lines.extend(FRONT_MATTER.splitlines())
     lines.append("")
+    lines.append("______________________________________________________________________")
+    lines.append("")
+    lines.extend(DOCUMENT_CONTROLS_TABLE.splitlines())
+    lines.append("")
+    lines.append("______________________________________________________________________")
+    lines.append("")
+    lines.extend(APPENDIX_OVERVIEW.splitlines())
+    lines.append("")
+    lines.append("______________________________________________________________________")
+    lines.append("")
+    lines.append(BEGIN_MARKER)
     lines.append("<!-- AUTO-GENERATED: Run `python scripts/docs/build_runbook_catalog.py` to refresh. -->")
     lines.append("")
-    if not catalog_lines:
+    if catalog_lines:
+        lines.extend(catalog_lines)
+    else:
         lines.append("_No runbook sections detected._")
         lines.append("")
-        return "\n".join(lines) + "\n"
-
-    lines.extend(catalog_lines)
-    return "\n".join(lines) + "\n"
+    lines.append(END_MARKER)
+    lines.append("")
+    return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -489,7 +489,7 @@ ______________________________________________________________________
 ## 6) Observability
 
 **Purpose:** Summarize telemetry, logging, and SLO governance. **|**
-**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../services/logging.md#4-log-schema--redaction-binding)) and maintains decision-log schema guarantees. **|**
+**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../services/logging.md#4-log-schema--redaction)) and maintains decision-log schema guarantees. **|**
 **State:** Grafana dashboards (“LPE – Enforcement & Residency”, “LPE Compiler”, “Localization QA”, “FinOps – LPE”, “SDK Health”) alongside PagerDuty service “Localization & Policy Engine”. Decision logs stored ≥365 days. **|**
 **Failures & handling:** Missing metrics or runbook linkage trigger docs lint failures; SLO burn-rate alerts feed §8.2 triggers. **|**
 **Observability:** Metrics `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`, `lpe_bundle_signature_error_total`, `opa_bundle_status`, `lpe_privacy_framework_enabled_total`, `lpe_compiler_resource_seconds`, `lpe_sdk_cache_error_total`. **|**
@@ -499,8 +499,8 @@ ______________________________________________________________________
 - Cost posture: FinOps alerts trigger when rolling 7-day spend exceeds 80 % of monthly budget; localization QA tracks translation spend per locale.
 - Synthetic monitors run after each deploy against HIPAA/PHIPA/PIPA contexts; failures block rollout.
 - Decision-log validator `scripts/opa/validate_decision_logs.py` runs in CI and after major releases.
-- Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks/index.md` and must meet Appendix L baselines before shipping.
-- Logs honour the never-log list ([`Logging §4`](../services/logging.md#4-log-schema--redaction-binding)); sampling budgets follow dynamic controls in [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding), and structured logging adapters prevent ad-hoc stdout noise.
+- Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks.md` and must meet Appendix L baselines before shipping.
+- Logs honour the never-log list ([`Logging §4`](../services/logging.md#4-log-schema--redaction)); sampling budgets follow dynamic controls in [`Logging §7`](../services/logging.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
 
 ### 6.1 SLOs & Targets (binding)
 
@@ -528,7 +528,7 @@ ______________________________________________________________________
 **Breadcrumbs:** `packages/udocket_core/lpe/security.py`, compliance scripts `ops/scripts/lpe/audit_compliance.py`, tests `tests/compliance/test_lpe_retention.py`. **|**
 **References:** Link to residency or policy appendices/ADRs.
 
-- Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding) dynamic controls.
+- Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow [`Logging §7`](../services/logging.md#7-cost-management--budgets) dynamic controls.
 - Key management: HSM-backed signing keys rotate per policy; evidence stored with bundle manifest records.
 - DSAR & erasure: §8.5.3 workflow captures PolicyContext replay evidence after DSAR operations.
 - FIPS enforcement: When `security.crypto.fips_mode|required`, services consuming OPA bundles invoke `opa_verify_dual_signature()` to assert Ed25519 + ECDSA P-256 signatures. Missing or invalid ECDSA signatures raise `FipsBundleSignatureError`, fire `opa_bundle_fips_signature_missing_total`, and block activation; CI job `ci-opa-bundle-signatures` validates artifacts under `ops/lpe/opa_bundles/*.tar.gz`.

@@ -3,6 +3,8 @@ repo_url: https://github.com/PantherianCodeX/udocket.com
 
 docs_dir: src
 use_directory_urls: false
+exclude_docs: |
+  **/_template.md
 
 theme:
   name: material
@@ -54,6 +56,7 @@ extra_javascript:
 
 nav:
 - Overview: index.md
+- Docs How To: CONTRIBUTING-docs.md
 - TDD:
   - Overview: overview/tdd/index.md
   - Technical Design (High-Level): overview/tdd.md
@@ -82,7 +85,7 @@ nav:
   - LLM Registry: services/llm-registry.md
   - Notifications: services/notifications.md
 - Ops:
-  - Runbooks: ops/runbooks/index.md
+  - Runbooks: ops/runbooks.md
 - ADR:
   - Overview: adr/README.md
   - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md

@@ -136,7 +136,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State Management (binding)
+## 4) State Management (binding) {#4-log-schema--redaction}
 
 **Purpose:** Capture persistent telemetry assets—schemas, buffers, indices, and retention policies. **|**
 **Contract:** Maintain 12-hour local buffers, monthly OpenSearch/`audit_event` partitions, ILM policies for hot→warm→cold tiers, and immutable retention per jurisdiction. **|**
@@ -166,7 +166,7 @@ ______________________________________________________________________
 **State:** Incident runbooks RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK; PagerDuty services `observability-ingest`, `observability-trace`. **|**
 **Failures & handling:** See scenario list below. **|**
 **Observability:** Incident metrics `logging_incident_total`, `mttr_minutes`. **|**
-**Breadcrumbs:** Runbooks in `../ops/runbooks/index.md`. **|**
+**Breadcrumbs:** Runbooks in `../ops/runbooks.md`. **|**
 **References:** Audit §5, Settings §7.2, TDD §12 summary.
 
 - `logging_ingest_lag_seconds > 30` → scale collectors, drain queues, validate mirror (RB-LOG-007).
@@ -178,7 +178,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability (binding)
+## 6) Observability (binding) {#6-observability--quality}
 
 **Purpose:** Ensure ingest, trace correlation, immutable mirroring, and cost posture stay measurable and alertable. **|**
 **Contract:** Prometheus rules, dashboards, synthetics, and alert routes enumerated here are mandatory; any removal triggers RB-LOG-007 until coverage is restored. **|**
@@ -201,11 +201,13 @@ ______________________________________________________________________
 - **Ingest availability:** ≥99.9% successful log ingestion each month, enforced by `logging_ingest_lag_seconds` < 30s P95 and `logging_drop_rate_pct = 0`; burn-rate alerts open RB-LOG-007.
 - **Immutable mirror lag:** Mirror delay stays ≤1 collection interval (≤15 minutes) measured via `audit_worm_lag_seconds`; breaches pause approvals until RB-AUDIT-004 completes.
 - **Trace correlation fidelity:** Sampling drift between trace/error rates <5% sustained, tracked by `trace_sampling_drift_total`; violations trigger RB-TRACE-CORR before release sign-off.
+<a id="7-cost-management--budgets"></a>
+
 - **Cost guardrails:** Daily log volume per service remains within configured budgets (`logging_volume_budget_violation_total = 0`); overrides require RB-COST and FinOps approval within 1 business day.
 
 ______________________________________________________________________
 
-## 7) Security & Compliance (binding)
+## 7) Security & Compliance (binding) {#6-access-control--auditing}
 
 **Purpose:** Prevent sensitive data leakage and enforce authorized access. **|**
 **Contract:** Apply “never log” scrubber, enforce WebAuthn + justification for log queries, respect immutable mirroring, and limit client telemetry to anonymized aggregates. **|**
@@ -225,7 +227,7 @@ ______________________________________________________________________
 - Scrubber removes auth headers, tokens, signed URLs, PHI, transcripts/exhibits.
 - LLM evidence logs confirm provider “no training/no logging” flags via LLM Registry §6.
 
-### 7.3 Client telemetry posture
+### 7.3 Client telemetry posture {#42-client--portal-telemetry}
 
 - Portal WebVitals capture anonymized aggregates; console capture disabled except for time-boxed incidents with ticket references cleared within 24h.
 
@@ -238,7 +240,7 @@ ______________________________________________________________________
 **State:** Helm releases, Terraform modules, runbook catalog entries, automation scripts `ops/logging/*`. **|**
 **Failures & handling:** Drill gaps escalate to SRE leadership; rollout failures revert via `helm rollback` recipes documented in RB-LOG-007. **|**
 **Observability:** Deployment dashboards, runbook execution trackers, release checklist metrics. **|**
-**Breadcrumbs:** Helm chart `infra/logging/helm/`, deployment pipeline configs `.buildkite/pipelines/logging.yml`, runbooks `../ops/runbooks/index.md`. **|**
+**Breadcrumbs:** Helm chart `infra/logging/helm/`, deployment pipeline configs `.buildkite/pipelines/logging.yml`, runbooks `../ops/runbooks.md`. **|**
 **References:** Platform Runtime §3, Audit §5, ADR-0006.
 
 ### 8.1 Operational Posture (binding)
@@ -337,5 +339,5 @@ ______________________________________________________________________
 - Audit & Evidence specification — `../services/audit.md`  
 - Guardian specification — `../services/guardian.md` §7  
 - LP Engine specification — `../services/lp-engine.md` §5  
-- Ops runbook catalog — `../ops/runbooks/index.md` (RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK)  
+- Ops runbook catalog — `../ops/runbooks.md` (RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK)  
 - ADR index — `../adr/README.md` (ADR-0004 logging posture, ADR-0006 immutable sink)

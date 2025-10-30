@@ -119,7 +119,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API Contract (binding)
+## 3) API Contract (binding) {#3-deployment-guardrails--environment-policy}
 
 **Purpose:** Capture the shared runtime “interfaces” that other services consume—cluster topology, mesh/TLS requirements, and residency-aware egress controls. **|**
 **Contract:** All services must deploy behind these guardrails; Settings and automation enforce compliance before traffic flows. **|**
@@ -129,7 +129,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Mesh renderers, `infra/kubernetes/`, Settings bundles, residency scanners. **|**
 **References:** TDD §3 summary, Settings spec §2.4, LPE spec §2.6.
 
-### 3.1 External Interfaces (binding)
+### 3.1 External Interfaces (binding) {#31-environment-topology}
 
 - Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
 - Service mesh (SPIFFE/SPIRE) issues workload identities; certificates rotate with TTL ≤ 24 h and SLO of 99.9 % renewals within five minutes of expiry. Certificates that overrun `security.tls.cert_ttl_minutes + 5` minutes trigger deny-by-default behaviour and page on-call; soft warnings fire 30 minutes before expiry.
@@ -141,7 +141,7 @@ ______________________________________________________________________
 - Container runtime: production runs on AKS with Flux CD applying Helm releases; PodSecurity admission enforces the restricted baseline (no privileged pods, `readOnlyRootFilesystem` where feasible), and cosign attestations gate image promotion. Local development uses `docker compose` to mirror service topology and health checks, sharing the `.env` schema.
 - Multi-region posture: each environment operates within a primary/secondary region pair. Database replicas, blob replication, and queue failover respect organization allowlists. Disaster recovery runbooks document region cut-over and data rehydration using only approved regions (§8).
 
-### 3.2 Internal Interfaces (binding)
+### 3.2 Internal Interfaces (binding) {#32-reference-manifests}
 
 #### 3.2.1 Mesh egress allowlist (illustrative)
 
@@ -202,7 +202,7 @@ metadata:
 
 All namespaces must declare the restricted baseline; violations are blocked by admission controllers and surfaced via `pod_security_violation_total`.
 
-### 3.3 TLS posture (binding)
+### 3.3 TLS posture (binding) {#33-tls-posture}
 
 - TLS 1.3 is the platform default (`security.tls.min_version=TLSv1.3`). TLS 1.2 appears only when `security.tls.legacy_exceptions[]` entries specify endpoint, justification, and expiry ≤ 30 days. Settings activation rejects longer windows and alerts seven days before expiry to force review.
 - FIPS mode (`security.tls.fips_mode=true`) restricts cipher suites to AES-GCM (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`). Performance mode (`security.tls.performance_mode=true`) may enable `TLS_CHACHA20_POLY1305_SHA256` but must record the exception in release checklists. Synthetic handshake job `scripts/security/check_tls_ciphers.py` runs per deploy and nightly to enforce the profile.
@@ -223,7 +223,7 @@ Mesh and ingress templates consume the same Settings bundles so routing surfaces
 
 ______________________________________________________________________
 
-## 4) State Management (binding)
+## 4) State Management (binding) {#4-service-catalog}
 
 **Purpose:** Maintain the authoritative service inventory and provider metadata that other docs and onboarding workflows consume. **|**
 **Contract:** The inventory must stay in sync with service specifications; updates require corresponding changes to owners’ docs and dashboards. **|**
@@ -465,4 +465,4 @@ ______________________________________________________________________
 - Worker Cluster specification — `../services/worker-cluster.md §2`.
 - Localization & Policy Engine specification — `../services/lp-engine.md §2.6`.
 - Reference Manager specification — `../services/ref-manager.md §2.1`.
-- Ops runbook catalog — `../ops/runbooks/index.md`.
+- Ops runbook catalog — `../ops/runbooks.md`.

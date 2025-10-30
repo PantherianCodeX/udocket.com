@@ -45,16 +45,6 @@ This appendix lists the SLOs defined in each service and app specification. Refr
 <!-- BEGIN AUTO-GENERATED SLO INDEX -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_slo_index.py` to refresh. -->
 
-### [App Template](../../../apps/_template.md)
-
-**Purpose:** Summarize the app’s measurable objectives. **|**
-**Contract:** State availability/latency/error budgets users experience. **|**
-**State:** Note dashboards, synthetic tests, or budgets tracked in tooling. **|**
-**Failures & handling:** Describe how SLO breaches page on-call and drive mitigation. **|**
-**Observability:** Link to Grafana views, availability reports, or burn-rate alerts. **|**
-**Breadcrumbs:** Metrics definitions, synthetic scripts, alert configs. **|**
-**References:** Roadmaps or TDD sections that motivate the targets.
-
 ### [Audit & Evidence](../../../services/audit.md)
 
 **Purpose:** Capture the availability and timeliness guarantees that keep audit evidence defensible. **|**
@@ -199,6 +189,8 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+<a id="6-access-control--auditing"></a>
+
 ### [Platform Runtime](../../../services/platform-runtime.md)
 
 **Purpose:** Define reliability expectations for the shared runtime footprint. **|**
@@ -229,16 +221,6 @@ ______________________________________________________________________
 - **Publish latency:** 95th percentile publish pipeline latency (`reference_manager_publish_latency_seconds`) ≤ 10 minutes; exceeding budget blocks new publishes and invokes RB-RM-PUBLISH.
 - **Adoption acknowledgement:** Bundles adopted within 24 hours P95 (`reference_bundle_adoption_latency_seconds`); backlog alerts enforce RB-RM-ADOPTION.
 - **Compliance enforcement:** License violations (`reference_manager_license_violation_total`) remain zero; detection escalates via RB-RM-LICENSE before additional ingest occurs.
-
-### [Service Template](../../../services/_template.md)
-
-**Purpose:** Summarize the service’s measurable objectives. **|**
-**Contract:** State availability/latency/error budgets that must hold before release. **|**
-**State:** Note SLO dashboards, Prometheus rules, or tooling that tracks burn rate. **|**
-**Failures & handling:** Describe how SLO breaches are paged and remediated. **|**
-**Observability:** Link to Grafana views or reports backing the SLO. **|**
-**Breadcrumbs:** Metrics definitions, synthetic jobs, SLO configuration files. **|**
-**References:** Docs or TDD sections that provide rationale for the targets.
 
 ### [Settings Registry](../../../services/settings.md)
 
