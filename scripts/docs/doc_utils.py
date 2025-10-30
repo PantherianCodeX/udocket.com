@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Iterable, Sequence, Tuple
+from typing import Any, Iterable, Mapping, Sequence, Tuple
 import re
 
 try:
@@ -20,6 +21,25 @@ TITLE_CLEAN_REPLACEMENTS = [
 ]
 
 PREAMBLE_DIVIDER = "**|**"
+
+DOCUMENT_CONTROL_FIELD_MAPPINGS: list[tuple[str, tuple[str, ...]]] = [
+    ("Authors", ("authors", "author")),
+    ("Version", ("version",)),
+    ("Status", ("status",)),
+    ("Classification", ("classification",)),
+    ("Last updated", ("last_updated", "last-update")),
+    ("Updated by", ("updated_by", "updated-by")),
+    ("Owners", ("owners", "owner")),
+    ("Reviewers", ("reviewers", "reviewer")),
+    ("Approvers", ("approvers", "approver")),
+    ("Approved by", ("approved_by", "approved-by")),
+    ("Approved date", ("approved_date", "approved-at", "approved_at")),
+]
+DOCUMENT_CONTROL_OPTIONAL_FIELDS = {"Approved by", "Approved date"}
+DOCUMENT_CONTROL_EXCLUDED_KEYS = {"title", "subtitle", "header-includes"}
+DOCUMENT_CONTROL_ALIAS_KEYS = {
+    alias for _, aliases in DOCUMENT_CONTROL_FIELD_MAPPINGS for alias in aliases
+}
 
 
 def slugify(text: str) -> str:
@@ -192,6 +212,37 @@ def normalize_table_cell(cell: str) -> str:
     if value.startswith("`") and value.endswith("`") and len(value) >= 2:
         value = value[1:-1].strip()
     return value
+
+
+def _select_front_matter_value(front_matter: Mapping[str, Any], keys: Sequence[str]) -> str:
+    for key in keys:
+        if key in front_matter:
+            return stringify(front_matter.get(key, ""))
+    return ""
+
+
+def build_document_control_map(
+    front_matter: Mapping[str, Any],
+    *,
+    include_additional: bool = True,
+) -> "OrderedDict[str, str]":
+    """Return an ordered mapping of document-control fields to values."""
+
+    fields: "OrderedDict[str, str]" = OrderedDict()
+    for label, keys in DOCUMENT_CONTROL_FIELD_MAPPINGS:
+        fields[label] = _select_front_matter_value(front_matter, keys)
+
+    if not include_additional:
+        return fields
+
+    for key, value in front_matter.items():
+        if key in DOCUMENT_CONTROL_ALIAS_KEYS or key in DOCUMENT_CONTROL_EXCLUDED_KEYS:
+            continue
+        label = key.replace("_", " ").replace("-", " ").title()
+        if label in fields:
+            continue
+        fields[label] = stringify(value)
+    return fields
 
 
 def iter_markdown_tables(

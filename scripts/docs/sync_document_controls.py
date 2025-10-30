@@ -20,8 +20,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from collections import OrderedDict
-from typing import Dict, Iterable, Iterator, List, Sequence, Tuple
+from typing import Iterable, Iterator, List
 import subprocess
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -31,32 +30,13 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
 from scripts.docs.doc_utils import (  # noqa: E402
+    DOCUMENT_CONTROL_OPTIONAL_FIELDS,
+    build_document_control_map,
     parse_front_matter,
-    stringify,
     yaml,
 )
 
-FieldMapping = Tuple[str, Tuple[str, ...]]
-
-FIELD_MAPPINGS: List[FieldMapping] = [
-    ("Authors", ("authors", "author")),
-    ("Version", ("version",)),
-    ("Status", ("status",)),
-    ("Classification", ("classification",)),
-    ("Last updated", ("last_updated", "last-update")),
-    ("Updated by", ("updated_by", "updated-by")),
-    ("Owners", ("owners", "owner")),
-    ("Reviewers", ("reviewers", "reviewer")),
-    ("Approvers", ("approvers", "approver")),
-    ("Approved by", ("approved_by", "approved-by")),
-    ("Approved date", ("approved_date", "approved-at", "approved_at")),
-]
-OPTIONAL_FIELDS = {"Approved by", "Approved date"}
-EXCLUDED_FRONT_MATTER_KEYS = {
-    "title",
-    "subtitle",
-    "header-includes",
-}
+OPTIONAL_FIELDS = DOCUMENT_CONTROL_OPTIONAL_FIELDS
 DEFAULT_ROOT = Path("docs/src/services")
 
 
@@ -91,31 +71,6 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
             if resolved.name != "_template.md" and resolved not in seen:
                 seen.add(resolved)
                 yield resolved
-
-
-def _select_first(front_matter: Dict[str, object], keys: Sequence[str]) -> str:
-    for candidate in keys:
-        if candidate in front_matter:
-            return stringify(front_matter[candidate])
-    return ""
-
-
-def _base_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
-    result: "OrderedDict[str, str]" = OrderedDict()
-    for label, keys in FIELD_MAPPINGS:
-        result[label] = _select_first(front_matter, keys)
-    return result
-
-
-def _additional_fields(front_matter: Dict[str, object]) -> OrderedDict[str, str]:
-    base_keys = {alias for _, aliases in FIELD_MAPPINGS for alias in aliases}
-    additional: "OrderedDict[str, str]" = OrderedDict()
-    for key, value in front_matter.items():
-        if key in base_keys or key in EXCLUDED_FRONT_MATTER_KEYS:
-            continue
-        label = key.replace("_", " ").replace("-", " ").title()
-        additional[label] = stringify(value)
-    return additional
 
 
 def sync_file(path: Path) -> bool:
@@ -159,11 +114,7 @@ def sync_file(path: Path) -> bool:
         if len(cells) >= 2:
             existing_map[cells[0]] = cells[1]
 
-    base_fields = _base_fields(front)
-    additional_fields = _additional_fields(front)
-    combined_fields: "OrderedDict[str, str]" = OrderedDict()
-    combined_fields.update(base_fields)
-    combined_fields.update(additional_fields)
+    combined_fields = build_document_control_map(front, include_additional=True)
 
     unexpected = sorted(
         field for field in existing_map if field not in combined_fields and field not in OPTIONAL_FIELDS
