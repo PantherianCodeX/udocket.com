@@ -440,7 +440,21 @@ ______________________________________________________________________
 **Breadcrumbs:** Dashboards under `infra/grafana/guardian_*.json`, synthetic job definitions `ops/synthetics/guardian_slo.yaml`, log pipeline config `infra/logging/guardian.json`. **|**
 **References:** §5 Failure modes, §7 Operational readiness, §8.3 Runbooks & drills, Appendix B (payload schema).
 
-### 6.1 Metrics
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture Guardian’s core latency and quality guarantees so approvals remain safe. **|**
+**Contract:** Judgment latency, manual review throughput, and false-positive ceiling must meet the thresholds below before artifacts progress. **|**
+**State:** Metrics `guardian_judgment_latency_seconds`, `guardian_pending_oldest_seconds`, `guardian_quarantine_false_positive_total`; dashboards “Guardian SLO” and “Guardian Manual Review”; synthetic job `guardian_slo.yaml`. **|**
+**Failures & handling:** Breaches invoke RB-GUARD-QUEUE, RB-GUARD-REVIEW, or RB-GUARD-POLICY before approvals resume. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, and synthetic runs monitor compliance. **|**
+**Breadcrumbs:** Telemetry `packages/udocket_core/guardian/metrics.py`, runbooks `docs/src/ops/runbooks/guardian/*.md`. **|**
+**References:** TDD §6, Audit spec §5, Settings spec §7.3.
+
+- **Judgment latency:** 99.9 % availability with P95 ≤ 5 minutes measured via `guardian_judgment_latency_seconds` and synthetic `guardian_slo.yaml`; burn-rate alerts 2×/6× open RB-GUARD-QUEUE.
+- **Manual review throughput:** Reviewer queue backlog P95 ≤ 30 minutes (`review_queue_oldest_seconds`); sustained breaches require manual escalation and review of staffing plan before further launches.
+- **False-positive quarantine ceiling:** `guardian_quarantine_false_positive_total` maintains ≤5 % of total quarantines on rolling 30-day basis; exceeding threshold requires policy tuning and Security sign-off.
+
+### 6.2 Metrics
 
 **Purpose:** List the key quantitative signals that demonstrate Guardian health and SLO compliance. **|**
 **Contract:** These metrics must remain instrumented and alerted; removing or renaming them requires Observability sign-off and doc updates. **|**
@@ -463,7 +477,7 @@ ______________________________________________________________________
 | `guardian_quarantine_false_positive_total` | Recovered quarantines with same hash; governance tracks ≤ 5 % objective. |
 | `review_queue_backlog_total` / `review_queue_oldest_seconds` | Downstream readiness; alerts coordinate with Guardian backlog. |
 
-### 6.2 Logs & audits
+### 6.3 Logs & audits
 
 **Purpose:** Summarize Guardian’s structured logging and audit footprint so compliance teams can trace every decision. **|**
 **Contract:** Audit streams must remain append-only with RLS safeguards; application code interacts only through secure projections. **|**

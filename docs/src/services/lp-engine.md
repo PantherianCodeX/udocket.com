@@ -502,6 +502,20 @@ ______________________________________________________________________
 - Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks/index.md` and must meet Appendix L baselines before shipping.
 - Logs honour the never-log list ([`Logging §4`](../services/logging.md#4-log-schema--redaction-binding)); sampling budgets follow dynamic controls in [`Logging §7`](../services/logging.md#7-cost-management--budgets-binding), and structured logging adapters prevent ad-hoc stdout noise.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture PolicyContext availability, compile latency, and residency enforcement expectations. **|**
+**Contract:** Lookups, compiles, and policy blocks must satisfy the thresholds below before activations or bundle promotions proceed. **|**
+**State:** Metrics `lpe_lookup_latency_seconds`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`; dashboards “LPE – Enforcement & Residency”, “LPE Compiler”, synthetic HIPAA/PIPEDA probes. **|**
+**Failures & handling:** Breaches invoke RB-LPE-CONTEXT, RB-LPE-COMPILER, or residency runbooks before unfreezing activations. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic activation jobs, and decision-log audits provide evidence. **|**
+**Breadcrumbs:** Telemetry `packages/udocket_core/lpe/telemetry.py`, synthetic definitions `synthetics/lpe_*`, runbooks `docs/src/ops/runbooks/lpe/*.md`. **|**
+**References:** TDD §6, Settings spec §7.3, Guardian spec §7.
+
+- **PolicyContext availability:** ≥99.9% of lookups succeed each month (`lpe_lookup_latency_seconds` + synthetic HIPAA/PIPEDA probes). Breaches trigger RB-LPE-CONTEXT and block Settings activations.
+- **Compile latency:** 95th percentile `lpe_compiler_duration_seconds` ≤ 2 seconds; exceeding the budget pauses rollout until regression is resolved and documented.
+- **Residency enforcement responsiveness:** `lpe_policy_block_total` records blocks within 60 seconds of unsafe activation; missed blocks escalate to Security and halt bundle promotion.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

@@ -360,6 +360,21 @@ ______________________________________________________________________
 - Synthetic monitors: SSE schema validation, portal download smoke tests, chat latency & policy checks, axe accessibility scans.
 - Logs: structured `UI_EVENT`, `PORTAL_EVENT`, `CHAT_SESSION`, `EDIT_EVENT` with correlation IDs and masked fields.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture availability, latency, notification, and assistant policy goals for the web experience. **|**
+**Contract:** Portal uptime, latency, SSE reliability, and assistant guardrails must meet the thresholds below before releases ship. **|**
+**State:** Metrics `portal_http_availability`, `portal_ttfb_seconds`, `ui_interaction_latency_seconds`, `sse_connection_drop_total`, `chat_policy_block_total`; dashboards “Portal Integrity”, “Operator Workspace”, “Notifications Delivery”, “Assistant Usage”. **|**
+**Failures & handling:** Breaches invoke RB-PORTAL-AVAIL, RB-PORTAL-PERF, RB-NOTIFY-INAPP, or RB-ASSISTANT-GUARDRAIL prior to resuming deploys. **|**
+**Observability:** Grafana dashboards, synthetic portal tests, SSE monitors, and assistant QA reports provide evidence. **|**
+**Breadcrumbs:** Prometheus rules `infra/monitoring/web-app-prometheus-rules.yaml`, synthetics `synthetics/web_portal_*.yaml`, runbooks `docs/src/ops/runbooks/web-app/*.md`. **|**
+**References:** Notifications §6, Guardian §7, Settings §6.
+
+- **Portal availability:** ≥99.9% monthly uptime for authenticated views, measured via synthetic portal smoke tests and `portal_http_availability`. Breaches trigger RB-PORTAL-AVAIL and pause deploys.
+- **Latency:** Portal TTFB P95 ≤ 400 ms for in-region clients (`portal_ttfb_seconds`), and staff workspace interactive latency (`ui_interaction_latency_seconds`) P95 ≤ 250 ms. Exceeding budgets invokes RB-PORTAL-PERF.
+- **Notification fan-out:** SSE drop rate (`sse_connection_drop_total`) < 1% rolling 15 minutes; higher rates trigger RB-NOTIFY-INAPP before UI degradation spreads.
+- **Assistant policy adherence:** Policy block rate (`chat_policy_block_total / chat_sessions_total`) stays below 5% while ensuring zero policy escapes; breaches trigger RB-ASSISTANT-GUARDRAIL review.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

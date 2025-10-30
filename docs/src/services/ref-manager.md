@@ -410,7 +410,22 @@ ______________________________________________________________________
 **Breadcrumbs:** Telemetry module `packages/udocket_core/reference_manager/telemetry.py`, dashboards `infra/grafana/reference_manager_*.json`. **|**
 **References:** §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills.
 
-### 6.1 Metrics
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture content ingestion, publish, adoption, and compliance objectives for the reference manager. **|**
+**Contract:** Harvest availability, publish latency, adoption acknowledgements, and license enforcement must meet the thresholds below before new bundles ship. **|**
+**State:** Metrics `reference_manager_harvest_total`, `reference_manager_publish_latency_seconds`, `reference_bundle_adoption_latency_seconds`, `reference_manager_license_violation_total`; dashboards “Reference Manager – Harvest”, “Publish Pipeline”, “Adoption”, “Compliance”. **|**
+**Failures & handling:** Breaches invoke RB-RM-HARVEST, RB-RM-PUBLISH, RB-RM-ADOPTION, or RB-RM-LICENSE before resuming operations. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic harvest/publish jobs, and adoption drills provide evidence. **|**
+**Breadcrumbs:** Telemetry `packages/udocket_core/reference_manager/telemetry.py`, synthetic definitions `ops/reference/synthetics/*.yaml`, runbooks `docs/src/ops/runbooks/reference/*.md`. **|**
+**References:** TDD §6, Settings spec §7.3, Audit spec §4.
+
+- **Harvest availability:** ≥99.5% availability for provider harvest runs, measured via `reference_manager_harvest_total` success rate and synthetic connector checks; breaches trigger RB-RM-HARVEST.
+- **Publish latency:** 95th percentile publish pipeline latency (`reference_manager_publish_latency_seconds`) ≤ 10 minutes; exceeding budget blocks new publishes and invokes RB-RM-PUBLISH.
+- **Adoption acknowledgement:** Bundles adopted within 24 hours P95 (`reference_bundle_adoption_latency_seconds`); backlog alerts enforce RB-RM-ADOPTION.
+- **Compliance enforcement:** License violations (`reference_manager_license_violation_total`) remain zero; detection escalates via RB-RM-LICENSE before additional ingest occurs.
+
+### 6.2 Metrics
 
 **Purpose:** Summarize key quantitative signals. **|**
 **Contract:** Track metrics including `reference_manager_request_total`, `reference_manager_error_total`, `reference_manager_harvest_total`, `reference_manager_etl_duration_seconds`, `reference_manager_review_latency_seconds`, `reference_manager_publish_total`, `reference_bundle_adoption_total`, `reference_manager_license_violation_total`, and `reference_manager_provider_endpoint_violation_total`. **|**
@@ -420,7 +435,7 @@ ______________________________________________________________________
 **References:** Appendix B metrics tables. **|**
 **Breadcrumbs:** Metric exporters `packages/udocket_core/reference_manager/telemetry.py`, tests `tests/reference/test_metrics.py`.
 
-### 6.2 Logs & audits
+### 6.3 Logs & audits
 
 **Purpose:** Describe the audit footprint supporting regulatory review. **|**
 **Contract:** Activations, validations, waivers, sensitive changes, and rollbacks must emit structured audit events stored immutably. **|**
@@ -430,7 +445,7 @@ ______________________________________________________________________
 **References:** §2.8 Security, §8.3.5 RB-RM-LICENSE. **|**
 **Breadcrumbs:** Audit writer `packages/udocket_core/reference_manager/audit.py`, tests `tests/reference/test_audit_log.py`.
 
-### 6.3 Synthetic monitoring & adoption drills
+### 6.4 Synthetic monitoring & adoption drills
 
 **Purpose:** Continuously exercise harvest, validation, publish, and adoption flows. **|**
 **Contract:** Synthetic jobs verify connectors, guard rails, and adoption acknowledgements per deploy; failures block releases. **|**

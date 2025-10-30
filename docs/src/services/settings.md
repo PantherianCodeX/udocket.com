@@ -424,7 +424,22 @@ ______________________________________________________________________
 **Breadcrumbs:** Dashboards `infra/grafana/settings_*.json`, synthetic config `ops/synthetics/settings_slo.yaml`, telemetry module `apps/platform/settings/telemetry.py`. **|**
 **References:** §1 Purpose, §4 State management, §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills.
 
-### 6.1 Metrics
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture registry availability, activation latency, cache freshness, and residency enforcement guarantees. **|**
+**Contract:** API availability, activation duration, cache invalidation, and residency checks must satisfy the thresholds below before new settings are promoted. **|**
+**State:** Metrics `settings_request_total`, `settings_error_total`, `settings_activation_duration_seconds`, `settings_cache_invalidation_lag_seconds`, `settings_residency_violation_total`; dashboards “Settings Registry – SLO”, “Settings Cache”, “Settings Drift”. **|**
+**Failures & handling:** Breaches invoke RB-GOV-008, RB-SETTINGS-CACHE, or RB-RES-* prior to resuming activations. **|**
+**Observability:** Grafana dashboards, synthetic activation tests, and burn-rate alerts supply evidence. **|**
+**Breadcrumbs:** Prometheus rules `infra/monitoring/settings-prometheus-rules.yaml`, synthetic configs `ops/synthetics/settings_slo.yaml`, runbooks `docs/src/ops/runbooks/settings/*.md`. **|**
+**References:** TDD §12, Logging spec §6, Audit spec §5.
+
+- **API availability:** ≥99.9% monthly success rate for read/write operations (`settings_request_total` vs `settings_error_total`). Breaches trigger RB-GOV-008 and freeze releases until the budget recovers. **|**
+- **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw. **|**
+- **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys. **|**
+- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-* and requires waiver or remediation before continuing. **|**
+
+### 6.2 Metrics
 
 **Purpose:** Summarize key quantitative signals. **|**
 **Contract:** Maintain metrics `settings_latency_seconds`, `settings_request_total`, `settings_error_total`, `settings_activation_duration_seconds`, `settings_activation_unsafe_total`, `settings_validation_failure_total`, `settings_cache_invalidation_lag_seconds`, `settings_snapshot_mismatch_total`, and `settings_residency_violation_total`. **|**
@@ -434,7 +449,7 @@ ______________________________________________________________________
 **References:** Appendix B. **|**
 **Breadcrumbs:** Telemetry helpers `apps/platform/settings/telemetry.py`, Prometheus rules `infra/monitoring/settings-prometheus-rules.yaml`.
 
-### 6.2 Logs & audits
+### 6.3 Logs & audits
 
 **Purpose:** Describe the audit footprint that supports incident response and compliance. **|**
 **Contract:** Activation history, diff artifacts, approvals, waivers, and drift findings must be append-only with immutable digests; redaction policies govern secret output. **|**
@@ -444,7 +459,7 @@ ______________________________________________________________________
 **References:** §4 State management, §7 Security & compliance, Appendix A traceability. **|**
 **Breadcrumbs:** Logging config `infra/logging/settings.json`, rotation script `ops/db/rotate_partitions.py`, tests `tests/platform/settings/test_audit_trail.py`.
 
-### 6.3 Synthetic monitoring
+### 6.4 Synthetic monitoring
 
 **Purpose:** Continuously exercise SR surfaces to detect regressions early. **|**
 **Contract:** Synthetic jobs execute read, activation, invalidation, and diff workflows on each deploy; failures block releases until mitigated. **|**
@@ -454,7 +469,7 @@ ______________________________________________________________________
 **References:** §4 Activation pipeline, §5 Failure modes, §8.3.2 RB-GOV-008. **|**
 **Breadcrumbs:** Synthetic scripts `ops/synthetics/`, tests `tests/synthetics/test_settings_slo.py`.
 
-### 6.4 Drift detection (binding)
+### 6.5 Drift detection (binding)
 
 **Purpose:** Detect mismatches between stored snapshots and effective configuration. **|**
 **Contract:** Drift detectors compare snapshot digests, schema versions, and residency profiles on a schedule; any mismatch raises incidents and freezes activations. **|**

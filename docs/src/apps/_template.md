@@ -168,6 +168,16 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Monitoring configs, dashboards, alert definitions. **|**
 **References:** Observability standards or shared appendices.
 
+### 6.1 SLOs & Targets
+
+**Purpose:** Summarize the app’s measurable objectives. **|**
+**Contract:** State availability/latency/error budgets users experience. **|**
+**State:** Note dashboards, synthetic tests, or budgets tracked in tooling. **|**
+**Failures & handling:** Describe how SLO breaches page on-call and drive mitigation. **|**
+**Observability:** Link to Grafana views, availability reports, or burn-rate alerts. **|**
+**Breadcrumbs:** Metrics definitions, synthetic scripts, alert configs. **|**
+**References:** Roadmaps or TDD sections that motivate the targets.
+
 ## 7) Security & Compliance
 
 **Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**

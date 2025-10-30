@@ -232,18 +232,32 @@ SELECT id,
 
 ## 6) Observability (binding)
 
-**Purpose:** Ensure identity controls remain visible and actionable. **|**
-**Contract:** Metrics, dashboards, and synthetic probes listed here must remain enabled; removals require Security + SRE approval. **|**
-**State:** Prometheus rules, Grafana dashboards, synthetic jobs, audit logs. **|**
-**Failures & handling:** Blind spots entered in retrospectives with follow-up actions. **|**
-**Observability:** Metrics/dashboards enumerated below. **|**
-**Breadcrumbs:** Monitoring configs `infra/monitoring/identity-prometheus-rules.yaml`, synthetic definitions `synthetics/identity_*`. **|**
-**References:** Ops observability standards, Settings spec §2.
+**Purpose:** Keep authentication, RLS, masking, and break-glass health visible so risky drifts are caught before impact. **|**
+**Contract:** Prometheus rules, dashboards, synthetics, and alert routes below require joint Security + SRE approval to change; gaps block releases until replaced. **|**
+**State:** Prometheus rules (`infra/monitoring/identity-prometheus-rules.yaml`), Grafana dashboards (“Identity Posture”, “RLS Context Guards”, “Masking Vault & Profiles”, “Break-Glass Governance”), synthetics (`synthetics/identity_token_flow.yaml`, `synthetics/rls_context_probe.yaml`, `synthetics/masking_alias_roundtrip.yaml`), and structured logs (`IDENTITY_EVENT`, `AUTH_EVENT`, `MASKING_EVENT`, `BREAK_GLASS_EVENT`). **|**
+**Failures & handling:** Missing coverage escalates through RB-IDP-FAILOVER, RB-RLS-CONTEXT, RB-MASK, or RB-BREAK-GLASS before production resumes. **|**
+**Observability:** Key metrics `auth_layer_violation_total`, `rls_context_missing_total`, `device_fp_mismatch_total`, `break_glass_event_total`, `masking_transformation_total`, `logging_neverlog_violation_total` drive burn-rate alerts and retrospectives. **|**
+**Breadcrumbs:** Monitoring configs `infra/monitoring/identity-prometheus-rules.yaml`, dashboards `infra/observability/dashboards/identity_*.json`, synthetic definitions `synthetics/identity_*.yaml`. **|**
+**References:** TDD §12, Settings spec §7, Guardian spec §7.
 
 - Metrics: `auth_layer_violation_total`, `rls_context_missing_total`, `device_fp_mismatch_total`, `break_glass_event_total`, `masking_transformation_total`, `logging_neverlog_violation_total`.  
 - Dashboards: “Identity Posture”, “RLS Context Guards”, “Masking Vault & Profiles”, “Break-Glass Governance”.  
 - Synthetic monitors: `synthetics/identity_token_flow.yaml`, `synthetics/rls_context_probe.yaml`, `synthetics/masking_alias_roundtrip.yaml`.  
 - Logs: structured `IDENTITY_EVENT`, `AUTH_EVENT`, `MASKING_EVENT`, `BREAK_GLASS_EVENT` containing Settings snapshot hash and device data.
+
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture the reliability expectations for authentication, RLS enforcement, and masking governance. **|**
+**Contract:** Token issuance, context setup, and masking/break-glass workflows must meet the thresholds below before releases continue. **|**
+**State:** Metrics `identity_token_flow`, `auth_layer_violation_total`, `rls_context_missing_total`, `logging_neverlog_violation_total`, `break_glass_event_missing_retrospective_total`; dashboards “Identity Posture” and “RLS Context Guards”; synthetic probes `synthetics/identity_*`. **|**
+**Failures & handling:** Breaches trigger RB-IDP-FAILOVER, RB-RLS-CONTEXT, RB-MASK, or RB-BREAK-GLASS prior to resuming automation. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, and synthetic runs ensure compliance. **|**
+**Breadcrumbs:** Telemetry modules `apps/platform/logging/access.py`, `packages/udocket_core/permissions`, runbooks `docs/src/ops/runbooks/identity/*.md`. **|**
+**References:** Settings spec §7, TDD §12, Guardian spec §7.
+
+- **Authentication availability:** ≥99.9% success for token issuance and session validation, measured via synthetic `identity_token_flow` and `auth_layer_violation_total`; breaches page RB-IDP-FAILOVER and require RCA prior to release.
+- **RLS context enforcement:** `rls_context_missing_total` remains at zero sustained; any incident triggers RB-RLS-CONTEXT and blocks deployments until resolved.
+- **Masking & break-glass governance:** `logging_neverlog_violation_total` and `break_glass_event_missing_retrospective_total` stay at zero; violations escalate via RB-MASK/RB-BREAK-GLASS within 24 hours.
 
 ## 7) Security & Compliance (binding)
 

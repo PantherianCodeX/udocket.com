@@ -392,6 +392,21 @@ ______________________________________________________________________
 - Metrics to watch: `llm_cost_estimate_total{org,case,job,model}`, `finops_cost_per_case_usd{org,case}`, `finops_cost_per_org_usd{org,month}`, `finops_mom_regression_flag{org}`, `delivery_events_total{org,channel,status}`. Budget overrides update `llm.finops.override_until` so dashboards annotate active bypass windows.
 - Acceptance: dashboards and alerts must pass staging drills prior to promotion; drills replay budget breaches and log alerts in `ops/finops/mom_guard/`.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture provider availability, moderation responsiveness, FinOps guardrails, and residency enforcement obligations. **|**
+**Contract:** Provider circuits, moderation pipelines, budget controllers, and residency policy checks must stay within the thresholds below before traffic continues. **|**
+**State:** Metrics `llm_circuit_state`, `llm_region_fallback_total`, `llm_moderation_latency_seconds`, `llm_cost_estimate_total`, `finops_mom_regression_flag`, `provider_data_policy_drift_total`; dashboards “LLM Residency & Failover”, “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”. **|**
+**Failures & handling:** Breaches invoke RB-LLM-CIRCUIT, RB-LLM-MODERATION, or RB-LLM-FINOPS prior to resuming provider usage. **|**
+**Observability:** Grafana SLO dashboards, Alertmanager routes (`alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_deploy_gate_failed_total`), and synthetic failover drills provide evidence. **|**
+**Breadcrumbs:** Monitoring configs `infra/monitoring/llm-prometheus-rules.yaml`, dashboards `infra/observability/dashboards/llm_*.json`, runbooks `docs/src/ops/runbooks/llm/*.md`. **|**
+**References:** TDD §8, Settings spec §7.3, Logging spec §6.
+
+- **Provider health:** Each active provider maintains ≥99.5% availability (`llm_circuit_state == "CLOSED"` and `llm_region_fallback_total` within waiver tolerances). Circuit opens trigger RB-LLM-CIRCUIT and suspend new assignments.
+- **Moderation latency:** Automated moderation pipeline availability ≥99.9% with P95 latency ≤ 3 seconds (`llm_moderation_latency_seconds`); breaches page RB-LLM-MODERATION and block risky channels until remedied.
+- **Cost guardrails:** Deploy gate budgets enforce `finops_mom_regression_flag = 0` and `finops_deploy_gate_failed_total = 0`; breaches require RB-LLM-FINOPS and leadership approval before continuing.
+- **Residency enforcement:** `provider_data_policy_drift_total` and `llm_policy_block_total` remain zero sustained; any drift escalates to Security and blocks provider selection.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

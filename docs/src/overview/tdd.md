@@ -1452,6 +1452,7 @@ ______________________________________________________________________
 **Settings keys:** Telemetry and audit toggles surface under `logging.*`, `audit.*`, and `privacy.*`; changes require dual approvals and documentation in their respective specs.
 **Runbooks:** Operational responses reference RB-LOG-007, RB-AUDIT-004, RB-MASK, RB-COST, and RB-TRACE-CORR in `../ops/runbooks/index.md`.
 **Cross-links:** Guardian judgments embed audit IDs (§7), manifests live with artifact lifecycle (§5.2), and Settings activation snapshots (§6.1) ensure every job carries provenance.
+
 ### 12.2 Runbooks and synthetic monitors
 
 *Purpose: Ensure operational readiness and quick diagnosis.*

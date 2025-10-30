@@ -2,6 +2,37 @@
 
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_runbook_catalog.py` to refresh. -->
 
+## Audit & Evidence — 8.3 Runbooks & Drills (binding)
+
+**Purpose:** Ensure evidence of drills and runbook freshness. **|**
+**Contract:** Quarterly seal chain drill, semi-annual DSAR dry-run, annual waiver review; evidence stored alongside drill output. **|**
+**State:** Drill scripts `ops/audit/drill_runner.py`, evidence directories `ops/audit/drills/<date>/`. **|**
+**Failures & handling:** Missed drill triggers compliance Sev-2 and blocks release sign-off. **|**
+**Observability:** Drill dashboard, metric `audit_drill_overdue_total`. **|**
+**Breadcrumbs:** Runbooks RB-AUDIT-004, RB-PRIV-DSAR. **|**
+**References:** Compliance governance plan.
+
+### Audit & Evidence — 8.3.1 Runbook Index
+
+- `audit_seal_errors_total` → RB-AUDIT-004  
+- `audit_worm_lag_seconds` → RB-AUDIT-004  
+- `waiver_expiring_total` → RB-WAIVER-GOV  
+- `dsar_journal_pending_total` → RB-PRIV-DSAR
+
+### Audit & Evidence — 8.3.2 Primary Runbooks
+
+**Purpose:** Summarize core runbooks. **|**
+**Contract:** Maintain RB-AUDIT-004 (seal/immutable response), RB-WAIVER-GOV (waiver review), RB-PRIV-DSAR (privacy obligations), RB-AUDIT-MANIFEST (manifest rebuild). **|**
+**State:** Runbook markdown files in `docs/src/ops/runbooks/compliance/`. **|**
+**Failures & handling:** Stale runbooks flagged during quarterly audit; block release until updated. **|**
+**Observability:** Runbook freshness tracker. **|**
+**Breadcrumbs:** Runbook repo. **|**
+**References:** Compliance governance manual.
+
+### Audit & Evidence — 8.3.3 Drill Cadence & Evidence
+
+- Quarterly seal + immutable tabletop; evidence saved to `ops/audit/drills/<date>/seal.md`.\n- Semi-annual DSAR end-to-end rehearsal with sample case.\n- Annual waiver governance review documented as `WAIVER_REVIEW_REPORT` artifact.
+
 ## Digital Signer — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain executable runbooks and drill cadence for key signing scenarios. **|**
@@ -50,7 +81,7 @@
 **Failures & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh runbooks before closing incidents. **|**
 **Observability:** Post-incident retros attach the executed RB-GUARD identifier and confirm coverage during quarterly reviews; docs CI checks referenced runbook files exist. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/guardian/*.md`, automation `ops/scripts/guardian/`, tests `tests/ops/test_runbook_integrity.py::test_guardian_runbooks`, PagerDuty service “Guardian SLO”, Grafana dashboard “Guardian SLO”. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, §8.3, ADR-0001. *
+**References:** §5 Failure modes, §8.1 Operational posture, §8.3, ADR-0001.
 
 ### Guardian Service — 8.3.1 Runbook Index (informative)
 
@@ -171,7 +202,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing evidence or outdated steps block release sign-off until updated. **|**
 **Observability:** Docs lint, drill calendar `ops/change/llm_rotations.ics`, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, automation scripts. **|**
-**References:** `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`. *
+**References:** `RB-LLM-003`, `RB-LLM-JB`, `RB-LLM-FINOPS`, `RB-LLM-REPLAY`.
 
 ### LLM Registry & Runtime Governance — 8.3.1 Runbook Index (informative)
 
@@ -203,6 +234,39 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Drill calendar `ops/change/llm_rotations.ics` tracks cadence and ownership; missed drills block release sign-off until evidence captured.
 - Docs lint and Ops governance dashboards verify runbook freshness and evidence uploads prior to production changes.
 
+## Observability & Logging — 8.3 Runbooks & Drills (binding)
+
+**Purpose:** Ensure playbooks stay current and executed. **|**
+**Contract:** Runbooks RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK reviewed quarterly; ingest/seal drills recorded as `AUDIT_DRILL` artifacts. **|**
+**State:** Runbook repo `docs/src/ops/runbooks/`, drill evidence under `ops/logging/drills/<date>/`. **|**
+**Failures & handling:** Missed reviews trigger compliance ticket and block release sign-off. **|**
+**Observability:** Drill completion dashboard, metric `logging_drill_overdue_total`. **|**
+**Breadcrumbs:** Runbook catalog, drill scripts `ops/logging/drill_runner.py`. **|**
+**References:** Audit §5, Compliance policy.
+
+### Observability & Logging — 8.3.1 Runbook Index
+
+- `logging_ingest_lag_seconds` → RB-LOG-007  
+- `trace_sampling_drift_total` → RB-TRACE-CORR  
+- `logging_volume_budget_violation_total` → RB-COST  
+- `logging_neverlog_violation_total` → RB-MASK
+
+### Observability & Logging — 8.3.2 Primary Runbooks
+
+**Purpose:** Summarize top-tier playbooks. **|**
+**Contract:** Maintain up-to-date steps, owners, evidence collection. **|**
+**State:** RB-LOG-007 (ingest triage), RB-TRACE-CORR (trace drift), RB-COST (budget control), RB-MASK (redaction incident). **|**
+**Failures & handling:** Stale runbooks flagged during quarterly review; blocking for release until updated. **|**
+**Observability:** Runbook freshness tracker. **|**
+**Breadcrumbs:** `docs/src/ops/runbooks/logging/`. **|**
+**References:** Incident governance policy.
+
+### Observability & Logging — 8.3.3 Drill Cadence & Evidence
+
+- Quarterly ingest + seal tabletop; evidence stored under `ops/logging/drills/<date>/ingest.md`.
+- Semi-annual trace correlation live drill with synthetic failure.
+- Annual cost-control drill verifying sampling overrides and alerting.
+
 ## Localization & Policy Engine — 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative recovery guides and drill expectations. **|**
@@ -211,7 +275,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing or stale steps block deploy sign-off until the runbook is refreshed. **|**
 **Observability:** Docs lint validates references; quarterly drill calendar tracks execution. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/lpe/*.md`, automation `ops/scripts/lpe/*.py`, tests `tests/ops/test_runbook_integrity.py`. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability. *
+**References:** §5 Failure modes, §8.1 Operational posture, §6 Observability.
 
 ### Localization & Policy Engine — 8.3.1 Runbook Index (informative)
 
@@ -249,7 +313,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing drill evidence or outdated steps block change approval until updated. **|**
 **Observability:** Docs lint, Ops governance dashboards, drill scheduler reports. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, Slack `#ops-notifications`. **|**
-**References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`. *
+**References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`.
 
 ### Notifications Service — 8.3.1 Runbook Index (informative)
 
@@ -330,7 +394,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing or stale steps block deploy sign-off until the runbook is refreshed. **|**
 **Observability:** Post-incident retros, docs lint, and runbook catalog builds verify coverage. **|**
 **Breadcrumbs:** Runbooks `ops/reference/runbooks/*.md`, automation `ops/reference/*.py`, tests `tests/reference/test_runbook_integrity.py`. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics. *
+**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics.
 
 ### Reference Manager — 8.3.1 Runbook Index (informative)
 
@@ -368,7 +432,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing or stale steps block deployment sign-off; responders raise follow-up tasks to refresh runbooks before closing incidents. **|**
 **Observability:** Post-incident retros, quarterly tabletop exercises, and docs lint verify runbook coverage. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/settings/*.md`, automation scripts under `ops/scripts/settings/`, tests `tests/platform/settings/test_runbook_integrity.py`. **|**
-**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0003. *
+**References:** §5 Failure modes, §8.1 Operational posture, Appendix B metrics, ADR-0003.
 
 ### Settings Registry — 8.3.1 Runbook Index (informative)
 
@@ -406,7 +470,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing drill evidence or outdated steps block automation restart after incidents. **|**
 **Observability:** Docs lint, drill scheduler reports, Ops governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, Ops governance records. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`. *
+**References:** `RB-JOB-WATCHDOG`, `RB-LOCK-006`, `RB-NOTIFY-*`, `RB-UPLOAD-SCAN`, `RB-CASE-IMPORT`.
 
 ### Worker Cluster — 8.3.1 Runbook Index (informative)
 
@@ -444,7 +508,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing drill evidence or outdated steps block release approval until updated. **|**
 **Observability:** Docs lint, drill scheduler reports, governance dashboards. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler, governance policy App.N. **|**
-**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`. *
+**References:** `RB-JOB-WATCHDOG`, `RB-PORTAL-INVALIDATION`, `RB-LPE-LOCALE-GAP`, `RB-NOTIFY-*`, `RB-CHAT-ABUSE`.
 
 ### Web Application & Portal — 8.3.1 Runbook Index (informative)
 

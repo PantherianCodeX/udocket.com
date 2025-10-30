@@ -299,6 +299,20 @@ ______________________________________________________________________
 - Logs: mesh ingress/egress logs (masked), Kubernetes audit logs, residency scanner findings (`ops/residency/findings/*.jsonl`).
 - Alerts: TLS expiry, mesh policy drift, residency drift, pod security violations, Flux sync failures.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Define reliability expectations for the shared runtime footprint. **|**
+**Contract:** Kubernetes control plane, Flux convergence, and guardrail enforcement must meet the thresholds below before releases proceed. **|**
+**State:** Metrics `platform_control_plane_up`, `platform_flux_sync_seconds`, `pod_security_violation_total`, `mesh_policy_violation_total`, `residency_drift_detected_total`; dashboards “Platform Runtime”, “Kubernetes Guardrails”, “Residency & Endpoint Posture”. **|**
+**Failures & handling:** Breaches invoke RB-K8S-FENCE and the residency runbooks before automation resumes. **|**
+**Observability:** Grafana SLO dashboards with burn-rate alerts, synthetic `/readyz` checks, and residency scanners provide evidence. **|**
+**Breadcrumbs:** Monitoring configs `infra/monitoring/platform-runtime-prometheus-rules.yaml`, synthetic scripts `scripts/security/check_tls_ciphers.py`, `scripts/residency/scan_endpoints.py`. **|**
+**References:** TDD §12, Settings spec §7.2, Logging spec §6.
+
+- **Control plane availability:** ≥99.9% monthly uptime for the managed Kubernetes API and ingress endpoints, measured via synthetic `/readyz` probes and `platform_control_plane_up`. Burn-rate alerts (1×/6×) page platform runtime on-call via RB-K8S-FENCE.
+- **Flux convergence:** 95th percentile reconciliation latency ≤5 minutes as captured by `platform_flux_sync_seconds`; breaches block releases until drift is resolved and recorded in RB-K8S-FENCE.
+- **Guardrail enforcement:** Policy enforcement alerts (`pod_security_violation_total`, `mesh_policy_violation_total`, `residency_drift_detected_total`) must remain at zero sustained; any recurring breach triggers incident review prior to release sign-off.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

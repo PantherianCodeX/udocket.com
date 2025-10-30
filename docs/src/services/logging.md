@@ -180,13 +180,28 @@ ______________________________________________________________________
 
 ## 6) Observability (binding)
 
-**Purpose:** Ensure operators can detect and diagnose telemetry issues. **|**
-**Contract:** Maintain dashboards for ingest, registration, cost, trace correlation, and immutable integrity; run synthetic ingest checks continuously. **|**
-**State:** Prometheus rules `infra/monitoring/logging-prometheus-rules.yaml`, Grafana dashboards “Logging Pipeline”, “Trace Correlation”, “Logging Cost”, “Immutable Sink”, synthetics `synthetics/logging_ingest.yaml`. **|**
-**Failures & handling:** Missing metric or dashboard pages on-call via RB-LOG-007; synthetic failures raise PagerDuty incidents. **|**
-**Observability:** Metrics `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct`, `trace_sampling_rate`, `audit_worm_lag_seconds`. **|**
-**Breadcrumbs:** Monitoring configs `infra/monitoring/`, synthetic scripts `synthetics/`. **|**
-**References:** Audit §5, Settings §7.2, LLM Registry §6 (cost dashboards).
+**Purpose:** Ensure ingest, trace correlation, immutable mirroring, and cost posture stay measurable and alertable. **|**
+**Contract:** Prometheus rules, dashboards, synthetics, and alert routes enumerated here are mandatory; any removal triggers RB-LOG-007 until coverage is restored. **|**
+**State:** Prometheus rules (`infra/monitoring/logging-prometheus-rules.yaml`), Grafana views (“Logging Pipeline”, “Trace Correlation”, “Logging Cost”, “Immutable Sink”), synthetics (`synthetics/logging_ingest.yaml`), and seal verifiers. **|**
+**Failures & handling:** Gaps escalate through RB-LOG-007 or linked runbooks (RB-AUDIT-004, RB-TRACE-CORR, RB-COST) before gates reopen. **|**
+**Observability:** Metrics `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct`, `trace_sampling_rate`, `audit_worm_lag_seconds` feed burn-rate alerts and dashboards. **|**
+**Breadcrumbs:** Monitoring configs `infra/monitoring/logging-prometheus-rules.yaml`, dashboards `infra/observability/dashboards/logging_*.json`, synthetic definitions `synthetics/logging_ingest.yaml`. **|**
+**References:** Audit spec §5, Settings spec §7.2, TDD §12 Observability overview.
+
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Outline ingestion, mirroring, correlation, and cost objectives that keep observability trustworthy. **|**
+**Contract:** Log ingestion, immutable mirroring, trace correlation, and cost budgets must satisfy the thresholds below before deploy gates reopen. **|**
+**State:** Metrics `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `audit_worm_lag_seconds`, `trace_sampling_drift_total`, `logging_volume_budget_violation_total`; dashboards “Logging Pipeline”, “Trace Correlation”, “Logging Cost”. **|**
+**Failures & handling:** Breaches invoke RB-LOG-007, RB-AUDIT-004, RB-TRACE-CORR, or RB-COST prior to resuming approvals. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic ingest checks, and seal verifiers provide evidence. **|**
+**Breadcrumbs:** Prometheus rules `infra/monitoring/logging-prometheus-rules.yaml`, seal runner `ops/audit/seal_runner.py`, runbooks `docs/src/ops/runbooks/logging/*.md`. **|**
+**References:** TDD §12, Audit spec §5, Settings §7.2.
+
+- **Ingest availability:** ≥99.9% successful log ingestion each month, enforced by `logging_ingest_lag_seconds` < 30s P95 and `logging_drop_rate_pct = 0`; burn-rate alerts open RB-LOG-007.
+- **Immutable mirror lag:** Mirror delay stays ≤1 collection interval (≤15 minutes) measured via `audit_worm_lag_seconds`; breaches pause approvals until RB-AUDIT-004 completes.
+- **Trace correlation fidelity:** Sampling drift between trace/error rates <5% sustained, tracked by `trace_sampling_drift_total`; violations trigger RB-TRACE-CORR before release sign-off.
+- **Cost guardrails:** Daily log volume per service remains within configured budgets (`logging_volume_budget_violation_total = 0`); overrides require RB-COST and FinOps approval within 1 business day.
 
 ______________________________________________________________________
 
@@ -201,14 +216,17 @@ ______________________________________________________________________
 **References:** Settings §7.2 (`logging.redaction.*`, `logging.access.roles[]`, `portal.logging.enabled`), Audit §4, Audit §5.
 
 ### 7.1 Access control
+
 - Log queries require WebAuthn step-up, purpose entry, and emit `LOG_QUERY` events.
 - Bulk exports demand dual approval and produce `LOG_EXPORT` artifacts with SHA-256 manifests.
 
 ### 7.2 Data minimization
+
 - Scrubber removes auth headers, tokens, signed URLs, PHI, transcripts/exhibits.
 - LLM evidence logs confirm provider “no training/no logging” flags via LLM Registry §6.
 
 ### 7.3 Client telemetry posture
+
 - Portal WebVitals capture anonymized aggregates; console capture disabled except for time-boxed incidents with ticket references cleared within 24h.
 
 ______________________________________________________________________

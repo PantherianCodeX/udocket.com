@@ -147,10 +147,12 @@ ______________________________________________________________________
 **References:** Logging §3.2 (mirror), Settings §7.3, Audit §5.
 
 ### 4.1 Manifest & event storage
+
 - Manifests stored under `storage/media/cases/<case>/ops/<job_id>__<agent>_manifest.json` with SHA-256 digests.
 - `audit_event` captures normalized events (case/artifact/job IDs, judgment IDs, settings hash, timestamps) and is mirrored to WORM.
 
 ### 4.2 Ledger storage
+
 - Waiver ledger table `compliance_waiver` holds scope, jurisdiction, owners, expiry, evidence bundle path.
 - DSAR journal `privacy_dsar_journal` tracks request lifecycle, deadlines, and evidence attachments.
 
@@ -184,6 +186,20 @@ ______________________________________________________________________
 **Breadcrumbs:** Monitoring configs `infra/monitoring/`, synthetic definitions `synthetics/`. **|**
 **References:** Logging §6, Settings §7.3, Compliance reporting.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture the availability and timeliness guarantees that keep audit evidence defensible. **|**
+**Contract:** Seal verification, immutable mirroring, waiver reviews, and DSAR handling must satisfy the thresholds below before approvals continue. **|**
+**State:** Metrics `audit_seal_errors_total`, `audit_worm_lag_seconds`, `waiver_expiring_total`, `dsar_journal_pending_total`; stored seal artifacts, waiver ledger entries, and DSAR journals provide evidence. **|**
+**Failures & handling:** Breaches invoke RB-AUDIT-004, RB-WAIVER-GOV, or RB-PRIV-DSAR prior to resuming promotions. **|**
+**Observability:** Dashboards “Audit Seal Integrity”, “Waiver Ledger”, and synthetic `audit_verify` runs monitor compliance. **|**
+**Breadcrumbs:** Seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/udocket_core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
+**References:** Logging spec §6, Settings spec §7.3, TDD §12.
+
+- **Seal continuity:** Hourly seal verification succeeds with ≤1 failed interval per quarter; tracked via `audit_seal_errors_total` and synthetic `audit_verify` job, escalating through RB-AUDIT-004 on breach.
+- **Immutable lag:** `audit_worm_lag_seconds` stays ≤15 minutes; exceeding lag blocks approvals and requires joint remediation with Observability before restart.
+- **Compliance workflows:** Waiver backlog (`waiver_expiring_total`) resolved within 5 business days; DSAR backlog (`dsar_journal_pending_total`) remains within regulatory SLA (45 days CCPA/30 days GDPR) with automated reminders and RB-PRIV-DSAR if breached.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance (binding)
@@ -197,10 +213,12 @@ ______________________________________________________________________
 **References:** Settings §7.3–§7.4, Guardian §7, Digital Signer §4.
 
 ### 7.1 Waiver governance
+
 - Dual approvers (Security + Product) required; evidence bundles stored under `ops/waivers/WAIVER-*.json`.
 - Expiry notifications sent 7 days prior; stale waivers auto-suspend affected flows.
 
 ### 7.2 DSAR & retention compliance
+
 - DSAR journal tracks received, due, completed status; erasure generates `ERASURE_JOURNAL` + `DESTRUCTION_CERT` artifacts referencing audit events removed.
 - Legal hold toggles recorded as `LEGAL_HOLD_EVENT` with reviewer metadata.
 

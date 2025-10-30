@@ -358,6 +358,21 @@ ______________________________________________________________________
 - Dashboards: `infra/observability/dashboards/notifications_delivery.json`, `notifications_inapp.json`, `download_tokens.json`.
 - Alert catalogue entries map to `RB-NOTIFY-*` runbooks; docs CI ensures runbook references rely on catalog.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture delivery, webhook, in-app, and token reliability goals. **|**
+**Contract:** Notification delivery, webhook ingestion, SSE drop rate, and token validation must satisfy the thresholds below before campaigns launch. **|**
+**State:** Metrics `delivery_success_ratio`, `notifications_receipt_latency_seconds`, `sse_connection_drop_total`, `download_token_validation_total{outcome}`; dashboards “Notifications Delivery”, “Notifications In-App”, “Download Tokens”. **|**
+**Failures & handling:** Breaches invoke RB-NOTIFY-OUTAGE, RB-NOTIFY-WEBHOOK, RB-NOTIFY-INAPP, or RB-NOTIFY-TOKEN prior to resuming automation. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, portal synthetics, and SSE monitors provide evidence. **|**
+**Breadcrumbs:** Prometheus rules `infra/monitoring/notifications-prometheus-rules.yaml`, synthetic definitions `synthetics/notifications_*`, runbooks `docs/src/ops/runbooks/notifications/*.md`. **|**
+**References:** TDD §11, Web App §6, Audit §4.
+
+- **Delivery success:** ≥99.5% of outbound notifications reach provider or user receipt within channel SLA, tracked by `delivery_success_ratio` and `notifications_receipt_latency_seconds`. Breaches trigger RB-NOTIFY-OUTAGE and pause new campaigns until resolved.
+- **Webhook ingestion latency:** Provider callbacks process within 60 seconds P95 (`notifications_receipt_latency_seconds` subset); overruns invoke RB-NOTIFY-WEBHOOK and force retry throttling audits.
+- **In-app realtime health:** SSE drop rate (`sse_connection_drop_total` / connections) stays below 1% rolling 15 minutes; exceeding threshold pages RB-NOTIFY-INAPP before customer-facing impact widens.
+- **Download token validation:** Unexpected deny rate (`download_token_validation_total{outcome="denied"}` minus abuse baseline) remains under 0.5%; anomalies escalate via RB-NOTIFY-TOKEN with security review.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

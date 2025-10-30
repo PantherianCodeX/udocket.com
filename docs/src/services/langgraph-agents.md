@@ -273,6 +273,21 @@ ______________________________________________________________________
 - **FinOps blend:** Monitor tokens-per-approved artifact and rejection counts to ensure budget adherence without quality degradation.
 - **Shadow acceptance:** Shadow runs must match production outputs within tolerance windows (§8.2) before promoting new pipelines.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture availability, quality, latency, and cost expectations for LangGraph pipelines. **|**
+**Contract:** Agent run completion, QA acceptance, lane latency, and token budgets must meet the thresholds below before promotions proceed. **|**
+**State:** Metrics `agent_job_completion_ratio`, `agent_lane_duration_seconds`, `agent_queue_latency_seconds`, `agent_token_budget_violation_total`; dashboards “Agent Pipelines – Activation”, “Agent QA Acceptance”, FinOps monitors `ops/finops/agents_cost_dashboard.json`. **|**
+**Failures & handling:** Breaches invoke RB-AGENT-PIPELINE, RB-AGENT-QA, or RB-FINOPS-LANGGRAPH before enabling new activations. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, QA harness reports, and shadow run comparisons provide evidence. **|**
+**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/udocket_core/agents/logging.py`, runbooks `docs/src/ops/runbooks/agents/*.md`. **|**
+**References:** TDD §6, Worker Cluster spec §3.5, Guardian spec §7.
+
+- **Pipeline availability:** ≥99.5% of LangGraph runs complete without manual retry, measured via `agent_job_completion_ratio`; breaches trigger RB-AGENT-PIPELINE before promotions proceed.
+- **QA acceptance:** Automated QA issue density stays ≤0.2 blocking defects per artifact; exceedances invoke RB-AGENT-QA and pause affected pipelines.
+- **Lane latency:** Analyze lane P95 ≤ 15 minutes, Compose lane P95 ≤ 45 minutes, Transcribe backlog clearance P95 ≤ 5 minutes (`agent_lane_duration_seconds{lane}` / `agent_queue_latency_seconds`). Breaches require corrective action before enabling new activations.
+- **FinOps guard:** `agent_token_budget_violation_total` remains zero; if triggered, RB-FINOPS-LANGGRAPH engages and approvals halt until the budget recovers.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

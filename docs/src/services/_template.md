@@ -168,6 +168,16 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Monitoring configs, dashboards, alert definitions. **|**
 **References:** Observability standards or shared appendices.
 
+### 6.1 SLOs & Targets
+
+**Purpose:** Summarize the service’s measurable objectives. **|**
+**Contract:** State availability/latency/error budgets that must hold before release. **|**
+**State:** Note SLO dashboards, Prometheus rules, or tooling that tracks burn rate. **|**
+**Failures & handling:** Describe how SLO breaches are paged and remediated. **|**
+**Observability:** Link to Grafana views or reports backing the SLO. **|**
+**Breadcrumbs:** Metrics definitions, synthetic jobs, SLO configuration files. **|**
+**References:** Docs or TDD sections that provide rationale for the targets.
+
 ## 7) Security & Compliance
 
 **Purpose:** Capture authZ/authN, data handling classes, and regulatory duties. **|**

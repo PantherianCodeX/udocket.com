@@ -253,6 +253,21 @@ ______________________________________________________________________
 - Traces: Workers propagate W3C trace context via Celery headers; spans tagged with `{queue, task_name, retry}`; sampling 15% baseline, 100% on errors.
 - Dashboards: “Worker Queues”, “Watchdog Runner”, “Job Progress”, “Upload Scanning”, “Case Import”; synthetic monitors verify watchdog heartbeat and SSE schema versions.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Capture queue throughput, job completion, and watchdog timing guarantees. **|**
+**Contract:** Queue latency, completion ratio, watchdog heartbeat, and upload scanning throughput must stay within the thresholds below before new jobs launch. **|**
+**State:** Metrics `celery_queue_depth`, `agent_job_completion_ratio`, `job_retry_total`, `watchdog_runner_lag_seconds`, `watchdog_runner_missed_total`, `upload_scan_duration_seconds`; dashboards “Worker Queues”, “Watchdog Runner”, “Upload Scanning”. **|**
+**Failures & handling:** Breaches trigger RB-JOB-QUEUE, RB-JOB-WATCHDOG, or RB-UPLOAD-SCAN prior to resuming automation. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic watchdog checks, and queue latency probes provide evidence. **|**
+**Breadcrumbs:** Monitoring rules `infra/monitoring/worker-prometheus-rules.yaml`, synthetic definitions `synthetics/worker_*`, runbooks `docs/src/ops/runbooks/worker/*.md`. **|**
+**References:** TDD §12, Logging spec §6, Notifications spec §6.
+
+- **Queue latency:** 95th percentile job start delay (`celery_queue_depth` + derived latency) ≤ 2 minutes for standard queues; breaches trigger RB-WORKER-QUEUE before new jobs enter backlog.
+- **Job completion:** ≥99.5% of jobs complete without DLQ escalation per rolling 24h (`job_retry_total`, `dlq_event_total`); higher failure rates require RB-WORKER-DLQ and leadership update.
+- **Watchdog heartbeat:** `watchdog_runner_lag_seconds` stays ≤ 60 seconds with `watchdog_runner_missed_total = 0`; missed beats invoke RB-JOB-WATCHDOG and block releases until restored.
+- **Upload scanning throughput:** `upload_scan_duration_seconds` P95 stays within SLA; breaches page RB-UPLOAD-SCAN and pause ingestion.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

@@ -327,6 +327,20 @@ ______________________________________________________________________
 **Breadcrumbs:** Observability config `infra/observability/dashboards/signer.json`, alert rules `infra/monitoring/signer-prometheus-rules.yaml`, tests `tests/observability/test_signer_metrics.py`. **|**
 **References:** §5 Failure modes, §8 Operational notes, Appendix D telemetry schema.
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Define reliability expectations for signing, TSA, and OCSP operations. **|**
+**Contract:** Signing requests, timestamping, and OCSP validation must meet the thresholds below before releases continue. **|**
+**State:** Metrics `signer_request_latency_seconds`, `signer_error_total`, `tsa_time_drift_seconds`, `ocsp_latency_seconds`; dashboards “Signer & TSA” and “Deliverable Signatures”; audit artifacts for key rotations. **|**
+**Failures & handling:** Breaches trigger RB-SIGN-INCIDENT, RB-SIGN-TSA, or RB-SIGN-OCSP as appropriate before new deliverables are approved. **|**
+**Observability:** Grafana dashboards “Signer & TSA”, Alertmanager routes for signer/TSA/OCSP, synthetic signing tests. **|**
+**Breadcrumbs:** Observability config `infra/observability/dashboards/signer.json`, Prometheus rules `infra/monitoring/signer-prometheus-rules.yaml`, runbooks `docs/src/ops/runbooks/signer/*.md`. **|**
+**References:** TDD §12, Audit spec §4, Settings spec §7.3.
+
+- **Signing success:** ≥99.9% of signing requests complete successfully each month; enforced via `signer_request_latency_seconds` P95 ≤ 5 seconds and `signer_error_total` burn-rate alerts tied to RB-SIGN-INCIDENT.
+- **Timestamp authority drift:** `tsa_time_drift_seconds` remains ≤ 5 seconds absolute; violations trigger RB-SIGN-TSA and pause releases until corrected.
+- **OCSP responsiveness:** OCSP round-trip P95 ≤ 5 seconds (`ocsp_latency_seconds`); sustained breaches escalate to RB-SIGN-OCSP before deliverables can be promoted.
+
 ______________________________________________________________________
 
 ## 7) Security & Compliance

@@ -60,6 +60,7 @@ nav:
   - Appendices:
     - Glossary: overview/tdd/appendices/glossary.md
     - Status Mapping: overview/tdd/appendices/status-mapping.md
+    - SLO Index: overview/tdd/appendices/slo_index.md
     - Diagrams: overview/tdd/appendices/diagrams.md
 - PRD:
   - Overview: overview/prd/index.md
