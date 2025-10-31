@@ -1,0 +1,25 @@
+error_codes:
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: Artifact metadata failed schema validation (hash mismatch, unsupported type, or missing manifest fields).
+    client_action: Fix the payload or recompute hashes locally before retrying the upload/promotion request.
+    related_metrics:
+      - artifact_api_error_total
+      - artifact_store_hash_mismatch_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: true
+    description: ExclusiveSwap detected an in-flight or newer deliverable/promotion for the same lineage.
+    client_action: Refresh artifact state, resolve outstanding approvals, and retry promotion after reviewers clear the conflict.
+    related_metrics:
+      - artifact_api_error_total
+      - artifact_promotion_conflict_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: Guardian, residency, or retention policy forbids writing or deleting the artifact.
+    client_action: Review Guardian verdicts, residency waivers, or retention windows; obtain approval before resubmitting.
+    related_metrics:
+      - artifact_api_error_total
+      - artifact_retention_violation_total

@@ -72,23 +72,23 @@ nav:
 - Apps:
   - Web App: apps/web-app.md
 - Services:
-  - Platform Runtime: services/platform-runtime.md
-  - Observability: services/observability.md
-  - Audit & Evidence: services/audit.md
-  - Identity & Access: services/identity.md
   - Accounts & Tenants: services/accounts-tenants.md
-  - Billing & Subscriptions: services/billing-subscriptions.md
   - Artifact Store: services/artifact-store.md
-  - Worker Cluster: services/worker-cluster.md
-  - LangGraph Agents: services/langgraph-agents.md
-  - Guardian: services/guardian.md
+  - Audit & Evidence: services/audit.md
+  - Billing & Subscriptions: services/billing-subscriptions.md
   - Communications: services/communications.md
   - Digital Signer: services/digital-signer.md
-  - Settings Registry: services/settings.md
-  - LPE: services/lp-engine.md
-  - Reference Manager: services/ref-manager.md
+  - Guardian: services/guardian.md
+  - Identity & Access: services/identity.md
+  - LangGraph Agents: services/langgraph-agents.md
   - LLM Registry: services/llm-registry.md
+  - LPE: services/lp-engine.md
+  - Observability: services/observability.md
+  - Platform Runtime: services/platform-runtime.md
+  - Reference Manager: services/ref-manager.md
+  - Settings Registry: services/settings.md
   - Search & Indexing: services/search-index.md
+  - Worker Cluster: services/worker-cluster.md
 - Ops:
   - Runbooks: ops/runbooks.md
 - ADR:

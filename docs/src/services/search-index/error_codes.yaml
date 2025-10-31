@@ -1,0 +1,25 @@
+error_codes:
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: Query payload or filter parameters failed validation (unsupported field, malformed vector, or tenant scope missing).
+    client_action: Correct the query parameters using the published schema and retry.
+    related_metrics:
+      - search_api_error_total
+      - search_query_validation_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: Access policy, Guardian verdict, or tenant residency rule forbids returning requested results.
+    client_action: Confirm caller permissions, review Guardian verdicts, or adjust residency scope before retrying.
+    related_metrics:
+      - search_api_error_total
+      - search_acl_violation_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: Underlying search index or embedding service is unavailable or lagging beyond thresholds.
+    client_action: Retry after backoff; system falls back to lexical only. Escalate using RB-SEARCH-INGEST if the incident persists.
+    related_metrics:
+      - search_api_error_total
+      - search_index_backlog_total

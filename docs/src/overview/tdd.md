@@ -192,6 +192,7 @@ To keep visuals helpful and consistent:
 - `transcription_cycle_time` ≤ 30 minutes P95 for batch jobs (case-ready transcript).
 - ≥ 95% Guardian pass rate on first submission with \< 1% false negatives per quarter.
 - FinOps: LLM spend per case maintained within org-defined monthly caps; ≥ 90% forecast accuracy.
+- *Service specification:* [`Billing & Subscriptions`](../services/billing-subscriptions.md) details plan catalog, usage metering, delinquency handling, and FinOps dashboards.
 - Platform reliability: Web/worker availability ≥ 99.5%, no Sev-1 incidents triggered by residency or RBAC violations.
 
 ### 1.5 Document readers & decision checkpoints
@@ -1791,6 +1792,8 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 16) Search & knowledge retrieval
+
+*Service specification:* [`Search & Indexing`](../services/search-index.md) captures ingestion pipelines, vector enrichment, API surfaces, and operational posture for discovery features.
 
 ### 16.1 Indexing model and sources
 

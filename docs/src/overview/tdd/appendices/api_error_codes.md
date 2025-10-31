@@ -45,6 +45,34 @@ This appendix aggregates the API error code sections from every service and app 
 <!-- BEGIN AUTO-GENERATED: api-error-index -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_api_error_codes.py` to refresh. -->
 
+### [Accounts & Tenants Service](../../../services/accounts-tenants.md#3-3-webhooks-events-binding) {#accounts-tenants-service}
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CONFLICT` | Tenant already exists or lifecycle state prevents the requested transition. | Refresh tenant state, resolve outstanding provisioning/offboarding steps, then retry. |
+| `POLICY_BLOCK` | Residency, compliance hold, or approval policy forbids processing the request. | Coordinate with Compliance/Records to clear the hold or obtain approval, then retry once unblocked. |
+| `VALIDATION_ERROR` | Tenant payload failed schema validation or residency selection rules. | Correct the request body (domains, residency, legal artefacts) and resubmit. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | Yes | accounts_api_error_total<br>tenant_event_conflict_total |
+| `POLICY_BLOCK` | 403 | Yes | accounts_api_error_total<br>tenant_suspension_active_total |
+| `VALIDATION_ERROR` | 400 | No | accounts_api_error_total<br>tenant_activation_latency_seconds |
+
+### [Artifact Store Service](../../../services/artifact-store.md#3-3-api-error-codes-binding) {#artifact-store-service}
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CONFLICT` | ExclusiveSwap detected an in-flight or newer deliverable/promotion for the same lineage. | Refresh artifact state, resolve outstanding approvals, and retry promotion after reviewers clear the conflict. |
+| `POLICY_BLOCK` | Guardian, residency, or retention policy forbids writing or deleting the artifact. | Review Guardian verdicts, residency waivers, or retention windows; obtain approval before resubmitting. |
+| `VALIDATION_ERROR` | Artifact metadata failed schema validation (hash mismatch, unsupported type, or missing manifest fields). | Fix the payload or recompute hashes locally before retrying the upload/promotion request. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | Yes | artifact_api_error_total<br>artifact_promotion_conflict_total |
+| `POLICY_BLOCK` | 403 | Yes | artifact_api_error_total<br>artifact_retention_violation_total |
+| `VALIDATION_ERROR` | 400 | No | artifact_api_error_total<br>artifact_store_hash_mismatch_total |
+
 ### [Audit & Evidence](../../../services/audit.md#3-3-api-error-codes-binding) {#audit-evidence}
 
 | Code | Scenario | Client guidance |
@@ -62,6 +90,40 @@ This appendix aggregates the API error code sections from every service and app 
 | `POLICY_BLOCK` | 403 | Yes | audit_api_error_total<br>waiver_expiring_total |
 | `QUARANTINED` | 423 | Yes | audit_api_error_total |
 | `VALIDATION_ERROR` | 400 | No | audit_api_error_total |
+
+### [Billing & Subscriptions Service](../../../services/billing-subscriptions.md#3-3-api-error-codes-binding) {#billing-subscriptions-service}
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CONFLICT` | Subscription state changed since the caller fetched it (pending change or grace period overlap). | Refresh subscription state, resolve pending changes, and resubmit with the latest version. |
+| `POLICY_BLOCK` | Finance approval or compliance policy prevented plan activation or subscription change. | Obtain required Finance/Compliance approval, update Settings overrides, then retry. |
+| `PROVIDER_DEGRADED` | External billing provider (Stripe) reported degraded health or webhook replay backlog. | Pause billing mutations, monitor provider status, and resume once health recovers; follow RB-BILLING-PAYMENT. |
+| `VALIDATION_ERROR` | Plan or subscription payload failed schema validation (pricing tiers, effective dates, billing contact data). | Correct the request body and rerun once validation passes; reference plan catalog guardrails. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | Yes | billing_api_error_total<br>billing_subscription_conflict_total |
+| `POLICY_BLOCK` | 403 | Yes | billing_api_error_total<br>billing_policy_block_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | billing_api_error_total<br>billing_payment_failed_total |
+| `VALIDATION_ERROR` | 400 | No | billing_api_error_total<br>billing_plan_update_total |
+
+### [Communications Service](../../../services/communications.md#3-3-api-error-codes-binding) {#communications-service}
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `CONFLICT` | Outbox entry replayed with a different payload or stale version. | Re-fetch outbox status, regenerate the payload or Idempotency-Key, and retry once. |
+| `POLICY_BLOCK` | Guardian or masking rules blocked a message, attachment, or portal download token. | Show the Guardian reason, remediate content or policy configuration, and retry once cleared. |
+| `PROVIDER_DEGRADED` | Email or SMS provider, or webhook endpoint, marked degraded with an open circuit. | Pause sends for the affected provider, alert operators, and resume once health recovers. |
+| `RATE_LIMIT` | Org or channel exceeded outbound messaging or webhook throughput limits. | Honor Retry-After headers, queue retries with exponential backoff, and coordinate for sustained spikes. |
+| `VALIDATION_ERROR` | Template context, attachment metadata, or download request failed schema checks. | Correct payload or template data and resubmit after validation passes. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | notifications_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | notifications_api_error_total<br>notify_policy_block_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | notifications_api_error_total<br>notifications_provider_health_total |
+| `RATE_LIMIT` | 429 | No | notify_rate_limit_total |
+| `VALIDATION_ERROR` | 400 | No | notifications_api_error_total |
 
 ### [Digital Signer](../../../services/digital-signer.md#3-3-api-error-codes-binding) {#digital-signer}
 
@@ -175,24 +237,6 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | lpe_api_error_total<br>lpe_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | lpe_api_error_total |
 
-### [Communications Service](../../../services/communications.md#3-3-api-error-codes-binding) {#communications-service}
-
-| Code | Scenario | Client guidance |
-| --- | --- | --- |
-| `CONFLICT` | Outbox entry replayed with a different payload or stale version. | Re-fetch outbox status, regenerate the payload or Idempotency-Key, and retry once. |
-| `POLICY_BLOCK` | Guardian or masking rules blocked a message, attachment, or portal download token. | Show the Guardian reason, remediate content or policy configuration, and retry once cleared. |
-| `PROVIDER_DEGRADED` | Email or SMS provider, or webhook endpoint, marked degraded with an open circuit. | Pause sends for the affected provider, alert operators, and resume once health recovers. |
-| `RATE_LIMIT` | Org or channel exceeded outbound messaging or webhook throughput limits. | Honor Retry-After headers, queue retries with exponential backoff, and coordinate for sustained spikes. |
-| `VALIDATION_ERROR` | Template context, attachment metadata, or download request failed schema checks. | Correct payload or template data and resubmit after validation passes. |
-
-| Code | HTTP Status | Audit Required | Metrics |
-| --- | --- | --- | --- |
-| `CONFLICT` | 409 | No | notifications_api_error_total |
-| `POLICY_BLOCK` | 403 | Yes | notifications_api_error_total<br>notify_policy_block_total |
-| `PROVIDER_DEGRADED` | 503 | Yes | notifications_api_error_total<br>notifications_provider_health_total |
-| `RATE_LIMIT` | 429 | No | notify_rate_limit_total |
-| `VALIDATION_ERROR` | 400 | No | notifications_api_error_total |
-
 ### [Observability](../../../services/observability.md#3-3-api-error-codes-binding) {#observability}
 
 | Code | Scenario | Client guidance |
@@ -258,6 +302,20 @@ This appendix aggregates the API error code sections from every service and app 
 | `PROVIDER_DEGRADED` | 503 | Yes | reference_api_error_total<br>reference_manager_harvest_error_total |
 | `RATE_LIMIT` | 429 | No | reference_api_error_total<br>reference_publish_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | reference_api_error_total |
+
+### [Search & Indexing Service](../../../services/search-index.md#3-3-api-error-codes-binding) {#search-indexing-service}
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `POLICY_BLOCK` | Access policy, Guardian verdict, or tenant residency rule forbids returning requested results. | Confirm caller permissions, review Guardian verdicts, or adjust residency scope before retrying. |
+| `PROVIDER_DEGRADED` | Underlying search index or embedding service is unavailable or lagging beyond thresholds. | Retry after backoff; system falls back to lexical only. Escalate using RB-SEARCH-INGEST if the incident persists. |
+| `VALIDATION_ERROR` | Query payload or filter parameters failed validation (unsupported field, malformed vector, or tenant scope missing). | Correct the query parameters using the published schema and retry. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `POLICY_BLOCK` | 403 | Yes | search_api_error_total<br>search_acl_violation_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | search_api_error_total<br>search_index_backlog_total |
+| `VALIDATION_ERROR` | 400 | No | search_api_error_total<br>search_query_validation_total |
 
 ### [Settings Registry](../../../services/settings.md#3-3-api-error-codes-binding) {#settings-registry}
 

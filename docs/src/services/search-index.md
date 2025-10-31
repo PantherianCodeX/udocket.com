@@ -141,15 +141,72 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API Contract (stub)
+## 3) API Contract (binding)
 
-- REST endpoints to be finalized post-PRD freeze. Placeholder interface summary above; detailed schemas will live in Appendix once GA. **|**
-- Websocket/SSE updates planned for live search filters; gating on performance validation. **|**
-- Error codes will follow API appendix once defined (`search-index` section). **|**
+**Purpose:** Capture emerging external and internal interfaces for search. **|**
+**Contract:** Document planned REST/SSE endpoints, internal ingestion hooks, and error code expectations even before GA. **|**
+**State:** API definitions tracked in PRD, OpenAPI drafts, and search service prototypes. **|**
+**Failures & handling:** Until GA, failures fall back to lexical search or return platform defaults; future updates will tighten contracts. **|**
+**Observability:** Planned metrics include request latency, error totals, and SSE health. **|**
+**Breadcrumbs:** Prototype modules `apps/platform/search/api.py`, design docs `docs/product/search/*.md`. **|**
+**References:** TDD §6.5, Platform Runtime §3.3, Artifact Store §3.
+
+### 3.1 External Interfaces (binding)
+
+- REST queries (`GET /api/search/`) return lexical results scoped to tenant and permissions. **|**
+- Semantic queries (`POST /api/search/vector`) accept embedding vectors or text, returning scored matches. **|**
+- Future SSE endpoint streams re-ranking updates when new artifacts arrive; pending performance validation. **|**
+
+### 3.2 Internal Interfaces (binding)
+
+- Ingestion workers consume Artifact Store ops logs and Guardian events via `search.ingest` queue. **|**
+- Embedding pipeline integrates with LLM Registry; deterministic UUID seeds stored in `search_embedding`. **|**
+- Tombstone processor applies DSAR deletions within 24 h using `search.tombstone` queue. **|**
+
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+
+**Purpose:** Track search-specific error codes once defined. **|**
+**Contract:** Currently no search-specific codes exist; the catalog remains empty until GA. **|**
+**State:** YAML placeholder `docs/src/services/search-index/error_codes.yaml`. **|**
+**Failures & handling:** Platform codes (`POLICY_BLOCK`, `VALIDATION_ERROR`, `PROVIDER_DEGRADED`) cover initial rollout. **|**
+**Observability:** Unknown codes will emit `search_api_error_unknown_total`. **|**
+**Breadcrumbs:** Planned API middleware `apps/platform/search/api_errors.py`. **|**
+**References:** Platform Runtime §3.3, Accounts & Tenants §3.
+
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#search-indexing-service)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `POLICY_BLOCK` | Access policy, Guardian verdict, or tenant residency rule forbids returning requested results. | Confirm caller permissions, review Guardian verdicts, or adjust residency scope before retrying. |
+| `PROVIDER_DEGRADED` | Underlying search index or embedding service is unavailable or lagging beyond thresholds. | Retry after backoff; system falls back to lexical only. Escalate using RB-SEARCH-INGEST if the incident persists. |
+| `VALIDATION_ERROR` | Query payload or filter parameters failed validation (unsupported field, malformed vector, or tenant scope missing). | Correct the query parameters using the published schema and retry. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `POLICY_BLOCK` | 403 | Yes | search_api_error_total<br>search_acl_violation_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | search_api_error_total<br>search_index_backlog_total |
+| `VALIDATION_ERROR` | 400 | No | search_api_error_total<br>search_query_validation_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+
+### 3.4 Events & Integrations (binding)
+
+- Emits search readiness events (`SEARCH_INDEX_READY`, `SEARCH_EMBEDDING_READY`) to notify UI and agents when indexing completes. **|**
+- Integrates with FinOps / telemetry exporters for query analytics once GA. **|**
 
 ______________________________________________________________________
 
-## 4) State Management (stub)
+## 4) State Management (binding)
+
+**Purpose:** Describe planned storage model for search indexes and embeddings. **|**
+**Contract:** Maintain per-tenant indexes, deterministic document identifiers, and tombstones supporting DSAR propagation. **|**
+**State:** Proposed OpenSearch clusters, Postgres metadata tables (`search_document`, `search_embedding`, `search_tombstone`), Redis caches. **|**
+**Failures & handling:** Reindex jobs restore drift; tombstone processor enforces deletions within 24 h. **|**
+**Observability:** Metrics `search_index_backlog_total`, `search_tombstone_backlog_total`; dashboards “Search State Health”. **|**
+**Breadcrumbs:** Design doc `docs/product/search/indexing.md`, migrations draft `apps/platform/search/migrations/`. **|**
+**References:** TDD §6.5, Appendix J SQL policies, Settings keys `search.*`.
 
 - Index storage expected to use OpenSearch (Canada cluster) with alias per tenant; lexical index shards align with residency requirements. **|**
 - Vector store options under evaluation (pgvector vs. managed). Decision tracked via ADR backlog. **|**
@@ -157,7 +214,15 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5) Failure modes & resiliency (stub)
+## 5) Failure Modes (binding)
+
+**Purpose:** Outline resiliency expectations for search as it matures. **|**
+**Contract:** Detect and remediate index lag, prevent cross-tenant leaks, and fallback gracefully when embeddings unavailable. **|**
+**State:** Ingestion backlog monitors, access control tests, embedding pipeline controllers. **|**
+**Failures & handling:** Runbooks `RB-SEARCH-INGEST`, `RB-SEARCH-ERASURE`, and `RB-SEARCH-RELEVANCY` govern response; cross-tenant leaks trigger immediate incident and feature rollback. **|**
+**Observability:** Metrics `search_index_backlog_total`, `search_embedding_staleness_minutes`, `search_query_error_total`; dashboards “Search Health” and “Embedding Pipeline”. **|**
+**Breadcrumbs:** Draft runbooks `docs/src/ops/runbooks/search/*.md`, incident templates `ops/search/incidents/*.md`, PRD resiliency section. **|**
+**References:** TDD §6.5, Appendix I controls map.
 
 - **Index lag:** Backlog monitors trigger scaling. **|**
 - **Cross-tenant leak:** Automated integration tests ensure ACL enforcement; any detection triggers immediate incident. **|**
@@ -166,15 +231,41 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability (stub)
+## 6) Observability (binding)
+
+**Purpose:** Define telemetry required for search readiness. **|**
+**Contract:** Instrument ingestion lag, query latency, embedding staleness, and error breakdowns before GA. **|**
+**State:** Planned Prometheus metrics, Grafana dashboards, structured logs with hashed queries. **|**
+**Failures & handling:** Missing telemetry blocks feature rollout; dashboards validated in staging before enablement. **|**
+**Observability:** Metrics `search_index_backlog_total`, `search_query_latency_seconds`, `search_embedding_staleness_minutes`. **|**
+**Breadcrumbs:** Monitoring design `docs/product/search/observability.md`, synthetic tests `scripts/search/run_synthetics.py`. **|**
+**References:** Observability spec §4, Settings keys `search.telemetry.*`.
 
 - Planned metrics: `search_index_backlog_total`, `search_query_latency_seconds`, `search_embedding_staleness_minutes`. **|**
 - Dashboards to include ingestion lag, query latency distribution, error breakdown. **|**
 - Logging: Structured events per query with anonymized search terms hashed using `compliance.search_hash_salt`. **|**
 
+### 6.1 SLOs & Targets (binding)
+
+**Purpose:** Establish provisional targets for launch gating. **|**
+**Contract:** Index updates applied within 5 minutes P95, query latency ≤ 500 ms P95, cross-tenant violations remain zero. **|**
+**State:** SLO drafts `infra/monitoring/search-slo-rules.yaml`, Grafana board “Search SLO (draft)”. **|**
+**Failures & handling:** Breaches halt rollout; reopen feature flag only after incident review. **|**
+**Observability:** Burn-rate alerts `search_ingest_slo_burn`, `search_latency_slo_burn`. **|**
+**Breadcrumbs:** SLO design doc `docs/product/search/slo.md`. **|**
+**References:** TDD §6.5, FinOps dashboards.
+
 ______________________________________________________________________
 
-## 7) Security & compliance (stub)
+## 7) Security & Compliance (binding)
+
+**Purpose:** Capture security posture and privacy obligations for search. **|**
+**Contract:** Enforce Canadian residency, tenant-level isolation, Guardian filtering, and DSAR propagation across indexes and logs. **|**
+**State:** Planned IAM policies, residency configurations, hashed query logs, waiver ledgers. **|**
+**Failures & handling:** Cross-tenant access or residency drift triggers RB-SEARCH-ISOLATION; DSAR failures escalate to Compliance. **|**
+**Observability:** Security alerts `search_residency_violation_total`, `search_acl_violation_total`; audit logs hashed for tamper evidence. **|**
+**Breadcrumbs:** Security design `docs/product/search/security.md`, compliance checklist `ops/search/checklists/compliance.md`. **|**
+**References:** Settings keys `search.*`, Guardian §5, Accounts & Tenants §7.
 
 - Residency: Index & embeddings stored in Canada regions only. **|**
 - Access: Enforce Identity service RBAC + Guardian decisions; vector queries masked to avoid leaking sensitive text. **|**
@@ -183,15 +274,108 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 8) Operations & runbooks (stub)
+## 8) Operational Notes (binding)
+
+**Purpose:** Summarize operational readiness for search rollout. **|**
+**Contract:** Define on-call staffing, runbook ownership, and drill cadence before GA. **|**
+**State:** Draft runbooks, drill plans, staffing proposals. **|**
+**Failures & handling:** Production enablement only after runbooks and drills validated; gaps block feature flag. **|**
+**Observability:** Runbook catalog checks, drill scheduler metrics. **|**
+**Breadcrumbs:** Runbooks `docs/src/ops/runbooks/search/`, staffing plan `ops/search/rota.md`. **|**
+**References:** Ops catalog, Appendix S roles.
 
 - Placeholder runbooks: `RB-SEARCH-INGEST`, `RB-SEARCH-ERASURE`, `RB-SEARCH-RELEVANCY`. Drafts live under `docs/src/ops/runbooks/search/` (to-be-created). **|**
 - Drills: Planned quarterly ingestion/backlog tabletop. **|**
 - On-call: `search-oncall@` (to be staffed before GA). **|**
 
-______________________________________________________________________
+### 8.1 Operational Posture (binding)
 
-## 9) Dependencies (stub)
+**Purpose:** Define staffing assumptions leading up to GA. **|**
+**Contract:** Knowledge Systems primary on-call during beta; formal rotation established before GA with 5 min acknowledge targets. **|**
+**State:** Staffing draft `ops/search/rota.md`, readiness checklist `ops/search/checklists/posture.md`. **|**
+**Failures & handling:** Coverage gaps escalate to Platform Operations; feature flag remains off until roster confirmed. **|**
+**Observability:** PagerDuty sandbox metrics, docs lint ensuring checklist completion. **|**
+**Breadcrumbs:** Staffing plan `ops/search/rota.md`, rollout checklist `ops/search/checklists/posture.md`. **|**
+**References:** Ops catalog, Appendix S roles.
+
+### 8.2 Incident Triggers (binding)
+
+**Purpose:** List alerts that will declare search incidents once live. **|**
+**Contract:** Alerts on index backlog, query errors, residency violations, and embedding latency must page on-call. **|**
+**State:** Alert definitions `infra/monitoring/search-alerts.yaml` (draft), synthetic monitors `scripts/search/run_synthetics.py`. **|**
+**Failures & handling:** Alert tuning documented in incident retros; false positives adjusted before GA. **|**
+**Observability:** Grafana “Search Incident Triggers”, docs metric `search_alert_suppressed_total`. **|**
+**Breadcrumbs:** Alert definitions `infra/monitoring/search-alerts.yaml`, PagerDuty sandbox service, synthetic monitors. **|**
+**References:** §6 Observability, RB-SEARCH-INGEST, RB-SEARCH-ERASURE.
+
+### 8.3 Runbooks & Drills (binding)
+
+**Purpose:** Keep emergent runbooks aligned with rollout. **|**
+**Contract:** Draft runbooks for ingestion, erasure, and relevancy must exist before beta; drills executed quarterly. **|**
+**State:** Runbooks `docs/src/ops/runbooks/search/*.md`, drill evidence `ops/search/drills/<date>/`. **|**
+**Failures & handling:** Missing runbooks or evidence blocks feature promotion. **|**
+**Observability:** Runbook catalog report, drill scheduler metrics. **|**
+**Breadcrumbs:** Runbook catalog, drill scheduler docs, Slack `#ops-search`. **|**
+**References:** RB-SEARCH-INGEST, RB-SEARCH-ERASURE, RB-SEARCH-RELEVANCY.
+
+#### 8.3.1 Runbook Index (informative)
+
+| Runbook code | Scenario | Notes |
+| --- | --- | --- |
+| `RB-SEARCH-INGEST` | Ingestion backlog or index staleness | Validates replay tooling and scaling plan |
+| `RB-SEARCH-ERASURE` | DSAR propagation failure | Confirms tombstone application and evidence capture |
+| `RB-SEARCH-RELEVANCY` | Relevancy regression or model rollout | Coordinates rollback to prior embeddings/models |
+
+#### 8.3.2 Primary Runbooks (binding)
+
+**Purpose:** Summarize core playbooks executed during incidents. **|**
+**Contract:** Keep runbooks versioned, linked to alerts, and reviewed quarterly. **|**
+**State:** Markdown in `docs/src/ops/runbooks/search/*.md`, automation scripts `scripts/ops/search/*.py`. **|**
+**Failures & handling:** Stale runbooks flagged by docs lint `runbook_catalog_stale_total`. **|**
+**Observability:** Governance dashboard, runbook catalog output. **|**
+**Breadcrumbs:** Runbook files, automation scripts, incident templates. **|**
+**References:** RB-SEARCH-INGEST, RB-SEARCH-ERASURE, RB-SEARCH-RELEVANCY.
+
+#### 8.3.3 Drill Cadence & Evidence (binding)
+
+Drills rehearse ingestion, erasure, and relevancy scenarios with evidence stored for governance review. **|**
+
+- Quarterly ingestion backlog tabletop; evidence stored in `ops/search/drills/<date>/ingest.md`. **|**
+- Semi-annual DSAR replay drill verifying tombstone propagation. **|**
+- Relevancy regression simulation after major model changes with evidence archived in `ops/search/evidence/<date>/`. **|**
+- Compliance reviews track `search_evidence_gap_total`; gaps block GA until resolved. **|**
+
+See Ops catalog and Appendix O decision log for templates and evidence requirements.
+
+### 8.4 Migrations & Backfills (binding)
+
+**Purpose:** Capture planned migrations and backfills for search indexes. **|**
+**Contract:** Perform reindex/backfill jobs via `scripts/search/reindex.py`, record before/after hashes, and coordinate with Artifact Store events. **|**
+**State:** Migration manifests `ops/search/migrations/`, backlog replays, change tickets. **|**
+**Failures & handling:** Failed reindex jobs roll back aliases; incidents logged with evidence. **|**
+**Observability:** Reindex dashboard “Search Migrations”, alerts `search_reindex_failure_total`. **|**
+**Breadcrumbs:** Migration scripts, change calendar, PRD rollout checklist. **|**
+**References:** TDD §6.5, Appendix J SQL policies.
+
+### 8.5 Operational Workflows (binding)
+
+**Purpose:** Describe recurring tasks such as relevancy sampling and query audits. **|**
+**Contract:** Weekly relevancy sampling, monthly ACL audit, quarterly DSAR verification executed before expanding rollout. **|**
+**State:** Workflow checklists `ops/search/workflows/*.md`, automation outputs `ops/search/reports/*.csv`. **|**
+**Failures & handling:** Missed workflows trigger `search_workflow_overdue_total` and halt rollout until resolved. **|**
+**Observability:** Workflow dashboard, docs lint, analytics reports. **|**
+**Breadcrumbs:** Workflow docs, automation scripts, staffing rosters. **|**
+**References:** Compliance playbooks, Ops catalog.
+
+## 9) Dependencies (binding)
+
+**Purpose:** Identify critical integrations search relies on. **|**
+**Contract:** Maintain isolation and event contracts with upstream/downstream services. **|**
+**State:** Dependency metadata documented in Platform Runtime catalog and search rollout plan. **|**
+**Failures & handling:** Dependency incidents coordinated via referenced runbooks. **|**
+**Observability:** Dependency dashboards overlay health metrics for Artifact Store, Guardian, and LLM Registry. **|**
+**Breadcrumbs:** Platform Runtime catalog, Ops runbook index, Settings `search.*` keys. **|**
+**References:** Platform Runtime §3, Settings §5 (`search.*`), Guardian §5, LLM Registry §3.
 
 | Dependency | Responsibility | Notes |
 | --- | --- | --- |
@@ -211,4 +395,3 @@ ______________________________________________________________________
 - Artifact Store specification — `../services/artifact-store.md`.
 - Accounts & Tenants specification — `../services/accounts-tenants.md`.
 - Product PRD: Search Discovery (link pending).
-
