@@ -72,6 +72,10 @@ ARG DEV_TOOLS
 
 WORKDIR /app
 
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
 COPY apps/platform/pyproject.toml apps/platform/uv.lock /app/apps/platform/
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
@@ -82,13 +86,12 @@ FROM python-deps AS app
 
 WORKDIR /app
 
-COPY --from=python-deps /app/apps/platform/.venv /app/apps/platform/.venv
-
 # Copy project source last to keep dependency layers hot
 COPY . /app
 
-ENV VIRTUAL_ENV=/app/apps/platform/.venv
-ENV PATH="/app/apps/platform/.venv/bin:${PATH}"
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 EXPOSE 8000
 

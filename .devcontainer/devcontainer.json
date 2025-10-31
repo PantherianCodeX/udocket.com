@@ -21,7 +21,7 @@
     "ENV_READ_DOTENV": "1"
   },
   "postCreateCommand": "bash -lc './scripts/devcontainer/post_create.sh'",
-  "postStartCommand": "bash -lc '[ -d /app/apps/platform/.venv ] || ./scripts/devcontainer/post_create.sh'",
+  "postStartCommand": "bash -lc '[ -d /opt/venv ] || ./scripts/devcontainer/post_create.sh'",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -53,7 +53,7 @@
         "Azurite.azurite"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/app/apps/platform/.venv/bin/python"
+        "python.defaultInterpreterPath": "/opt/venv/bin/python"
       }
     }
   }

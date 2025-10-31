@@ -178,7 +178,7 @@ General guidelines:
   - Per-module enforcement: `packages/udocket_core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/udocket_core/logging` and `pyright packages/udocket_core/logging`). Do not introduce `Any` or untyped defs there.
   - When editing other modules, remove `Any` usage, add precise types, and reduce pyright warnings in that scope. Never add `# type: ignore` without an accompanying TODO referencing the typing roadmap.
   - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
-- Stub dependencies: run `uv sync --frozen --group dev --no-install-project --project apps/platform` to ensure Pyright and Django/DRF stubs are installed before editing.
+- Stub dependencies: run `uv sync --frozen --group dev --no-install-project --project apps/platform` to ensure Pyright and Django/DRF stubs are installed before editing. Activation isn’t required because `/opt/venv/bin` is already on `PATH`, but you can run `. /opt/venv/bin/activate` if you prefer the activated prompt locally.
 - Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
 - Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging. Never introduce provider/model fallback logic—jobs must use the exact configured provider chain and raise actionable errors if initialization fails.
 - Refactors spanning many files should rely on helper scripts (add them under `scripts/` when reusable) instead of manual editing. Always run `pyright` to surface import/function issues across the tree before finishing a refactor.

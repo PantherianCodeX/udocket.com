@@ -16,6 +16,8 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    uv sync --frozen --group dev --no-install-project --project apps/platform
    ```
 
+   The container’s `PATH` already includes `/opt/venv/bin`, so activation isn’t required. If you prefer an activated prompt locally, run `. /opt/venv/bin/activate`.
+
 5) Build & run the stack:
 
    ```bash

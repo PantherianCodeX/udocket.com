@@ -10,7 +10,7 @@ printf '[devcontainer] Preparing build cache scaffolding…\n'
 printf '[devcontainer] Syncing platform environment (dev group)…\n'
 pushd apps/platform >/dev/null
 uv sync --frozen --group dev --no-install-project
-VENV_PY="$(pwd)/.venv/bin/python"
+VENV_PY="/opt/venv/bin/python"
 printf '[devcontainer] Refreshing vendored stubs…\n'
 HASH_DIR="$ROOT/.cache/devcontainer"
 mkdir -p "$HASH_DIR"
