@@ -1,5 +1,5 @@
 ---
-title: uDocket — Notifications Service Specification
+title: uDocket — Communications Service Specification
 subtitle: Multi-channel Delivery, Receipts, and In-App Alerts
 author:
   - Communications & Outbound Delivery Working Group
@@ -44,7 +44,7 @@ header-includes:
         display: block;
       }
     </style>
-  - <header class="page-header">uDocket — Notifications Service Specification <br>
+  - <header class="page-header">uDocket — Communications Service Specification <br>
     Multi-channel Delivery, Receipts, and In-App Alerts</header>
   - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page
     <span class="page-number"></span> of <span class="page-count"></span></footer>
@@ -76,9 +76,9 @@ ______________________________________________________________________
 
 ## Reading Guide
 
-- **Scope:** Governs outbound communications (email, SMS, phone-adjacent alerts, secure download tokens) and in-app notifications emitted by the uDocket platform. Covers outbox/state machines, provider adapters, webhook ingestion, receipts, audit posture, digest generation, and rate limiting. Portal banners and SSE fan-out ride on the same orchestration, so UI sections reference this specification for delivery guarantees.
+- **Scope:** Governs outbound communications (email, SMS, phone-adjacent alerts, secure download tokens) and in-app notifications emitted by the uDocket platform. Covers outbox/state machines, provider adapters, webhook ingestion, receipts, audit posture, digest generation, and rate limiting. Portal banners and SSE fan-out ride on the same orchestration, so UI sections reference this specification for delivery guarantees. Historically branded “Notifications,” the runtime modules remain under `apps/platform/notifications/*`; this spec widens the domain to all outbound communications.
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) enumerate channels and compliance requirements; APIs (§3) describe outbound queues and webhook callbacks; State management (§4) documents schema, RLS, and secure-view contracts; Failure/Observability (§5–§6) map to alerting; Security & Compliance (§7) captures DMARC/SMS obligations; Operations (§8) links to runbooks/digests; Dependencies, references close the doc.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/notifications.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting changes. Updates that alter schema, queue semantics, or provider adapters also require `build_runbook_catalog.py --check` to pass. Notify Platform + Ops architecture lists on PRs.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/communications.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting changes. Updates that alter schema, queue semantics, or provider adapters also require `build_runbook_catalog.py --check` to pass. Notify Platform + Ops architecture lists on PRs.
 - **Change protocol:** Any PR affecting `outbox_delivery`/`delivery_receipt` schema, webhook signatures, download token format, or notification templates must reference this spec and ADR-0002. Provider onboarding/offboarding, DMARC policy changes, or SMS compliance updates demand Security + Architecture approval and runbook refreshes per §8.
 - **References:** TDD §11 summary, Settings Registry §5 (keys under `notifications.*`), Guardian §5 (quarantine notifications), LP Engine §7 (localization bundles), Ops runbook catalog (`RB-NOTIFY-\*`), policy references in ADR-0002/0004.
 - **Contacts:** Platform Engineering (service ownership), Operations Engineering (runbooks/delivery providers), on-call `notify-oncall@`, escalation `#ops-notifications`.
@@ -88,7 +88,7 @@ ______________________________________________________________________
 ## 1) Purpose
 
 **Purpose:** Provide reliable, auditable delivery across email, SMS, and in-app channels while enforcing residency, privacy, and compliance guardrails. **|**
-**Contract:** Notifications guarantees idempotent sends, signed download tokens, provider receipt correlation, and organizational rate limits. Deliveries either succeed with recorded receipts or fail closed with actionable audit reasons. **|**
+**Contract:** Communications service (legacy module `apps/platform/notifications`) guarantees idempotent sends, signed download tokens, provider receipt correlation, and organizational rate limits. Deliveries either succeed with recorded receipts or fail closed with actionable audit reasons. **|**
 **State:** Owns `outbox_delivery`, `delivery_receipt`, `download_token`, in-app notification queues, digest artifacts, and channel templates. Workers and webhooks mutate state under OCC to prevent duplicates. **|**
 **Failures & handling:** Provider outages, webhook signature drift, STOP/HELP compliance events, or token misuse trigger runbooks (§5, §8) and fan-out warnings. **|**
 **Observability:** Grafana dashboards “Notifications Delivery” (`delivery_success_ratio`, `delivery_retry_total`), “In-App Notifications” (`inapp_notification_sent_total`, `inapp_notification_click_total`), “Download Tokens” (`download_token_validation_total`). Alert catalog tags `RB-NOTIFY-\*` entries. **|**
@@ -224,7 +224,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Controllers `apps/platform/notifications/views.py`, outbox workers `apps/platform/notifications/outbox.py`, webhook signer `apps/platform/notifications/webhooks.py`, tests `tests/platform/notifications/test_outbox_api.py`. **|**
 **References:** Platform Runtime §3.3, Guardian spec §2.2, Settings spec §2.6, Ops runbooks `RB-NOTIFY-RATE`, `RB-NOTIFY-WEBHOOK`.
 
-> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#notifications-service)
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#communications-service)
 
 <!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
@@ -437,7 +437,7 @@ ______________________________________________________________________
 **Failures & handling:** Staffing gaps or ignored freezes trigger management review; deployments pause until coverage restored. **|**
 **Observability:** PagerDuty analytics, delivery dashboards, alert `notifications_oncall_gap_total`. **|**
 **Breadcrumbs:** Roster docs, freeze calendars, App.O escalation notes. **|**
-**References:** Notifications spec §7, `RB-NOTIFY-\*`.
+**References:** Communications spec §7, `RB-NOTIFY-\*`.
 
 ### 8.2 Incident Triggers (binding)
 
@@ -502,7 +502,7 @@ ______________________________________________________________________
 **Failures & handling:** Failed migrations revert to previous provider/template and open `RB-NOTIFY-OUTAGE`; replay failures quarantine payloads until corrected. **|**
 **Observability:** Metrics `notifications_migration_success_total`, `notifications_dlq_replay_total`, App.O change tickets. **|**
 **Breadcrumbs:** Migration scripts, template bundles, DLQ tooling. **|**
-**References:** Settings spec §5, Notifications spec §4.
+**References:** Settings spec §5, Communications spec §4.
 
 ### 8.5 Operational Workflows (normative)
 
@@ -552,7 +552,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix A — Event catalog & streaming contract (binding)
+## Appendix A — Event catalog & streaming contract (binding) {#appendix-a-event-catalog-streaming-contract}
 
 **Purpose:** Keep the authoritative catalog of notification and portal SSE events in one place. **|**
 **Contract:** Publishers emit events that validate against the shared schemas; consumers implement the envelope contract and respect replay/SLO requirements. **|**
@@ -593,7 +593,7 @@ Each payload includes `schema_version` and `emitted_at` (RFC3339 with timezone) 
 
 ______________________________________________________________________
 
-## Appendix B — Database enforcement patterns (binding)
+## Appendix B — Database enforcement patterns (binding) {#appendix-b--database-enforcement-patterns}
 
 **Purpose:** Capture authoritative SQL for portal messaging row-level security, delivery receipt partitioning, and download token enforcement.
 

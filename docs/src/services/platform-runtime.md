@@ -364,7 +364,7 @@ All namespaces must declare the restricted baseline; violations are blocked by a
 **Failures & handling:** Emitting an unknown code fails Spectral lint, triggers `api_error_unknown_total`, and blocks rollout until the catalog updates. **|**
 **Observability:** Metrics `api_error_total{code}`, synthetic probes, and alert rules `api_error_unknown_total`/`api_error_rate_spike_total` track drifts. **|**
 **Breadcrumbs:** Schema `spec/schemas/api_error.schema.json`, middleware `apps/platform/api/errors.py`, tests `tests/platform/api/test_api_error_schema.py`, dashboards “API Gateway – Errors”. **|**
-**References:** Settings spec §3.4, Guardian spec §2.2, Notifications spec §3.3, Ops runbooks `RB-API-GATEWAY-ERROR`.
+**References:** Settings spec §3.4, Guardian spec §2.2, Communications spec §3.3, Ops runbooks `RB-API-GATEWAY-ERROR`.
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#platform-runtime)
 
 <!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
@@ -418,8 +418,6 @@ metadata:
 
 Mesh and ingress templates consume the same Settings bundles so routing surfaces stay consistent across services.
 
-<a id="34-service-to-service-request-signing"></a>
-
 ### 3.5 Service-to-service request signing (binding) {#35-service-to-service-request-signing}
 
 **Purpose:** Authenticate privileged inter-service calls that traverse trust boundaries. **|**
@@ -448,8 +446,6 @@ canonical = [
 ```
 
 Receivers recompute the digest with the secret referenced by `X-Signature-Key-Id`, compare using constant-time equality, and record signature metrics. Replay protection combines the `Idempotency-Key` with a short-lived cache (default TTL 24 hours) so identical requests return cached responses.
-
-<a id="341-hmac-key-rotation"></a>
 
 #### 3.5.1 Key rotation flows (binding) {#351-hmac-key-rotation}
 
@@ -692,7 +688,7 @@ ______________________________________________________________________
 **Failures & handling:** Dependency regressions surface via §5 failure modes and Ops runbooks. **|**
 **Observability:** Dashboards track sync status with Settings, LPE, Reference Manager, and Flux. **|**
 **Breadcrumbs:** Dependency specifications referenced in the table. **|**
-**References:** Settings, LPE, Reference Manager, Worker Cluster, Notifications specs.
+**References:** Settings, LPE, Reference Manager, Worker Cluster, Communications specs.
 
 | Dependency | Role | Notes |
 | --- | --- | --- |
@@ -713,3 +709,5 @@ ______________________________________________________________________
 - Localization & Policy Engine specification — `../services/lp-engine.md §2.6`.
 - Reference Manager specification — `../services/ref-manager.md §2.1`.
 - Ops runbook catalog — `../ops/runbooks.md`.
+- JSON Schema — <https://json-schema.org/>
+- RFC 8594 — Deprecation HTTP Header: <https://www.rfc-editor.org/rfc/rfc8594>

@@ -196,7 +196,7 @@ ______________________________________________________________________
 
 <a id="digital-signer-external-interfaces"></a>
 
-### 3.1 External Interfaces (binding)
+### 3.1 External Interfaces (binding) {#digital-signer-external-interfaces}
 
 | Endpoint / Stream | Purpose | Contract notes |
 | --- | --- | --- |
@@ -483,7 +483,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing checklist evidence or overdue waivers halt deployment until mitigated; acknowledgement backlog triggers `RB-SIGN-ACK`. **|**
 **Observability:** Deployment guard `scripts/ci/check_signer_release.py`, metrics `signer_release_gate_blocked_total`, `signer_ack_pending_total`. **|**
 **Breadcrumbs:** Release tooling, waiver logs, acknowledgement workflows. **|**
-**References:** §7 Security & compliance, Notifications spec §7, Guardian spec §5.
+**References:** §7 Security & compliance, Communications spec §7, Guardian spec §5.
 
 - Release gate automation validates TSA/OCSP dashboards, signer queue depth, and waiver status before allowing cutover.
 - Daily jobs reconcile client acknowledgement SLAs and notify Portal when outstanding signatures remain.

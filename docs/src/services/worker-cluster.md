@@ -80,7 +80,7 @@ ______________________________________________________________________
 - **Structure:** Follows the standard 0–10 template. Responsibilities (§2) describe orchestration, queue management, watchdog automation, and provider integrations. APIs (§3) reference task entry points, job control RPC endpoints, and SSE updates. State, failure, observability, security, and ops guidance live in §§4–8.
 - **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/worker-cluster.md docs/src/overview/tdd.md docs/tdd_modularization.md` plus `build_runbook_catalog.py --check` before landing worker changes. Update task-module AGENTS guides when adding queues or long-running jobs.
 - **Change protocol:** Celery queue additions, watchdog changes, provider adapter updates, or retry semantics must reference this spec and note affected Settings keys. Provider failover logic requires Security + Architecture approval.
-- **References:** TDD §12 summary, Transcription agent spec, Notifications spec, Guardian spec, Settings Registry keys (`jobs.*`, `watchdog.*`), Ops runbooks `RB-JOB-WATCHDOG`, `RB-LOCK-006`.
+- **References:** TDD §12 summary, Transcription agent spec, Communications spec, Guardian spec, Settings Registry keys (`jobs.*`, `watchdog.*`), Ops runbooks `RB-JOB-WATCHDOG`, `RB-LOCK-006`.
 - **Contacts:** Platform Engineering (queue topology), Operations Engineering (KEDA/scaling), Applied AI Programs (agent orchestration), `#worker-cluster` Slack, on-call `workers-oncall@`.
 
 ______________________________________________________________________
@@ -115,7 +115,7 @@ ______________________________________________________________________
 **Failures & handling:** Capability mismatches or provider failures trigger parity-aware failover (`ModelFailoverOrchestrator`, `SpeechFailoverController`); exhausted fallback chain pauses jobs (`PAUSED_AWAITING_PROVIDER`) via `RB-LLM-003`. **|**
 **Observability:** Metrics `job_duration_seconds{lane}`, `provider_progress_percent_complete`, `job_retry_total`; SSE `job.update` events include `provider_progress`. **|**
 **Breadcrumbs:** Task modules `apps/platform/operations/task_modules/analyze.py`, `compose.py`, `transcribe.py`; capability map `packages/udocket_core/llm/registry.py`, speech failover `packages/udocket_core/failover/speech.py`; tests `tests/platform/jobs/test_provider_progress_adapter.py`. **|**
-**References:** LLM registry spec §2.1–§2.3, Transcription agent doc, Notifications spec §2.1.
+**References:** LLM registry spec §2.1–§2.3, Transcription agent doc, Communications spec §2.1.
 
 - Workers run prefork Celery pools with dedicated queues per agent class; queue names encode priority (`analyze-high`, `compose-default`, `backfill-low`).
 - Settings snapshots accompany every job to guarantee replay parity and are persisted alongside manifests.
@@ -130,7 +130,7 @@ ______________________________________________________________________
 **Failures & handling:** Queue backlog alerts page SRE; DLQ backlog triggers `RB-JOB-WATCHDOG` or `RB-NOTIFY-OUTAGE` depending on queue type. **|**
 **Observability:** Metrics `celery_queue_depth{queue}`, `celery_task_retry_total`, `dlq_messages_total`, `keda_scaler_events_total`. **|**
 **Breadcrumbs:** Celery config `apps/platform/operations/bootstrap.py`, scaling manifests `infra/kubernetes/workers/`, tests `tests/platform/operations/test_queue_backpressure.py`. **|**
-**References:** Notifications spec §2.1, Settings Registry keys `jobs.queues.*`, Ops runbook catalog (queue remediation).
+**References:** Communications spec §2.1, Settings Registry keys `jobs.queues.*`, Ops runbook catalog (queue remediation).
 
 - Prefork pool defaults: `minReplicas=2`, `maxReplicas=10`, CPU target 70%; KEDA triggers on queue depth thresholds (default 25/50/100).
 - Beat schedules manage periodic tasks (watchdogs, residency scanners, integrity checks); schedule metadata recorded in ops telemetry.
@@ -146,15 +146,15 @@ ______________________________________________________________________
 **Breadcrumbs:** Watchdog definitions `apps/platform/operations/watchdogs.py`, tests `tests/platform/operations/test_watchdogs.py`, runbook `RB-JOB-WATCHDOG`, `RB-LOCK-006`. **|**
 **References:** Guardian spec §5 (backlog), Settings Registry `watchdog.*`.
 
-### 2.4 Notifications & back-office pipelines (binding)
+### 2.4 Communications & back-office pipelines (binding)
 
 **Purpose:** Fan out notification deliveries, upload scanning, case imports, and backfills via shared worker infrastructure. **|**
-**Contract:** Task modules enforce idempotency (`retry_token`, advisory locks) and integrate with Notifications service for outbox events. **|**
+**Contract:** Task modules enforce idempotency (`retry_token`, advisory locks) and integrate with Communications service for outbox events. **|**
 **State:** `outbox_delivery`, `delivery_receipt`, upload sessions, case import manifests, backfill logs. **|**
 **Failures & handling:** Upload scanning failures quarantine staging blobs; case import errors halt portal exposure pending human review. **|**
 **Observability:** Metrics `delivery_success_ratio`, `upload_scan_duration_seconds`, `case_import_duration_seconds`, `backfill_progress_percent`; audit events `CASE_IMPORT_ATTEMPT`, `UPLOAD_SCAN_FAILED`. **|**
 **Breadcrumbs:** Task modules `apps/platform/operations/task_modules/files.py`, `notifications.py`, case import scripts `scripts/import/validate_case_bundle.py`, tests `tests/platform/files/test_upload_scan.py`. **|**
-**References:** Notifications spec, Ops runbook `RB-UPLOAD-SCAN`, Settings keys `upload.scan.*`.
+**References:** Communications spec, Ops runbook `RB-UPLOAD-SCAN`, Settings keys `upload.scan.*`.
 
 ### 2.5 Provider integration & capability registry (binding)
 
@@ -176,7 +176,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing or stale idempotency keys return `409`; unsupported controls produce `400`; retries limited by policy. **|**
 **Observability:** API metrics `job_control_request_total{action}`, SSE monitor `job_sse_schema_mismatch_total`, audit `JOB_*` events. **|**
 **Breadcrumbs:** API handlers `apps/platform/jobs/views.py`, SSE publisher `apps/platform/events/jobs.py`, schema fixtures `spec/schemas/job_event.schema.json`. **|**
-**References:** TDD §10 (job APIs), Notifications spec (outbox endpoints).
+**References:** TDD §10 (job APIs), Communications spec (outbox endpoints).
 
 ### 3.1 External Interfaces
 
@@ -293,7 +293,7 @@ Workers MUST update `last_seen_at` on every replay, echo the stored payload when
 **Failures & handling:** Missing IDs return the latest cursor with `event: heartbeat`; stale IDs older than retention raise `410 GONE` and instruct clients to refetch job state. **|**
 **Observability:** Metrics `job_sse_connection_total`, `job_sse_replay_total`, and structured logs capture reconnect behaviour. **|**
 **Breadcrumbs:** SSE implementation `apps/platform/events/jobs.py`, tests `tests/platform/events/test_jobs_sse.py`. **|**
-**References:** Portal spec §4, Notifications spec §4 (in-app streams).
+**References:** Portal spec §4, Communications spec §4 (in-app streams).
 
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" \
@@ -442,7 +442,7 @@ ______________________________________________________________________
 **Failures & handling:** Breaches trigger RB-JOB-QUEUE, RB-JOB-WATCHDOG, or RB-UPLOAD-SCAN prior to resuming automation. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic watchdog checks, and queue latency probes provide evidence. **|**
 **Breadcrumbs:** Monitoring rules `infra/monitoring/worker-prometheus-rules.yaml`, synthetic definitions `synthetics/worker_*`, runbooks `docs/src/ops/runbooks/worker/*.md`. **|**
-**References:** TDD §12, Logging spec §6, Notifications spec §6.
+**References:** TDD §12, Logging spec §6, Communications spec §6.
 
 - **Queue latency:** 95th percentile job start delay (`celery_queue_depth` + derived latency) ≤ 2 minutes for standard queues; breaches trigger RB-WORKER-QUEUE before new jobs enter backlog.
 - **Job completion:** ≥99.5% of jobs complete without DLQ escalation per rolling 24h (`job_retry_total`, `dlq_event_total`); higher failure rates require RB-WORKER-DLQ and leadership update.
@@ -550,7 +550,7 @@ ______________________________________________________________________
 **Failures & handling:** Failed migrations revert to prior queue configuration; replay failures quarantine payloads for manual inspection. **|**
 **Observability:** Metrics `worker_migration_success_total`, `dlq_replay_success_total`, change tickets in App.O. **|**
 **Breadcrumbs:** Migration scripts, upgrade playbooks, DLQ tooling. **|**
-**References:** §4 State management, Notifications spec §4.
+**References:** §4 State management, Communications spec §4.
 
 ### 8.5 Operational Workflows (normative)
 
@@ -582,7 +582,7 @@ ______________________________________________________________________
 | --- | --- | --- |
 | Settings Registry | Supplies queue definitions, watchdog toggles, provider metadata | Activation diff artifacts archived with change requests |
 | Guardian | Provides verdicts, quarantine actions, and backlog metrics | Workers escalate Guardian failures via SSE and runbooks |
-| Notifications service | Outbox delivery and receipt tracking for email/SMS/in-app | Shared queues, DLQ handling, signed download tokens |
+| Communications service | Outbox delivery and receipt tracking for email/SMS/in-app | Shared queues, DLQ handling, signed download tokens |
 | LLM Registry & Speech | Capability registry, parity evidence, failover orchestrators | Workers consume controllers to enforce residency and parity |
 | Storage subsystem | Artifact staging, upload sessions, case import bundles | Workers manage lifecycle and cleanup |
 | Worker infrastructure | KEDA, Kubernetes HPA, monitoring dashboards | Ops Engineering maintains scaling policies |
@@ -594,7 +594,7 @@ ______________________________________________________________________
 
 - TDD overview summary — `../overview/tdd.md §12`.
 - LLM Registry specification — `../services/llm-registry.md`.
-- Notifications service specification — `../services/notifications.md`.
+- Communications service specification — `../services/communications.md`.
 - Transcription agent implementation — `packages/udocket_core/agents/transcribe_lib.py`.
 - Ops runbook catalog — `../ops/runbooks.md`.
 - Settings Registry specification — `../services/settings.md`.

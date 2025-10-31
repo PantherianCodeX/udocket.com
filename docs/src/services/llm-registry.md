@@ -545,7 +545,7 @@ ______________________________________________________________________
 **Failures & handling:** Missed audits trigger `RB-LLM-JB` or `RB-LLM-FINOPS` follow-up; stale parity evidence blocks provider activation. **|**
 **Observability:** Metrics `llm_content_flagged_total`, `finops_mom_regression_flag`, dashboards “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”. **|**
 **Breadcrumbs:** Audit scripts `ops/scripts/llm/run_golden_set.py`, moderation tuning playbooks, FinOps guard tooling. **|**
-**References:** §5 Failure modes, §4 State management, Notifications spec §2.3 (alert fan-out).
+**References:** §5 Failure modes, §4 State management, Communications spec §2.3 (alert fan-out).
 
 - Daily golden-set jobs review jailbreak, safety, and fairness results; failures halt releases pending remediation.
 - Weekly parity review ensures fallback chains still meet quality/residency/cost criteria; evidence hashed and archived.

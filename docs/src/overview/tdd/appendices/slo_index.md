@@ -155,10 +155,10 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Notifications Service](../../../services/notifications.md)
+### [Communications Service](../../../services/communications.md)
 
 **Purpose:** Capture delivery, webhook, in-app, and token reliability goals. **|**
-**Contract:** Notification delivery, webhook ingestion, SSE drop rate, and token validation must satisfy the thresholds below before campaigns launch. **|**
+**Contract:** Communications delivery, webhook ingestion, SSE drop rate, and token validation must satisfy the thresholds below before campaigns launch. **|**
 **State:** Metrics `delivery_success_ratio`, `notifications_receipt_latency_seconds`, `sse_connection_drop_total`, `download_token_validation_total{outcome}`; dashboards “Notifications Delivery”, “Notifications In-App”, “Download Tokens”. **|**
 **Failures & handling:** Breaches invoke RB-NOTIFY-OUTAGE, RB-NOTIFY-WEBHOOK, RB-NOTIFY-INAPP, or RB-NOTIFY-TOKEN prior to resuming automation. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, portal synthetics, and SSE monitors provide evidence. **|**
@@ -262,7 +262,7 @@ ______________________________________________________________________
 **Failures & handling:** Breaches trigger RB-JOB-QUEUE, RB-JOB-WATCHDOG, or RB-UPLOAD-SCAN prior to resuming automation. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic watchdog checks, and queue latency probes provide evidence. **|**
 **Breadcrumbs:** Monitoring rules `infra/monitoring/worker-prometheus-rules.yaml`, synthetic definitions `synthetics/worker_*`, runbooks `docs/src/ops/runbooks/worker/*.md`. **|**
-**References:** TDD §12, Logging spec §6, Notifications spec §6.
+**References:** TDD §12, Logging spec §6, Communications spec §6.
 
 - **Queue latency:** 95th percentile job start delay (`celery_queue_depth` + derived latency) ≤ 2 minutes for standard queues; breaches trigger RB-WORKER-QUEUE before new jobs enter backlog.
 - **Job completion:** ≥99.5% of jobs complete without DLQ escalation per rolling 24h (`job_retry_total`, `dlq_event_total`); higher failure rates require RB-WORKER-DLQ and leadership update.

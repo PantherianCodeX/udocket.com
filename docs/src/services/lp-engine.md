@@ -509,7 +509,7 @@ ______________________________________________________________________
 ## 6) Observability
 
 **Purpose:** Summarize telemetry, logging, and SLO governance. **|**
-**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../services/observability.md#4-log-schema--redaction)) and maintains decision-log schema guarantees. **|**
+**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../services/observability.md#4-state-management)) and maintains decision-log schema guarantees. **|**
 **State:** Grafana dashboards (“LPE – Enforcement & Residency”, “LPE Compiler”, “Localization QA”, “FinOps – LPE”, “SDK Health”) alongside PagerDuty service “Localization & Policy Engine”. Decision logs stored ≥365 days. **|**
 **Failures & handling:** Missing metrics or runbook linkage trigger docs lint failures; SLO burn-rate alerts feed §8.2 triggers. **|**
 **Observability:** Metrics `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`, `lpe_bundle_signature_error_total`, `opa_bundle_status`, `lpe_privacy_framework_enabled_total`, `lpe_compiler_resource_seconds`, `lpe_sdk_cache_error_total`. **|**
@@ -520,7 +520,7 @@ ______________________________________________________________________
 - Synthetic monitors run after each deploy against HIPAA/PHIPA/PIPA contexts; failures block rollout.
 - Decision-log validator `scripts/opa/validate_decision_logs.py` runs in CI and after major releases.
 - Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks.md` and must meet Appendix L baselines before shipping.
-- Logs honour the never-log list ([`Logging §4`](../services/observability.md#4-log-schema--redaction)); sampling budgets follow dynamic controls in [`Logging §7`](../services/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
+- Logs honour the never-log list ([`Logging §4`](../services/observability.md#4-state-management)); sampling budgets follow dynamic controls in [`Logging §7`](../services/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
 
 ### 6.1 SLOs & Targets (binding)
 
@@ -647,7 +647,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Migration README `ops/lpe/migrations/README.md`, change calendar `ops/change/lpe_cutover.ics`, shim implementation `packages/udocket_core/reference/__init__.py`. **|**
 **References:** ADRs or ops docs governing migrations.
 
-- Cutover timeline (target starting Mon 2025-10-20 America/Vancouver):
+- Cutover timeline (executed starting Mon 2025-10-20 America/Vancouver):
   - **Weeks 1–2:** ADR + doc updates, schema/compiler scaffolding, seed jurisdiction data, `PolicyContext` draft, Threat Model v1.
   - **Weeks 3–4:** Integrations with Web/Portal, Guardian/Workers, Search; vector residency enforcement live.
   - **Week 5:** Accessibility CI gates, Notifications templates via LPE, dashboards, synthetic monitors.
@@ -732,5 +732,8 @@ ______________________________________________________________________
 - FIPS tracing for dual-signed policy bundles — TDD App.J.
 - Localization QA evidence templates — `ops/localization/checklists/lpe_release.yaml`.
 - OPA toolkit — `ops/scripts/lpe/deploy_opa_bundle.py`, `scripts/opa/validate_decision_logs.py`.
+- Open Policy Agent — Bundles: <https://www.openpolicyagent.org/docs/latest/management-bundles/>
+- Open Policy Agent — Discovery: <https://www.openpolicyagent.org/docs/latest/management-discovery/>
+- Open Policy Agent — Decision Logs: <https://www.openpolicyagent.org/docs/latest/management-decision-logs/>
 - LPE lifecycle ADR — `docs/adr/ADR-0003-localization-and-policy-engine.md`.
 - Reference migration guide — `https://docs.udocket.io/reference-migration`.

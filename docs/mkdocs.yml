@@ -76,15 +76,19 @@ nav:
   - Observability: services/observability.md
   - Audit & Evidence: services/audit.md
   - Identity & Access: services/identity.md
+  - Accounts & Tenants: services/accounts-tenants.md
+  - Billing & Subscriptions: services/billing-subscriptions.md
+  - Artifact Store: services/artifact-store.md
   - Worker Cluster: services/worker-cluster.md
   - LangGraph Agents: services/langgraph-agents.md
   - Guardian: services/guardian.md
+  - Communications: services/communications.md
   - Digital Signer: services/digital-signer.md
   - Settings Registry: services/settings.md
   - LPE: services/lp-engine.md
   - Reference Manager: services/ref-manager.md
   - LLM Registry: services/llm-registry.md
-  - Notifications: services/notifications.md
+  - Search & Indexing: services/search-index.md
 - Ops:
   - Runbooks: ops/runbooks.md
 - ADR:

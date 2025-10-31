@@ -170,7 +170,7 @@ ______________________________________________________________________
 
 ### 3.1 External Interfaces (binding)
 
-- Celery task wrappers under `apps/platform/operations/tasks/agents.py` expose LangGraph pipelines to the Operations service layer and publish job progress over SSE to the Web App and Notifications services.
+- Celery task wrappers under `apps/platform/operations/tasks/agents.py` expose LangGraph pipelines to the Operations service layer and publish job progress over SSE to the Web App and Communications services.
 - Settings activation endpoints (`agents.pipeline.*`, `agents.tools.*`, `assistant.*`) gate configuration changes; they enforce schema validation, blue/green rollout, and post-activation contract tests before exposing new graphs.
 - Guardian, Worker Cluster, and Web App integrations consume structured status payloads (`job.accepted|running|completed`), manifest references, and QA summaries to keep UI and safety gating aligned.
 - Manual/Agent edit tooling interacts through `ops/agent_edit` APIs that accept deterministic manifests and enforce reviewer approvals before promotion.
@@ -446,7 +446,7 @@ ______________________________________________________________________
 **State:** Settings snapshots stored in manifests; LLM Registry envelopes include provider selections; Worker Cluster tracks Celery tasks; Notifications propagate SSE updates. **|**
 **Failures & handling:** Missing settings or registry configurations halt activation; Guardian rejection blocks promotion; Worker Cluster watchdog triggers job retry or manual intervention. **|**
 **Observability:** Settings activation logs, registry audit events, Worker Cluster dashboards, Notifications queues, and Guardian telemetry track integration health. **|**
-**Breadcrumbs:** Settings spec §5, LLM Registry spec §2, Worker Cluster spec §3, Notifications spec §2, Compose spec §4, tests `tests/integration/test_agent_dependencies.py`. **|**
+**Breadcrumbs:** Settings spec §5, LLM Registry spec §2, Worker Cluster spec §3, Communications spec §2, Compose spec §4, tests `tests/integration/test_agent_dependencies.py`. **|**
 **References:** TDD §3, §6 summary, Guardian spec §2.3, Web App spec §5 (editors/assistants), Settings spec appendices.
 
 - Settings alignment: `agents.pipeline.*`, `agents.tools.*`, `compose.policy.*`, `analyze.policy.*`, `assistant.*` keys validated against this spec; lint scripts ensure canonical IDs and enumerations.
@@ -468,7 +468,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix A – Agent schemas & error taxonomy (binding)
+## Appendix A – Agent schemas & error taxonomy (binding) {#appendix-a-agent-schemas-error-taxonomy}
 
 **Purpose:** Provide typed schema examples and canonical error codes for agent outputs. **|**
 **Contract:** Schemas must remain in sync with implementation; error codes are authoritative and map to failure classes in §5. **|**

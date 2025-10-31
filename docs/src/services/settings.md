@@ -751,7 +751,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix A — Settings key map & traceability index
+## Appendix A — Settings key map & traceability index {#appendix-a-settings-key-map-traceability-index}
 
 **Purpose:** Link platform behaviour to Settings Registry configuration for audit and troubleshooting. **|**
 **Contract:** Every key referenced in code, bundles, or docs appears here with scope, defaults, and enforcement notes; automation cross-checks ensure completeness. **|**
@@ -892,7 +892,7 @@ class SettingDefinition(BaseModel):
 | `storage.remote_hash.enabled` | ORG\|CASE   | false | Record remote hashes for batch inputs; §5.3. |
 | `storage.remote_hash.max_mb` | ORG\|CASE   | 50 | Max remote bytes to hash; §5.3. |
 | `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
-| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../services/observability.md#4-log-schema--redaction). |
+| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../services/observability.md#4-state-management). |
 | `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §6`](../services/observability.md#6-access-control--auditing). |
 | `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
 | `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
@@ -967,7 +967,7 @@ Checklist items:
 **References:** §4 Activation pipeline, §8 Operational notes.
 **Breadcrumbs:** Change log `ops/settings/change_log.md`, tests `tests/platform/settings/test_change_log.py`.
 
-## Appendix B — Metrics & alerts
+## Appendix B — Metrics & alerts {#appendix-b-metrics-alerts}
 
 **Purpose:** Define the telemetry set that proves SR health, governance controls, and security posture. **|**
 **Contract:** Metrics and alerts enumerated here must exist in production dashboards; owners keep thresholds aligned with SLOs and audit requirements. **|**

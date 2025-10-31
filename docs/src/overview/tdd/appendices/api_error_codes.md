@@ -175,7 +175,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | lpe_api_error_total<br>lpe_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | lpe_api_error_total |
 
-### [Notifications Service](../../../services/notifications.md#3-3-api-error-codes-binding) {#notifications-service}
+### [Communications Service](../../../services/communications.md#3-3-api-error-codes-binding) {#communications-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |

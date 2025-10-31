@@ -167,7 +167,7 @@ ______________________________________________________________________
 | `VALIDATION_ERROR` | 400 | No | observability_api_error_total |
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-## 4) State Management (binding) {#4-log-schema--redaction}
+## 4) State Management (binding) {#4-state-management}
 
 **Purpose:** Document how telemetry schemas, retention policies, and redaction rules persist across the observability stack. **|**
 **Contract:** Maintain schema versions, ILM policies, and immutable sinks aligned with Settings; redaction profiles must apply uniformly to every ingestion path. **|**

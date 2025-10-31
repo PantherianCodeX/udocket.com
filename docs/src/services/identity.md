@@ -190,7 +190,7 @@ ______________________________________________________________________
 
 - Tenancy model: `organization` as root, `case.org_id` referencing the tenant. `case_member(user_id, case_id, role)` scopes access (default “own cases”; Settings may widen to “all org cases”).  
 - Effective permissions compile from Settings into `effective_permission` and feed `udocket_can` (deny-by-default; only `sysadmin` bypasses).  
-- Secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, `entitlement_snapshot_secure`, …) expose only masked data; `ALTER TABLE ... FORCE ROW LEVEL SECURITY` enforces policies even for table owners. Deliverable receipt views live with the Notifications specification.  
+- Secure views (`case_secure`, `artifact_secure`, `qa_log_secure`, `entitlement_snapshot_secure`, …) expose only masked data; `ALTER TABLE ... FORCE ROW LEVEL SECURITY` enforces policies even for table owners. Deliverable receipt views live with the Communications specification.  
 - Example policy:
 
 ```sql

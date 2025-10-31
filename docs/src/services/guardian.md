@@ -194,7 +194,7 @@ Guardian respects downstream approval invariants (ExclusiveSwap) and ensures del
 - Reference Manager tracks proposal SLAs (triage ≤ 14 days, resolution ≤ 30 days) and publishes adoption status. Guardian blocks new enum enforcement until bundles propagate to the UI, API, and schema validators.
 - Downstream analytics consume the same enums to ensure dashboards, runbooks, and audits remain consistent.
 
-### 2.4 Review modes & risk overrides (binding)
+### 2.4 Review modes & risk overrides (binding) {#24-review-modes-risk-overrides-binding}
 
 **Purpose:** Document the deterministic review-mode contract Guardian enforces so workflow services and reviewers share the same expectations. **|**
 **Contract:** Settings `review.mode`, `review.approval_type.default`, and `review.risk_overrides[]` originate from the Settings Registry; Guardian evaluates them after a PASS/WARN judgment and records the outcome in manifests and audit logs. **|**
@@ -308,7 +308,7 @@ curl -sS -X POST \
 **Failures & handling:** Unknown codes fail contract tests (`tests/platform/guardian/test_api_errors.py`) and trigger `guardian_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Metrics `guardian_api_error_total{code}`, SSE topics `guardian.judgment.failed`, and dashboards “Guardian Decisions”/“Policy Drift” highlight error rates; synthetic submissions replay canonical failures every deploy. **|**
 **Breadcrumbs:** Pipeline `packages/udocket_core/guardian/pipeline.py`, detector integrations `packages/udocket_core/guardian/detectors/*`, review API `apps/platform/guardian/views.py`, tests `tests/platform/guardian/test_pipeline.py`, `tests/platform/guardian/test_review_actions.py`. **|**
-**References:** Platform Runtime §3.3, Settings spec §2.6, Notifications spec §3.2.
+**References:** Platform Runtime §3.3, Settings spec §2.6, Communications spec §3.2.
 
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#guardian-service)
 

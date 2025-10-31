@@ -334,9 +334,9 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
 - Compliance reviews reference drill artefacts, waiver ledgers, and compiler adoption metrics to demonstrate readiness.
 
-## Notifications Service — 8.3 Runbooks & Drills (binding) {#notifications-service-8-3-runbooks-drills-binding}
+## Communications Service — 8.3 Runbooks & Drills (binding) {#communications-service-8-3-runbooks-drills-binding}
 
-**Purpose:** Keep playbooks executable and drills current for core notification scenarios. **|**
+**Purpose:** Keep playbooks executable and drills current for core communications and notification scenarios. **|**
 <a id="rb-notify-"></a>
 **Contract:** Alerts map to `RB-NOTIFY-\*` runbooks; quarterly drills rehearse provider failover, webhook compromise, STOP/HELP compliance surges, and download-token abuse investigations. **|**
 **State:** Runbooks `ops/runbooks/notifications/*.md`, drill evidence `ops/notifications/drills/<date>/summary.md`. **|**
@@ -349,7 +349,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 <a id="rb-notify-token"></a>
 **References:** `RB-NOTIFY-OUTAGE`, `RB-NOTIFY-WEBHOOK`, `RB-NOTIFY-SMS`, `RB-NOTIFY-TOKEN`.
 
-### Notifications Service — 8.3.1 Runbook Index (informative) {#notifications-service-8-3-1-runbook-index-informative}
+### Communications Service — 8.3.1 Runbook Index (informative) {#communications-service-8-3-1-runbook-index-informative}
 
 | Runbook code | Scenario | Notes |
 | --- | --- | --- |
@@ -358,7 +358,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 | `RB-NOTIFY-SMS` | STOP/HELP surge & regulatory response | Compliance scripts, opt-in reinstatement |
 | `RB-NOTIFY-TOKEN` | Download token abuse or leak | Token rotation, artifact quarantine |
 
-### Notifications Service — 8.3.2 Primary Runbooks (binding) {#notifications-service-8-3-2-primary-runbooks-binding}
+### Communications Service — 8.3.2 Primary Runbooks (binding) {#communications-service-8-3-2-primary-runbooks-binding}
 
 **Purpose:** Document operational playbooks responders execute during incidents or exercises. **|**
 **Contract:** Link production alerts to runbook identifiers, outline execution cadence, and name the maintaining team. **|**
@@ -373,7 +373,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - `RB-NOTIFY-SMS` — Handles STOP/HELP surges, regulator notifications, and opt-in reconciliation.
 - `RB-NOTIFY-TOKEN` — Investigates token abuse, rotates secrets, and quarantines compromised artifacts.
 
-### Notifications Service — 8.3.3 Drill Cadence & Evidence (binding) {#notifications-service-8-3-3-drill-cadence-evidence-binding}
+### Communications Service — 8.3.3 Drill Cadence & Evidence (binding) {#communications-service-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills cover provider failover, webhook compromise, STOP/HELP surge, and token abuse scenarios with evidence stored in `ops/notifications/drills/<date>/`.
 - Drill scheduler `ops/scripts/notifications/schedule_drills.py` tracks cadence; missed drills block change approvals until evidence uploaded.
