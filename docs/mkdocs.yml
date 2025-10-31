@@ -55,43 +55,46 @@ extra_javascript:
 - assets/javascripts/glightbox-panzoom.js
 
 nav:
-- Overview: index.md
-- Docs How To: CONTRIBUTING-docs.md
-- TDD:
-  - Overview: overview/tdd/index.md
-  - Technical Design (High-Level): overview/tdd.md
-  - Appendices:
-    - Glossary: overview/tdd/appendices/glossary.md
-    - Status Mapping: overview/tdd/appendices/status-mapping.md
-    - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
-    - SLO Index: overview/tdd/appendices/slo_index.md
-    - Diagrams: overview/tdd/appendices/diagrams.md
-- PRD:
+- Home: index.md
+- Contributor Guide: CONTRIBUTING-docs.md
+- Product Strategy:
   - Overview: overview/prd/index.md
   - Product Requirements: overview/prd.md
-- Apps:
+- Architecture Blueprint:
+  - Blueprint Overview: overview/tdd/index.md
+  - High-Level Design: overview/tdd.md
+- Architecture Appendices:
+  - Glossary: overview/tdd/appendices/glossary.md
+  - Status Mapping: overview/tdd/appendices/status-mapping.md
+  - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
+  - SLO Index: overview/tdd/appendices/slo_index.md
+  - Diagrams: overview/tdd/appendices/diagrams.md
+- Experience Layer:
   - Web App: apps/web-app.md
-- Services:
-  - Accounts & Tenants: services/accounts-tenants.md
-  - Artifact Store: services/artifact-store.md
-  - Audit & Evidence: services/audit.md
-  - Billing & Subscriptions: services/billing-subscriptions.md
-  - Communications: services/communications.md
-  - Digital Signer: services/digital-signer.md
-  - Guardian: services/guardian.md
+- Platform Control Plane:
+  - Platform Runtime: services/platform-runtime.md
+  - Settings Registry: services/settings.md
   - Identity & Access: services/identity.md
+  - Guardian: services/guardian.md
+  - Observability: services/observability.md
+- Automation & Intelligence:
   - LangGraph Agents: services/langgraph-agents.md
+  - Worker Cluster: services/worker-cluster.md
   - LLM Registry: services/llm-registry.md
   - LPE: services/lp-engine.md
-  - Observability: services/observability.md
-  - Platform Runtime: services/platform-runtime.md
+- Data & Evidence:
+  - Artifact Store: services/artifact-store.md
+  - Digital Signer: services/digital-signer.md
   - Reference Manager: services/ref-manager.md
-  - Settings Registry: services/settings.md
   - Search & Indexing: services/search-index.md
-  - Worker Cluster: services/worker-cluster.md
-- Ops:
+  - Audit & Evidence: services/audit.md
+- Customer Operations:
+  - Accounts & Tenants: services/accounts-tenants.md
+  - Billing & Subscriptions: services/billing-subscriptions.md
+  - Communications: services/communications.md
+- Operations Hub:
   - Runbooks: ops/runbooks.md
-- ADR:
+- Decision Records:
   - Overview: adr/README.md
   - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md
   - API Versioning & Sunset: adr/ADR-0002-api-versioning-and-sunset.md

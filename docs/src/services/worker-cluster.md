@@ -180,13 +180,17 @@ ______________________________________________________________________
 
 ### 3.1 External Interfaces
 
-- Primary tasks located in `apps/platform/operations/task_modules/*.py`; each module declares queue bindings, retry policies, and capability requirements.
-- Beat schedules defined in `apps/platform/operations/bootstrap.py`; scheduling changes require documentation updates and runbook references.
+- `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` enforce OCC on `version`, require `Idempotency-Key`, and propagate `retry_token` to keep retries idempotent.
+- Responses include current status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and updated `retry_generation`.
+- Upload finalize endpoint (`POST /api/v1/files/uploads/{id}:finalize`) interacts with worker tasks for storage conversions and validation.
+- SSE topics `job.accepted|running|blocked|completed` broadcast progress with schema-versioned payloads for UI and automation consumers.
 
 ### 3.2 Internal Interfaces
 
-- `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` enforce OCC on `version`, require `Idempotency-Key`, and propagate `retry_token` to keep retries idempotent.
-- Responses include current status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and updated `retry_generation`.
+- Primary task modules live in `apps/platform/operations/task_modules/*.py`; each declares queue bindings, retry budgets, and capability requirements.
+- Beat schedules defined in `apps/platform/operations/bootstrap.py`; scheduling changes require documentation updates and runbook references.
+- Workers communicate with provider controllers (LLM, speech) through `packages/udocket_core/*` registry facades for parity enforcement.
+- Internal publish/subscribe uses Redis streams (`worker.events`) for watchdog and audit fan-out.
 
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
