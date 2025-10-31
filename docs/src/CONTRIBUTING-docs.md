@@ -66,6 +66,8 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   - From `docs/`: `vale --config docs/config/vale.ini src/`
   - Rules live under `docs/config/vale/`.
 - Build site: `mkdocs -f docs/config/mkdocs.yml build --clean` (outputs to `docs/site/`).
+- Preview docs locally (default dev server port 8010):
+  - `mkdocs serve -f docs/config/mkdocs.yml --dev-addr 0.0.0.0:8010`
 - Build TDD PDF:
   - `bash docs/tools/render_mermaid.sh --all`
   - `bash docs/tools/build/pdf_tdd.sh` (outputs to `docs/build/pdf/tdd.pdf`).

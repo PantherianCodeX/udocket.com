@@ -11,6 +11,8 @@
   ],
   "shutdownAction": "stopCompose",
   "workspaceFolder": "/app",
+  "forwardPorts": [8000, 8010],
+  "appPort": [8000, 8010],
   "overrideCommand": true,
   "remoteUser": "root",
   "remoteEnv": {

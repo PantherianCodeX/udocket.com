@@ -47,4 +47,13 @@ typing-clean-cache:
 	rm -f .typewiz_cache.json
 
 lint-docs:
-	. ./.venv/bin/activate && python -m docs.tools.lint_docs
+	. ./.venv/bin/activate && python -m docs.tools.manage_docs --lint
+
+sync-docs:
+	. ./.venv/bin/activate && python -m docs.tools.manage_docs --sync
+
+build-docs:
+	. ./.venv/bin/activate && python -m docs.tools.manage_docs --build
+
+preview-docs:
+	. ./.venv/bin/activate && mkdocs serve -f docs/config/mkdocs.yml --dev-addr 0.0.0.0:8010
