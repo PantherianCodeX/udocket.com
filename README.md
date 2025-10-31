@@ -9,7 +9,14 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 2) Copy `.env.example` to `.env` and fill required values.
    - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
-3) Build & run the stack:
+3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
+4) Sync the platform dependencies (dev extras included):
+
+   ```bash
+   uv sync --frozen --group dev --project apps/platform
+   ```
+
+5) Build & run the stack:
 
    ```bash
    docker compose up --build
@@ -20,13 +27,14 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 ### Optional: enable BuildKit cache reuse
 
 - Create a container-based builder once: `docker buildx create --name udocket --driver docker-container --bootstrap --use`.
-- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths). The helper also seeds the OCI index so BuildKit skips “index.json not found” warnings:
+- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths) or run `make compose-build-cache`:
 
   ```bash
   ./scripts/setup_buildx_cache.sh
   ```
 
-- Cache directories live under `.docker/buildx-cache/` (dev, platform, platform_worker, platform_beat, keycloak). Host and devcontainer builds share them automatically.
+- Cache directories live under `.docker/buildx-cache/` (platform, platform_worker, platform_beat, keycloak, platform-dev, docs). Host and devcontainer builds share them automatically.
+- `make compose-build-cache SERVICES="platform platform_worker platform_beat"` wraps `docker compose build` with the cache override for faster rebuilds.
 - To read/write caches, include the override: `docker compose -f docker-compose.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
 - VS Code devcontainer users can opt in by appending `../docker-compose.cache.yml` to the `dockerComposeFile` list in `.devcontainer/devcontainer.json`.
 

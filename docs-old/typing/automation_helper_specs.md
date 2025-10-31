@@ -7,11 +7,11 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **CLI**: `python scripts/typing/bootstrap_env.py [--venv <path>] [--check-only]`
 - **Workflow**:
   1. Resolve the target virtualenv (default: `.venv`).
-  2. Verify `pip` is available; bail with actionable error if not.
-  3. Install (or upgrade) stub wheels listed in `pyproject.toml` / `requirements-dev.txt`.
+  2. Verify `uv` is available; bail with actionable error if not.
+  3. Install (or upgrade) stub wheels via `uv sync --frozen --only-group dev --project apps/platform`.
   4. Confirm required overlay paths in `pyrightconfig.json` exist; create empty directories when missing.
 - **Idempotency checks**: The script records an install hash (package + version) in `.cache/typing/bootstrap.json`. Reruns compare hashes and skip unchanged packages.
-- **Exit codes**: `0` on success/no-op, `10` if pip is missing, `20` if locking fails.
+- **Exit codes**: `0` on success/no-op, `10` if uv is missing, `20` if locking fails.
 - **Validation**: Automatically run `pyright --stats` post-install (optional `--no-stats`). Append snapshot to `docs/typing_debt_assessment.md` via the document synchroniser.
 
 ## 2. Strictify (`scripts/typing/strictify.py`)

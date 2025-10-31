@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "udocket-docs"
+version = "0.1.0"
+description = "uDocket documentation toolkit with MkDocs configuration and supporting plugins."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "uDocket Team" }]
+license = "MIT"
+dependencies = [
+    "beautifulsoup4==4.12.3",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.5.44",
+    "mkdocs-redirects==1.2.1",
+    "mkdocs-glightbox==0.5.2",
+    "pillow==10.4.0",
+    "PyYAML==6.0.3",
+    "weasyprint==62.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mdformat==0.7.17",
+    "mdformat-gfm==0.4.1",
+    "mdformat-frontmatter==0.4.1",
+]
+
+[project.entry-points."mkdocs.plugins"]
+auto-image-scale = "udocket_docs_plugins.auto_image_scale.plugin:AutoImageScalePlugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]

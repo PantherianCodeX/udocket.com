@@ -1,9 +1,10 @@
 PYTHON ?= python
+UV ?= uv
 
 .PHONY: init-precommit typing type-baseline type-strict tests ci-check typing-audit typing-dashboard typing-readiness typing-ci typing-clean-cache
 
 init-precommit:
-	$(PYTHON) -m pip install pre-commit || true
+	$(UV) pip install --quiet pre-commit || true
 	pre-commit install
 
 typing: type-baseline type-strict
@@ -46,14 +47,16 @@ typing-ci: reports/typing
 typing-clean-cache:
 	rm -f .typewiz_cache.json
 
+DC := docker compose
+
 lint-docs:
-	. ./.venv/bin/activate && python -m docs.tools.manage_docs --lint
+	$(DC) run --rm docs bash -lc 'cd packages/udocket_docs && uv run python -m docs.tools.manage_docs --lint'
 
 sync-docs:
-	. ./.venv/bin/activate && python -m docs.tools.manage_docs --sync
+	$(DC) run --rm docs bash -lc 'cd packages/udocket_docs && uv run python -m docs.tools.manage_docs --sync'
 
 build-docs:
-	. ./.venv/bin/activate && python -m docs.tools.manage_docs --build
+	$(DC) run --rm docs bash -lc 'cd packages/udocket_docs && uv run python -m docs.tools.manage_docs --build'
 
 preview-docs:
-	. ./.venv/bin/activate && mkdocs serve -f docs/config/mkdocs.yml --dev-addr 0.0.0.0:8010
+	$(DC) run --rm --service-ports docs bash -lc 'cd packages/udocket_docs && uv run mkdocs serve --config-file mkdocs.yml --dev-addr 0.0.0.0:8010'

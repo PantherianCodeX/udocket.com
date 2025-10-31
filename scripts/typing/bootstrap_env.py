@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Tuple
@@ -115,7 +116,10 @@ def _install_packages(
     skipped_optional: list[str] = []
     for package in packages:
         try:
-            run_command([str(python_exe), "-m", "pip", "install", package], check=True)
+            run_command(
+                ["uv", "pip", "install", "--quiet", "--python", str(python_exe), package],
+                check=True,
+            )
         except RuntimeError as exc:  # pragma: no cover - pip error formatting varies
             message = str(exc)
             if package in OPTIONAL_STUB_SET and "No matching distribution" in message:
@@ -151,6 +155,13 @@ def main() -> int:
     parser.add_argument("--check-only", action="store_true", help="Do not install packages; exit with 0 if up to date, 1 otherwise.")
     parser.add_argument("--no-stats", action="store_true", help="Skip running pyright --stats after installation.")
     args = parser.parse_args()
+
+    if shutil.which("uv") is None:
+        print(
+            "uv CLI not found in PATH. Install it from https://astral.sh/uv "
+            "(e.g. `pip install uv` or use the official installer)."
+        )
+        return 1
 
     venv_path = (PROJECT_ROOT / args.venv).resolve()
     package_list = _load_package_list(args.packages_file if args.packages_file else None)

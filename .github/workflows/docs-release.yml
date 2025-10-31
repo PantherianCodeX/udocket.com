@@ -11,37 +11,44 @@ jobs:
       contents: write
     env:
       VALE_VERSION: 3.7.1
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           check-latest: true
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - name: Install tools
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y
+      - name: Install system dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium pandoc
+      - name: Install docs dependencies
+        working-directory: packages/udocket_docs
+        run: |
+          uv sync --frozen --extra dev
           npm ci
-          pip install -r requirements-docs.txt
-          sudo apt-get update && sudo apt-get install -y pandoc
-          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o vale.tar.gz
-          tar -xzf vale.tar.gz vale
-          sudo mv vale /usr/local/bin/vale
-          rm -f vale.tar.gz
       - name: Add local node binaries to PATH
-        run: echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+        run: echo "$(pwd)/packages/udocket_docs/node_modules/.bin" >> $GITHUB_PATH
       - name: Build site
-        run: mkdocs -f docs/mkdocs.yml build --clean
+        working-directory: packages/udocket_docs
+        run: uv run mkdocs build --config-file mkdocs.yml --site-dir site --clean
       - name: Render Mermaid (all)
-        run: bash scripts/docs/render_mermaid.sh --all --verbose
-      - name: Build PDFs (TDD)
-        run: |
-          mkdir -p docs/build/pdf
-          bash scripts/docs/build_pdf_tdd.sh
+        working-directory: packages/udocket_docs
+        run: bash tools/render_mermaid.sh --all --verbose
+      - name: Build PDFs (TDD & PRD)
+        working-directory: packages/udocket_docs
+        run: uv run python tools/pdf_build.py --skip-build
       - name: Checksums & manifest
-        run: bash scripts/docs/hash_and_manifest.sh
+        working-directory: packages/udocket_docs
+        run: bash tools/hash_and_manifest.sh
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -51,5 +58,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            docs/build/pdf/tdd.pdf
-            docs/build/pdf/manifest.json
+            packages/udocket_docs/build/pdf/tdd.pdf
+            packages/udocket_docs/build/pdf/manifest.json

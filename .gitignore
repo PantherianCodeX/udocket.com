@@ -83,6 +83,10 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+packages/udocket_docs/build/
+packages/udocket_docs/site/
+packages/udocket_docs/docs/_assets/mermaid/
+!packages/udocket_docs/tools/build/
 
 # PyBuilder
 .pybuilder/

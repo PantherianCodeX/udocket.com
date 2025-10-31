@@ -44,6 +44,26 @@ services:
     # Internal port remains 5432 so other services keep working
     ports:
       - "5434:5432"
+
+  docs:
+    build:
+      context: packages/udocket_docs
+      dockerfile: Dockerfile
+    command: sleep infinity
+    tty: true
+    volumes:
+      - vscode-server:/root/.vscode-server
+      - home-config:/root/.config
+      - home-cache:/root/.cache
+      - home-local-share:/root/.local/share
+      - codex-data:/root/.codex
+      - ..:/workspace
+    environment:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+    ports:
+      - "8011:8010"
+
 volumes:
   vscode-server: {}
   home-config: {}

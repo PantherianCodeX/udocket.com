@@ -25,6 +25,9 @@ typings/
 .github/
 docker-compose*.yml
 docs/
+packages/udocket_docs/build/
+packages/udocket_docs/site/
+packages/udocket_docs/docs/_assets/mermaid/
 docs_old/
 scripts/
 tests/

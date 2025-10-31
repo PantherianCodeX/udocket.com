@@ -178,7 +178,7 @@ General guidelines:
   - Per-module enforcement: `packages/udocket_core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/udocket_core/logging` and `pyright packages/udocket_core/logging`). Do not introduce `Any` or untyped defs there.
   - When editing other modules, remove `Any` usage, add precise types, and reduce pyright warnings in that scope. Never add `# type: ignore` without an accompanying TODO referencing the typing roadmap.
   - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
-- Stub dependencies: install `apps/platform/requirements.txt` (which bundles the Django and DRF stub packages) so Pyright has Django/DRF annotations locally.
+- Stub dependencies: run `uv sync --frozen --only-group dev --project apps/platform` to ensure Pyright and Django/DRF stubs are installed before editing.
 - Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
 - Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging. Never introduce provider/model fallback logic—jobs must use the exact configured provider chain and raise actionable errors if initialization fails.
 - Refactors spanning many files should rely on helper scripts (add them under `scripts/` when reusable) instead of manual editing. Always run `pyright` to surface import/function issues across the tree before finishing a refactor.
@@ -188,6 +188,7 @@ General guidelines:
 
 - Start stack: `docker compose up --build`
   - Django platform (primary UI/API): `http://localhost:8000`
+- Sync dependencies locally before running management commands: `uv sync --frozen --group dev --project apps/platform`
 - Create a case via the platform UI and upload audio from the case page.
 - The Celery worker (`platform_worker` service) picks up jobs automatically and writes outputs under the case directory.
 - To exercise the agent manually, open a Django shell and invoke the `TranscriptionAgent`:

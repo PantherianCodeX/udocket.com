@@ -13,14 +13,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           check-latest: true
+      - name: Add uv
+        uses: astral-sh/setup-uv@v2
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium
       - name: Install Node deps
+        working-directory: packages/udocket_docs
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
         run: npm ci
       - name: Add local node binaries to PATH
-        run: echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+        run: echo "$(pwd)/packages/udocket_docs/node_modules/.bin" >> $GITHUB_PATH
       - name: Render Mermaid diagrams
-        run: bash scripts/docs/render_mermaid.sh --all
+        working-directory: packages/udocket_docs
+        run: bash tools/render_mermaid.sh --all
 
   docs-lint:
     runs-on: ubuntu-latest
@@ -29,18 +40,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install documentation Python tooling
+      - uses: astral-sh/setup-uv@v2
+      - name: Install system dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-docs.txt
+          sudo apt-get update
+          sudo apt-get install -y chromium
+      - name: Install documentation Python tooling
+        working-directory: packages/udocket_docs
+        run: uv sync --frozen --extra dev
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           check-latest: true
       - name: Install Node deps
+        working-directory: packages/udocket_docs
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
         run: npm ci
       - name: Add local node binaries to PATH
-        run: echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+        run: echo "$(pwd)/packages/udocket_docs/node_modules/.bin" >> $GITHUB_PATH
       - name: Install Vale CLI
         env:
           VALE_VERSION: 3.7.1
@@ -50,4 +69,5 @@ jobs:
           sudo mv vale /usr/local/bin/vale
           rm -f vale.tar.gz
       - name: Run documentation lint suite
-        run: python scripts/docs/lint_docs.py
+        working-directory: packages/udocket_docs
+        run: uv run python -m docs.tools.manage_docs --lint

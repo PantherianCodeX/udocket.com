@@ -1,0 +1,14 @@
+# Ignore build artefacts and caches to keep Docker context lean
+build/
+site/
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.docs-cache/
+# Generated assets rendered from source diagrams
+docs/_assets/mermaid/
+# Local tool outputs

@@ -5,45 +5,86 @@ on:
     branches: [ main ]
 
 jobs:
+  publish-toolbox:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/udocket-docs-toolbox
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute lock digest
+        id: meta
+        working-directory: packages/udocket_docs
+        run: |
+          echo "lock_sha=$(sha256sum uv.lock | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push docs toolbox image
+        uses: docker/build-push-action@v5
+        with:
+          context: packages/udocket_docs
+          file: packages/udocket_docs/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.lock_sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha,scope=docs-toolbox
+          cache-to: type=gha,scope=docs-toolbox,mode=max
+
   lint-build:
     runs-on: ubuntu-latest
     env:
       VALE_VERSION: 3.7.1
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           check-latest: true
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - name: Install tools
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y
+      - name: Install system dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium pandoc
+      - name: Install docs dependencies
+        working-directory: packages/udocket_docs
+        run: |
+          uv sync --frozen --extra dev
           npm ci
-          pip install -r requirements-docs.txt
-          sudo apt-get update && sudo apt-get install -y pandoc
-          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o vale.tar.gz
-          tar -xzf vale.tar.gz vale
-          sudo mv vale /usr/local/bin/vale
-          rm -f vale.tar.gz
       - name: Add local node binaries to PATH
-        run: echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+        run: echo "$(pwd)/packages/udocket_docs/node_modules/.bin" >> $GITHUB_PATH
       - name: Markdownlint
-        run: npx markdownlint-cli2 'docs/src/**/*.md'
+        working-directory: packages/udocket_docs
+        run: npx markdownlint-cli2 'docs/**/*.md' '!docs/build/**' '!site/**'
       - name: Vale
-        run: |
-          cd docs
-          vale src/
+        working-directory: packages/udocket_docs
+        run: vale --config config/vale.ini docs/
       - name: Mermaid render (all)
-        run: bash scripts/docs/render_mermaid.sh --all --verbose
+        working-directory: packages/udocket_docs
+        run: bash tools/render_mermaid.sh --all --verbose
       - name: MkDocs build (HTML)
-        run: mkdocs -f docs/mkdocs.yml build --clean
-      - name: Pandoc dry-run (TDD only)
-        run: |
-          mkdir -p docs/build/pdf
-          bash scripts/docs/build_pdf_tdd.sh
-      - name: lint-docs
-        run: python scripts/docs/lint_docs.py
+        working-directory: packages/udocket_docs
+        run: uv run mkdocs build --config-file mkdocs.yml --site-dir site --clean
+      - name: PDF build (TDD + PRD)
+        working-directory: packages/udocket_docs
+        run: uv run python tools/pdf_build.py --skip-build
+      - name: Lint docs suite
+        working-directory: packages/udocket_docs
+        run: uv run python -m docs.tools.manage_docs --lint
 
   linkcheck:
     runs-on: ubuntu-latest

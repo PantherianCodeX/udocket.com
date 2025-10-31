@@ -3,6 +3,7 @@
   "dockerComposeFile": [
     "../docker-compose.yml",
     "../docker-compose.override.yml",
+    "../docker-compose.cache.yml",
     "./docker-compose.devcontainer.yml"
   ],
   "service": "platform-dev",
@@ -19,7 +20,8 @@
     "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
     "ENV_READ_DOTENV": "1"
   },
-  "postCreateCommand": "bash -lc 'set -euo pipefail; ./scripts/setup_buildx_cache.sh; if [ \"${INSTALL_DOCS:-1}\" = \"1\" ]; then pip install -r requirements-docs.txt; fi; npm ci; python scripts/typing/vendor_stubs.py'",
+  "postCreateCommand": "bash -lc './scripts/devcontainer/post_create.sh'",
+  "postStartCommand": "bash -lc '[ -d /app/apps/platform/.venv ] || ./scripts/devcontainer/post_create.sh'",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -51,7 +53,7 @@
         "Azurite.azurite"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/app/.venv/bin/python"
+        "python.defaultInterpreterPath": "/app/apps/platform/.venv/bin/python"
       }
     }
   }

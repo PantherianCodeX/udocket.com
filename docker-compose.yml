@@ -8,9 +8,9 @@ x-develop:
         path: packages
         target: /app/packages
       - action: rebuild
-        path: apps/platform/requirements.txt
+        path: apps/platform/pyproject.toml
       - action: rebuild
-        path: packages/udocket_core/requirements.txt
+        path: apps/platform/uv.lock
       - action: rebuild
         path: infra/docker/Dockerfile.platform
 
@@ -20,6 +20,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+    image: udocket-platform:dev
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -46,6 +47,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+    image: udocket-platform:dev
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -74,6 +76,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
+    image: udocket-platform:dev
     develop: *platform-watch
     restart: unless-stopped
     env_file: .env
@@ -94,6 +97,23 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+
+  docs:
+    build:
+      context: packages/udocket_docs
+      dockerfile: Dockerfile
+    image: udocket-docs-toolbox:dev
+    volumes:
+      - .:/workspace:cached
+    tty: true
+    command: sleep infinity
+    environment:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+    ports:
+      - "8010:8010"
+    profiles:
+      - docs
 
 
   redis:

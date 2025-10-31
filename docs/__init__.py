@@ -1,2 +1,1 @@
-"""uDocket documentation tooling package."""
-
+../packages/udocket_docs/__init__.py
