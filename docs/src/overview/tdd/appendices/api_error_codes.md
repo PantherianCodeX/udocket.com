@@ -40,10 +40,10 @@ ______________________________________________________________________
 
 ## Appendix Overview
 
-This appendix aggregates the API error code sections from every service and app specification. Refresh it with `python scripts/docs/build_api_error_codes.py` whenever those sections change.
+This appendix aggregates the API error code sections from every service and app specification. Refresh it with `python -m docs.tools.build.api_error_codes` whenever those sections change.
 
 <!-- BEGIN AUTO-GENERATED: api-error-index -->
-<!-- AUTO-GENERATED: Run `python scripts/docs/build_api_error_codes.py` to refresh. -->
+<!-- AUTO-GENERATED: Run `python -m docs.tools.build.api_error_codes` to refresh. -->
 
 ### [Accounts & Tenants Service](../../../customer/accounts-tenants.md#3-3-webhooks-events-binding) {#accounts-tenants-service}
 

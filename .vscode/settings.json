@@ -8,6 +8,11 @@
   "markdown.preview.scrollEditorWithPreview": true,
   "markdown.preview.scrollPreviewWithEditor": true,
 
+  "vale.configPath": "docs/config/vale.ini",
+  "markdownlint.configFile": "docs/config/.markdownlint.json",
+  "mkdocs.projectDirectory": "docs",
+  "mkdocs.configFilePath": "docs/config/mkdocs.yml",
+
   "markdown-pdf.executablePath": "/usr/bin/chromium",
   "markdown-pdf.launchOptions": [
     "--no-sandbox",
@@ -48,5 +53,6 @@
     "marimo/_static/**": true,
     "marimo/_lsp/**": true,
     "__marimo__/**": true
-  }
+  },
+  "makefile.configureOnOpen": false
 }

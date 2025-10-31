@@ -1,0 +1,3 @@
+{
+  "extends": "docs/config/.markdownlint.json"
+}

@@ -2,16 +2,16 @@
 title: App Specification Template
 subtitle: Structural reference for uDocket app documents
 authors:
-  - <Primary authors>
+  - [Primary authors]
 version: <0.1-draft>
 status: <Provisional/Implementable/Implemented>
-classification: <Confidential>
+classification: [Confidential]
 last_updated: <1970-01-01>
-updated_by: <Editor or team responsible for latest update>
+updated_by: [Editor or team responsible for latest update]
 owners:
-  - <Teams accountable for day-to-day ownership>
+  - [Teams accountable for day-to-day ownership]
 reviewers:
-  - <Roles or committees that sign off on changes>
+  - [Roles or committees that sign off on changes]
 approvers:
   - <Stakeholders providing technical/operational review>
 approved_by: 
@@ -54,20 +54,20 @@ ______________________________________________________________________
 
 ## Document Controls
 
-> Populated from the YAML front matter via `python scripts/docs/sync_document_controls.py`. Do not edit the table manually.
+> Populated from the YAML front matter via `python -m docs.tools.sync_document_controls`. Do not edit the table manually.
 
 <!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
-| Authors | <Primary authors> |
+| Authors | [Primary authors] |
 | Version | <0.1-draft> |
 | Status | <Provisional/Implementable/Implemented> |
-| Classification | <Confidential> |
+| Classification | [Confidential] |
 | Last updated | <1970-01-01> |
-| Updated by | <Editor or team responsible for latest update> |
-| Owners | <Teams accountable for day-to-day ownership> |
+| Updated by | [Editor or team responsible for latest update] |
+| Owners | [Teams accountable for day-to-day ownership] |
 | Reviewers | <Stakeholders providing technical/operational review> |
-| Approvers | <Roles or committees that sign off on changes> |
+| Approvers | [Roles or committees that sign off on changes] |
 | Approved by | |
 | Approved date | |
 <!-- END AUTO-GENERATED: document-controls -->
@@ -135,7 +135,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Link to controllers, view logic, and tests covering the behaviours. **|**
 **References:** Always link to Platform Runtime §3.3 and supporting service specs.
 
-> Store the canonical definitions in `./<app-folder>/error_codes.yaml` (see `spec/schemas/api_error_codes.schema.yaml`) and run `python scripts/docs/build_api_error_codes.py` to refresh the tables.
+> Store the canonical definitions in `./<app-folder>/error_codes.yaml` (see `spec/schemas/api_error_codes.schema.yaml`) and run `python -m docs.tools.build.api_error_codes` to refresh the tables.
 
 <!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 <!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
@@ -143,7 +143,7 @@ Use this section to orient readers before they dive into the specification. It s
 <!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-> Tables generated from `./<app-folder>/error_codes.yaml`. Edit that YAML and run `python scripts/docs/build_api_error_codes.py`.
+> Tables generated from `./<app-folder>/error_codes.yaml`. Edit that YAML and run `python -m docs.tools.build.api_error_codes`.
 
 ## 4) State Management
 

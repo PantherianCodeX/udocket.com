@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Document Signer service responsible for platform signatures, client attestation workflows, TSA/OCSP validation, trust-root management, and FIPS enforcement.
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py` and `python scripts/docs/link_check.py --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
+- **Maintenance:** Run `python python -m docs.tools.lint_docs` and `python -m docs.tools.check_links --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
 - **Change protocol:** Modifying signature policies, TSA/OCSP profiles, or trust-root rotations demands dual approval (Security + Architecture) and an update to this spec plus the relevant runbooks.
 - **References:** TDD §7.2 (summary), ADR-0001, ADR-0002, ADR-0003, Ops runbooks `RB-SIGN-\*`.
 - **Contacts:** Security Engineering (service owner), Platform Architecture (co-owner), on-call list `signer-oncall@`.
@@ -178,7 +178,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Validator `packages/udocket_core/signer/verification.py`, cache `packages/udocket_core/signer/cache.py`, tests `tests/platform/operations/test_signer_verification.py`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/merma../data/digital-signer/diagrams/signing-delivery-v1.svg" alt="Signing and delivery flow">
+  <img class="diagram" src="../_assets/mermaid/data/digital-signer/diagrams/signing-delivery-v1.svg" alt="Signing and delivery flow">
   <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
 </figure>
 
@@ -387,7 +387,7 @@ ______________________________________________________________________
 **Contract:** On-call rotations, runbooks, and release evidence must stay current; signing halts when FIPS, TSA/OCSP, or waiver gates fail until remediation completes. **|**
 **State:** Runbooks under `ops/runbooks/signer/`, key-rotation evidence in `ops/security/key_rotation/`, release checklists `ops/releases/signing_release_checklist.md`, waiver records in App.O. **|**
 **Failures & handling:** Stale playbooks, missing rotation artifacts, or failed release gates block deployment until remediation and evidence capture. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
+**Observability:** Docs lint (`python -m docs.tools.build.runbook_catalog --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks `RB-SIGN-\*`.
 

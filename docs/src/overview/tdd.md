@@ -89,7 +89,7 @@ ______________________________________________________________________
 
 **Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
 
-*Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.* *Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables. See Appendices: Glossary and Status Mapping for single‑source definitions.* *State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).* *Failure modes & retries: `scripts/docs/lint_docs.py --check-template` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.* *Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.* *References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
+*Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.* *Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables. See Appendices: Glossary and Status Mapping for single‑source definitions.* *State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).* *Failure modes & retries: `python -m docs.tools.lint_docs --check-template` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.* *Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.* *References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
 
 ### Artifact classes (authoritative definitions)
 
@@ -123,7 +123,7 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - No new status or judgment names appear outside §5.2.2–§5.2.3 without an ADR update and a matching lint rule update; CI job `lint-artifact-vocabulary` blocks unknown terms in diffs.
 - APIs emit events whose values are exactly the canonical statuses/judgments; payload schemas MUST reference this section instead of inventing aliases.
 - Mapping tables live only in §5.2.3. Other sections reference them with `See §5.2.3 (canonical mapping)`.
-- Binding breadcrumbs are mandatory for every normative/binding subsection; missing breadcrumbs fail `scripts/docs/lint_docs.py --check-template`.
+- Binding breadcrumbs are mandatory for every normative/binding subsection; missing breadcrumbs fail `python -m docs.tools.lint_docs --check-template`.
 
 ______________________________________________________________________
 
@@ -133,7 +133,7 @@ ______________________________________________________________________
 - **Structure:** Numbered sections with ≤3 levels of depth; appendices mirror section numbers for reference artifacts.
 - **Cross-references:** Use `§<number>` for sections and `App.<letter>` for appendices.
 - **LLM hint:** Each subsection starts with a one-line purpose statement before implementation details.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
+- **Maintenance:** Run `python python -m docs.tools.lint_docs` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
 - **Audit integration (2025-10-19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Settings key coverage and traceability now live in [`Settings Registry – Appendix A`](../platform/settings.md#appendix-a-settings-key-map-traceability-index); CI blocks releases if parity ever drifts.
 - **Doc change protocol:** Every PR that modifies regulated behavior (policy, residency, approvals, agents) must link to the corresponding TDD diff; Architecture/Security reviewers block merges when code and spec diverge. Appendix automation (settings map, API snippets) continues to evolve—when feasible, replace manual tables with generated outputs to minimize churn.
 
@@ -156,7 +156,7 @@ To keep visuals helpful and consistent:
 - Use **ER diagrams** when we describe shared persistence contracts or artifacts that other teams must extend (for example, §9 core domain entities).
 - Produce **class diagrams** when detailing important service classes or agent orchestration objects whose inheritance/composition relationships benefit from a visual (limit to high-signal surfaces such as Guardian, Settings activation engine, or core agents).
 - Reserve diagrams for bounded topics—avoid trying to capture the entire platform in a single chart; favor appendix references for deep dives (App.A/App.G).
-- When behavior changes, update the `.mmd` source under `overview/tdd/diagrams/`, regenerate SVGs via `scripts/docs/render_mermaid.sh`, and ensure the affected TDD section still references the correct image.
+- When behavior changes, update the `.mmd` source under `overview/tdd/diagrams/`, regenerate SVGs via `docs/tools/render_mermaid.sh`, and ensure the affected TDD section still references the correct image.
 
 ## 1) Executive summary
 
@@ -323,7 +323,7 @@ ______________________________________________________________________
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure class="full-width-diagram">
-  <img class="diagram" data-scale="0.5" src="../assets/mermaid/platform/guardian/diagrams/upload-guardian-approve-v1.svg" alt="Upload → Guardian → Approve happy path">
+  <img class="diagram" data-scale="0.5" src="../_assets/mermaid/platform/guardian/diagrams/upload-guardian-approve-v1.svg" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 
@@ -338,7 +338,7 @@ ______________________________________________________________________
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/system-context-v1.svg" alt="System context overview">
+  <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/system-context-v1.svg" alt="System context overview">
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
 
@@ -370,7 +370,7 @@ ______________________________________________________________________
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../assets/mermaid/automation/lp-engine/diagrams/residency-policy-enforcement-v1.svg" alt="Residency policy enforcement sequence">
+  <img class="diagram" src="../_assets/mermaid/automation/lp-engine/diagrams/residency-policy-enforcement-v1.svg" alt="Residency policy enforcement sequence">
   <figcaption style="font-size: 0.9em; color: #555;">Residency policy enforcement sequence</figcaption>
 </figure>
 
@@ -412,7 +412,7 @@ ______________________________________________________________________
 
 ### 3.9 C4 containers & STRIDE dataflows (binding)
 
-**Breadcrumbs:** Implementation `overview/tdd/diagrams/c4/container-platform-v1.mmd` + `overview/tdd/diagrams/threat/dfd-platform-stride-v1.mmd`, Tests `scripts/docs/render_mermaid.sh` (CI job `docs-diagram-render`), Observability CI stage “docs-validate” with artifact drift alerts.
+**Breadcrumbs:** Implementation `overview/tdd/diagrams/c4/container-platform-v1.mmd` + `overview/tdd/diagrams/threat/dfd-platform-stride-v1.mmd`, Tests `docs/tools/render_mermaid.sh` (CI job `docs-diagram-render`), Observability CI stage “docs-validate” with artifact drift alerts.
 
 *Purpose: Provide an explicit container-level view with threat annotations that build on the context diagram.*
 
@@ -520,15 +520,15 @@ ______________________________________________________________________
 
 <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.25rem 0;">
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg" alt="Artifact lifecycle overview">
+    <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg" alt="Artifact lifecycle overview">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Overview — SA ➜ WP ➜ CD ➜ DL.RELEASED ➜ Retention gate</figcaption>
   </figure>
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg" alt="Work Product lifecycle">
+    <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg" alt="Work Product lifecycle">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Work Product — Guardian gating to <code>CLEARED_FOR_USE</code></figcaption>
   </figure>
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg" alt="Candidate Deliverable lifecycle">
+    <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg" alt="Candidate Deliverable lifecycle">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Candidate Deliverable — operator and reviewer rail to release</figcaption>
   </figure>
 </div>
@@ -1181,7 +1181,7 @@ Binding breadcrumbs:
 *Purpose: Keep service documentation aligned on a shared error envelope while delegating canonical code ownership to the Platform Runtime specification and per-service appendices.*
 
 - Envelope (binding): HTTP error payloads MUST validate against `spec/schemas/api_error.schema.json`. Runtime code in Django/FastAPI imports Pydantic models generated from that schema during the build pipeline so the schema remains the single source of truth. Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
-- Code catalog: [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `python scripts/docs/build_api_error_codes.py`.
+- Code catalog: [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `python -m docs.tools.build.api_error_codes`.
 - Headers: always emit `X-Request-ID`; add `Retry-After`, `Deprecation`, `Sunset`, and rate-limit headers when applicable. Error payloads are included in Spectral lint checks (§10.5).
 - Client guidance: follow the retry/stop rules documented in each service spec’s API error section; SDKs surface the same behaviour via typed exceptions.
 
@@ -1313,7 +1313,7 @@ ______________________________________________________________________
 - Diagram: see `overview/tdd/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/dr-region-failover-v1.svg" alt="Region failover runbook">
+  <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/dr-region-failover-v1.svg" alt="Region failover runbook">
   <figcaption style="font-size: 0.9em; color: #555;">Region failover runbook</figcaption>
 </figure>
 
@@ -1341,7 +1341,7 @@ ______________________________________________________________________
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/error-flows-v1.svg" alt="Error handling taxonomy">
+  <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/error-flows-v1.svg" alt="Error handling taxonomy">
   <figcaption style="font-size: 0.9em; color: #555;">Error handling taxonomy</figcaption>
 </figure>
 
@@ -1577,7 +1577,7 @@ ______________________________________________________________________
 - Diagram: DSAR/erasure hard-purge flow lives in `overview/tdd/diagrams/dsar-erasure-v1.mmd`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../assets/mermaid/overview/tdd/diagrams/dsar-erasure-v1.svg" alt="DSAR hard-purge workflow">
+  <img class="diagram" src="../_assets/mermaid/overview/tdd/diagrams/dsar-erasure-v1.svg" alt="DSAR hard-purge workflow">
   <figcaption style="font-size: 0.9em; color: #555;">DSAR hard-purge workflow</figcaption>
 </figure>
 
@@ -1655,7 +1655,7 @@ ______________________________________________________________________
 - Rollout orchestrator & tenant migration (binding): `deploy.rollout_plan` consumes `agents.pipeline.rollouts[]` and infrastructure cohorts to move orgs through pilot → cohort → fleet. Cutovers happen in waves with automatic pauses when QA, FinOps, or residency monitors deviate. Migration state records `{org_id, rollout_wave, prior_definition_version}` so support can trace exposure and revert specific cohorts if needed.
 - Automated rollback & overrides (binding): rollback scripts snapshot DB schema, settings bundles, and object storage manifests before cutover. Snapshots include data-plane validation (logical replication health, storage versioning, LangGraph state) so enterprise data/infra controls stay satisfied during revert. Configuration bundle rollback is deterministic: Flux re-applies the last good bundle version, settings service invalidates caches, and Guardian/LPE pods purge bundle caches before resuming traffic. On failure, orchestrator restores the prior snapshot, rebinds traffic to blue, and replays queued jobs against the previous pipeline. Emergency overrides (`deploy hold`, `deploy resume`, `deploy skip`) are audited, require dual approval, and expire automatically to prevent “forgotten” freezes.
 - Communication: notify stakeholders (Product, Support, Security) with release notes summarizing changes, risk, and mitigation.
-- Spec/code parity gate: `docs/settings_key_skip.txt` must remain empty; CI and release pipelines fail immediately if any Appendix E key lacks implementation coverage or automated tests.
+- Spec/code parity gate: `docs/config/settings_key_skip.txt` must remain empty; CI and release pipelines fail immediately if any Appendix E key lacks implementation coverage or automated tests.
 - Case enum migration playbook: settings introduce new `case.status`/`representation_type` values first; DB adds `CHECK ... NOT VALID` constraints, validates post-backfill, and only then removes deprecated values. Deprecations flow through Settings/UI; final removal requires data migration and constraint regeneration.
 
 ### 14.6 Organization directory sync (Ops)
@@ -1780,7 +1780,7 @@ ______________________________________________________________________
 
 ### 15.9 Architectural decision records (binding)
 
-**Breadcrumbs:** Implementation `docs/adr/README.md`, Tests `scripts/docs/check_adr_index.py::main`, Observability CI job “docs-adr-lint” with badge in Docs Quality dashboard.
+**Breadcrumbs:** Implementation `docs/adr/README.md`, Tests `docs/tools/check_adr_index.py::main`, Observability CI job “docs-adr-lint” with badge in Docs Quality dashboard.
 
 *Purpose: Ensure significant technical choices remain discoverable, immutable, and supersedable.*
 
@@ -2257,7 +2257,7 @@ ______________________________________________________________________
 *Purpose: Point platform teams to the maintained runbook library without duplicating procedures in this document.*\
 *Contract: Operational playbooks reside under `docs/runbooks/` and service-specific specifications; this appendix links to those sources.*\
 *State: Runbook owners track RB identifiers, alert bindings, and evidence requirements in the referenced documents.*\
-*Failure modes & retries: `scripts/docs/lint_docs.py` flags missing runbook links; update the runbook catalog when adding or retiring alerts.*\
+*Failure modes & retries: `python -m docs.tools.lint_docs` flags missing runbook links; update the runbook catalog when adding or retiring alerts.*\
 *Observability: Docs lint metric `docs_runbook_missing_total` and OnCall drill analytics monitor coverage.*
 
 - **Platform runbooks:** `../ops/runbooks.md`

@@ -40,10 +40,10 @@ ______________________________________________________________________
 
 ## Appendix Overview
 
-This appendix lists the SLOs defined in each service and app specification. Refresh it with `python scripts/docs/build_slo_index.py` when SLO sections change.
+This appendix lists the SLOs defined in each service and app specification. Refresh it with `python -m docs.tools.build.slo_index` when SLO sections change.
 
 <!-- BEGIN AUTO-GENERATED: slo-index -->
-<!-- AUTO-GENERATED: Run `python scripts/docs/build_slo_index.py` to refresh. -->
+<!-- AUTO-GENERATED: Run `python -m docs.tools.build.slo_index` to refresh. -->
 
 ### [Audit & Evidence](../../../data/audit.md)
 

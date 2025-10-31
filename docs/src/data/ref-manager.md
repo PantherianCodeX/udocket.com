@@ -79,7 +79,7 @@ ______________________________________________________________________
 - **Scope:** Service charter, source ingestion, editorial workflows, publishing, integrations, and observability for Reference Manager.
 - **Structure:** Sections are limited to three levels of depth; cross-cutting diagrams live in the platform TDD appendices (App.A state flows, App.G ERD).
 - **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` for appendices or §8.3 entries.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting edits. Schema snippets must match `spec/schemas/reference_*`; CI verifies locale coverage and bundle manifests.
+- **Maintenance:** Run `python python -m docs.tools.lint_docs` before submitting edits. Schema snippets must match `spec/schemas/reference_*`; CI verifies locale coverage and bundle manifests.
 - **Change protocol:** PRs changing Reference Manager ingestion, bundles, or review workflows must update this document and linked ADRs. Architecture/Security reviewers block merges when services diverge from these contracts.
 
 ______________________________________________________________________
@@ -576,7 +576,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover bundle rollback, harvest failure, waiver expiry, and feed outage; evidence lives in `ops/ref_manager/drills/<date>/` with retrospective notes.
-- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
+- Docs lint (`python -m docs.tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
 - Compliance reviews reference drill evidence, waiver logs, and adoption metrics to demonstrate readiness.
 
 ### 8.4 Migrations & Backfills (binding)

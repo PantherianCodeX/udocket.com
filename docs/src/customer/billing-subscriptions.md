@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the Billing & Subscriptions service that governs price plans, entitlements, usage metering, invoicing, delinquency detection, and FinOps hooks referenced in TDD §3.9 (FinOps guardrails) and §14.4 (billing retention). Covers integration with external billing provider, portal subscription UI, and Operations runbooks.
 - **Structure:** Follows standard sections covering charter, responsibilities, API contracts (internal REST + billing provider webhooks), state management, resiliency, observability, security/compliance, operations, dependencies, and references.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/customer/billing-subscriptions.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting. Contract changes must update TDD billing tables and Ops runbooks `RB-BILLING-*`.
+- **Maintenance:** Run `python -m docs.tools.lint_docs docs/src/customer/billing-subscriptions.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting. Contract changes must update TDD billing tables and Ops runbooks `RB-BILLING-*`.
 - **Change protocol:** Changes to pricing plans, usage quotas, or delinquency behaviour require Finance + Compliance approval and updated Settings keys (`billing.*`). Schema changes require migrations plus doc updates.
 - **References:** TDD §3.9 (FinOps), §4 (tenant holds), §14.4 (billing records), Ops runbooks `RB-BILLING-DELINQUENCY`, Settings spec §5 (`billing.*`), Accounts & Tenants spec.
 - **Contacts:** Finance Ops (billing owner), Platform Engineering (service implementation), escalation `#ops-billing`, on-call `billing-oncall@`.

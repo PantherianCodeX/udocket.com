@@ -169,9 +169,11 @@ __azurite_db_*.json
 
 # mkdocs documentation
 docs/build
+docs/site
 docs/src/_assets/mermaid/
 docs/src/**/.cache/
 docs/src/**/.pytest_cache/
+!docs/tools/build/
 
 # mypy
 .mypy_cache/

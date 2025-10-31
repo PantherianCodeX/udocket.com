@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Covers the shared LangGraph orchestration layer and the canonical pipelines for Transcribe, Analyze, Compose, Timeline, and Relationship agents. This spec also governs graph configuration, schema enforcement, QA gates, and shadow mode deployments.
 - **Structure:** Sections follow the standard 0–10 layout with appendices for schema and error taxonomies. Per-agent responsibilities live in §2; pipeline contracts, tooling, and LangGraph runtime details live in §3; operational guardrails are in §§5–8.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/automation/langgraph-agents.md` plus targeted lints (`scripts/docs/link_check.py --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
+- **Maintenance:** Run `python -m docs.tools.lint_docs docs/src/automation/langgraph-agents.md` plus targeted lints (`python -m docs.tools.check_links --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
 - **Change protocol:** Any change that alters agent outputs, pipeline structure, or QA gating must update this spec, cite relevant ADRs, and include LangGraph acceptance test results in the PR description. Guardian/Security approvals are mandatory for policy or residency-impacting edits.
 - **References:** TDD §6 summary, Settings Registry spec §5, LLM Registry spec §2, Worker Cluster spec §3, Ops Runbooks `RB-AGENT-\*`, QA harness documentation in tests README.
 - **Contacts:** Applied AI Engineering (primary owners), Platform Architecture (co-owners), Operations Eng (shadow mode), Guardian (safety), `#langgraph-agents` Slack, on-call alias `agents-oncall@`.
@@ -159,12 +159,12 @@ ______________________________________________________________________
 **References:** TDD §6 summary, Settings spec §5.4, LLM Registry spec §2, Worker Cluster spec §3, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-AGENT-ACTIVATION`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../assets/mermaid/automation/langgraph-agents/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
+  <img class="diagram" src="../../_assets/mermaid/automation/langgraph-agents/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../assets/mermaid/automation/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
+  <img class="diagram" src="../../_assets/mermaid/automation/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 
@@ -247,7 +247,7 @@ ______________________________________________________________________
 **Contract:** Every agent job produces manifests capturing input hashes, settings snapshot, pipeline + graph versions, tool usage, Guardian/Signer dependencies, and resulting artifact paths. **|**
 **State:** Manifests stored under `storage/media/cases/<case>/ops/<job_id>__<agent>_manifest.json`; audit JSONL streams append to `ops/ops_<agent>.jsonl`; QA logs and acceptance verdicts live alongside artifacts. **|**
 **Failures & handling:** Missing or corrupt manifests trigger `E_INTEGRITY_MISMATCH` and quarantine outputs; pipeline activation blocks if manifests fail schema validation. **|**
-**Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `scripts/docs/lint_docs.py --check-manifests` ensures schema parity during CI. **|**
+**Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `python -m docs.tools.lint_docs --check-manifests` ensures schema parity during CI. **|**
 **Breadcrumbs:** Manifest models `packages/udocket_core/agents/manifests.py`, ops logging `packages/udocket_core/agents/logging.py`, lineage tooling `packages/udocket_core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**
 **References:** TDD §5.2, §6 summary, Compose spec §4, Guardian spec §2.4, Ops runbooks `RB-LINEAGE-BACKFILL`.
 
@@ -373,7 +373,7 @@ ______________________________________________________________________
 **Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
 **State:** Runbook markdown lives under `docs/src/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runboo../data/agents/`. **|**
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
-**Observability:** Ops catalog build (`scripts/docs/build_runbook_catalog.py`), drill checklist dashboards, and on-call retros track preparedness. **|**
+**Observability:** Ops catalog build (`python -m docs.tools.build.runbook_catalog`), drill checklist dashboards, and on-call retros track preparedness. **|**
 **Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, evidence store `ops/runboo../data/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
 **References:** Ops runbooks index, TDD Appendix B, Worker Cluster spec §3.5, QA governance §6.
 
@@ -383,7 +383,7 @@ ______________________________________________________________________
 
 #### 8.3.1 Runbook Index (informative)
 
-The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `scripts/docs/build_runbook_catalog.py`; stale ownership or verification dates fail the docs lint and block merges.
+The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `python -m docs.tools.build.runbook_catalog`; stale ownership or verification dates fail the docs lint and block merges.
 
 - `RB-AGENT-ACTIVATION` — Applied AI Engineering (primary), Platform Operations (secondary), verified quarterly.
 - `RB-AGENT-SHADOW` — Platform Operations (primary), Applied AI Engineering (secondary), verified quarterly.
@@ -406,7 +406,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover SLO breach recovery, quarantine spikes, backlog management, and manual reconciliation; evidence stored in `ops/runboo../data/agents/<YYYY>/<MM>/` with retrospective notes.
-- `scripts/docs/build_runbook_catalog.py --check` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
+- `python -m docs.tools.build.runbook_catalog --check` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to demonstrate readiness for auditors.
 
 ### 8.4 Migrations & Backfills (normative)

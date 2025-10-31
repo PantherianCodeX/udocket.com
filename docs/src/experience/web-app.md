@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/experience/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
+- **Maintenance:** Run `python python -m docs.tools.lint_docs docs/src/experience/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
 - **Change protocol:** UX-affecting PRs update this spec and cite ADR-0002 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
 - **References:** TDD §11 summary, Guardian spec §5, Communications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks `RB-PORTAL-INVALIDATION` and `RB-JOB-WATCHDOG`.
 - **Contacts:** Platform Engineering (frontend owners), Product Management (experience roadmap), Accessibility guild, `#web-app` Slack channel, on-call rotation `webapp-oncall@`.
@@ -283,7 +283,7 @@ The UI coordinates with internal controllers for portal messaging, edit manifest
 
 **Purpose:** Visualise how staff and portal surfaces collaborate with backend services in real time. **|**
 **Contract:** Staff and client flows rely on API, Channels, Guardian, Settings, and Notifications integrations depicted below; changes must preserve these linkages. **|**
-**State:** Diagram source `experience/web-app/diagrams/ui-interaction-topology-v1.mmd` renders to build artifacts for docs/build/site and PDFs. **|**
+**State:** Diagram source `experience/web-app/diagrams/ui-interaction-topology-v1.mmd` renders to build artifacts for docs/site and PDFs. **|**
 **Failures & handling:** Drift between diagram and implementation is treated as documentation debt and must be reconciled during UI changes. **|**
 **Observability:** Docs CI (`render_mermaid.sh`) renders SVG artifacts and alerts when sources are missing. **|**
 **Breadcrumbs:** API controllers `apps/platform/api/*.py`, Channels gateway `apps/platform/ui/channels.py`, Notifications integration `apps/platform/notifications/*`, Guardian verdict publisher `apps/platform/events/guardian.py`. **|**
@@ -320,7 +320,7 @@ flowchart LR
 ```
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../assets/mermaid/experience/web-app/diagrams/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
+  <img class="diagram" src="../_assets/mermaid/experience/web-app/diagrams/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
   <figcaption style="font-size: 0.9em; color: #555;">Web app staff and portal interaction topology</figcaption>
 </figure>
 
@@ -421,7 +421,7 @@ ______________________________________________________________________
 **Contract:** Runbooks, drills, and release workflows must stay current; UI surfaces pause when alert gates or evidence requirements fail. **|**
 **State:** Runbooks in `ops/runbooks/webapp/` and `ops/runbooks/notifications/`, drill evidence `ops/webapp/drills/<date>/`, freeze calendars `ops/webapp/freeze_windows.ics`. **|**
 **Failures & handling:** Stale playbooks, missed drills, or expired freezes block deployments until remediation and evidence capture. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
+**Observability:** Docs lint (`python -m docs.tools.build.runbook_catalog --check`), dashboards “Portal Integrity”/“Operator Workspace”, alert `portal_link_invalidated_total`. **|**
 **Breadcrumbs:** Runbook index `docs/src/ops/runbooks.md`, drill scripts `ops/scripts/webapp/schedule_drills.py`, governance policies App.N. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 

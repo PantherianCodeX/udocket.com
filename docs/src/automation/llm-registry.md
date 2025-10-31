@@ -79,7 +79,7 @@ ______________________________________________________________________
 
 - **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.
 - **Structure:** Follows the standard 0–10 template; subsections are marked (binding/normative/informative) per policy vocabulary. Appendices live in ops runbooks for golden sets and moderation configs.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting changes. Update golden-set fixtures and moderation configs referenced here when models, prompts, or safety settings change.
+- **Maintenance:** Run `python -m docs.tools.lint_docs` before submitting changes. Update golden-set fixtures and moderation configs referenced here when models, prompts, or safety settings change.
 - **Change protocol:** Any PR touching `llm.providers[]`, `llm.models[]`, failover logic, moderation, or FinOps guardrails must cite this spec and ADR-0003. Security + Architecture approval required for provider additions or residency waivers.
 - **References:** TDD §8 summary, LPE spec §2 (PolicyContext), Settings spec §2 (activation), Ops runbooks RB-LLM-003/RB-LLM-JB.
 - **Contacts:** Platform Architecture (catalog), Security Engineering (safety/residency), Applied AI Programs (golden sets, moderation).
@@ -450,7 +450,7 @@ ______________________________________________________________________
 **Contract:** On-call rotations, runbooks, and gating evidence must stay current; registry traffic pauses when residency, moderation, or FinOps alerts breach thresholds until remediation completes. **|**
 **State:** Runbooks under `ops/runbooks/llm/`, drill calendar `ops/change/llm_rotations.ics`, release checklists `ops/releases/llm_release_checklist.md`, waiver records in App.O. **|**
 **Failures & handling:** Stale runbooks, missed drills, or incomplete release evidence block deployment until refreshed. **|**
-**Observability:** Docs lint (`build_runbook_catalog.py --check`), dashboards “LLM Residency & Failover” / “LLM Safety & Moderation” / “FinOps – LLM Cost & Circuit”, alerts `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_budget_hold_active_total`. **|**
+**Observability:** Docs lint (`python -m docs.tools.build.runbook_catalog --check`), dashboards “LLM Residency & Failover” / “LLM Safety & Moderation” / “FinOps – LLM Cost & Circuit”, alerts `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_budget_hold_active_total`. **|**
 **Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, automation scripts `ops/scripts/llm/*.py`, release tooling `scripts/finops/check_mom_guard.py`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 

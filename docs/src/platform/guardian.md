@@ -81,7 +81,7 @@ Use this guide before changing Guardian policy, queue semantics, or downstream w
 
 - **Scope:** Guardian judgments, policy integration, API surface, queueing, observability, security, and operational controls.
 - **Structure:** Sections follow the 0–10 service spec template; appendices hold payload samples and runbooks.
-- **Maintenance:** Run the docs lint (`python scripts/docs/lint_docs.py`) and link check (`python scripts/docs/link_check.py --strict`) prior to submitting Guardian changes.
+- **Maintenance:** Run the docs lint (`python python -m docs.tools.lint_docs`) and link check (`python -m docs.tools.check_links --strict`) prior to submitting Guardian changes.
 - **Change protocol:** Include a summary of Guardian impact in PR descriptions and link reviewers to the affected sections (`§2`, `§3`, `§4`, etc.).
 - **References:** TDD §7 (Guardian), ADR-0001, ADR-0002, ADR-0003.
 - **Contacts:** Owners Security Engineering + Platform Architecture; operational mailing list `guardian-oncall@`.
@@ -628,7 +628,7 @@ ______________________________________________________________________
 **Failures & handling:** Failures escalate via §8.3.2 RB-GUARD-001 and may freeze bundle activations. **|**
 **Observability:** Grafana panels, PagerDuty incidents, and synthetic job logs track outcomes. **|**
 **References:** §5 Failure modes, §8 Operational notes, §8.3.2 RB-GUARD-001.
-**Breadcrumbs:** Synthetic config `ops/synthetics/guardian_slo.yaml`, CI hooks `scripts/docs/lint_docs.py` (synthetic link check), tests `tests/synthetics/test_guardian_slo.py`.
+**Breadcrumbs:** Synthetic config `ops/synthetics/guardian_slo.yaml`, CI hooks `python -m docs.tools.lint_docs` (synthetic link check), tests `tests/synthetics/test_guardian_slo.py`.
 
 - Synthetic job `guardian_slo.yaml` submits representative workloads (500 concurrent submissions, 5k/day) and records judgment/queue timing; success requires P95 latency ≤ configured SLO and zero submission timeouts.
 - Synthetic GET requests verify `/readyz` and `/synthetic/status` per environment after deployments; failures open PagerDuty incidents tagged `GUARDIAN_SLO`.
@@ -728,7 +728,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills rehearse SLO breach recovery, quarantine investigation, backlog management, and manual reconciliation; evidence stored in `ops/guardian/drills/<date>/` with retrospective notes.
-- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
+- Docs lint (`python -m docs.tools.build.runbook_catalog --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to confirm coverage of Guardian runbooks.
 
 ### 8.4 Migrations & Backfills (binding)
@@ -737,7 +737,7 @@ ______________________________________________________________________
 **Contract:** Partition rotations, manifest replays, and policy cache backfills must run from tagged scripts with dry-run output captured before production execution. **|**
 **State:** Migration manifests live in `ops/guardian/migrations/` with SHA-256 digests recorded in `ops/guardian/migration_log.jsonl`. **|**
 **Failures & handling:** Failed rotations or partial replays lead to duplicate submissions or lost audit history; §8.3 Runbooks & drills require rollback checkpoints and post-migration validation. **|**
-**Observability:** Dashboards “Guardian Queue Health” and “Guardian Policy Sync” plus synthetic submissions verify migration success; `scripts/docs/build_runbook_catalog.py` ensures referenced scripts remain present. **|**
+**Observability:** Dashboards “Guardian Queue Health” and “Guardian Policy Sync” plus synthetic submissions verify migration success; `python -m docs.tools.build.runbook_catalog` ensures referenced scripts remain present. **|**
 **Breadcrumbs:** Partition rotation script `ops/scripts/guardian/rotate_partitions.py`, policy sync `ops/scripts/guardian/sync_policy.py`, migration checklist `ops/guardian/migrations/README.md`. **|**
 **References:** §3 API contract, §4.3 Queue state, ADR-0001, ops README.
 
@@ -798,7 +798,7 @@ ______________________________________________________________________
 - **Runbooks:** §8.3 entries RB-GUARD-001/QUEUE/QUAR/MANUAL plus supporting files in `ops/runbooks/guardian/`.
 - **Diagrams:** `docs/src/platform/guardian/diagrams/upload-guardian-approve-v1.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`, `docs/src/automation/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
 - **Schemas & fixtures:** Appendix B, `packages/udocket_core/guardian/contracts/payloads.py`, sample manifests in `docs/examples/lineage/`.
-- **Change protocol:** PRs touching Guardian code/policy must link to this section, run `python scripts/docs/lint_docs.py`, and obtain Architecture + Security approval before deploy.
+- **Change protocol:** PRs touching Guardian code/policy must link to this section, run `python python -m docs.tools.lint_docs`, and obtain Architecture + Security approval before deploy.
 
 ______________________________________________________________________
 
@@ -808,9 +808,9 @@ ______________________________________________________________________
 **Contract:** Files listed here remain the canonical artifacts; updates must keep paths stable and refresh references in §§2–4. **|**
 **State:** Artifacts live under `docs/src/platform/guardian/diagrams/` and `docs/examples/lineage/` with deterministic filenames matching the associated job IDs. **|**
 **Failures & handling:** Missing or stale artifacts cause docs lint/link check failures; update the assets or adjust references before merging. **|**
-**Observability:** Docs CI verifies diagram availability via `scripts/docs/render_mermaid.sh` and link checks. **|**
+**Observability:** Docs CI verifies diagram availability via `docs/tools/render_mermaid.sh` and link checks. **|**
 **References:** §2 Responsibilities, §3 API contract, Appendix B payload schema.
-**Breadcrumbs:** Diagram sources `docs/src/platform/guardian/diagrams/`, example manifests `docs/examples/lineage/`, render script `scripts/docs/render_mermaid.sh`.
+**Breadcrumbs:** Diagram sources `docs/src/platform/guardian/diagrams/`, example manifests `docs/examples/lineage/`, render script `docs/tools/render_mermaid.sh`.
 
 - **Diagrams:**
 - `platform/guardian/diagrams/upload-guardian-approve-v1.mmd` (sequence of upload → Guardian → approval).

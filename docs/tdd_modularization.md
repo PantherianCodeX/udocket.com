@@ -14,7 +14,7 @@ This plan lays out a phased approach to refactor the uDocket documentation. We w
 
 * **Single doc root, clear boundaries**
   * `docs/src/` = human-authored sources (Markdown, Mermaid, images, styles).
-  * `docs/build/site/` and `docs/build/` = generated/temporary (gitignored).
+  * `docs/site/` and `docs/build/` = generated/temporary (gitignored).
   * **No PDFs committed**; publish PDFs as **GitHub Release assets** when you tag.
 * * **One canonical home per topic** (service specs live under services/; shared truths live in appendices; `overview/tdd.md` stays high‑level and links out).
 * * **Stable release mechanics**
@@ -72,9 +72,14 @@ docs/                              ← single doc root
     pdf/
   releases/
   site/
-  src/.vale/
-  .vale.ini
-  mkdocs.yml
+  config/
+    .markdownlint.json (extends docs/config/.markdownlint.json)
+    mermaid.config.json
+    mermaidrc.json
+    mkdocs.yml
+    settings_key_skip.txt
+    vale.ini
+    vale/
 scripts/
   docs/
     build_site.sh
@@ -86,7 +91,7 @@ scripts/
 **.gitignore** (excerpt)
 
 ```gitignore
-/docs/build/site/
+/docs/site/
 /docs/build/
 /docs/src/**/.cache/
 /docs/src/**/.pytest_cache/
@@ -127,7 +132,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python scripts/docs/check_structure.py docs/src/platform docs/src/automation docs/src/data docs/src/customer` to confirm compliance before submitting PRs.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python -m docs.tools.check_structure docs/src/platform docs/src/automation docs/src/data docs/src/customer` to confirm compliance before submitting PRs.
 
 #### Standardized section preamble
 
@@ -198,16 +203,16 @@ Identify information that appears in multiple places or applies to the system as
 
 Ensure the documentation toolchain is ready for the new structure:
 
-* **MkDocs/Nav:** Update `mkdocs.yml` navigation to point to `overview/tdd.md`, `overview/tdd/*`, and `overview/prd/*` alongside `services/` and `apps/`.
+* **MkDocs/Nav:** Update `docs/config/mkdocs.yml` navigation to point to `overview/tdd.md`, `overview/tdd/*`, and `overview/prd/*` alongside `services/` and `apps/`.
 * **Link Checking:** Anticipate broken links due to file moves and renames; set up redirects if desired via MkDocs plugins.
-* **Docs lint:** Run `python scripts/docs/lint_docs.py` (optionally with per-file targets) after restructuring to validate references, appendices, and template scaffolding.
+* **Docs lint:** Run `python -m docs.tools.lint_docs` (optionally with per-file targets) after restructuring to validate references, appendices, and template scaffolding.
 * **Vale Style Rules:** Update file path patterns; consider adding rules to enforce presence of the standard sections.
 * **Pandoc/PDF build:** Update scripts/config to include `overview/tdd.md`, `overview/prd.md`, and any appendices.
 * **Branch Protection/CI settings:** Run the docs CI (build, lint, link check) on this branch to catch issues early.
 
 ### 6. MkDocs config, plugins & PDF
 
-`mkdocs.yml` (essentials you’ll likely want):
+`docs/config/mkdocs.yml` (essentials you’ll likely want):
 
 ```yaml
 site_name: uDocket Docs
@@ -281,10 +286,10 @@ nav:
 
 ### 7. Vale — “nicely configured” styles
 
-**.vale.ini:**
+**docs/config/vale.ini:**
 
 ````ini
-StylesPath = src/.vale
+StylesPath = vale
 MinAlertLevel = suggestion
 
 Packages = Google, write-good
@@ -299,7 +304,7 @@ BlockIgnores = (?s)```.*?```|::: mermaid.*?:::
 TokenIgnores = ^#{1,6}\s
 ````
 
-**src/.vale/uDocket-Core/Headings.yml:**
+**config/vale/uDocket-Core/Headings.yml:**
 
 ```yaml
 extends: capitalization
@@ -309,7 +314,7 @@ scope: heading
 match: '^[A-Z][a-z0-9].*'
 ```
 
-**src/.vale/uDocket-Core/Terms.yml:**
+**config/vale/uDocket-Core/Terms.yml:**
 
 ```yaml
 extends: existence
@@ -328,7 +333,7 @@ exceptions:
   - 'artifact'        # allow lowercase when used generically
 ```
 
-**src/.vale/uDocket-Policy/BindingLabels.yml:**
+**config/vale/uDocket-Policy/BindingLabels.yml:**
 
 ```yaml
 extends: existence
@@ -345,7 +350,7 @@ tokens:
 # (optional: use a 'scope' filter by path via Vale's CLI per-file config)
 ```
 
-**src/.vale/uDocket-Policy/Citations.yml:**
+**config/vale/uDocket-Policy/Citations.yml:**
 
 ```yaml
 extends: substitution
@@ -365,7 +370,7 @@ swap:
 **On every PR and main:**
 
 * Lint MD (`markdownlint`), style (`vale` optional), link check (lychee).
-* Build MkDocs HTML to `docs/build/site/` (not committed).
+* Build MkDocs HTML to `docs/site/` (not committed).
 * Validate Mermaid (fail on syntax errors).
 
 **On tag (e.g., `docs-v0.8.0`):**
@@ -398,25 +403,25 @@ jobs:
         with: { python-version: '3.11' }
       - name: Install tools
         run: |
-          pip install markdownlint-cli2==0.12.0
+          pip install markdownlint-cli==0.39.0
           pip install vale==3.7.1
           npm i -g @mermaid-js/mermaid-cli
           pip install mkdocs mkdocs-material
           pip install pandocfilters
           sudo apt-get update && sudo apt-get install -y pandoc
       - name: Markdownlint
-        run: npx markdownlint-cli2 '**/*.md' '#node_modules'
+        run: npx markdownlint --config docs/config/.markdownlint.json '**/*.md' '#node_modules'
       - name: Vale
-        run: vale docs/src/
+        run: vale --config docs/config/vale.ini docs/src/
       - name: Mermaid pre-render (validate diagrams)
-        run: bash scripts/docs/prerender_mermaid.sh
+        run: bash docs/tools/prerender_mermaid.sh
       - name: MkDocs build (HTML)
         run: mkdocs build --clean
       - name: Pandoc dry-run (PRD/TDD only)
         run: |
           mkdir -p docs/build/pdf
-          bash scripts/docs/build_pdf_prd.sh
-          bash scripts/docs/build_pdf_tdd.sh
+          bash docs/tools/build/pdf_prd.sh
+          bash docs/tools/build/pdf_tdd.sh
 
   linkcheck:
     runs-on: ubuntu-latest
@@ -463,14 +468,14 @@ jobs:
       - name: Build site
         run: mkdocs build --clean
       - name: Pre-render Mermaid
-        run: bash scripts/docs/prerender_mermaid.sh
+        run: bash docs/tools/prerender_mermaid.sh
       - name: Build PDFs (PRD/TDD)
         run: |
           mkdir -p docs/build/pdf
-          bash scripts/docs/build_pdf_prd.sh
-          bash scripts/docs/build_pdf_tdd.sh
+          bash docs/tools/build/pdf_prd.sh
+          bash docs/tools/build/pdf_tdd.sh
       - name: Checksums & manifest
-        run: bash scripts/docs/hash_and_manifest.sh
+        run: bash docs/tools/hash_and_manifest.sh
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -512,8 +517,8 @@ jobs:
 1. **Create structure & config**
 
     * Create `docs/src/overview/` with `tdd/` and `prd/` subfolders as above.
-    * Ensure `mkdocs.yml`, `.markdownlint.json`, optional `.vale.ini` exist.
-    * Ensure `.gitignore` includes `docs/build/` and `docs/build/site/`.
+    * Ensure `.markdownlint.json` (extending `docs/config/.markdownlint.json`), `docs/config/mkdocs.yml`, `docs/config/.markdownlint.json`, optional `docs/config/vale.ini` exist.
+    * Ensure `.gitignore` includes `docs/build/` and `docs/site/`.
 
 2. **Migrate content**
 
@@ -529,13 +534,13 @@ jobs:
 
     * Replace repeated tables with links to the canonical appendix.
     * Replace any OPA mentions in TDD with a link to `automation/lp-engine.md#opa-integration`.
-    * Ensure link paths match `mkdocs.yml` nav.
+    * Ensure link paths match `docs/config/mkdocs.yml` nav.
 
 4. **Build & verify locally**
 
-    * `scripts/docs/render_mermaid.sh` → render diagrams to SVG/PNG
-    * `scripts/docs/build_site.sh` → mkdocs build
-    * `scripts/docs/build_pdf_tdd.sh` → generate TDD PDF
+    * `docs/tools/render_mermaid.sh` → render diagrams to SVG/PNG
+    * `docs/tools/build/site.sh` → mkdocs build
+    * `docs/tools/build/pdf_tdd.sh` → generate TDD PDF
     * Fix lint/link/Mermaid errors.
 
 5. **CI**

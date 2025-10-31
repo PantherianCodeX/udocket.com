@@ -25,14 +25,14 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 - Rendered SVGs live under `docs/_assets/mermaid/` (mirrored into `docs/src/_assets/mermaid/`) so MkDocs can serve them alongside the Markdown sources. Use `_assets/mermaid/...` in image links so paths remain correct regardless of page depth.
 
-- Before generating PDFs, render diagrams: `bash scripts/docs/render_mermaid.sh` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
+- Before generating PDFs, render diagrams: `bash docs/tools/render_mermaid.sh` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 
 - Embed rules:
   - Owner docs should contain the Mermaid fence and an adjacent image fallback that points at the pre-rendered SVG.
-  - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/assets/mermaid/<REL>.svg`); never duplicate the Mermaid source.
+  - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/_assets/mermaid/<REL>.svg`); never duplicate the Mermaid source.
   - The source path pattern is `docs/src/<REL>.mmd`, and the build artifact lives at `docs/_assets/mermaid/<REL>.svg` (mirrored to `docs/src/_assets/mermaid/<REL>.svg`).
 - Optional metadata: add `%% id: <slug>`, `%% version: v1`, or `%% owner: <owner-doc>` comments to encode diagram provenance for the index.
-- Keep the appendix up to date by running `python scripts/docs/build_diagram_index.py` whenever diagrams are added, renamed, or removed.
+- Keep the appendix up to date by running `python -m docs.tools.build.diagram_index` whenever diagrams are added, renamed, or removed.
 
 ## Add a runbook
 
@@ -52,19 +52,19 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   - Vale CLI ships in the devcontainer; when running locally, download v3.7.1 from the official releases if you want parity.
 - Node tooling expects Node.js 22.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
 - Run the aggregate lint script (or `make lint-docs` if you already activated the repository virtualenv):
-  - `python scripts/docs/lint_docs.py` (lints entire `docs/src/`)
-  - Optional: pass one or more targets, e.g. `python scripts/docs/lint_docs.py docs/src/platform/settings.md docs/src/overview/tdd.md`
-- The lint runner executes (in order): `build_runbook_catalog.py --check`, `build_diagram_index.py --check`, `check_structure.py` (platform/automation/data/customer/experience/ops), `check_appendices.py`, `markdownlint-cli2` (npx plus optional global binary), `check_settings_keys.py`, `link_check.py` with `STRICT_DOCS=1`, and a strict MkDocs build (`scripts/docs/build_mkdocs.py --dry-run`).
-- Validate service specs against the template: `python scripts/docs/check_structure.py docs/src/platform docs/src/automation docs/src/data docs/src/customer`
-- Lint markdown: `npx markdownlint-cli2 'docs/src/**/*.md'`.
+  - `python -m docs.tools.lint_docs` (lints entire `docs/src/`)
+  - Optional: pass one or more targets, e.g. `python -m docs.tools.lint_docs docs/src/platform/settings.md docs/src/overview/tdd.md`
+- The lint runner executes (in order): `python -m docs.tools.build.runbook_catalog --check`, `python -m docs.tools.build.diagram_index --check`, `check_structure.py` (platform/automation/data/customer/experience/ops), `check_appendices.py`, `markdownlint` (npx plus optional global `markdownlint-cli`), `check_settings_keys.py`, `check_links.py` with `STRICT_DOCS=1`, and a strict MkDocs build (`docs/tools/build/mkdocs.py --dry-run`).
+- Validate service specs against the template: `python -m docs.tools.check_structure docs/src/platform docs/src/automation docs/src/data docs/src/customer`
+- Lint markdown: `npx markdownlint --config docs/config/.markdownlint.json 'docs/src/**/*.md'`.
 - Style checks (Vale):
-  - From `docs/`: `vale src/`
-  - Rules live under `docs/src/.vale/`.
-- Build site: `mkdocs -f docs/mkdocs.yml build --clean` (outputs to `docs/build/site/`).
+  - From `docs/`: `vale --config docs/config/vale.ini src/`
+  - Rules live under `docs/config/vale/`.
+- Build site: `mkdocs -f docs/config/mkdocs.yml build --clean` (outputs to `docs/site/`).
 - Build TDD PDF:
-  - `bash scripts/docs/render_mermaid.sh --all`
-  - `bash scripts/docs/build_pdf_tdd.sh` (outputs to `docs/build/pdf/tdd.pdf`).
-  - The MkDocs wrapper also supports a dry run: `python scripts/docs/build_mkdocs.py --dry-run`.
+  - `bash docs/tools/render_mermaid.sh --all`
+  - `bash docs/tools/build/pdf_tdd.sh` (outputs to `docs/build/pdf/tdd.pdf`).
+  - The MkDocs wrapper also supports a dry run: `python -m docs.tools.build.mkdocs --dry-run`.
 
 ## Cross-linking and single-source rules
 
@@ -83,9 +83,9 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 ## File layout reference
 
 - Sources: `docs/src/` (TDD, platform, automation, data, customer, experience, ADR, runbooks, .assets).
-- Generated: `docs/build/site/`, `docs/build/` (gitignored).
-- Config: `docs/mkdocs.yml`, `docs/.vale.ini`, `docs/.markdownlint.json`, `docs/.mermaidrc`.
-- Scripts: `scripts/docs/*.sh`.
+- Generated: `docs/site/`, `docs/build/` (gitignored).
+- Config: `.markdownlint.json` (extends `docs/config/.markdownlint.json`), `docs/config/mkdocs.yml`, `docs/config/vale.ini`, `docs/config/.markdownlint.json`, `docs/config/mermaidrc.json`, `docs/config/settings_key_skip.txt`.
+- Scripts: `docs/tools/*.sh`.
 
 ## Tips
 

@@ -72,7 +72,7 @@ ______________________________________________________________________
 - **Scope:** This specification governs the observability stack (logs, metrics, traces), structured logging schema, ingest pipeline, sampling and cost controls, and operator access workflows. Audit evidence, manifests, and seal pipelines are documented separately in `../data/audit.md`.
 - **Audience:** SRE, Platform, service owners, and compliance reviewers who need consistent telemetry behavior and log governance.
 - **Related specs:** TDD §12 provides the overview; Settings (§7.2) enumerates telemetry knobs; Guardian (§7) and LP Engine (§5) describe dependent judgments and policy contexts.
-- **Change process:** Any pipeline, schema, or access control change must link this spec in the PR description, update `settings.md` keys, and include roll-forward/rollback plans. Run `python scripts/docs/check_structure.py docs/src/platform/observability.md` before submission.
+- **Change process:** Any pipeline, schema, or access control change must link this spec in the PR description, update `settings.md` keys, and include roll-forward/rollback plans. Run `python -m docs.tools.check_structure docs/src/platform/observability.md` before submission.
 
 ______________________________________________________________________
 

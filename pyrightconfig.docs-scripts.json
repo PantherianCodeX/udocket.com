@@ -1,27 +1,28 @@
 {
   "pythonVersion": "3.12",
   "stubPath": "typings",
+  "typeCheckingMode": "strict",
   "include": [
-    "scripts/docs"
+    "docs/tools"
   ],
   "executionEnvironments": [
     {
-      "root": "scripts/docs",
+      "root": "docs/tools",
       "extraPaths": [
         ".",
         "typings"
       ]
     }
   ],
-  "reportMissingTypeStubs": "warning",
-  "reportAttributeAccessIssue": "warning",
-  "reportMissingImports": "warning",
-  "reportUnusedImport": "warning",
-  "reportUnusedVariable": "warning",
-  "reportUnusedClass": "warning",
-  "reportUnusedFunction": "warning",
-  "reportArgumentType": "warning",
-  "reportUnnecessaryTypeIgnoreComment": "warning",
-  "reportUnnecessaryCast": "warning",
-  "reportUnnecessaryIsInstance": "warning"
+  "reportMissingTypeStubs": "error",
+  "reportAttributeAccessIssue": "error",
+  "reportMissingImports": "error",
+  "reportUnusedImport": "error",
+  "reportUnusedVariable": "error",
+  "reportUnusedClass": "error",
+  "reportUnusedFunction": "error",
+  "reportArgumentType": "error",
+  "reportUnnecessaryTypeIgnoreComment": "error",
+  "reportUnnecessaryCast": "error",
+  "reportUnnecessaryIsInstance": "error"
 }

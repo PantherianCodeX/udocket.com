@@ -83,7 +83,7 @@ ______________________________________________________________________
 - **Scope:** Service charter, compiler/runtime internals, API contracts, observability, OPA bundle management, rollout controls, and runbooks for LPE.
 - **Structure:** Sections follow the standard 0–10 outline; §8 contains the operational posture, alert triggers, runbook summaries, migrations, and workflows that previously lived in Appendix R.
 - **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` when pointing at shared appendices (for example TDD App.J for FIPS tracing).
-- **Maintenance:** Run `python scripts/docs/lint_docs.py` before submitting edits. Localization and policy schema snippets must match `spec/schemas/*`; CI enforces localization completeness, policy coverage, and decision-log schema validation.
+- **Maintenance:** Run `python -m docs.tools.lint_docs` before submitting edits. Localization and policy schema snippets must match `spec/schemas/*`; CI enforces localization completeness, policy coverage, and decision-log schema validation.
 - **Change protocol:** PRs touching localization packs, residency policies, OPA bundles, or PolicyContext generation must cite this spec and ADR-0003 in the review summary. Architecture + Security approvals are required when SDKs, Settings bundles, or compiler behaviour change.
 
 ______________________________________________________________________
@@ -634,7 +634,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover compiler regression, OPA rollback, waiver expiry, and localization gap scenarios; evidence stored in `ops/lpe/drills/<date>/` with retrospective notes.
-- Docs lint (`scripts/docs/build_runbook_catalog.py --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
+- Docs lint (`python -m docs.tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
 - Compliance reviews reference drill artefacts, waiver ledgers, and compiler adoption metrics to demonstrate readiness.
 
 ### 8.4 Migrations & Backfills (binding)
@@ -699,7 +699,7 @@ ______________________________________________________________________
 
 - Contract tests validate OpenAPI schemas, golden `PolicyContext` fixtures for HIPAA/PHIPA/PIPA/GDPR combinations, and compiler diff outputs via `scripts/lpe/verify_policy_context.py`.
 - `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` verifies localized banners and attribution; `tests/platform/db/test_mask_profiles.py` ensures masking alignment.
-- CI job `.github/workflows/lpe-validation.yml` runs `lint-artifact-vocabulary`, `scripts/docs/lint_docs.py --check-template`, and localization CI suites; failures block rollout.
+- CI job `.github/workflows/lpe-validation.yml` runs `lint-artifact-vocabulary`, `python -m docs.tools.lint_docs --check-template`, and localization CI suites; failures block rollout.
 - Synthetic monitors run after each deploy for HIPAA/PHIPA/PIPA contexts; failures keep cutover flags disabled until remediation.
 
 ______________________________________________________________________

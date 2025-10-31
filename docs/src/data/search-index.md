@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Captures the emerging Search & Indexing service providing full-text search, semantic/vector retrieval, and case discovery APIs referenced in TDD §6.5 (analysis consumers) and §11 (portal discovery). Document serves as stub until full implementation lands; where behaviour is TBD the section references product requirements.
 - **Structure:** Standard sections with emphasis on ingestion pipelines, index lifecycle, query APIs, and compliance guardrails (residency, confidentiality).
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/data/search-index.md docs/src/overview/tdd.md docs/tdd_modularization.md`. Updates require sync with product PRDs and LLM Registry (embedding models).
+- **Maintenance:** Run `python -m docs.tools.lint_docs docs/src/data/search-index.md docs/src/overview/tdd.md docs/tdd_modularization.md`. Updates require sync with product PRDs and LLM Registry (embedding models).
 - **Change protocol:** Any change enabling cross-tenant discovery, new vector providers, or schema modifications must reference ADR backlog and receive Privacy + Architecture approval. Production rollout gated by readiness checklist (Appendix TBD).
 - **References:** TDD §6.5, §11.3, LLM Registry §3 (embedding profiles), Artifact Store §2.3 (promotion signals), Ops runbooks `RB-SEARCH-*`.
 - **Contacts:** Knowledge Systems (implementation), Product Discovery (requirements), escalation `#ops-search`.

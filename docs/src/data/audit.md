@@ -71,7 +71,7 @@ ______________________________________________________________________
 
 - **Scope:** This spec owns immutable audit storage, structured evidence manifests, audit seals, judgment history, DSAR/waiver logging, and compliance traceability. It complements `../platform/observability.md`, which focuses on runtime observability.
 - **Audience:** Compliance engineers, platform architects, Guardian/Signer teams, and auditors verifying evidence chains.
-- **Change protocol:** Any schema or seal change must update this document, reference relevant ADRs, and demonstrate seal verification in staging. Run `python scripts/docs/check_structure.py docs/src/data/audit.md` prior to submission.
+- **Change protocol:** Any schema or seal change must update this document, reference relevant ADRs, and demonstrate seal verification in staging. Run `python -m docs.tools.check_structure docs/src/data/audit.md` prior to submission.
 - **Related references:** TDD §5 and §12 summarize lifecycle/audit obligations; Guardian (§7) describes judgment payloads; Settings (§7.3) enumerates audit keys; Audit appendices in the TDD now point here.
 
 ______________________________________________________________________
