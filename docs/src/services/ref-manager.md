@@ -54,6 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | uDocket Platform Architecture Team; Reference Programs Leadership |
@@ -65,8 +66,9 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Reference Programs |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -250,7 +252,7 @@ ______________________________________________________________________
 - Adoption statuses: `pending`, `in_progress`, `acknowledged`, `stale`.
 - Adoption reports join LPE compile results, Settings activation diffs, and Guardian acknowledgements.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Reference Manager (`RM`) `ApiError.code` values so downstream automation and reviewers respond deterministically. **|**
 **Contract:** RM APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below cover harvest, publish, and adoption flows. **|**
@@ -259,14 +261,27 @@ ______________________________________________________________________
 **Observability:** Dashboards “Reference Manager – Publish” and “Reference Manager – Adoption” track `reference_api_error_total{code}`, `reference_manager_publish_guard_failure`; synthetic publishes exercise hotfix + rollback paths. **|**
 **Breadcrumbs:** API handlers `apps/platform/reference_manager/views.py`, publisher `packages/udocket_core/reference_manager/publish.py`, adoption service `packages/udocket_core/reference_manager/adoption.py`, tests `tests/reference/test_publish_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §3.3, LPE spec §3.5, Guardian spec §2.2.
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#reference-manager)
 
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `POLICY_BLOCK` | License, residency, or waiver policy prevented bundle publish or acknowledgment. | Surface waiver/licensing metadata, resolve policy issues, and rerun publish/adoption after remediation. |
-| `VALIDATION_ERROR` | Bundle/template payload failed schema, checksum, or coverage validation. | Inspect validation report, correct source data or manifests, and resubmit publish job. |
-| `CONFLICT` | Publish request collided with an in-flight version (`bundle@version` already exists). | Refresh bundle catalog, increment semantic version, and retry once. |
-| `PROVIDER_DEGRADED` | Source connector offline or Reference Manager put into protective pause. | Alert Content Ops/Legal Ops, retry after source recovers or manual upload completes. |
-| `RATE_LIMIT` | Org or system-wide publish cadence exceeded governance limits. | Respect `Retry-After`, reschedule batch publishes, or escalate for temporary quota increase. |
+| `CONFLICT` | Publish request collided with an in-flight version where the bundle version already exists. | Refresh the bundle catalog, increment the semantic version, and retry once. |
+| `POLICY_BLOCK` | License, residency, or waiver policy prevented bundle publish or acknowledgment. | Surface waiver or licensing metadata, resolve policy issues, and rerun publish or adoption after remediation. |
+| `PROVIDER_DEGRADED` | Source connector offline or Reference Manager put into protective pause. | Alert Content Ops or Legal Ops, retry after the source recovers or manual upload completes. |
+| `RATE_LIMIT` | Org or system-wide publish cadence exceeded governance limits. | Respect Retry-After, reschedule batch publishes, or escalate for a temporary quota increase. |
+| `VALIDATION_ERROR` | Bundle or template payload failed schema, checksum, or coverage validation. | Inspect the validation report, correct source data or manifests, and resubmit the publish job. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | reference_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | reference_api_error_total<br>reference_manager_publish_guard_failure |
+| `PROVIDER_DEGRADED` | 503 | Yes | reference_api_error_total<br>reference_manager_harvest_error_total |
+| `RATE_LIMIT` | 429 | No | reference_api_error_total<br>reference_publish_rate_limit_total |
+| `VALIDATION_ERROR` | 400 | No | reference_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 Alignment with Settings, Guardian, and Portal (binding)
 

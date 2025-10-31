@@ -1,0 +1,39 @@
+error_codes:
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Evaluation detected residency, waiver, or privacy violations that must block the requested action."
+    client_action: "Present policy_block_code and waiver metadata to operators, remediate configuration, or obtain a waiver before retrying."
+    related_metrics:
+      - lpe_policy_block_total
+      - guardian_policy_block_total
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Policy bundle or context payload failed schema or semantic validation."
+    client_action: "Inspect details[], correct inputs such as missing locales or duplicate rules, and resubmit compile/evaluate."
+    related_metrics:
+      - lpe_api_error_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Concurrent activation changed the same PolicyContext version or hash."
+    client_action: "Refresh digests via conditional GET, merge changes, and retry with updated If-Match or Idempotency-Key headers."
+    related_metrics:
+      - lpe_api_error_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "Reference Manager or policy bundle fetch unavailable; fallback chain exhausted."
+    client_action: "Pause rollouts, retry once dependencies are healthy, and notify Ops of the degraded state."
+    related_metrics:
+      - lpe_api_error_total
+      - lpe_compiler_duration_seconds
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Org exceeded compilation or evaluation budget or concurrency ceiling."
+    client_action: "Honor Retry-After headers, stagger batch compiles, and request higher limits through governance."
+    related_metrics:
+      - lpe_api_error_total
+      - lpe_rate_limit_total

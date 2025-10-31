@@ -1,0 +1,44 @@
+error_codes:
+  - code: AUTH_SIGNATURE_INVALID
+    http_status: 401
+    audit_required: true
+    description: "HMAC signature mismatch on mutating requests."
+    client_action: "Recompute the signature, rotate credentials via RB-HMAC-ROTATE if repeated, and retry."
+    related_metrics:
+      - settings_auth_failure_total
+  - code: AUTH_CLOCK_SKEW
+    http_status: 401
+    audit_required: false
+    description: "X-Timestamp header outside the ±120 second tolerance."
+    client_action: "Sync clocks and retry with a corrected timestamp."
+    related_metrics:
+      - settings_auth_failure_total
+  - code: SECRET_DISCLOSURE_BLOCKED
+    http_status: 403
+    audit_required: true
+    description: "Attempt to export masked secret fields through diff previews or read APIs."
+    client_action: "Remove secret fields from the request; fetch redacted values only."
+    related_metrics:
+      - settings_error_total
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Bundle schema violation, unsafe override, or diff failing semantic guard."
+    client_action: "Inspect details[], remediate configuration, rerun validation."
+    related_metrics:
+      - settings_error_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Activation expected_version mismatch or replayed Idempotency-Key."
+    client_action: "Re-fetch activation state, regenerate the idempotency token, and retry."
+    related_metrics:
+      - settings_error_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Residency, waiver, or governance policy rejected the activation."
+    client_action: "Obtain waiver or approval, update policy inputs, and resubmit the activation."
+    related_metrics:
+      - settings_error_total
+      - settings_policy_block_total

@@ -68,10 +68,17 @@ def _read_table(path: Path) -> dict[str, str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     header_idx = lines.index("## Document controls")
     idx = header_idx + 1
-    while idx < len(lines) and not lines[idx].strip():
-        idx += 1
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+        if not stripped or stripped.startswith("<!--"):
+            idx += 1
+            continue
+        break
     table_rows: list[str] = []
-    while idx < len(lines) and lines[idx].startswith("|"):
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+        if not stripped or stripped.startswith("<!--") or not lines[idx].startswith("|"):
+            break
         table_rows.append(lines[idx])
         idx += 1
     data_rows = table_rows[2:]
@@ -101,6 +108,24 @@ def test_collect_targets_handles_dirs(tmp_path: Path) -> None:
     targets = list(collect_targets([services]))
 
     assert targets == [file_a.resolve()]
+
+
+def test_collect_targets_warns_for_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    missing = tmp_path / "docs" / "src" / "services"
+
+    targets = list(collect_targets([missing]))
+
+    captured = capsys.readouterr()
+    assert targets == []
+    assert "does not exist" in captured.err
+
+
+def test_collect_targets_accepts_file(tmp_path: Path) -> None:
+    doc = _write_doc(tmp_path)
+
+    targets = list(collect_targets([doc]))
+
+    assert targets == [doc.resolve()]
 
 
 def test_parse_front_matter_handles_missing_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,6 +182,7 @@ review_notes:
 
 ## Document controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Alice; Bob |
@@ -172,6 +198,7 @@ review_notes:
 | Approved date |  |
 | Extra Meta | Extra data |
 | Review Notes | Note A |
+<!-- END AUTO-GENERATED: document-controls -->
 
 Body text.
 """
@@ -223,6 +250,63 @@ author: Alice
 ## Document controls
 
 No table present.
+"""
+    doc = _write_doc(tmp_path, content=content)
+
+    updated = sync_file(doc)
+
+    captured = capsys.readouterr()
+    assert updated is False
+    assert "incomplete document controls table" in captured.err
+
+
+def test_sync_skips_when_section_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    content = """---
+author: Alice
+---
+
+## Another heading
+
+Body text.
+"""
+    doc = _write_doc(tmp_path, content=content)
+
+    updated = sync_file(doc)
+
+    captured = capsys.readouterr()
+    assert updated is False
+    assert "missing 'Document controls' section" in captured.err
+
+
+def test_sync_warns_when_marker_end_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    content = """---
+author: Alice
+---
+
+## Document controls
+
+<!-- BEGIN AUTO-GENERATED: document-controls -->
+| Field | Value |
+| --- | --- |
+| Authors | Alice |
+"""
+    doc = _write_doc(tmp_path, content=content)
+
+    updated = sync_file(doc)
+
+    captured = capsys.readouterr()
+    assert updated is False
+    assert "missing '<!-- END AUTO-GENERATED: document-controls -->'" in captured.err
+
+
+def test_sync_warns_when_table_rows_insufficient(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    content = """---
+author: Alice
+---
+
+## Document controls
+
+| Field | Value |
 """
     doc = _write_doc(tmp_path, content=content)
 

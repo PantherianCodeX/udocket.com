@@ -57,6 +57,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | uDocket Platform Architecture Team; Settings Program Leads |
@@ -68,8 +69,9 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Settings Program |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -271,7 +273,7 @@ ______________________________________________________________________
 - Clients avoid `.env` usage beyond bootstrapping; runtime relies on SR for truth.
 - SDK exports helpers for dry-run validation and diff preview consumption.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Settings-specific `ApiError.code` values so platform consumers can build deterministic retry logic. **|**
 **Contract:** Settings Registry reuses the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and supplements it with the service-specific codes below. Mutating endpoints surface the same envelope schema and echo `Idempotency-Key` when supplied. **|**
@@ -280,17 +282,29 @@ ______________________________________________________________________
 **Observability:** Metrics `settings_error_total{code}` and `settings_auth_failure_total{reason}` feed the “Settings Registry – Availability” dashboard; synthetic activations assert error semantics before release. **|**
 **Breadcrumbs:** API handlers `apps/platform/settings/api.py`, security helpers `apps/platform/settings/security.py`, tests `tests/platform/settings/test_auth.py`, `tests/platform/settings/test_activation_flow.py`, schema `spec/schemas/api_error.schema.json`. **|**
 **References:** Platform Runtime §3.3, Guardian spec §2.2, Reference Manager spec §3.4, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-HMAC-ROTATE`.
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#settings-registry)
 
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
-|---|---|---|
-| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch on mutating requests (`X-Request-Signature` wrong or key revoked). | Recompute signature, rotate credentials via RB-HMAC-ROTATE if repeated. |
-| `AUTH_CLOCK_SKEW` | `X-Timestamp` outside ±120 seconds tolerance. | Sync clocks, retry with corrected timestamp. |
-| `SECRET_DISCLOSURE_BLOCKED` | Attempt to export masked secret fields through diff previews or read APIs. | Remove secret fields from request; fetch redacted values only. |
-| `VALIDATION_ERROR` | Bundle schema violation, unsafe override, or diff failing semantic guard. | Inspect `details[]`, remediate configuration, rerun validation. |
-| `CONFLICT` | Activation `expected_version` mismatch or replayed `Idempotency-Key`. | Re-fetch activation state, regenerate idempotency token, retry. |
-| `POLICY_BLOCK` | Residency, waiver, or governance policy rejected the activation. | Obtain waiver/approval, update policy inputs, resubmit activation. |
+| --- | --- | --- |
+| `AUTH_CLOCK_SKEW` | X-Timestamp header outside the ±120 second tolerance. | Sync clocks and retry with a corrected timestamp. |
+| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch on mutating requests. | Recompute the signature, rotate credentials via RB-HMAC-ROTATE if repeated, and retry. |
+| `CONFLICT` | Activation expected_version mismatch or replayed Idempotency-Key. | Re-fetch activation state, regenerate the idempotency token, and retry. |
+| `POLICY_BLOCK` | Residency, waiver, or governance policy rejected the activation. | Obtain waiver or approval, update policy inputs, and resubmit the activation. |
+| `SECRET_DISCLOSURE_BLOCKED` | Attempt to export masked secret fields through diff previews or read APIs. | Remove secret fields from the request; fetch redacted values only. |
+| `VALIDATION_ERROR` | Bundle schema violation, unsafe override, or diff failing semantic guard. | Inspect details[], remediate configuration, rerun validation. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-Settings surfaces continue to emit `POLICY_BLOCK`, `QUARANTINED`, `INTEGRITY_ERROR`, and other shared codes as defined in the Platform Runtime catalog.
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `AUTH_CLOCK_SKEW` | 401 | No | settings_auth_failure_total |
+| `AUTH_SIGNATURE_INVALID` | 401 | Yes | settings_auth_failure_total |
+| `CONFLICT` | 409 | No | settings_error_total |
+| `POLICY_BLOCK` | 403 | Yes | settings_error_total<br>settings_policy_block_total |
+| `SECRET_DISCLOSURE_BLOCKED` | 403 | Yes | settings_error_total |
+| `VALIDATION_ERROR` | 400 | No | settings_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 Authentication & request signing (binding)
 

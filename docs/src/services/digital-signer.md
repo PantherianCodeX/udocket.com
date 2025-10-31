@@ -54,6 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Document Signing Working Group |
@@ -65,8 +66,9 @@ ______________________________________________________________________
 | Owners | Security Engineering; Platform Architecture |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -223,7 +225,7 @@ curl -X POST https://platform.local/api/v1/sign \
 - Settings activation (`sign.*`) pushes trust-root, TSA/OCSP, and waiver configuration; activation lints invoke signer contract tests before enabling changes.
 - Evidence store writers, manifest generators, and ack processors share the internal API layer `packages/udocket_core/signer/*`, ensuring deterministic manifests and audit append-only logs.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate signer-specific `ApiError.code` values so service consumers and monitoring can distinguish signing failures from upstream transport issues. **|**
 **Contract:** Digital Signer emits the platform baseline codes (`POLICY_BLOCK`, `PROVIDER_DEGRADED`, etc.) plus the scenarios below when signature policy, manifest integrity, or replay rules fail. **|**
@@ -233,25 +235,37 @@ curl -X POST https://platform.local/api/v1/sign \
 **Breadcrumbs:** API handlers `apps/platform/signer/api.py`, manifest validator `packages/udocket_core/signer/manifest.py`, replay utilities `ops/scripts/signer/replay_signature.py`, tests `tests/platform/operations/test_signer_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §3.4, Guardian spec §2.2.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#digital-signer)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
-|---|---|---|
-| `SIGNATURE_MANIFEST_INVALID` | Manifest hash mismatch, missing TSA evidence, or unsupported format detected before release. | Investigate manifest diff, regenerate evidence via `ops/signer/validate_manifests.py`, retry submission. |
-| `SIGNING_PIPELINE_BLOCKED` | Signing queue halted due to FIPS waiver expiry, trust-root drift, or Guardian quarantine. | Follow RB-SIGN-INCIDENT / RB-SIGN-TSA, refresh waivers or trust roots, resubmit once pipeline resumes. |
-| `SIGNATURE_POLICY_MISMATCH` | Requested policy does not match Settings (`sign.signature_policies[]`) or deliverable class. | Align request payload with active policy or update Settings; avoid blind retries. |
-| `SIGN_IDEMPOTENCY_CONFLICT` | Replayed signing request with differing payload or digest. | Generate new `Idempotency-Key`, ensure canonical payload remains unchanged, retry once. |
-| `SIGNATURE_REPLAY_MISMATCH` | Replay verification detected output drift versus stored manifest. | Quarantine artifact, run replay validation (`ops/scripts/signer/replay_signature.py`), remediate before reissuing. |
+| --- | --- | --- |
+| `SIGNATURE_MANIFEST_INVALID` | Manifest hash mismatch, missing TSA evidence, or unsupported format detected before release. | Investigate manifest diff, regenerate evidence via ops/signer/validate_manifests.py, then retry the submission. |
+| `SIGNATURE_POLICY_MISMATCH` | Requested policy does not match Settings (sign.signature_policies[]) or deliverable class. | Align the request payload with the active policy or update Settings; avoid blind retries. |
+| `SIGNATURE_REPLAY_MISMATCH` | Replay verification detected output drift versus the stored manifest. | Quarantine the artifact, run replay validation (ops/scripts/signer/replay_signature.py), and remediate before reissuing. |
+| `SIGNING_PIPELINE_BLOCKED` | Signing queue halted due to FIPS waiver expiry, trust-root drift, or Guardian quarantine. | Follow RB-SIGN-INCIDENT or RB-SIGN-TSA, refresh waivers or trust roots, and resubmit once the pipeline resumes. |
+| `SIGN_IDEMPOTENCY_CONFLICT` | Replayed signing request with differing payload or digest. | Generate a new Idempotency-Key, ensure the canonical payload remains unchanged, and retry once. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-______________________________________________________________________
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `SIGNATURE_MANIFEST_INVALID` | 409 | Yes | signer_api_error_total<br>signer_signature_policy_violation_total |
+| `SIGNATURE_POLICY_MISMATCH` | 409 | Yes | signer_signature_policy_violation_total |
+| `SIGNATURE_REPLAY_MISMATCH` | 412 | Yes | signer_api_error_total<br>signer_signature_policy_violation_total |
+| `SIGNING_PIPELINE_BLOCKED` | 503 | Yes | signer_api_error_total<br>signer_pipeline_blocked_total |
+| `SIGN_IDEMPOTENCY_CONFLICT` | 409 | No | signer_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-## 4) State Management
+## 4) State Management (binding)
 
-**Purpose:** Explain storage and configuration strategy. **|**
-**Contract:** Define persistence guarantees, migration expectations, and retention. **|**
-**State:** Describe schemas, caches, and configuration sources. **|**
-**Failures & handling:** Cover corruption, drift, and reconciliation flows. **|**
-**Observability:** Metrics for storage health, cache hit rates, or config parity. **|**
-**Breadcrumbs:** ORM models, migrations, infrastructure manifests. **|**
-**References:** TDD appendices or diagrams related to state.
+**Purpose:** Outline how signed artifacts, trust metadata, and replay assets persist across the platform. **|**
+**Contract:** Keep manifests append-only, track trust-root and waiver state changes, and persist idempotency records for every signing request. **|**
+**State:** Deliverable/signature tables, evidence store objects, waiver ledger entries, trust-root settings, Redis caches, and idempotency key tables. **|**
+**Failures & handling:** Manifest divergences, waiver expiry, or cache/idempotency mismatches raise `SIGNATURE_MANIFEST_INVALID`, `SIGNATURE_REPLAY_MISMATCH`, or `SIGN_IDEMPOTENCY_CONFLICT` and route through RB-SIGN-* runbooks. **|**
+**Observability:** Dashboards “Signer & TSA”, metrics `signature_manifest_invalid_total`, `sign_trust_root_expiring_total`, `idempotency_replay_total`, `signer_pipeline_blocked_total`. **|**
+**Breadcrumbs:** Manifest writer `packages/udocket_core/signer/manifest.py`, waiver and trust-root activation `apps/platform/settings/services/signature.py`, cache/idempotency helpers `packages/udocket_core/signer/cache.py`, replay scripts `ops/scripts/signer/replay_signature.py`. **|**
+**References:** Audit §4, Settings §3.4, Observability §4.
 
 ### 4.1 Artifact manifests & evidence (binding)
 

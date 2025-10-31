@@ -55,6 +55,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | LLM Platform Working Group |
@@ -66,8 +67,9 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Applied AI Programs |
 | Reviewers | QA Engineering Lead; FinOps Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -267,7 +269,7 @@ ______________________________________________________________________
 - Decision traces persist to evidence store and `ops/llm/decision_trace.jsonl`; replay tooling consumes the same format.
 - Workers expose `job.update` SSE payloads with `provider_progress` fields derived from adapter snapshots and warnings (`BUDGET_HELD`, `REGION_DRIFT`).
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Document the `ApiError.code` values emitted by the LLM Registry so calling services handle retries, fallbacks, and throttling consistently. **|**
 **Contract:** Registry APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to registry-specific scenarios. **|**
@@ -277,25 +279,37 @@ ______________________________________________________________________
 **Breadcrumbs:** Controllers `apps/platform/llm/views.py`, Settings activation `apps/platform/settings/services/llm.py`, moderation adapter `packages/udocket_core/llm/moderation.py`, tests `tests/platform/llm/test_registry_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §2, Worker Cluster spec §3.4, Guardian spec §2.2, Ops runbooks `RB-LLM-CIRCUIT`, `RB-LLM-MODERATION`.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#llm-registry-runtime-governance)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `POLICY_BLOCK` | Residency, waiver, or moderation policy prevents provider/model activation. | Present blocking reason to operators, adjust residency/masking settings or obtain waiver before retrying activation. |
+| `CONFLICT` | Concurrent activation modified the same provider or version. | Refresh the catalog snapshot, increment the provider version, and retry with a fresh Idempotency-Key. |
+| `POLICY_BLOCK` | Residency, waiver, or moderation policy prevents provider or model activation. | Present the blocking reason to operators, adjust residency or masking settings, or obtain a waiver before retrying activation. |
+| `PROVIDER_DEGRADED` | Registry placed provider circuit into OPEN or PAUSED_AWAITING_PROVIDER. | Respect the degraded status, shift traffic using the fallback chain, and retry once health returns to CLOSED. |
+| `RATE_LIMIT` | Org exceeded moderation or inference budget thresholds enforced by the registry. | Honor Retry-After, shed traffic, and coordinate a FinOps waiver before resuming. |
 | `VALIDATION_ERROR` | Provider catalog entry failed schema, checksum, or residency coverage validation. | Fix catalog metadata (regions, digests, pricing), rerun Settings activation, and revalidate. |
-| `CONFLICT` | Concurrent activation modified the same provider/version. | Refresh catalog snapshot, increment the provider version, and retry with a fresh `Idempotency-Key`. |
-| `PROVIDER_DEGRADED` | Registry placed provider circuit into `OPEN`/`PAUSED_AWAITING_PROVIDER`. | Respect degraded status, shift traffic using fallback chain, and retry once health returns to CLOSED. |
-| `RATE_LIMIT` | Org exceeded moderation or inference budget thresholds enforced by the registry. | Honor `Retry-After`, shed traffic, and coordinate FinOps waiver before resuming. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-______________________________________________________________________
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | llm_registry_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | llm_registry_api_error_total<br>llm_circuit_state |
+| `PROVIDER_DEGRADED` | 503 | Yes | llm_circuit_state<br>llm_registry_api_error_total |
+| `RATE_LIMIT` | 429 | No | llm_registry_api_error_total<br>llm_cost_estimate_total |
+| `VALIDATION_ERROR` | 400 | No | llm_registry_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-## 4) State Management
+## 4) State Management (binding)
 
-**Purpose:** Explain storage and configuration strategy. **|**
-**Contract:** Define persistence guarantees, migration expectations, and retention. **|**
-**State:** Describe schemas, caches, and configuration sources. **|**
-**Failures & handling:** Cover corruption, drift, and reconciliation flows. **|**
-**Observability:** Metrics for storage health, cache hit rates, or config parity. **|**
-**Breadcrumbs:** ORM models, migrations, infrastructure manifests. **|**
-**References:** TDD appendices or diagrams related to state.
+**Purpose:** Describe how provider catalogs, health state, and reproducibility envelopes persist across the registry. **|**
+**Contract:** Keep provider metadata immutable once activated, record envelopes for every inference, and mirror moderation/waiver state for auditability. **|**
+**State:** Provider records, circuit state tables, reproducibility envelopes, health poll logs, waiver ledger, and Settings snapshots. **|**
+**Failures & handling:** Catalog hash drift, replay mismatches, or circuit state desync raise `LLM_REPLAY_MISMATCH`/`PROVIDER_DEGRADED` alerts and trigger RB-LLM-* runbooks. **|**
+**Observability:** Dashboards “LLM Registry – API”, “LLM Health”, metrics `llm_registry_api_error_total`, `llm_circuit_state`, `llm_replay_total`, `llm_cost_estimate_total`. **|**
+**Breadcrumbs:** Evidence store helpers `packages/udocket_core/llm/evidence_store.py`, health pollers `operations/task_modules/llm_health_poll.py`, Settings activation `apps/platform/settings/services/llm.py`, tests `tests/platform/llm/test_registry_state.py`. **|**
+**References:** Settings §2, Worker Cluster §3.4, Observability §4, Audit §4.
 
 ### 4.1 Reproducibility envelopes & replay strategy (binding)
 

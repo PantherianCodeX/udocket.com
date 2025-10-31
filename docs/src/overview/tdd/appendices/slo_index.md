@@ -42,7 +42,7 @@ ______________________________________________________________________
 
 This appendix lists the SLOs defined in each service and app specification. Refresh it with `python scripts/docs/build_slo_index.py` when SLO sections change.
 
-<!-- BEGIN AUTO-GENERATED SLO INDEX -->
+<!-- BEGIN AUTO-GENERATED: slo-index -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_slo_index.py` to refresh. -->
 
 ### [Audit & Evidence](../../../services/audit.md)
@@ -185,11 +185,11 @@ ______________________________________________________________________
 - **Ingest availability:** ≥99.9% successful log ingestion each month, enforced by `logging_ingest_lag_seconds` < 30s P95 and `logging_drop_rate_pct = 0`; burn-rate alerts open RB-LOG-007.
 - **Immutable mirror lag:** Mirror delay stays ≤1 collection interval (≤15 minutes) measured via `audit_worm_lag_seconds`; breaches pause approvals until RB-AUDIT-004 completes.
 - **Trace correlation fidelity:** Sampling drift between trace/error rates <5% sustained, tracked by `trace_sampling_drift_total`; violations trigger RB-TRACE-CORR before release sign-off.
+<a id="7-cost-management--budgets"></a>
+
 - **Cost guardrails:** Daily log volume per service remains within configured budgets (`logging_volume_budget_violation_total = 0`); overrides require RB-COST and FinOps approval within 1 business day.
 
 ______________________________________________________________________
-
-<a id="6-access-control--auditing"></a>
 
 ### [Platform Runtime](../../../services/platform-runtime.md)
 
@@ -227,15 +227,15 @@ ______________________________________________________________________
 **Purpose:** Capture registry availability, activation latency, cache freshness, and residency enforcement guarantees. **|**
 **Contract:** API availability, activation duration, cache invalidation, and residency checks must satisfy the thresholds below before new settings are promoted. **|**
 **State:** Metrics `settings_request_total`, `settings_error_total`, `settings_activation_duration_seconds`, `settings_cache_invalidation_lag_seconds`, `settings_residency_violation_total`; dashboards “Settings Registry – SLO”, “Settings Cache”, “Settings Drift”. **|**
-**Failures & handling:** Breaches invoke RB-GOV-008, RB-SETTINGS-CACHE, or RB-RES-* prior to resuming activations. **|**
+**Failures & handling:** Breaches invoke RB-GOV-008, RB-SETTINGS-CACHE, or RB-RES-\* prior to resuming activations. **|**
 **Observability:** Grafana dashboards, synthetic activation tests, and burn-rate alerts supply evidence. **|**
 **Breadcrumbs:** Prometheus rules `infra/monitoring/settings-prometheus-rules.yaml`, synthetic configs `ops/synthetics/settings_slo.yaml`, runbooks `docs/src/ops/runbooks/settings/*.md`. **|**
 **References:** TDD §12, Logging spec §6, Audit spec §5.
 
-- **API availability:** ≥99.9% monthly success rate for read/write operations (`settings_request_total` vs `settings_error_total`). Breaches trigger RB-GOV-008 and freeze releases until the budget recovers. **|**
-- **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw. **|**
-- **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys. **|**
-- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-* and requires waiver or remediation before continuing.
+- **API availability:** ≥99.9% monthly success rate for read/write operations (`settings_request_total` vs `settings_error_total`). Breaches trigger RB-GOV-008 and freeze releases until the budget recovers.
+- **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw.
+- **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys.
+- **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-\* and requires waiver or remediation before continuing.
 
 ### [Web Application & Portal](../../../apps/web-app.md)
 
@@ -270,4 +270,4 @@ ______________________________________________________________________
 - **Upload scanning throughput:** `upload_scan_duration_seconds` P95 stays within SLA; breaches page RB-UPLOAD-SCAN and pause ingestion.
 
 ______________________________________________________________________
-<!-- END AUTO-GENERATED SLO INDEX -->
+<!-- END AUTO-GENERATED: slo-index -->

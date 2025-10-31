@@ -47,6 +47,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Compliance Engineering Guild |
@@ -60,6 +61,7 @@ ______________________________________________________________________
 | Approvers | Architecture Steering Committee; Security Review Board |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -134,7 +136,7 @@ ______________________________________________________________________
 - Seal runner `ops/audit/seal_runner.py` and verifier `ops/audit/verify_seal_chain.py` operate hourly; results persisted under `AUDIT_SEAL` artifacts.
 - Retention jobs `ops/privacy/retention_runner.py` consume audit logs to build `ERASURE_JOURNAL`/`DESTRUCTION_CERT` artifacts.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Document Audit & Evidence `ApiError.code` emissions so downstream services and auditors can apply the correct remediation flow. **|**
 **Contract:** Audit APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and surface the codes below for domain-specific failures. **|**
@@ -144,25 +146,37 @@ ______________________________________________________________________
 **Breadcrumbs:** API handlers `apps/platform/audit/api.py`, waiver service `apps/platform/compliance/waiver.py`, DSAR runner `ops/privacy/dsar_runner.py`, tests `tests/platform/audit/test_api_errors.py`. **|**
 **References:** Platform Runtime §3.3, Guardian spec §2.3, Settings spec §7.3.
 
-| Code | Scenario | Client guidance |
-|---|---|---|
-| `POLICY_BLOCK` | Legal hold, residency, or waiver guard prevents evidence release or deletion. | Surface Guardian/waiver reason, engage RB-AUDIT-004 or RB-WAIVER-GOV before retrying. |
-| `QUARANTINED` | Evidence quarantined pending Guardian/manual review. | Escalate to Guardian reviewers; do not retry until quarantine cleared. |
-| `INTEGRITY_ERROR` | Seal manifest hash mismatch or immutable sink divergence detected. | Rebuild manifests via `ops/audit/rebuild_manifest.py`, regenerate seal, retry once integrity restored. |
-| `VALIDATION_ERROR` | Waiver/DSAR payload fails schema or policy validation. | Inspect `details[]`, correct input, resubmit. |
-| `NOT_FOUND` | Evidence bundle absent or redacted per retention policy. | Treat as terminal; refresh catalog or request prior version rather than retrying blindly. |
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#audit-evidence)
 
-______________________________________________________________________
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `INTEGRITY_ERROR` | Seal manifest hash mismatch or immutable sink divergence detected. | Rebuild manifests via `ops/audit/rebuild_manifest.py`, regenerate seal, then retry once integrity is restored. |
+| `NOT_FOUND` | Evidence bundle absent or redacted per retention policy. | Treat as terminal; refresh catalog or request prior version rather than retrying blindly. |
+| `POLICY_BLOCK` | Legal hold, residency, or waiver guard prevents evidence release or deletion. | Surface Guardian/waiver reason, engage RB-AUDIT-004 or RB-WAIVER-GOV before retrying. |
+| `QUARANTINED` | Evidence quarantined pending Guardian or manual review. | Escalate to Guardian reviewers; do not retry until quarantine cleared. |
+| `VALIDATION_ERROR` | Waiver or DSAR payload fails schema or policy validation. | Inspect `details[]`, correct the input, and resubmit. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `INTEGRITY_ERROR` | 412 | Yes | audit_api_error_total<br>audit_seal_errors_total |
+| `NOT_FOUND` | 404 | No | audit_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | audit_api_error_total<br>waiver_expiring_total |
+| `QUARANTINED` | 423 | Yes | audit_api_error_total |
+| `VALIDATION_ERROR` | 400 | No | audit_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ## 4) State Management (binding) {#4-immutable-storage--replication}
 
-**Purpose:** Describe how audit data is persisted, partitioned, and retained. **|**
-**Contract:** Maintain monthly partitions for `audit_event`, append-only JSONL streams, immutable WORM mirror, and retention schedules aligned with jurisdictional requirements (HIPAA, GDPR, CPPA). **|**
-**State:** `audit_event` table partitions, WORM buckets, seal manifests, waiver ledger tables, DSAR journal, legal hold metadata, retention tombstones. **|**
-**Failures & handling:** Partition rotation failures raise `audit_partition_rotation_failed_total`; immutable sink drift escalates via Audit §5; retention drift triggers `audit_retention_violation_total`. **|**
-**Observability:** Dashboards “Immutable Sink” and “Retention Compliance”. **|**
-**Breadcrumbs:** Partition script `ops/db/rotate_partitions.py`, immutable bucket policies `infra/logging/worm/`, ledger migrations `db/migrations/compliance/`, DSAR journal schema `db/migrations/privacy/`. **|**
-**References:** Logging §3.2 (mirror), Settings §7.3, Audit §5.
+**Purpose:** Preserve audit evidence, manifests, and immutable replicas so records remain admissible. **|**
+**Contract:** Keep manifests append-only, mirror audit events to WORM storage, and maintain waivers/DSAR logs in lockstep with production state. **|**
+**State:** Manifest files, `audit_event` partitions, WORM buckets, waiver ledger, DSAR journal, and replication scripts. **|**
+**Failures & handling:** Seal gaps, replication lag, or ledger drift trigger RB-AUDIT-004 or RB-WAIVER-GOV before approvals resume. **|**
+**Observability:** Dashboards “Audit Seal Integrity”, “Immutable Sink”, metrics `audit_worm_lag_seconds`, `audit_seal_errors_total`, `waiver_expiring_total`. **|**
+**Breadcrumbs:** Schema definitions `spec/schemas/audit_manifest.schema.json`, rotation tooling `ops/audit/rotate_partitions.py`, replication jobs `ops/audit/verify_seal_chain.py`, tests `tests/audit/test_state_management.py`. **|**
+**References:** Logging §4, Settings §7.3, Observability §4.
 
 ### 4.1 Manifest & event storage
 

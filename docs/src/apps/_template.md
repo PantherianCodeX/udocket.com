@@ -54,9 +54,9 @@ ______________________________________________________________________
 
 ## Document Controls
 
-**<< AUTOMATED AREA >>** - Updates automatically on pre-commit hook.
-*Do not edit the values here. Make all updates in the frontmatter above.*
+> Populated from the YAML front matter via `python scripts/docs/sync_document_controls.py`. Do not edit the table manually.
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | <Primary authors> |
@@ -70,6 +70,7 @@ ______________________________________________________________________
 | Approvers | <Roles or committees that sign off on changes> |
 | Approved by | |
 | Approved date | |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -134,13 +135,15 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Link to controllers, view logic, and tests covering the behaviours. **|**
 **References:** Always link to Platform Runtime §3.3 and supporting service specs.
 
-> Introduce the table with context for consumers, then enumerate codes using the canonical header.
+> Store the canonical definitions in `./<app-folder>/error_codes.yaml` (see `spec/schemas/api_error_codes.schema.yaml`) and run `python scripts/docs/build_api_error_codes.py` to refresh the tables.
 
-| Code | Scenario | Client guidance |
-| --- | --- | --- |
-| [optional] `EXAMPLE_CODE` | Replace with a concise scenario description. | Outline whether clients retry, escalate, or abort. |
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-> Mark optional template rows with `[optional]` so implementations can omit them while preserving structure.
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+
+> Tables generated from `./<app-folder>/error_codes.yaml`. Edit that YAML and run `python scripts/docs/build_api_error_codes.py`.
 
 ## 4) State Management
 

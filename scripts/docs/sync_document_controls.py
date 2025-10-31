@@ -38,6 +38,8 @@ from scripts.docs.doc_utils import (  # noqa: E402
 
 OPTIONAL_FIELDS = DOCUMENT_CONTROL_OPTIONAL_FIELDS
 DEFAULT_ROOT = Path("docs/src/services")
+MARKER_BEGIN = "<!-- BEGIN AUTO-GENERATED: document-controls -->"
+MARKER_END = "<!-- END AUTO-GENERATED: document-controls -->"
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,19 +88,65 @@ def sync_file(path: Path) -> bool:
         return False
 
     try:
-        header_idx = next(i for i, line in enumerate(lines) if line.strip().lower() == "## Document Controls".lower())
+        header_idx = next(
+            i for i, line in enumerate(lines) if line.strip().lower() == "## Document Controls".lower()
+        )
     except StopIteration:
         print(f"[sync-document-controls] warning: {path} missing 'Document controls' section; skipping", file=sys.stderr)
         return False
 
+    begin_idx = None
+    end_idx = None
+    markers_added = False
+    for offset in range(header_idx + 1, len(lines)):
+        stripped = lines[offset].strip()
+        if not stripped:
+            continue
+        if stripped == MARKER_BEGIN:
+            begin_idx = offset
+            break
+        if stripped.startswith("## "):
+            break
+        if stripped.startswith("|"):
+            # no marker present; table starts here
+            begin_idx = None
+            break
+
     idx = header_idx + 1
     while idx < len(lines) and not lines[idx].strip():
         idx += 1
-    table_start = idx
-    table_rows: List[str] = []
-    while idx < len(lines) and lines[idx].startswith("|"):
-        table_rows.append(lines[idx])
-        idx += 1
+
+    if begin_idx is not None:
+        table_start = begin_idx + 1
+        try:
+            end_idx = next(i for i in range(table_start, len(lines)) if lines[i].strip() == MARKER_END)
+        except StopIteration:
+            print(
+                f"[sync-document-controls] warning: {path} missing '{MARKER_END}' after document controls table; skipping",
+                file=sys.stderr,
+            )
+            return False
+        table_rows = lines[table_start:end_idx]
+    else:
+        table_start = idx
+        table_rows: List[str] = []
+        while idx < len(lines) and lines[idx].startswith("|"):
+            table_rows.append(lines[idx])
+            idx += 1
+        end_idx = table_start + len(table_rows)
+        if table_rows:
+            lines.insert(table_start, MARKER_BEGIN)
+            lines.insert(end_idx + 1, MARKER_END)
+            table_start += 1
+            end_idx += 1
+            markers_added = True
+        else:
+            print(
+                f"[sync-document-controls] warning: {path} has incomplete document controls table; skipping",
+                file=sys.stderr,
+            )
+            return False
+
     if len(table_rows) < 2:
         print(
             f"[sync-document-controls] warning: {path} has incomplete document controls table; skipping",
@@ -106,7 +154,6 @@ def sync_file(path: Path) -> bool:
         )
         return False
 
-    _header_row, _separator_row = table_rows[:2]
     data_rows = table_rows[2:]
     existing_map = {}
     for row in data_rows:
@@ -132,7 +179,7 @@ def sync_file(path: Path) -> bool:
         value = expected if expected or field not in OPTIONAL_FIELDS else ""
         new_rows.append(f"| {field} | {value} |")
 
-    if table_rows == new_rows:
+    if not markers_added and table_rows == new_rows:
         return False
 
     lines[table_start:table_start + len(table_rows)] = new_rows

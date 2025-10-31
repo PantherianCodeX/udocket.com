@@ -54,6 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Communications & Outbound Delivery Working Group |
@@ -65,8 +66,9 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | Compliance Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -212,7 +214,7 @@ ______________________________________________________________________
 - SSE publisher `apps/platform/events/notifications.py` broadcasts in-app and portal invalidation events. Channel topics namespaced `notifications.org.{org_id}` and `notifications.case.{case_id}`.
 - Guardian/Compose integrations call `notifications.outbox.enqueue_review_timeout` to alert reviewers and escalate timeouts.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Notifications `ApiError.code` values so producers, webhooks, and portal clients handle throttling and policy blocks consistently. **|**
 **Contract:** Notifications reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below map those codes to messaging semantics. **|**
@@ -222,25 +224,37 @@ ______________________________________________________________________
 **Breadcrumbs:** Controllers `apps/platform/notifications/views.py`, outbox workers `apps/platform/notifications/outbox.py`, webhook signer `apps/platform/notifications/webhooks.py`, tests `tests/platform/notifications/test_outbox_api.py`. **|**
 **References:** Platform Runtime §3.3, Guardian spec §2.2, Settings spec §2.6, Ops runbooks `RB-NOTIFY-RATE`, `RB-NOTIFY-WEBHOOK`.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#notifications-service)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `POLICY_BLOCK` | Guardian/masking rules blocked a message, attachment, or portal download token. | Show Guardian reason, remediate content or policy configuration, then retry once cleared. |
-| `RATE_LIMIT` | Org/channel exceeded outbound messaging or webhook throughput limits. | Honor `Retry-After`, queue retries with exponential backoff, and coordinate for sustained spikes. |
-| `CONFLICT` | Outbox entry replayed with different payload or stale `version`. | Re-fetch outbox status, regenerate payload/`Idempotency-Key`, and retry once. |
-| `PROVIDER_DEGRADED` | Email/SMS provider or webhook endpoint marked degraded (`OPEN` circuit). | Pause sends for affected provider, alert operators, and resume once health recovers. |
-| `VALIDATION_ERROR` | Template context, attachment metadata, or download request failed schema checks. | Correct payload/template data and resubmit after validation passes. |
+| `CONFLICT` | Outbox entry replayed with a different payload or stale version. | Re-fetch outbox status, regenerate the payload or Idempotency-Key, and retry once. |
+| `POLICY_BLOCK` | Guardian or masking rules blocked a message, attachment, or portal download token. | Show the Guardian reason, remediate content or policy configuration, and retry once cleared. |
+| `PROVIDER_DEGRADED` | Email or SMS provider, or webhook endpoint, marked degraded with an open circuit. | Pause sends for the affected provider, alert operators, and resume once health recovers. |
+| `RATE_LIMIT` | Org or channel exceeded outbound messaging or webhook throughput limits. | Honor Retry-After headers, queue retries with exponential backoff, and coordinate for sustained spikes. |
+| `VALIDATION_ERROR` | Template context, attachment metadata, or download request failed schema checks. | Correct payload or template data and resubmit after validation passes. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-______________________________________________________________________
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | notifications_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | notifications_api_error_total<br>notify_policy_block_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | notifications_api_error_total<br>notifications_provider_health_total |
+| `RATE_LIMIT` | 429 | No | notify_rate_limit_total |
+| `VALIDATION_ERROR` | 400 | No | notifications_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-## 4) State Management
+## 4) State Management (binding)
 
-**Purpose:** Describe persistence, retention, and access patterns for notifications artifacts. **|**
-**Contract:** `outbox_delivery`, `delivery_receipt`, and `download_token` enforce OCC, secure views, and residency-friendly partitioning. **|**
-**State:** Tables partitioned by month (`created_at`), RLS enforced via secure views, single writer per row through version increments. **|**
-**Failures & handling:** Schema drift or RLS misconfiguration blocks deploys (lint), partitions auto-rotate via ops scripts. **|**
-**Observability:** Metrics `notifications_partition_lag_days`, `notifications_rls_violation_total`; CLI `python ops/db/rotate_partitions.py` monitors rotation. **|**
-**Breadcrumbs:** Migrations `db/migrations/notifications/001_outbox_delivery.sql`, `db/migrations/notifications/002_delivery_receipt.sql`, secure view `db/migrations/security/015_delivery_receipt_secure.sql`, partition rotation script `ops/db/rotate_partitions.py`, tests `tests/platform/db/test_notifications_schema.py`. **|**
-**References:** Appendix B (DB enforcement patterns), Settings Registry §5 (notifications keys).
+**Purpose:** Capture how notification templates, outbox state, and token metadata persist to guarantee delivery guarantees and auditing. **|**
+**Contract:** Maintain append-only outbox entries, versioned templates, and signed download tokens tied to Settings activation and Guardian policies. **|**
+**State:** Outbox tables, template registry, webhook signer state, token ledger, and Settings snapshots. **|**
+**Failures & handling:** Outbox replay errors, template drift, or token mismatches raise `PORTAL_RATE_LIMIT`, Guardian policy blocks, or outbox retry alerts and trigger RB-NOTIFY-* runbooks. **|**
+**Observability:** Dashboards “Notifications – Outbox” and “Notifications – Webhooks”, metrics `notify_outbox_pending_total`, `notify_rate_limit_total`, `notify_webhook_error_total`. **|**
+**Breadcrumbs:** Outbox worker `apps/platform/notifications/outbox.py`, template activation `apps/platform/notifications/template_service.py`, token signer `apps/platform/notifications/webhooks.py`, tests `tests/platform/notifications/test_state_management.py`. **|**
+**References:** Settings §2.6, Guardian §2.3, Observability §4.
 
 ### 4.1 Outbox schema (binding)
 
@@ -581,7 +595,7 @@ ______________________________________________________________________
 
 ## Appendix B — Database enforcement patterns (binding)
 
-*Purpose:* Capture authoritative SQL for portal messaging row-level security, delivery receipt partitioning, and download token enforcement.
+**Purpose:** Capture authoritative SQL for portal messaging row-level security, delivery receipt partitioning, and download token enforcement.
 
 ### B.1 Portal messaging RLS
 

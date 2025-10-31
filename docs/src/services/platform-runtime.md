@@ -47,6 +47,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Platform Architecture Working Group |
@@ -58,8 +59,9 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Site Reliability Engineering |
 | Reviewers | Operations Engineering; Security Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -363,43 +365,39 @@ All namespaces must declare the restricted baseline; violations are blocked by a
 **Observability:** Metrics `api_error_total{code}`, synthetic probes, and alert rules `api_error_unknown_total`/`api_error_rate_spike_total` track drifts. **|**
 **Breadcrumbs:** Schema `spec/schemas/api_error.schema.json`, middleware `apps/platform/api/errors.py`, tests `tests/platform/api/test_api_error_schema.py`, dashboards “API Gateway – Errors”. **|**
 **References:** Settings spec §3.4, Guardian spec §2.2, Notifications spec §3.3, Ops runbooks `RB-API-GATEWAY-ERROR`.
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#platform-runtime)
 
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `POLICY_BLOCK` | Guardian, residency, or settings policy prevented the action. | Surface `details.reason`, remediate policy or obtain an approved waiver before retrying. |
-| `QUARANTINED` | Artifact quarantined for manual review or remediation. | Hold follow-on actions until Guardian releases the artifact; do not retry automatically. |
-| `INTEGRITY_ERROR` | Hash or ETag validation failed for the submitted content. | Recompute digests, re-upload content, and avoid blind retries without correcting the payload. |
-| `VALIDATION_ERROR` | Request payload failed schema or semantic validation. | Inspect `details[]`, correct the offending fields, and resubmit the request. |
+| `AUTH_CLOCK_SKEW` | X-Timestamp fell outside the permitted ±120 second window. | Synchronize system clocks (NTP/Chrony) and retry with an accurate timestamp. |
 | `AUTH_ERROR` | Caller failed authentication or presented an expired token. | Re-authenticate, ensure the correct audience, and retry with a fresh credential. |
-| `AUTH_CLOCK_SKEW` | `X-Timestamp` fell outside the permitted ±120 second window. | Synchronize system clocks (NTP/Chrony) and retry with an accurate timestamp. |
 | `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch or revoked key identifier. | Regenerate the canonical string, rotate keys if necessary, and retry with a valid signature. |
+| `CONFLICT` | Optimistic concurrency or idempotency conflict detected. | Fetch the latest state, update the payload or Idempotency-Key, and retry once. |
+| `INTEGRITY_ERROR` | Hash or ETag validation failed for the submitted content. | Recompute digests, re-upload content, and avoid blind retries without correcting the payload. |
 | `NOT_FOUND` | Resource missing, masked by RLS, or already archived. | Treat as terminal; refresh indices or scope before retrying with a new identifier. |
-| `CONFLICT` | Optimistic concurrency or idempotency conflict detected. | Fetch the latest state, update the payload or `Idempotency-Key`, and retry once. |
-| `RATE_LIMIT` | Rate, quota, or budget exceeded for the caller. | Honor `Retry-After`, apply exponential backoff, and present throttling feedback to operators. |
-| `PROVIDER_DEGRADED` | Downstream dependency unavailable or circuit breaker open. | Implement retry with jitter respecting `Retry-After`; surface degraded status to operators. |
+| `POLICY_BLOCK` | Guardian, residency, or settings policy prevented the action. | Surface details.reason, remediate policy or obtain an approved waiver before retrying. |
+| `PROVIDER_DEGRADED` | Downstream dependency unavailable or circuit breaker open. | Implement retry with jitter respecting Retry-After; surface degraded status to operators. |
+| `QUARANTINED` | Artifact quarantined for manual review or remediation. | Hold follow-on actions until Guardian releases the artifact; do not retry automatically. |
+| `RATE_LIMIT` | Rate, quota, or budget exceeded for the caller. | Honor Retry-After, apply exponential backoff, and present throttling feedback to operators. |
+| `VALIDATION_ERROR` | Request payload failed schema or semantic validation. | Inspect details[], correct the offending fields, and resubmit the request. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-HTTP mapping examples (informative):
-
-- `409 CONFLICT`: `code="CONFLICT"` (stale `version`, duplicate idempotency signature).
-- `412 PRECONDITION_FAILED`: `code="INTEGRITY_ERROR"` (hash mismatch) or `code="POLICY_BLOCK"` (portal invalidation, Guardian override).
-- `429 TOO_MANY_REQUESTS`: `code="RATE_LIMIT"` (RPM/token ceiling); include `Retry-After` header and `details.retry_after_ms` when known.
-- `503 SERVICE_UNAVAILABLE`: `code="PROVIDER_DEGRADED"` (dependency outage, provider throttle).
-
-Client retry guidance (normative):
-
-| Error code | Typical cause | Client action |
-|---|---|---|
-| `CONFLICT` + stale `version` | Optimistic concurrency failure | Re-fetch state, apply latest `version`, retry mutation. |
-| `CONFLICT` + idempotency mismatch | Replayed `Idempotency-Key` with new payload | Regenerate key; ensure body matches original request before retrying. |
-| `RATE_LIMIT` | Per-org or per-user quota exceeded | Honor `Retry-After`, apply exponential backoff, surface warning to operators. |
-| `POLICY_BLOCK` | Guardian or residency guard denied action | Present Guardian reasons, resolve policy violation, retry only after remediation. |
-| `QUARANTINED` | Guardian quarantined artifact or deliverable | Require manual review/unquarantine before retry. |
-| `INTEGRITY_ERROR` | Hash/ETag mismatch on upload/download | Recompute hash, re-upload source, avoid blind retries. |
-| `AUTH_CLOCK_SKEW` | Request timestamp outside tolerance | Sync system clock; retry with corrected timestamp. |
-
-All error responses include `X-Request-ID`; callers must log the value for support. Services echo the `Idempotency-Key` header when present to aid replay diagnostics.
-
-<a id="33-tls-posture"></a>
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `AUTH_CLOCK_SKEW` | 401 | No | api_error_total |
+| `AUTH_ERROR` | 401 | Yes | api_error_total |
+| `AUTH_SIGNATURE_INVALID` | 401 | Yes | api_error_total |
+| `CONFLICT` | 409 | No | api_error_total |
+| `INTEGRITY_ERROR` | 412 | Yes | api_error_total |
+| `NOT_FOUND` | 404 | No | api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | api_error_total<br>api_error_unknown_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | api_error_total<br>api_error_rate_spike_total |
+| `QUARANTINED` | 423 | Yes | api_error_total |
+| `RATE_LIMIT` | 429 | No | api_error_total |
+| `VALIDATION_ERROR` | 400 | No | api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 TLS posture (binding) {#34-tls-posture}
 

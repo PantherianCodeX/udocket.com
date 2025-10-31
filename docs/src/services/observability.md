@@ -47,6 +47,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Observability Engineering Guild |
@@ -60,6 +61,7 @@ ______________________________________________________________________
 | Approvers | Architecture Steering Committee; Security Review Board |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -134,7 +136,7 @@ ______________________________________________________________________
 - When `logging.immutable_sink.enabled=true`, Fluent Bit forks the stream to the immutable WORM bucket alongside metadata captured by Audit §4.
 - Seal runner `ops/audit/seal_runner.py` consumes immutable batches hourly; verification job `ops/audit/verify_seal_chain.py` feeds Audit §5.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Observability `ApiError.code` values so teams updating alert rules, dashboards, or telemetry exports react consistently when operations fail. **|**
 **Contract:** Observability APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to observability-specific workflows. **|**
@@ -143,26 +145,37 @@ ______________________________________________________________________
 **Observability:** Dashboards “Observability – API Errors” and “Ingestion Health” track `observability_api_error_total{code}`, `telemetry_ingest_rate_limit_total`; synthetic alert CRUD flows run per deploy. **|**
 **Breadcrumbs:** Controllers `apps/platform/observability/views.py`, alert orchestrator `apps/platform/observability/alerts.py`, ingest guard `apps/platform/observability/ingest_guard.py`, tests `tests/observability/test_alert_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §2, Ops runbooks `RB-OBS-ALERTS`, `RB-OBS-INGEST`.
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#observability)
 
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `CONFLICT` | Alert/dashboard update failed optimistic concurrency (`expected_version` mismatch). | Re-fetch configuration, merge edits, and retry with the latest `expected_version`. |
-| `POLICY_BLOCK` | Compliance policy forbade enabling an alert (missing escalation/runbook mapping). | Supply required metadata or approvals, then retry once policy passes. |
-| `RATE_LIMIT` | Telemetry ingestion or dashboard export exceeded assigned quota. | Respect `Retry-After`, throttle exporters, and coordinate capacity adjustments. |
-| `PROVIDER_DEGRADED` | Downstream telemetry pipeline (Prometheus, Loki, Tempo) degraded/unavailable. | Buffer locally where possible, alert SRE, and retry after health recovers. |
-| `VALIDATION_ERROR` | Alert/dash payload failed schema validation or referenced unknown metrics. | Correct payload (metrics, labels), rerun validation, and resubmit. |
+| `CONFLICT` | Alert or dashboard update failed optimistic concurrency (expected_version mismatch). | Re-fetch the configuration, merge edits, and retry with the latest expected_version. |
+| `POLICY_BLOCK` | Compliance policy forbade enabling an alert because metadata was missing. | Supply the required escalation or runbook metadata, then retry once policy checks pass. |
+| `PROVIDER_DEGRADED` | Downstream telemetry pipeline (Prometheus, Loki, Tempo) degraded or unavailable. | Buffer locally where possible, alert SRE, and retry after health recovers. |
+| `RATE_LIMIT` | Telemetry ingestion or dashboard export exceeded the assigned quota. | Respect Retry-After headers, throttle exporters, and coordinate capacity adjustments. |
+| `VALIDATION_ERROR` | Alert or dashboard payload failed schema validation or referenced unknown metrics. | Correct the payload (metrics or labels), rerun validation, and resubmit. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-______________________________________________________________________
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | observability_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | observability_api_error_total<br>observability_policy_block_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | observability_api_error_total<br>telemetry_pipeline_health_total |
+| `RATE_LIMIT` | 429 | No | telemetry_ingest_rate_limit_total |
+| `VALIDATION_ERROR` | 400 | No | observability_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ## 4) State Management (binding) {#4-log-schema--redaction}
 
-**Purpose:** Capture persistent telemetry assets—schemas, buffers, indices, and retention policies. **|**
-**Contract:** Maintain 12-hour local buffers, monthly OpenSearch/`audit_event` partitions, ILM policies for hot→warm→cold tiers, and immutable retention per jurisdiction. **|**
-**State:** Otel config maps, Fluent Bit buffers, Kafka topics, OpenSearch ILM policies, WORM storage, `spec/schemas/log_record.schema.json`, `spec/schemas/judgment_event.schema.json`. **|**
-**Failures & handling:** Partition rotation failures raise `audit_partition_rotation_failed_total`; ILM drift triggers `logging_retention_violation_total`; schema drift blocked by CI and RB-LOG-007. **|**
-**Observability:** Dashboards “Logging Retention” and “Immutable Sink”. **|**
-**Breadcrumbs:** ILM configs `infra/logging/opensearch/ilm/`, partition script `ops/db/rotate_partitions.py`, schema tests `tests/logging/test_schema_validation.py`. **|**
-**References:** Audit §4, Settings §7.2, Audit §5 seals.
+**Purpose:** Document how telemetry schemas, retention policies, and redaction rules persist across the observability stack. **|**
+**Contract:** Maintain schema versions, ILM policies, and immutable sinks aligned with Settings; redaction profiles must apply uniformly to every ingestion path. **|**
+**State:** Fluent Bit buffers, Kafka/OTel pipelines, OpenSearch ILM policies, WORM replicas, schema definitions (`log_record`, `judgment_event`). **|**
+**Failures & handling:** ILM or schema drift triggers `logging_retention_violation_total` and RB-OBS-SINK/LOG-007; missing redaction configs block deployments. **|**
+**Observability:** Dashboards “Logging Retention”, “Immutable Sink”, metrics `logging_retention_violation_total`, `telemetry_ingest_rate_limit_total`, `observability_api_error_total`. **|**
+**Breadcrumbs:** ILM configs `infra/logging/opensearch/ilm/`, ingestion guard `apps/platform/observability/ingest_guard.py`, schema tests `tests/observability/test_schema_validation.py`. **|**
+**References:** Audit §4, Settings §4.1, Notifications §3.3.
 
 ### 4.1 Schema & redaction assets
 

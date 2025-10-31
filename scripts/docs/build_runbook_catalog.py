@@ -17,17 +17,21 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
 from scripts.docs.doc_utils import (  # noqa: E402
-    parse_front_matter,
+    begin_auto_generated_marker,
     derive_doc_label,
-    stringify,
+    end_auto_generated_marker,
+    parse_front_matter,
     slugify,
+    stringify,
+    write_or_check,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
 OUTPUT_FILE = SRC_DIR / "ops" / "runbooks.md"
-BEGIN_MARKER = "<!-- BEGIN AUTO-GENERATED RUNBOOK CATALOG -->"
-END_MARKER = "<!-- END AUTO-GENERATED RUNBOOK CATALOG -->"
+MARKER_LABEL = "runbook-catalog"
+BEGIN_MARKER = begin_auto_generated_marker(MARKER_LABEL)
+END_MARKER = end_auto_generated_marker(MARKER_LABEL)
 
 FRONT_MATTER = """---
 title: "uDocket — Ops Appendix: Runbook Catalog"
@@ -51,6 +55,7 @@ approved_date:
 
 DOCUMENT_CONTROLS_TABLE = """## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Platform Operations Team |
@@ -63,7 +68,8 @@ DOCUMENT_CONTROLS_TABLE = """## Document Controls
 | Reviewers | Platform Operations Team |
 | Approvers | Operations Steering Committee |
 | Approved by |  |
-| Approved date |  |"""
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->"""
 
 APPENDIX_OVERVIEW = """## Appendix Overview
 
@@ -275,13 +281,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not OUTPUT_FILE.exists():
             print("Runbook catalog is missing; regenerate it.", file=sys.stderr)
             return 1
-        current = OUTPUT_FILE.read_text(encoding="utf-8")
-        if current != content:
-            print("Runbook catalog is stale. Run build_runbook_catalog.py to refresh.", file=sys.stderr)
-            return 1
-        return 0
+        ok = write_or_check(
+            OUTPUT_FILE,
+            content,
+            check=True,
+            stale_message="Runbook catalog is stale. Run build_runbook_catalog.py to refresh.",
+        )
+        return 0 if ok else 1
 
-    OUTPUT_FILE.write_text(content, encoding="utf-8")
+    write_or_check(OUTPUT_FILE, content, check=False)
     return 0
 
 

@@ -1,0 +1,38 @@
+error_codes:
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Guardian or masking rules blocked a message, attachment, or portal download token."
+    client_action: "Show the Guardian reason, remediate content or policy configuration, and retry once cleared."
+    related_metrics:
+      - notifications_api_error_total
+      - notify_policy_block_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Org or channel exceeded outbound messaging or webhook throughput limits."
+    client_action: "Honor Retry-After headers, queue retries with exponential backoff, and coordinate for sustained spikes."
+    related_metrics:
+      - notify_rate_limit_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Outbox entry replayed with a different payload or stale version."
+    client_action: "Re-fetch outbox status, regenerate the payload or Idempotency-Key, and retry once."
+    related_metrics:
+      - notifications_api_error_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "Email or SMS provider, or webhook endpoint, marked degraded with an open circuit."
+    client_action: "Pause sends for the affected provider, alert operators, and resume once health recovers."
+    related_metrics:
+      - notifications_api_error_total
+      - notifications_provider_health_total
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Template context, attachment metadata, or download request failed schema checks."
+    client_action: "Correct payload or template data and resubmit after validation passes."
+    related_metrics:
+      - notifications_api_error_total

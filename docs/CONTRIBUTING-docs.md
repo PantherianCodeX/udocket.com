@@ -8,6 +8,20 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Keep deep technical content here; keep `docs/src/overview/tdd.md` high‑level and link to services.
 - Use consistent headings (Sentence case). Vale guides tone and terms.
 
+### API error code subsections
+
+- Every service and app specification keeps the prose preamble under `### 3.3 API Error Codes (binding)` using the shared template (`docs/src/services/_template.md` / `docs/src/apps/_template.md`).
+- Author the canonical definitions in `docs/src/services/<service>/error_codes.yaml` (or `docs/src/apps/<app>/error_codes.yaml`). Follow `spec/schemas/api_error_codes.schema.yaml` for required fields (`code`, `http_status`, `audit_required`, `description`, `client_action`) and optional `scenario`/`related_metrics`.
+- Run `python scripts/docs/build_api_error_codes.py` (or `--check`) after editing the YAML. The script rewrites the summary & catalog tables in each spec and regenerates `docs/src/overview/tdd/appendices/api_error_codes.md`.
+- The tables live between HTML comment markers (`<!-- BEGIN/END AUTO-GENERATED: api-error-codes:* -->`). Do not edit them manually—any changes will be overwritten on the next sync.
+- `python scripts/docs/check_structure.py` validates marker placement and ensures every spec with a 3.3 section has a matching `error_codes.yaml`. Lint locally before submitting a PR.
+
+### Auto-generated sections
+
+- All doc automation shares the same marker format: `<!-- BEGIN AUTO-GENERATED: <label> -->` … `<!-- END AUTO-GENERATED: <label> -->`. Do not introduce alternative marker names or shapes.
+- Never hand-edit the contents between these markers. Instead, rerun the owning build script (for example `build_api_error_codes.py`, `build_diagram_index.py`, `build_runbook_catalog.py`, `build_slo_index.py`, or `sync_document_controls.py`).
+- When adding a new generated block, wrap it with the shared helpers in `scripts/docs/doc_utils.py` so future tooling can manage it consistently.
+
 ## Add a diagram (Mermaid)
 
 - Save `.mmd` under the owning doc’s local `diagrams/` folder:

@@ -34,22 +34,28 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
 from scripts.docs.doc_utils import (  # noqa: E402
-    normalize_key,
-    key_variants,
-    format_label,
-    split_table_row,
-    is_table_separator,
-    normalize_table_cell,
     PREAMBLE_DIVIDER,
+    YamlSchema,
+    build_yaml_schema,
+    format_label,
     iter_markdown_tables,
+    iter_yaml_blocks,
+    key_variants,
+    normalize_key,
+    normalize_table_cell,
     parse_front_matter,
-    stringify,    
+    split_table_row,
+    stringify,
+    validate_yaml_schema,
+    yaml,
 )
 
 TEMPLATE_NAME = "_template.md"
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)")
 PREAMBLE_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
+DOCUMENT_CONTROLS_BEGIN = "<!-- BEGIN AUTO-GENERATED: document-controls -->"
+DOCUMENT_CONTROLS_END = "<!-- END AUTO-GENERATED: document-controls -->"
 EXCLUDED_FRONT_MATTER_KEYS = {
     "title",
     "subtitle",
@@ -97,15 +103,8 @@ class SectionSpec:
     preamble_order: Tuple[str, ...]
     preamble_requires_marker: Dict[str, bool]
     tables: Tuple[TableSpec, ...]
-
-
-normalize_key = normalize_key
-key_variants = key_variants
-format_label = format_label
-split_table_row = split_table_row
-is_table_separator = is_table_separator
-normalize_table_cell = normalize_table_cell
-PREAMBLE_DIVIDER = PREAMBLE_DIVIDER
+    yaml_schemas: Tuple[YamlSchema, ...]
+    required_markers: Tuple[str, ...]
 
 
 def build_front_matter_index(front_matter: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -315,12 +314,31 @@ def build_template_spec(template_path: Path) -> List[SectionSpec]:
         content_end = next_idx if next_idx >= 0 else len(lines)
         if content_end <= content_start:
             content_end = len(lines)
+        segment_lines = lines[max(content_start, 0) : min(content_end, len(lines))]
         tables = extract_tables(
-            lines,
-            max(content_start, 0),
-            min(content_end, len(lines)),
+            segment_lines,
+            0,
+            len(segment_lines),
             allow_optional_tags=True,
         )
+        marker_lines: List[str] = []
+        for raw_line in segment_lines:
+            stripped_line = raw_line.strip()
+            if stripped_line.startswith("<!-- BEGIN AUTO-GENERATED") or stripped_line.startswith(
+                "<!-- END AUTO-GENERATED"
+            ):
+                marker_lines.append(stripped_line)
+        yaml_schemas: List[YamlSchema] = []
+        for _, block_lines in iter_yaml_blocks(segment_lines):
+            if yaml is None:
+                raise RuntimeError("PyYAML is required to validate template YAML blocks")
+            try:
+                loaded = yaml.safe_load("\n".join(block_lines))
+            except Exception as exc:
+                raise RuntimeError(f"{template_path}: failed to parse YAML block: {exc}") from exc
+            if loaded is None:
+                loaded = {}
+            yaml_schemas.append(build_yaml_schema(loaded))
         specs.append(
             SectionSpec(
                 numbering=numbering,
@@ -329,6 +347,8 @@ def build_template_spec(template_path: Path) -> List[SectionSpec]:
                 preamble_order=order,
                 preamble_requires_marker=marker_map,
                 tables=tuple(tables),
+                yaml_schemas=tuple(yaml_schemas),
+                required_markers=tuple(marker_lines),
             )
         )
         if order:
@@ -397,6 +417,8 @@ def walk_targets(paths: Iterable[Path]) -> Iterator[Path]:
             if resolved.name != TEMPLATE_NAME and resolved not in seen:
                 seen.add(resolved)
                 yield resolved
+
+
 def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
     errors: List[str] = []
     front_matter = parse_front_matter(lines)
@@ -491,6 +513,11 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
             continue
         errors.append(f"{path}: document controls has unexpected field '{label}'")
 
+    if DOCUMENT_CONTROLS_BEGIN not in lines or DOCUMENT_CONTROLS_END not in lines:
+        errors.append(
+            f"{path}: document controls table must be wrapped with '{DOCUMENT_CONTROLS_BEGIN}' and '{DOCUMENT_CONTROLS_END}' markers"
+        )
+
     return errors
 
 
@@ -544,7 +571,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
             return stripped, None
 
         actual_title_base, _ = _strip_suffix(actual_title)
-        spec_title_base = spec.title.strip()
+        spec_title_base, _ = _strip_suffix(spec.title.strip())
 
         # Enforce title case (excluding suffix) for headings
         def _is_title_case(text: str) -> bool:
@@ -574,6 +601,14 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
             )
 
         preamble_lines = gather_preamble(lines, line_no)
+        start_idx, next_idx = section_bounds.get(numbering, (line_no - 1, len(lines)))
+        section_slice = lines[start_idx : (next_idx if next_idx > start_idx else len(lines))]
+
+        if spec.required_markers:
+            present = {segment.strip() for segment in section_slice}
+            for marker in spec.required_markers:
+                if marker not in present:
+                    errors.append(f"{path}: section {human} missing marker '{marker}' from template")
 
         if spec.preamble_order:
             if not preamble_lines:
@@ -612,13 +647,10 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                 errors.append(f"{path}: section {human} should not have preamble entries but found: {', '.join(labels)}")
 
         if spec.tables:
-            start_idx, next_idx = section_bounds.get(numbering, (line_no - 1, len(lines)))
-            content_start = start_idx + 1
-            content_end = next_idx if next_idx > content_start else len(lines)
             doc_tables = extract_tables(
-                lines,
-                max(content_start, 0),
-                min(content_end, len(lines)),
+                section_slice,
+                0,
+                len(section_slice),
                 allow_optional_tags=False,
             )
             used = [False] * len(doc_tables)
@@ -652,6 +684,52 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                         errors.append(
                             f"{path}: section {human} table '{header_display}' missing row '{row_spec.first_cell}'"
                         )
+
+        if spec.yaml_schemas:
+            start_idx, next_idx = section_bounds.get(numbering, (line_no - 1, len(lines)))
+            content_start = start_idx + 1
+            content_end = next_idx if next_idx > content_start else len(lines)
+            segment_lines = lines[max(content_start, 0) : min(content_end, len(lines))]
+            yaml_blocks = [block for _, block in iter_yaml_blocks(segment_lines)]
+            if not yaml_blocks:
+                errors.append(f"{path}: section {human} missing required YAML block(s) from template")
+            else:
+                used_indices: set[int] = set()
+                for schema in spec.yaml_schemas:
+                    matched = False
+                    for idx_block, block_lines in enumerate(yaml_blocks):
+                        if idx_block in used_indices:
+                            continue
+                        if yaml is None:
+                            errors.append(f"{path}: section {human} cannot validate YAML without PyYAML installed")
+                            matched = True
+                            break
+                        try:
+                            loaded = yaml.safe_load("\n".join(block_lines))
+                        except Exception as exc:
+                            errors.append(f"{path}: section {human} contains invalid YAML: {exc}")
+                            used_indices.add(idx_block)
+                            matched = True
+                            break
+                        if loaded is None:
+                            loaded = {}
+                        if schema.kind == "mapping" and isinstance(loaded, dict):
+                            field_keys = set(schema.fields.keys()) if schema.fields else set()
+                            if field_keys and field_keys.isdisjoint(loaded.keys()):
+                                continue
+                        validation_errors: List[str] = []
+                        validate_yaml_schema(schema, loaded, [], validation_errors)
+                        if validation_errors:
+                            for issue in validation_errors:
+                                errors.append(f"{path}: section {human} YAML {issue}")
+                            used_indices.add(idx_block)
+                            matched = True
+                            break
+                        used_indices.add(idx_block)
+                        matched = True
+                        break
+                    if not matched:
+                        errors.append(f"{path}: section {human} missing required YAML block(s) from template")
 
     return errors
 

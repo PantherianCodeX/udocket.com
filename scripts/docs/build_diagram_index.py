@@ -18,19 +18,23 @@ if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
 
 from scripts.docs.doc_utils import (  # noqa: E402
-    read_markdown_lines,
-    parse_front_matter,
+    begin_auto_generated_marker,
     derive_doc_label,
+    end_auto_generated_marker,
+    parse_front_matter,
+    read_markdown_lines,
+    replace_auto_generated_section,
     stringify,
-    replace_marked_section,
+    write_or_check,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
 APPENDIX_FILE = SRC_DIR / "overview" / "tdd" / "appendices" / "diagrams.md"
 APPENDIX_DIR = APPENDIX_FILE.parent
-BEGIN_MARKER = "<!-- BEGIN AUTO-GENERATED DIAGRAM INDEX -->"
-END_MARKER = "<!-- END AUTO-GENERATED DIAGRAM INDEX -->"
+MARKER_LABEL = "diagram-index"
+BEGIN_MARKER = begin_auto_generated_marker(MARKER_LABEL)
+END_MARKER = end_auto_generated_marker(MARKER_LABEL)
 
 
 @dataclass
@@ -196,7 +200,7 @@ def build_content() -> str:
     groups = build_groups(diagrams)
     appendix_text = APPENDIX_FILE.read_text(encoding="utf-8")
     generated = render_groups(groups)
-    return replace_marked_section(appendix_text, BEGIN_MARKER, END_MARKER, generated)
+    return replace_auto_generated_section(appendix_text, MARKER_LABEL, generated)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -205,16 +209,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     updated_content = build_content()
-
-    if args.check:
-        current = APPENDIX_FILE.read_text(encoding="utf-8")
-        if current != updated_content:
-            print("Diagrams index is stale. Run build_diagram_index.py to refresh.", file=sys.stderr)
-            return 1
-        return 0
-
-    APPENDIX_FILE.write_text(updated_content, encoding="utf-8")
-    return 0
+    ok = write_or_check(
+        APPENDIX_FILE,
+        updated_content,
+        check=args.check,
+        stale_message="Diagrams index is stale. Run build_diagram_index.py to refresh.",
+    )
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

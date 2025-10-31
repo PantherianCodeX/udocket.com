@@ -15,5 +15,13 @@
   ],
   "reportMissingTypeStubs": "warning",
   "reportAttributeAccessIssue": "warning",
-  "reportMissingImports": "warning"
+  "reportMissingImports": "warning",
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "reportUnusedClass": "warning",
+  "reportUnusedFunction": "warning",
+  "reportArgumentType": "warning",
+  "reportUnnecessaryTypeIgnoreComment": "warning",
+  "reportUnnecessaryCast": "warning",
+  "reportUnnecessaryIsInstance": "warning"
 }

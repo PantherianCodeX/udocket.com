@@ -54,6 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Worker Cluster Working Group |
@@ -65,8 +66,9 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Operations Engineering |
 | Reviewers | SRE Manager; Applied AI Programs |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -186,7 +188,7 @@ ______________________________________________________________________
 - `POST /api/v1/jobs/{id}:pause|resume|cancel|retry` enforce OCC on `version`, require `Idempotency-Key`, and propagate `retry_token` to keep retries idempotent.
 - Responses include current status, warnings (`BUDGET_HELD`, `REGION_DRIFT`), and updated `retry_generation`.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate worker-control `ApiError.code` values so API clients and automation react consistently. **|**
 **Contract:** Worker Cluster reuses the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and applies the scenarios below for job control, upload finalize, and pipeline orchestration requests. **|**
@@ -195,16 +197,27 @@ ______________________________________________________________________
 **Observability:** Dashboards “Worker Cluster – API” and “Upload Finalize” watch `job_api_error_total{code}`, `upload_finalize_total{status}`; synthetic controls exercise pause/resume/cancel paths. **|**
 **Breadcrumbs:** Controllers `apps/platform/jobs/views.py`, upload guard `apps/platform/files/views.py::finalize_upload`, idempotency helpers `packages/udocket_core/idem/store.py`, tests `tests/platform/jobs/test_job_controls.py`, `tests/platform/files/test_upload_finalize.py`. **|**
 **References:** Platform Runtime §3.3, Settings keys `api.idempotency.*`, Ops runbooks `RB-JOB-WATCHDOG`, `RB-UPLOAD-SCAN`.
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#worker-cluster)
 
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `CONFLICT` | Idempotency payload hash mismatch or stale `version` when retrying job controls. | Re-fetch job state, regenerate `Idempotency-Key`, and retry once with updated payload. |
-| `POLICY_BLOCK` | Guardian/residency guard or budget hold prevented job execution. | Surface Guardian reason or budget hold, remediate policy (waiver, quota) before retrying. |
+| `CONFLICT` | Idempotency payload hash mismatch or stale version when retrying job controls. | Re-fetch job state, regenerate the Idempotency-Key, and retry once with the updated payload. |
 | `INTEGRITY_ERROR` | Upload finalize detected a hash mismatch against staged content. | Re-upload chunks with the correct digest and avoid blind retries until integrity matches. |
-| `PROVIDER_DEGRADED` | Downstream provider/queue paused (`PAUSED_AWAITING_PROVIDER`, circuit open). | Respect backoff, surface degraded status to operators, and retry when health probes recover. |
-| `RATE_LIMIT` | Org or job-kind concurrency ceiling exceeded. | Honor `Retry-After`, queue retries with exponential backoff, and reduce burst size. |
+| `POLICY_BLOCK` | Guardian or residency guard, or a budget hold, prevented job execution. | Surface Guardian reason or budget hold, remediate policy or quota before retrying. |
+| `PROVIDER_DEGRADED` | Downstream provider or queue paused (PAUSED_AWAITING_PROVIDER, circuit open). | Respect backoff, surface degraded status to operators, and retry when health probes recover. |
+| `RATE_LIMIT` | Org or job-kind concurrency ceiling exceeded. | Honor Retry-After, queue retries with exponential backoff, and reduce burst size. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
-<a id="worker-api-idempotency"></a>
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | job_api_error_total<br>idempotency_conflict_total |
+| `INTEGRITY_ERROR` | 412 | Yes | job_api_error_total<br>upload_finalize_total |
+| `POLICY_BLOCK` | 403 | Yes | job_api_error_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | job_api_error_total<br>job_dependency_degraded_total |
+| `RATE_LIMIT` | 429 | No | job_api_error_total<br>job_rate_limit_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 Idempotency store & replay headers (binding) {#34-idempotency-store-replay-headers}
 

@@ -22,6 +22,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Platform Operations Team |
@@ -35,6 +36,7 @@ ______________________________________________________________________
 | Approvers | Operations Steering Committee |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ______________________________________________________________________
 
@@ -44,7 +46,7 @@ This appendix consolidates runbook sections from service and application specifi
 
 ______________________________________________________________________
 
-<!-- BEGIN AUTO-GENERATED RUNBOOK CATALOG -->
+<!-- BEGIN AUTO-GENERATED: runbook-catalog -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_runbook_catalog.py` to refresh. -->
 
 ## Audit & Evidence — 8.3 Runbooks & Drills (binding) {#audit-evidence-8-3-runbooks-drills-binding}
@@ -622,4 +624,4 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 - Quarterly drills exercise SSE resiliency, portal abuse response, accessibility audits, and assistant abuse scenarios with evidence in `ops/webapp/drills/<date>/`.
 - Drill scheduler `ops/scripts/webapp/schedule_drills.py` tracks cadence and ownership; missed drills block release approvals until evidence uploaded.
 - Docs lint, governance dashboards, and App.N reviews verify runbook freshness before production changes.
-<!-- END AUTO-GENERATED RUNBOOK CATALOG -->
+<!-- END AUTO-GENERATED: runbook-catalog -->

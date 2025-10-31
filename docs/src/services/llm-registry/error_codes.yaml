@@ -1,0 +1,39 @@
+error_codes:
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Residency, waiver, or moderation policy prevents provider or model activation."
+    client_action: "Present the blocking reason to operators, adjust residency or masking settings, or obtain a waiver before retrying activation."
+    related_metrics:
+      - llm_registry_api_error_total
+      - llm_circuit_state
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Provider catalog entry failed schema, checksum, or residency coverage validation."
+    client_action: "Fix catalog metadata (regions, digests, pricing), rerun Settings activation, and revalidate."
+    related_metrics:
+      - llm_registry_api_error_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Concurrent activation modified the same provider or version."
+    client_action: "Refresh the catalog snapshot, increment the provider version, and retry with a fresh Idempotency-Key."
+    related_metrics:
+      - llm_registry_api_error_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "Registry placed provider circuit into OPEN or PAUSED_AWAITING_PROVIDER."
+    client_action: "Respect the degraded status, shift traffic using the fallback chain, and retry once health returns to CLOSED."
+    related_metrics:
+      - llm_circuit_state
+      - llm_registry_api_error_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Org exceeded moderation or inference budget thresholds enforced by the registry."
+    client_action: "Honor Retry-After, shed traffic, and coordinate a FinOps waiver before resuming."
+    related_metrics:
+      - llm_registry_api_error_total
+      - llm_cost_estimate_total

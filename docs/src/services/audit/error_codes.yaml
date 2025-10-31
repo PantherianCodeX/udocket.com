@@ -1,0 +1,38 @@
+error_codes:
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Legal hold, residency, or waiver guard prevents evidence release or deletion."
+    client_action: "Surface Guardian/waiver reason, engage RB-AUDIT-004 or RB-WAIVER-GOV before retrying."
+    related_metrics:
+      - audit_api_error_total
+      - waiver_expiring_total
+  - code: QUARANTINED
+    http_status: 423
+    audit_required: true
+    description: "Evidence quarantined pending Guardian or manual review."
+    client_action: "Escalate to Guardian reviewers; do not retry until quarantine cleared."
+    related_metrics:
+      - audit_api_error_total
+  - code: INTEGRITY_ERROR
+    http_status: 412
+    audit_required: true
+    description: "Seal manifest hash mismatch or immutable sink divergence detected."
+    client_action: "Rebuild manifests via `ops/audit/rebuild_manifest.py`, regenerate seal, then retry once integrity is restored."
+    related_metrics:
+      - audit_api_error_total
+      - audit_seal_errors_total
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Waiver or DSAR payload fails schema or policy validation."
+    client_action: "Inspect `details[]`, correct the input, and resubmit."
+    related_metrics:
+      - audit_api_error_total
+  - code: NOT_FOUND
+    http_status: 404
+    audit_required: false
+    description: "Evidence bundle absent or redacted per retention policy."
+    client_action: "Treat as terminal; refresh catalog or request prior version rather than retrying blindly."
+    related_metrics:
+      - audit_api_error_total

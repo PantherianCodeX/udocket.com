@@ -54,6 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Agent Platform Working Group |
@@ -65,8 +66,9 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Applied AI Engineering |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -183,7 +185,7 @@ ______________________________________________________________________
 - Activation safety: contract tests validate schema hashes, stage wiring, and GraphRunner compatibility before promotion. Activations follow blue/green rollout; manifests capture which orgs completed cutover.
 - Versioning: stage definitions are additive; prior versions remain callable for queued jobs & replays until Guardian signs off; deletion blocked until archival manifests exist.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate LangGraph agent `ApiError.code` values so service clients, worker orchestration, and UI flows respond deterministically. **|**
 **Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
@@ -193,13 +195,27 @@ ______________________________________________________________________
 **Breadcrumbs:** Controllers `apps/platform/agents/views.py`, runtime orchestrator `packages/udocket_core/agents/runtime.py`, Guardian bridge `packages/udocket_core/agents/guardian.py`, tests `tests/platform/agents/test_launch_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §5.4, Worker Cluster spec §3.4, Guardian spec §2.3, Ops runbooks `RB-AGENT-SHADOW`, `RB-JOB-WATCHDOG`.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#langgraph-agent-orchestration)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `POLICY_BLOCK` | Guardian/residency guard or waiver policy rejected a pipeline launch or artifact promotion. | Present Guardian reason codes, remediate policy inputs, or seek waiver approval before retrying. |
-| `CONFLICT` | Idempotency key replay with different payload or stale manifest `version`. | Read the latest manifest, regenerate the payload, and retry with a fresh `Idempotency-Key`. |
-| `PROVIDER_DEGRADED` | LLM provider or speech service unavailable; fallback chain exhausted. | Record degraded status, halt automatic retries, and resume once health probes report recovery. |
+| `CONFLICT` | Idempotency key replay with a different payload or stale manifest version. | Read the latest manifest, regenerate the payload, and retry with a fresh Idempotency-Key. |
+| `POLICY_BLOCK` | Guardian or residency guard rejected a pipeline launch or artifact promotion. | Present Guardian reason codes, remediate policy inputs, or seek waiver approval before retrying. |
+| `PROVIDER_DEGRADED` | LLM provider or speech service unavailable and fallback chain exhausted. | Record degraded status, halt automatic retries, and resume once health probes report recovery. |
 | `QUARANTINED` | Generated artifact or intermediate output quarantined pending Guardian review. | Route to reviewer workflow, capture remediation notes, and relaunch only after clearance. |
-| `RATE_LIMIT` | Org/agent concurrency or FinOps budget limit exceeded. | Honour `Retry-After`, shed background runs, and reschedule once budget resets. |
+| `RATE_LIMIT` | Org or agent exceeded concurrency or FinOps budgets. | Honour Retry-After, shed background runs, and reschedule once the budget resets. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | agent_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | agent_guardian_block_total<br>agent_api_error_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | agent_api_error_total |
+| `QUARANTINED` | 423 | Yes | agent_guardian_block_total |
+| `RATE_LIMIT` | 429 | No | agent_api_error_total<br>agent_rate_limit_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 LangGraph Tool Registry & Onboarding (binding)
 

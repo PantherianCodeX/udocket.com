@@ -58,6 +58,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | uDocket Platform Architecture Team; Localization & Policy Program Leads |
@@ -69,8 +70,9 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering; Localization & Policy Program |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -313,7 +315,7 @@ ______________________________________________________________________
 - Policy Agent (OPA) deployments: sidecars colocated with Guardian, Portal, and workers for low latency; centralized cluster distributes discovery bundles. Metrics `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` feed the “OPA Policy Plane” dashboard.
 - Local hot-reload tooling (`scripts/dev/run_lpe_hot_reload.py`) compiles sandbox bundles, pushes to a developer OPA, and diffs PolicyContext digests without staging deploys; snapshots attach to PRs modifying policy or locale packs.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate LPE-specific `ApiError.code` values so downstream services and automation interpret failures consistently. **|**
 **Contract:** LPE APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below describe how those codes manifest during policy compilation and evaluation. **|**
@@ -323,13 +325,27 @@ ______________________________________________________________________
 **Breadcrumbs:** Controllers `apps/platform/policy/views.py`, compiler `packages/udocket_core/policy/compiler.py`, runtime `packages/udocket_core/policy/runtime.py`, tests `tests/platform/policy/test_compile_api.py`, `tests/platform/policy/test_evaluate_api.py`. **|**
 **References:** Platform Runtime §3.3, Reference Manager spec §3.4, Settings spec §3.4, Guardian spec §2.2.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#localization-policy-engine)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `POLICY_BLOCK` | Evaluation detected residency, waiver, or privacy violations that must block the requested action. | Present `policy_block_code`/waiver metadata to operators, remediate configuration, or obtain waiver before retrying. |
-| `VALIDATION_ERROR` | Policy bundle or context payload failed schema or semantic validation. | Inspect `details[]`, correct inputs (missing locales, duplicate rules), and resubmit compile/evaluate. |
-| `CONFLICT` | Concurrent activation changed the same PolicyContext version/hash. | Refresh digests via conditional GET, merge changes, and retry with updated `If-Match`/`Idempotency-Key`. |
-| `PROVIDER_DEGRADED` | Reference Manager or policy bundle fetch unavailable; fallback chain exhausted. | Pause rollouts, retry once dependencies healthy, and notify Ops of degraded state. |
-| `RATE_LIMIT` | Org exceeded compilation/evaluation budget or concurrency ceiling. | Honor `Retry-After`, stagger batch compiles, and request higher limits through governance. |
+| `CONFLICT` | Concurrent activation changed the same PolicyContext version or hash. | Refresh digests via conditional GET, merge changes, and retry with updated If-Match or Idempotency-Key headers. |
+| `POLICY_BLOCK` | Evaluation detected residency, waiver, or privacy violations that must block the requested action. | Present policy_block_code and waiver metadata to operators, remediate configuration, or obtain a waiver before retrying. |
+| `PROVIDER_DEGRADED` | Reference Manager or policy bundle fetch unavailable; fallback chain exhausted. | Pause rollouts, retry once dependencies are healthy, and notify Ops of the degraded state. |
+| `RATE_LIMIT` | Org exceeded compilation or evaluation budget or concurrency ceiling. | Honor Retry-After headers, stagger batch compiles, and request higher limits through governance. |
+| `VALIDATION_ERROR` | Policy bundle or context payload failed schema or semantic validation. | Inspect details[], correct inputs such as missing locales or duplicate rules, and resubmit compile/evaluate. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CONFLICT` | 409 | No | lpe_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | lpe_policy_block_total<br>guardian_policy_block_total |
+| `PROVIDER_DEGRADED` | 503 | Yes | lpe_api_error_total<br>lpe_compiler_duration_seconds |
+| `RATE_LIMIT` | 429 | No | lpe_api_error_total<br>lpe_rate_limit_total |
+| `VALIDATION_ERROR` | 400 | No | lpe_api_error_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 Downstream service integrations (normative)
 

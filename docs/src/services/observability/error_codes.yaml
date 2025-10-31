@@ -1,0 +1,38 @@
+error_codes:
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Alert or dashboard update failed optimistic concurrency (expected_version mismatch)."
+    client_action: "Re-fetch the configuration, merge edits, and retry with the latest expected_version."
+    related_metrics:
+      - observability_api_error_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Compliance policy forbade enabling an alert because metadata was missing."
+    client_action: "Supply the required escalation or runbook metadata, then retry once policy checks pass."
+    related_metrics:
+      - observability_api_error_total
+      - observability_policy_block_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Telemetry ingestion or dashboard export exceeded the assigned quota."
+    client_action: "Respect Retry-After headers, throttle exporters, and coordinate capacity adjustments."
+    related_metrics:
+      - telemetry_ingest_rate_limit_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "Downstream telemetry pipeline (Prometheus, Loki, Tempo) degraded or unavailable."
+    client_action: "Buffer locally where possible, alert SRE, and retry after health recovers."
+    related_metrics:
+      - observability_api_error_total
+      - telemetry_pipeline_health_total
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Alert or dashboard payload failed schema validation or referenced unknown metrics."
+    client_action: "Correct the payload (metrics or labels), rerun validation, and resubmit."
+    related_metrics:
+      - observability_api_error_total

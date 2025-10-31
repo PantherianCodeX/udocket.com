@@ -18,11 +18,12 @@ def _setup_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     appendix = docs_root / "overview" / "tdd" / "appendices" / "slo_index.md"
     appendix.parent.mkdir(parents=True, exist_ok=True)
     appendix.write_text(
-        "\n".join(
-            [
-                "Intro", "<!-- BEGIN AUTO-GENERATED SLO INDEX -->", "PLACEHOLDER", "<!-- END AUTO-GENERATED SLO INDEX -->",
-            ]
-        ),
+        "\n".join([
+            "Intro",
+            bsi.BEGIN_MARKER,
+            "PLACEHOLDER",
+            bsi.END_MARKER,
+        ]),
         encoding="utf-8",
     )
 

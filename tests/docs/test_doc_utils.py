@@ -243,3 +243,161 @@ def test_iter_markdown_tables_skips_extra_separators() -> None:
     assert len(tables) == 1
     _, rows = tables[0]
     assert "| item | data |" in rows
+
+
+def test_iter_yaml_blocks_detects_blocks() -> None:
+    lines = [
+        "Intro",
+        "```yaml",
+        "key: value",
+        "```",
+    ]
+
+    blocks = list(du.iter_yaml_blocks(lines))
+
+    assert len(blocks) == 1
+    start, block_lines = blocks[0]
+    assert start == 1
+    assert block_lines == ["key: value"]
+
+
+def test_is_optional_yaml_value_handles_variants() -> None:
+    assert du.is_optional_yaml_value("[optional]") is True
+    assert du.is_optional_yaml_value("optional") is True
+    assert du.is_optional_yaml_value("required") is False
+
+
+def test_build_yaml_schema_marks_optional_sequence() -> None:
+    schema = du.build_yaml_schema(["[optional]"])
+
+    assert schema.kind == "sequence"
+    assert schema.optional is True
+
+
+def test_validate_yaml_schema_allows_missing_optional_sequence() -> None:
+    schema = du.build_yaml_schema({"metrics": ["[optional]"]})
+    errors: list[str] = []
+
+    du.validate_yaml_schema(schema, {}, [], errors)
+
+    assert errors == []
+
+
+def test_validate_yaml_schema_rejects_wrong_type() -> None:
+    schema = du.build_yaml_schema({"metrics": ["value"]})
+    errors: list[str] = []
+
+    du.validate_yaml_schema(schema, {"metrics": "not-a-list"}, [], errors)
+
+    assert any("expected list" in error for error in errors)
+
+
+def test_begin_end_auto_generated_marker() -> None:
+    begin = du.begin_auto_generated_marker("example-tag")
+    end = du.end_auto_generated_marker("example-tag")
+    assert begin == "<!-- BEGIN AUTO-GENERATED: example-tag -->"
+    assert end == "<!-- END AUTO-GENERATED: example-tag -->"
+
+
+def test_replace_auto_generated_section() -> None:
+    original = "\n".join(
+        [
+            "A",
+            du.begin_auto_generated_marker("sample"),
+            "old",
+            du.end_auto_generated_marker("sample"),
+            "B",
+        ]
+    )
+    updated = du.replace_auto_generated_section(original, "sample", "new content")
+    assert "new content" in updated
+    assert "old" not in updated
+
+
+def test_write_or_check(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / "file.txt"
+    # Write when file missing
+    result_write = du.write_or_check(path, "hello\n", check=False)
+    assert result_write is True
+    assert path.read_text(encoding="utf-8") == "hello\n"
+
+    # Check success
+    assert du.write_or_check(path, "hello\n", check=True) is True
+
+    # Check failure with message
+    assert (
+        du.write_or_check(path, "bye\n", check=True, stale_message="stale message")
+        is False
+    )
+    captured = capsys.readouterr()
+    assert "stale message" in captured.err
+
+
+def test_unescape_markdown_removes_escapes() -> None:
+    assert du.unescape_markdown(r"\| foo \* bar") == "| foo * bar"
+
+
+def test_split_table_row_handles_backticks() -> None:
+    row = r"| `a\|b` | value\|data |"
+    cells = du.split_table_row(row)
+    assert cells == ["`a\\|b`", "value\\|data"]
+
+
+def test_build_document_control_map_include_additional() -> None:
+    front = {
+        "authors": ["Alice"],
+        "owners": ["Ops"],
+        "custom_field": "Custom value",
+    }
+    base = du.build_document_control_map(front, include_additional=False)
+    assert "Custom Field" not in base
+
+    extended = du.build_document_control_map(front, include_additional=True)
+    assert extended["Custom Field"] == "Custom value"
+
+
+def test_parse_markdown_table_returns_records() -> None:
+    rows = [
+        "| A | B |",
+        "| --- | --- |",
+        "| one | two |",
+        "| three |",
+        "| | |",
+    ]
+
+    records = du.parse_markdown_table(rows)
+
+    assert records[0]["A"] == "one"
+    assert records[1]["B"] == ""
+
+
+def test_iter_yaml_blocks_multiple() -> None:
+    lines = [
+        "```yaml",
+        "first: block",
+        "```",
+        "",
+        "```yaml",
+        "second: block",
+        "```",
+    ]
+
+    blocks = list(du.iter_yaml_blocks(lines))
+
+    assert len(blocks) == 2
+    assert blocks[0][1] == ["first: block"]
+    assert blocks[1][1] == ["second: block"]
+
+
+def test_validate_yaml_schema_errors_and_sequences() -> None:
+    schema = du.build_yaml_schema({"code": "value", "notes": ["[optional]"]})
+    errors: list[str] = []
+
+    du.validate_yaml_schema(schema, None, [], errors)
+    du.validate_yaml_schema(schema, {"notes": ["entry1", "entry2"]}, [], errors)
+
+    assert any("<root>: value missing" in err for err in errors)
+
+    errors.clear()
+    du.validate_yaml_schema(schema, {"code": "ok"}, [], errors)
+    assert errors == []

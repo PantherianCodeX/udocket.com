@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 from textwrap import dedent
+from typing import Callable, List
 
 import pytest
 
@@ -81,12 +82,59 @@ approved_date:
 ## 3) Extras
 
 Body text.
+
+### 3.3 API Error Codes (binding)
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `FOO` | Something happened | Do a thing |
+
+```yaml
+error_codes:
+  - code: "<CODE>"
+    http_status: "<STATUS>"
+    audit_required: "<true|false>"
+    description: "<Description>"
+    client_action: "<Guidance>"
+    related_metrics: [optional]
+```
 """
 
 
 def _write(path: Path, content: str) -> Path:
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _strip_yaml_block(content: str) -> str:
+    lines = content.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip().startswith("```yaml"))
+    except StopIteration:
+        return content
+    end = start + 1
+    while end < len(lines) and not lines[end].strip().startswith("```"):
+        end += 1
+    if end < len(lines):
+        del lines[start : end + 1]
+    else:
+        del lines[start:]
+    return "\n".join(lines)
+
+
+def _edit_yaml_block(content: str, transform: Callable[[List[str]], List[str]]) -> str:
+    lines = content.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip().startswith("```yaml"))
+    except StopIteration:
+        return content
+    end = start + 1
+    while end < len(lines) and not lines[end].strip().startswith("```"):
+        end += 1
+    block = lines[start + 1 : end]
+    new_block = transform(block)
+    lines = lines[: start + 1] + new_block + lines[end:]
+    return "\n".join(lines)
 
 
 @pytest.fixture()
@@ -215,6 +263,7 @@ approved_date:
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | ----- | ----- |
 | Authors | Alice |
@@ -228,6 +277,7 @@ approved_date:
 | Approvers | Approver |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ## 1) Purpose
 **Purpose:** Template **|**
@@ -247,6 +297,19 @@ approved_date:
 **References:** Template
 ## 3) Extras
 Body text.
+### 3.3 API Error Codes (binding)
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `FOO` | Something happened | Do a thing |
+
+```yaml
+error_codes:
+  - code: FOO
+    http_status: 400
+    audit_required: false
+    description: Something happened
+    client_action: Do a thing
+```
 """
     path.write_text(content, encoding="utf-8")
     return path
@@ -331,6 +394,8 @@ def test_validate_sections_table_errors() -> None:
                 rows=(TableRowSpec(first_cell="foo", optional=False),),
             ),
         ),
+        yaml_schemas=(),
+        required_markers=(),
     )
 
     no_table_lines = ["## 1) Section", "**Purpose:** Demo **|**"]
@@ -357,6 +422,58 @@ def test_validate_sections_table_errors() -> None:
     assert any("missing row 'foo'" in issue for issue in issues)
 
 
+def test_validate_sections_requires_yaml_block(tmp_path: Path, template_path: Path) -> None:
+    specs = build_template_spec(template_path)
+    document = _write(tmp_path / "service.md", _strip_yaml_block(TEMPLATE_CONTENT))
+
+    errors = validate_sections(document, specs, document.read_text(encoding="utf-8").splitlines())
+
+    assert any("missing required YAML block" in error for error in errors)
+
+
+def test_validate_sections_yaml_schema_enforced(tmp_path: Path, template_path: Path) -> None:
+    specs = build_template_spec(template_path)
+    document = _write(
+        tmp_path / "service.md",
+        _edit_yaml_block(
+            TEMPLATE_CONTENT,
+            lambda block: [line for line in block if not line.strip().startswith("client_action:")],
+        ),
+    )
+
+    errors = validate_sections(document, specs, document.read_text(encoding="utf-8").splitlines())
+
+    assert any("client_action" in error for error in errors)
+
+
+def test_validate_sections_accepts_optional_metrics(tmp_path: Path, template_path: Path) -> None:
+    specs = build_template_spec(template_path)
+    document = _write(
+        tmp_path / "service.md",
+        _edit_yaml_block(
+            TEMPLATE_CONTENT,
+            lambda block: [line for line in block if not line.strip().startswith("related_metrics:")],
+        ),
+    )
+
+    errors = validate_sections(document, specs, document.read_text(encoding="utf-8").splitlines())
+
+    assert errors == []
+
+
+def test_validate_sections_skips_unrelated_yaml_blocks(tmp_path: Path, template_path: Path) -> None:
+    specs = build_template_spec(template_path)
+    extra_block = """### 3.3 API Error Codes (binding)\n\n```yaml\napiVersion: v1\n```\n\n"""
+    document = _write(
+        tmp_path / "service.md",
+        TEMPLATE_CONTENT.replace("### 3.3 API Error Codes (binding)\n\n", extra_block),
+    )
+
+    errors = validate_sections(document, specs, document.read_text(encoding="utf-8").splitlines())
+
+    assert errors == []
+
+
 def test_validate_sections_heading_with_anchor() -> None:
     spec = SectionSpec(
         numbering=(1,),
@@ -365,6 +482,8 @@ def test_validate_sections_heading_with_anchor() -> None:
         preamble_order=("Purpose",),
         preamble_requires_marker={"Purpose": False},
         tables=(),
+        yaml_schemas=(),
+        required_markers=(),
     )
     lines = ["## 1) Heading {#anchor}", "**Purpose:** Demo"]
 
@@ -433,6 +552,7 @@ approved_date:
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Alice |
@@ -446,6 +566,7 @@ approved_date:
 | Approvers | Approver |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 """,
     )
 
@@ -465,48 +586,7 @@ def test_main_skips_disabled_template(
     services.mkdir(parents=True)
     template = services / "_template.md"
     template.write_text("<!-- template:disabled -->", encoding="utf-8")
-    doc = services / "service.md"
-    doc.write_text(
-        dedent(
-            """---
-            title: Sample
-            subtitle: Example
-            authors:
-              - Alice
-            version: 1.0
-            status: draft
-            classification: Confidential
-            last_updated: 2025-01-01
-            updated_by: Alice
-            owners:
-              - Team
-            reviewers:
-              - Reviewer
-            approvers:
-              - Approver
-            approved_by:
-            approved_date:
-            ---
-
-            ## Document Controls
-
-            | Field | Value |
-            | --- | --- |
-            | Authors | Alice |
-            | Version | 1.0 |
-            | Status | draft |
-            | Classification | Confidential |
-            | Last updated | 2025-01-01 |
-            | Updated by | Alice |
-            | Owners | Team |
-            | Reviewers | Reviewer |
-            | Approvers | Approver |
-            | Approved by |  |
-            | Approved date |  |
-            """
-        ),
-        encoding="utf-8",
-    )
+    doc = _write_service_doc(services / "service.md")
 
     monkeypatch.setattr(
         cs,
@@ -603,8 +683,21 @@ def test_structure_validation_passes_with_matching_headings(tmp_path: Path, temp
 **References:** Doc
 ## 3) Extras
 Body text.
+### 3.3 API Error Codes (binding)
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `FOO` | Demo | Do a thing |
+
+```yaml
+error_codes:
+  - code: FOO
+    http_status: 400
+    audit_required: false
+    description: Demo
+    client_action: Do a thing
+```
 """,
-    )
+        )
 
     errors = validate_sections(doc, specs, doc.read_text(encoding="utf-8").splitlines())
 
@@ -633,8 +726,21 @@ def test_structure_validation_allows_binding_suffix(tmp_path: Path, template_pat
 **References:** Doc
 ## 3) Extras
 Body text.
+### 3.3 API Error Codes (binding)
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `FOO` | Demo | Do a thing |
+
+```yaml
+error_codes:
+  - code: FOO
+    http_status: 400
+    audit_required: false
+    description: Demo
+    client_action: Do a thing
+```
 """,
-    )
+        )
 
     errors = validate_sections(doc, specs, doc.read_text(encoding="utf-8").splitlines())
 
@@ -876,6 +982,7 @@ def test_document_controls_additional_fields_valid() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Alice |",
@@ -890,6 +997,7 @@ def test_document_controls_additional_fields_valid() -> None:
         "| Approved by |  |",
         "| Approved date |  |",
         "| Extra Meta | Extra data |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -916,6 +1024,7 @@ def test_document_controls_additional_field_missing_row_detected() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Alice |",
@@ -929,6 +1038,7 @@ def test_document_controls_additional_field_missing_row_detected() -> None:
         "| Approvers | Approver |",
         "| Approved by |  |",
         "| Approved date |  |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -954,6 +1064,7 @@ def test_document_controls_unexpected_field_detected() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Alice |",
@@ -968,6 +1079,7 @@ def test_document_controls_unexpected_field_detected() -> None:
         "| Approved by |  |",
         "| Approved date |  |",
         "| Custom Field | 123 |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -998,6 +1110,7 @@ def test_document_controls_missing_field_detected() -> None:
         "",
         "## Document controls",
         "",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | |",
@@ -1011,6 +1124,7 @@ def test_document_controls_missing_field_detected() -> None:
         "| Approvers | Approver |",
         "| Approved by | |",
         "| Approved date | |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -1039,6 +1153,7 @@ def test_document_controls_mismatch_detected() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Someone Else |",
@@ -1052,6 +1167,7 @@ def test_document_controls_mismatch_detected() -> None:
         "| Approvers | Approver |",
         "| Approved by | |",
         "| Approved date | |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -1080,6 +1196,7 @@ def test_document_controls_optional_fields_blank() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Author Name |",
@@ -1093,6 +1210,7 @@ def test_document_controls_optional_fields_blank() -> None:
         "| Approvers | Approver |",
         "| Approved by | |",
         "| Approved date | |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -1118,6 +1236,7 @@ def test_document_controls_missing_updated_by_field_detected() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Alice |",
@@ -1130,6 +1249,7 @@ def test_document_controls_missing_updated_by_field_detected() -> None:
         "| Approvers | Approver |",
         "| Approved by | |",
         "| Approved date | |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
     ]
 
     errors = check_document_controls(Path("service.md"), lines)
@@ -1155,6 +1275,7 @@ def test_document_controls_duplicate_field_detected() -> None:
         "approved_date: ",
         "---",
         "## Document controls",
+        "<!-- BEGIN AUTO-GENERATED: document-controls -->",
         "| Field | Value |",
         "| ----- | ----- |",
         "| Authors | Alice |",
@@ -1167,6 +1288,7 @@ def test_document_controls_duplicate_field_detected() -> None:
         "| Owners | Duplicate |",
         "| Reviewers | Reviewer |",
         "| Approvers | Approver |",
+        "<!-- END AUTO-GENERATED: document-controls -->",
         "| Approved by | |",
         "| Approved date | |",
     ]

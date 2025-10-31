@@ -1,0 +1,30 @@
+error_codes:
+  - code: CHAT_DISABLED
+    http_status: 403
+    audit_required: false
+    description: "Org-level settings or Guardian policy disabled assistants for the active org or case."
+    client_action: "Display the assistant-disabled banner, suppress retries, direct operators to review Settings or Guardian waivers."
+    related_metrics:
+      - ui_api_error_total
+  - code: PORTAL_DOWNLOAD_PRECONDITION
+    http_status: 412
+    audit_required: false
+    description: "Portal download request failed the If-Match guard or token validation."
+    client_action: "Prompt the client to refresh the deliverable list, regenerate the download link, and avoid automatic retry loops."
+    related_metrics:
+      - portal_download_error_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Guardian or residency guard blocked an action invoked from the UI."
+    client_action: "Surface Guardian reason/details, require operator remediation before enabling another attempt."
+    related_metrics:
+      - ui_api_error_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Client exceeded the configured RPM or token limits for chat or portal download APIs."
+    client_action: "Honor Retry-After headers, show throttling guidance, and back off additional attempts."
+    related_metrics:
+      - ui_api_error_total
+      - ui_rate_limit_total

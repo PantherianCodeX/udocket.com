@@ -42,7 +42,7 @@ ______________________________________________________________________
 
 Diagram authoring guidelines live in [Docs: How To](../../../CONTRIBUTING-docs.md#add-a-diagram). This appendix lists the current Mermaid sources and their rendered assets.
 
-<!-- BEGIN AUTO-GENERATED DIAGRAM INDEX -->
+<!-- BEGIN AUTO-GENERATED: diagram-index -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_diagram_index.py` to refresh. -->
 
 ### [Digital Signer](../../../services/digital-signer.md)
@@ -106,4 +106,4 @@ Diagram authoring guidelines live in [Docs: How To](../../../CONTRIBUTING-docs.m
 | Diagram | Version | Mermaid source | Rendered SVG | Preview |
 | ------- | ------- | -------------- | ------------ | ------- |
 | `webapp-interaction-topology` | v1 | [`apps/web-app/diagrams/ui-interaction-topology-v1.mmd`](../../../apps/web-app/diagrams/ui-interaction-topology-v1.mmd) | [`build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg`](../../../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg) | <a class="glightbox" href="../../../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg" data-type="image"><img src="../../../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg" alt="webapp-interaction-topology diagram" style="max-height: 160px; max-width: 200px; width: auto; height: auto; border: 1px solid #d0d0d0; border-radius: 4px; vertical-align: middle;"></a> |
-<!-- END AUTO-GENERATED DIAGRAM INDEX -->
+<!-- END AUTO-GENERATED: diagram-index -->

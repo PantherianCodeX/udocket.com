@@ -55,6 +55,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Guardian Service Working Group |
@@ -66,8 +67,9 @@ ______________________________________________________________________
 | Owners | Security Engineering; Platform Architecture |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -298,7 +300,7 @@ curl -sS -X POST \
 - Submissions must use HMAC-authenticated service tokens; Guardian records request metadata in `ops/guardian/batch_submit.jsonl` and Postgres `guardian_submission_audit`.
 - Replay tooling (`POST /guardian/judgments:enqueue`) shares the same queue path to guarantee identical side effects and audit history.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Guardian-specific `ApiError.code` values so downstream services, UI surfaces, and monitoring dashboards can distinguish policy rejections from transient infrastructure issues. **|**
 **Contract:** Guardian inherits the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and layers detector/policy-specific codes listed below. **|**
@@ -308,15 +310,31 @@ curl -sS -X POST \
 **Breadcrumbs:** Pipeline `packages/udocket_core/guardian/pipeline.py`, detector integrations `packages/udocket_core/guardian/detectors/*`, review API `apps/platform/guardian/views.py`, tests `tests/platform/guardian/test_pipeline.py`, `tests/platform/guardian/test_review_actions.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §2.6, Notifications spec §3.2.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#guardian-service)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
-|---|---|---|
-| `SCHEMA_POLICY_BLOCK` | Request payload failed schema validation or missing required policy context. | Fix payload, rerun submission; repeated failures escalate to RB-GUARD-QUEUE. |
-| `RESIDENCY_POLICY_BLOCK` | Residency or waiver policy prohibits processing (e.g., provider drift, missing attestation). | Coordinate with Settings/Reference Manager waivers, update residency catalog, retry once cleared. |
-| `POLICY_FORBIDDEN_PATTERN` | Detectors matched forbidden content (PII/PHI pattern, legal hold, leakage). | Follow Guardian remediation guidance, redact or waive content before resubmission. |
-| `CLASSIFIER_LOW_CONFIDENCE` | ML detectors produced low-confidence spans requiring manual review. | Surface to reviewers; expect `WARN`/manual decision instead of auto retry. |
-| `PARENT_NOT_APPROVED` | Upstream artifact reverted or lacks PASS while dependant artifact submitted. | Approve/restore parent artifact, resubmit child once lineage consistent. |
-| `GUARDIAN_SUBMISSION_TIMEOUT` | Queue processing exceeded timeout or detector unavailable. | Workers auto-retry; clients may poll status; escalate if repeated (`guardian_submission_timeout_total`). |
-| `QUARANTINED` | Guardian quarantined artifact due to detector or policy breach. | Resolve root cause, obtain manual clearance via `POST /guardian/quarantine`, then rerun pipeline. |
+| --- | --- | --- |
+| `CLASSIFIER_LOW_CONFIDENCE` | ML detectors produced low-confidence spans that require manual review. | Surface the decision to reviewers; expect WARN/manual decision instead of automatic retry. |
+| `GUARDIAN_SUBMISSION_TIMEOUT` | Queue processing exceeded timeout or a detector became unavailable. | Workers auto-retry; clients may poll status; escalate if repeated via guardian_submission_timeout_total. |
+| `PARENT_NOT_APPROVED` | Upstream artifact reverted or lacks PASS while a dependant artifact was submitted. | Approve or restore the parent artifact, then resubmit once lineage is consistent. |
+| `POLICY_FORBIDDEN_PATTERN` | Detectors matched forbidden content such as PII/PHI patterns, legal hold signals, or leakage. | Follow Guardian remediation guidance, redact or waive content before resubmission. |
+| `QUARANTINED` | Guardian quarantined the artifact due to detector or policy breach. | Resolve the root cause, obtain manual clearance via POST /guardian/quarantine, then rerun the pipeline. |
+| `RESIDENCY_POLICY_BLOCK` | Residency or waiver policy prohibits processing (for example, provider drift or missing attestation). | Coordinate with Settings or Reference Manager waivers, update residency catalog, and retry once cleared. |
+| `SCHEMA_POLICY_BLOCK` | Request payload failed schema validation or was missing required policy context. | Fix the payload, rerun submission; repeated failures escalate to RB-GUARD-QUEUE. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CLASSIFIER_LOW_CONFIDENCE` | 409 | Yes | guardian_api_error_total |
+| `GUARDIAN_SUBMISSION_TIMEOUT` | 503 | Yes | guardian_submission_timeout_total |
+| `PARENT_NOT_APPROVED` | 409 | Yes | guardian_api_error_total |
+| `POLICY_FORBIDDEN_PATTERN` | 403 | Yes | guardian_policy_block_total |
+| `QUARANTINED` | 423 | Yes | guardian_api_error_total<br>guardian_policy_block_total |
+| `RESIDENCY_POLICY_BLOCK` | 403 | Yes | guardian_api_error_total<br>guardian_policy_block_total |
+| `SCHEMA_POLICY_BLOCK` | 400 | No | guardian_api_error_total<br>guardian_detector_errors_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 Evaluation pipeline (normative)
 
@@ -875,7 +893,7 @@ ______________________________________________________________________
 
 ## Appendix C — Integrity scan queue (binding)
 
-*Purpose:* Document the queue schema and operations that back artifact integrity sweeps.*
+**Purpose:** Document the queue schema and operations that back artifact integrity sweeps.
 
 ```sql
 CREATE TABLE integrity_scan_queue (

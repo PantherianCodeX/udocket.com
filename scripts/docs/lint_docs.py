@@ -76,6 +76,10 @@ def build_tasks(targets: list[Path]) -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_diagram_index.py"), "--check"],
         ),
         Task(
+            name="build_api_error_codes.py --check",
+            cmd=[py, str(ROOT / "scripts" / "docs" / "build_api_error_codes.py"), "--check"],
+        ),
+        Task(
             name="check_structure.py",
             cmd=[
                 py,

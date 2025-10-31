@@ -1,0 +1,80 @@
+error_codes:
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Guardian, residency, or settings policy prevented the action."
+    client_action: "Surface details.reason, remediate policy or obtain an approved waiver before retrying."
+    related_metrics:
+      - api_error_total
+      - api_error_unknown_total
+  - code: QUARANTINED
+    http_status: 423
+    audit_required: true
+    description: "Artifact quarantined for manual review or remediation."
+    client_action: "Hold follow-on actions until Guardian releases the artifact; do not retry automatically."
+    related_metrics:
+      - api_error_total
+  - code: INTEGRITY_ERROR
+    http_status: 412
+    audit_required: true
+    description: "Hash or ETag validation failed for the submitted content."
+    client_action: "Recompute digests, re-upload content, and avoid blind retries without correcting the payload."
+    related_metrics:
+      - api_error_total
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: "Request payload failed schema or semantic validation."
+    client_action: "Inspect details[], correct the offending fields, and resubmit the request."
+    related_metrics:
+      - api_error_total
+  - code: AUTH_ERROR
+    http_status: 401
+    audit_required: true
+    description: "Caller failed authentication or presented an expired token."
+    client_action: "Re-authenticate, ensure the correct audience, and retry with a fresh credential."
+    related_metrics:
+      - api_error_total
+  - code: AUTH_CLOCK_SKEW
+    http_status: 401
+    audit_required: false
+    description: "X-Timestamp fell outside the permitted ±120 second window."
+    client_action: "Synchronize system clocks (NTP/Chrony) and retry with an accurate timestamp."
+    related_metrics:
+      - api_error_total
+  - code: AUTH_SIGNATURE_INVALID
+    http_status: 401
+    audit_required: true
+    description: "HMAC signature mismatch or revoked key identifier."
+    client_action: "Regenerate the canonical string, rotate keys if necessary, and retry with a valid signature."
+    related_metrics:
+      - api_error_total
+  - code: NOT_FOUND
+    http_status: 404
+    audit_required: false
+    description: "Resource missing, masked by RLS, or already archived."
+    client_action: "Treat as terminal; refresh indices or scope before retrying with a new identifier."
+    related_metrics:
+      - api_error_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Optimistic concurrency or idempotency conflict detected."
+    client_action: "Fetch the latest state, update the payload or Idempotency-Key, and retry once."
+    related_metrics:
+      - api_error_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Rate, quota, or budget exceeded for the caller."
+    client_action: "Honor Retry-After, apply exponential backoff, and present throttling feedback to operators."
+    related_metrics:
+      - api_error_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "Downstream dependency unavailable or circuit breaker open."
+    client_action: "Implement retry with jitter respecting Retry-After; surface degraded status to operators."
+    related_metrics:
+      - api_error_total
+      - api_error_rate_spike_total

@@ -12,16 +12,19 @@ def _setup_diagram_env(tmp_path: Path) -> None:
     appendix = src_dir / "overview" / "tdd" / "appendices" / "diagrams.md"
     appendix.parent.mkdir(parents=True, exist_ok=True)
     appendix.write_text(
-        """---
-title: diagrams
----
-
-## Overview
-
-<!-- BEGIN AUTO-GENERATED DIAGRAM INDEX -->
-_placeholder_
-<!-- END AUTO-GENERATED DIAGRAM INDEX -->
-""",
+        "\n".join(
+            [
+                "---",
+                "title: diagrams",
+                "---",
+                "",
+                "## Overview",
+                "",
+                bdi.BEGIN_MARKER,
+                "_placeholder_",
+                bdi.END_MARKER,
+            ]
+        ),
         encoding="utf-8",
     )
 

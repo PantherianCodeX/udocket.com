@@ -54,6 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Application Experience Working Group |
@@ -65,8 +66,9 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Product Management |
 | Reviewers | Accessibility Program Lead; Operations Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -248,7 +250,7 @@ Portal downloads exchange signed tokens issued by the Notifications service; `If
 
 The UI coordinates with internal controllers for portal messaging, edit manifests, and assistant orchestration. SSE publishers in `apps/platform/events/*.py` broadcast state transitions to the front-end, while background jobs in the worker cluster hydrate downloads, regenerate manifests, and backfill presence events. Layout builders in `apps/platform/ui/views/*.py` assemble React component payloads from secure views (`*_secure`) governed by the Settings registry.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Document the `ApiError.code` values that the web application surfaces so UX flows handle retries and blocking states consistently. **|**
 **Contract:** Staff and portal clients reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the UI introduces the cases below for assistant and portal interactions. **|**
@@ -257,13 +259,25 @@ The UI coordinates with internal controllers for portal messaging, edit manifest
 **Observability:** Dashboards “Web App – API Errors” and “Portal Integrity” watch `ui_api_error_total{code}`; synthetic probes cover chat availability and portal download flows. **|**
 **Breadcrumbs:** Controllers `apps/platform/api/chat.py`, portal download guard `apps/platform/portal/downloads.py`, UI error mappers `apps/platform/ui/errors.py`, tests `tests/platform/ui/test_error_adapters.py`, `tests/platform/portal/test_portal_errors.py`. **|**
 **References:** Platform Runtime §3.3, Notifications spec §2.4 (download tokens), Settings spec §11.11 (assistant toggles), TDD §10.12.
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#web-application-portal)
 
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `CHAT_DISABLED` | Org-level settings or Guardian policy disabled assistants for the active org/case. | Display the assistant-disabled banner, suppress retries, direct operators to review Settings or Guardian waivers. |
-| `PORTAL_DOWNLOAD_PRECONDITION` | Portal download request failed the `If-Match` guard or token validation. | Prompt the client to refresh the deliverable list, regenerate the download link, and avoid automatic retry loops. |
-| `POLICY_BLOCK` | Guardian or residency guard blocked an action invoked from the UI (approvals, compose publish, portal download). | Surface Guardian reason/details, require operator remediation before enabling another attempt. |
-| `RATE_LIMIT` | Client exceeded the configured RPM/token limits for chat or portal download APIs. | Honor `Retry-After`, show throttling guidance, and backoff additional attempts. |
+| `CHAT_DISABLED` | Org-level settings or Guardian policy disabled assistants for the active org or case. | Display the assistant-disabled banner, suppress retries, direct operators to review Settings or Guardian waivers. |
+| `POLICY_BLOCK` | Guardian or residency guard blocked an action invoked from the UI. | Surface Guardian reason/details, require operator remediation before enabling another attempt. |
+| `PORTAL_DOWNLOAD_PRECONDITION` | Portal download request failed the If-Match guard or token validation. | Prompt the client to refresh the deliverable list, regenerate the download link, and avoid automatic retry loops. |
+| `RATE_LIMIT` | Client exceeded the configured RPM or token limits for chat or portal download APIs. | Honor Retry-After headers, show throttling guidance, and back off additional attempts. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `CHAT_DISABLED` | 403 | No | ui_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | ui_api_error_total |
+| `PORTAL_DOWNLOAD_PRECONDITION` | 412 | No | portal_download_error_total |
+| `RATE_LIMIT` | 429 | No | ui_api_error_total<br>ui_rate_limit_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ### 3.4 Interaction Topology (informative)
 

@@ -1,0 +1,37 @@
+error_codes:
+  - code: AUTH_ERROR
+    http_status: 401
+    audit_required: true
+    description: "Invalid credentials, disabled account, or revoked session token."
+    client_action: "Prompt the user to re-authenticate, enforce MFA if required, and avoid retry loops with stale tokens."
+    related_metrics:
+      - identity_api_error_total
+  - code: AUTH_CLOCK_SKEW
+    http_status: 401
+    audit_required: false
+    description: "Signed request timestamp fell outside the ±120 second tolerance."
+    client_action: "Sync client clocks with NTP or Chrony, then retry once the skew is corrected."
+    related_metrics:
+      - identity_api_error_total
+  - code: AUTH_SIGNATURE_INVALID
+    http_status: 401
+    audit_required: true
+    description: "HMAC signature mismatch for privileged service calls."
+    client_action: "Regenerate the canonical string, rotate keys if necessary, and retry with a corrected signature."
+    related_metrics:
+      - identity_api_error_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Break-glass or residency policy forbids the requested action."
+    client_action: "Surface remediation steps, complete the break-glass workflow or obtain a waiver before retrying."
+    related_metrics:
+      - identity_api_error_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Org or actor exceeded login, password reset, or session creation quotas."
+    client_action: "Honor Retry-After, enforce backoff in the UI, and notify operators for sustained spikes."
+    related_metrics:
+      - identity_api_error_total
+      - identity_rate_limit_total

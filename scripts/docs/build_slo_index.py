@@ -13,22 +13,26 @@ import re
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
-SRC_DIR = ROOT / "docs" / "src"
-APPENDIX_FILE = SRC_DIR / "overview" / "tdd" / "appendices" / "slo_index.md"
-APPENDIX_DIR = APPENDIX_FILE.parent
-BEGIN_MARKER = "<!-- BEGIN AUTO-GENERATED SLO INDEX -->"
-END_MARKER = "<!-- END AUTO-GENERATED SLO INDEX -->"
-
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from scripts.docs.doc_utils import (  # noqa: E402
-    read_markdown_lines,
-    parse_front_matter,
+    begin_auto_generated_marker,
     derive_doc_label,
+    end_auto_generated_marker,
+    parse_front_matter,
+    read_markdown_lines,
+    replace_auto_generated_section,
     stringify,
-    replace_marked_section,
+    write_or_check,
 )
+
+SRC_DIR = ROOT / "docs" / "src"
+APPENDIX_FILE = SRC_DIR / "overview" / "tdd" / "appendices" / "slo_index.md"
+APPENDIX_DIR = APPENDIX_FILE.parent
+MARKER_LABEL = "slo-index"
+BEGIN_MARKER = begin_auto_generated_marker(MARKER_LABEL)
+END_MARKER = end_auto_generated_marker(MARKER_LABEL)
 
 SLO_HEADING_RE = re.compile(r"^###\s+6\.1\s+SLOs?\s*&\s*Targets.*$", re.IGNORECASE)
 HEADINGS_RE = re.compile(r"^#{2,}\s")
@@ -126,7 +130,7 @@ def build_content() -> str:
     appendix_text = APPENDIX_FILE.read_text(encoding="utf-8")
     entries = collect_entries()
     generated = render(entries)
-    return replace_marked_section(appendix_text, BEGIN_MARKER, END_MARKER, generated)
+    return replace_auto_generated_section(appendix_text, MARKER_LABEL, generated)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -135,15 +139,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     content = build_content()
-    if args.check:
-        current = APPENDIX_FILE.read_text(encoding="utf-8")
-        if content == current:
-            return 0
-        print("SLO index is stale; run `python scripts/docs/build_slo_index.py`.", file=sys.stderr)
-        return 1
-
-    APPENDIX_FILE.write_text(content, encoding="utf-8")
-    return 0
+    ok = write_or_check(
+        APPENDIX_FILE,
+        content,
+        check=args.check,
+        stale_message="SLO index is stale; run `python scripts/docs/build_slo_index.py`.",
+    )
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

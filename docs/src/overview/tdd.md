@@ -1178,7 +1178,7 @@ Binding breadcrumbs:
 *Purpose: Keep service documentation aligned on a shared error envelope while delegating canonical code ownership to the Platform Runtime specification and per-service appendices.*
 
 - Envelope (binding): HTTP error payloads MUST validate against `spec/schemas/api_error.schema.json`. Runtime code in Django/FastAPI imports Pydantic models generated from that schema during the build pipeline so the schema remains the single source of truth. Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
-- Code catalog: [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `python scripts/docs/build_api_error_index.py`.
+- Code catalog: [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `python scripts/docs/build_api_error_codes.py`.
 - Headers: always emit `X-Request-ID`; add `Retry-After`, `Deprecation`, `Sunset`, and rate-limit headers when applicable. Error payloads are included in Spectral lint checks (§10.5).
 - Client guidance: follow the retry/stop rules documented in each service spec’s API error section; SDKs surface the same behaviour via typed exceptions.
 

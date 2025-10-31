@@ -42,6 +42,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Identity & Access Working Group |
@@ -53,8 +54,9 @@ ______________________________________________________________________
 | Owners | Platform Engineering; Security Engineering |
 | Reviewers | Site Reliability Engineering; Compliance Engineering |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -142,7 +144,7 @@ ______________________________________________________________________
 - Watchdog jobs (`ops/scripts/identity/watch_device_fingerprint.py`) reconcile device mismatch counts, break-glass expiries, and federation lint results, emitting SSE warnings to the UI.  
 - PgBouncer health probe `/healthz/pgbouncer-mode` asserts pooling remains `transaction` or approved `session` so per-request GUCs stay intact.
 
-### 3.3 API Error Codes (binding)
+### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Record the `ApiError.code` values emitted by identity and session APIs so clients respond safely to authentication and governance failures. **|**
 **Contract:** Identity surfaces the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to identity-specific flows. **|**
@@ -152,23 +154,37 @@ ______________________________________________________________________
 **Breadcrumbs:** Controllers `apps/platform/auth/views.py`, session manager `apps/platform/session/binding.py`, break-glass services `apps/platform/auth/break_glass.py`, tests `tests/platform/auth/test_token_api.py`, `tests/platform/auth/test_break_glass.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §3.4, Guardian spec §2.2, Ops runbooks `RB-IDP-FAILOVER`, `RB-BREAK-GLASS`.
 
+> _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#identity-access)
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
-| `AUTH_ERROR` | Invalid credentials, disabled account, or revoked session token. | Prompt user to re-authenticate, enforce MFA if required, and avoid retry loops with stale tokens. |
-| `AUTH_CLOCK_SKEW` | Signed requests outside the ±120 second tolerance. | Sync client clocks with NTP/Chrony, retry once skew corrected. |
-| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch for privileged service calls. | Regenerate canonical string, rotate keys if necessary, and retry with corrected signature. |
-| `POLICY_BLOCK` | Break-glass or residency policy forbids requested action (e.g., missing retrospective). | Surface remediation steps, complete break-glass workflow or obtain waiver before retrying. |
-| `RATE_LIMIT` | Org/actor exceeded login, password reset, or session creation quotas. | Honor `Retry-After`, enforce backoff in UI, and notify operators for sustained spikes. |
+| `AUTH_CLOCK_SKEW` | Signed request timestamp fell outside the ±120 second tolerance. | Sync client clocks with NTP or Chrony, then retry once the skew is corrected. |
+| `AUTH_ERROR` | Invalid credentials, disabled account, or revoked session token. | Prompt the user to re-authenticate, enforce MFA if required, and avoid retry loops with stale tokens. |
+| `AUTH_SIGNATURE_INVALID` | HMAC signature mismatch for privileged service calls. | Regenerate the canonical string, rotate keys if necessary, and retry with a corrected signature. |
+| `POLICY_BLOCK` | Break-glass or residency policy forbids the requested action. | Surface remediation steps, complete the break-glass workflow or obtain a waiver before retrying. |
+| `RATE_LIMIT` | Org or actor exceeded login, password reset, or session creation quotas. | Honor Retry-After, enforce backoff in the UI, and notify operators for sustained spikes. |
+<!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
+
+<!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `AUTH_CLOCK_SKEW` | 401 | No | identity_api_error_total |
+| `AUTH_ERROR` | 401 | Yes | identity_api_error_total |
+| `AUTH_SIGNATURE_INVALID` | 401 | Yes | identity_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | identity_api_error_total |
+| `RATE_LIMIT` | 429 | No | identity_api_error_total<br>identity_rate_limit_total |
+<!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
 ## 4) State Management (binding)
 
-**Purpose:** Maintain the data structures that enforce authorization, masking, and break-glass controls. **|**
-**Contract:** `udocket_can` and masking profiles are the single sources of truth; secure views and vault state must remain aligned with Settings bundles. **|**
-**State:** `organization`, `case`, `case_member`, `effective_permission`, `field_mask_rule`, secure views, masking vault, break-glass ledger. **|**
-**Failures & handling:** Drift or unauthorized changes route through `RB-RLS-CONTEXT`, `RB-MASK`, or `RB-BREAK-GLASS`. **|**
-**Observability:** Metrics `rls_context_missing_total`, `masking_transformation_total`, `break_glass_event_total`; dashboards “RLS Context Guards”, “Masking Vault & Profiles”. **|**
-**Breadcrumbs:** `packages/udocket_core/permissions/`, `packages/udocket_core/masking/`, migrations under `apps/platform/db/`. **|**
-**References:** TDD §4 summary, Appendix A, Settings spec §2.4.
+**Purpose:** Describe how identity permissions, masking policies, and break-glass controls persist across the platform. **|**
+**Contract:** Ensure row-level security, masking, and waiver/break-glass ledgers remain consistent and append-only, and that downstream caches honor the same policies. **|**
+**State:** Authorization lattice tables (`case_member`, `effective_permission`), secure views, masking configuration, break-glass ledger, and cache entries. **|**
+**Failures & handling:** Policy or masking drift triggers RB-RLS-CONTEXT or RB-BREAK-GLASS; break-glass sessions require post-hoc approvals before re-enabling automation. **|**
+**Observability:** Dashboards “Identity – RLS Health”, metrics `rls_context_missing_total`, `masking_transformation_total`, `break_glass_event_total`. **|**
+**Breadcrumbs:** Permission services `packages/udocket_core/permissions/`, masking utilities `packages/udocket_core/masking/`, Settings activation `apps/platform/settings/services/identity.py`, tests `tests/identity/test_state_management.py`. **|**
+**References:** Settings §7, Observability §4, Audit §4.
 
 ### 4.1 Authorization lattice & data access (binding)
 
@@ -425,7 +441,7 @@ ______________________________________________________________________
 
 ## Appendix A — SQL policy patterns (binding) {#appendix-a--sql-policy-patterns-binding}
 
-*Purpose: Preserve authoritative SQL patterns for row-level security, masking, and operational guards used by identity-aware services.*
+_Purpose: Preserve authoritative SQL patterns for row-level security, masking, and operational guards used by identity-aware services._
 
 - SQL detailed in Notifications Appendix A covers portal messaging RLS and download token enforcement.
 - Guardian Appendix C records integrity queue rotation and quarantine workflows.
