@@ -27,6 +27,8 @@ def _setup_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         encoding="utf-8",
     )
 
+    monkeypatch.setattr(bsi, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(bsi, "SERVICE_ROOTS", [Path("docs/src/services"), Path("docs/src/apps")])
     monkeypatch.setattr(bsi, "SRC_DIR", docs_root)
     monkeypatch.setattr(bsi, "APPENDIX_FILE", appendix)
     monkeypatch.setattr(bsi, "APPENDIX_DIR", appendix.parent)

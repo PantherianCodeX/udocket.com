@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from docs.tools import doc_utils
-from docs.tools import sync_document_controls as sdc
-from docs.tools.sync_document_controls import (
+from docs.tools.sync import document_controls as sdc
+from docs.tools.sync.document_controls import (
     OPTIONAL_FIELDS,
     collect_targets,
     parse_args,
@@ -96,6 +96,7 @@ def test_parse_args_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     args = parse_args()
 
     assert args.paths == sdc.DEFAULT_ROOTS
+    assert args.dry_run is False
 
 
 def test_collect_targets_handles_dirs(tmp_path: Path) -> None:
@@ -252,6 +253,16 @@ No table present.
     assert "incomplete document controls table" in captured.err
 
 
+def test_sync_dry_run_reports_without_writing(tmp_path: Path) -> None:
+    doc = _write_doc(tmp_path)
+    original = doc.read_text(encoding="utf-8")
+
+    updated = sync_file(doc, dry_run=True)
+
+    assert updated is True
+    assert doc.read_text(encoding="utf-8") == original
+
+
 def test_sync_skips_when_section_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     content = """---
 author: Alice
@@ -375,7 +386,7 @@ author: Alice
 
 
 def test_main_handles_no_targets(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[Path("/nope")]))
+    monkeypatch.setattr(sdc, "parse_args", lambda argv=None: argparse.Namespace(paths=[Path("/nope")], dry_run=False))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([]))
     def _fail(*args: object, **kwargs: object) -> None:
         raise AssertionError("should not run")
@@ -390,7 +401,7 @@ def test_main_handles_no_targets(monkeypatch: pytest.MonkeyPatch, capsys: pytest
 
 def test_main_aborts_without_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     doc = _write_doc(tmp_path)
-    monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
+    monkeypatch.setattr(sdc, "parse_args", lambda argv=None: argparse.Namespace(paths=[doc], dry_run=False))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
     monkeypatch.setattr(sdc, "yaml", None)
     def _fail(*args: object, **kwargs: object) -> None:
@@ -406,7 +417,7 @@ def test_main_aborts_without_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
 def test_main_runs_and_updates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     doc = _write_doc(tmp_path)
-    monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
+    monkeypatch.setattr(sdc, "parse_args", lambda argv=None: argparse.Namespace(paths=[doc], dry_run=False))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
     calls: list[tuple[list[str], dict[str, object]]] = []
 
@@ -431,7 +442,7 @@ def test_main_returns_failure_when_verification_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     doc = _write_doc(tmp_path)
-    monkeypatch.setattr(sdc, "parse_args", lambda: argparse.Namespace(paths=[doc]))
+    monkeypatch.setattr(sdc, "parse_args", lambda argv=None: argparse.Namespace(paths=[doc], dry_run=False))
     monkeypatch.setattr(sdc, "collect_targets", lambda paths: iter([doc]))
 
     def _fake_run(cmd: list[str], **kwargs: object) -> SimpleNamespace:

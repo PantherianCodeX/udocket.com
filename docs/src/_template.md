@@ -54,7 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
-> Populated from the YAML front matter via `python -m docs.tools.sync_document_controls`. Do not edit the table manually.
+> Populated from the YAML front matter via `python -m docs.tools.sync.document_controls`. Do not edit the table manually.
 
 <!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
@@ -75,10 +75,11 @@ ______________________________________________________________________
 **Status:** KEP: Provisional → Implementable → Implemented
 
 > **Section Requirements (binding):**
-    > - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`python -m docs.tools.lint_docs --check-template`)
+>
+> - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`python -m docs.tools.check_structure docs/src/platform docs/src/automation docs/src/data docs/src/customer docs/src/experience docs/src/ops`)
     > - Section tags: `(binding)`, `(normative)` or `(informative)`
     > - Links resolve: §/App./ADR (`docs-link-check`)
-    > - Document validation: `python python -m docs.tools.lint_docs`
+    > - Document validation: `python -m docs.tools.manage_docs --lint`
     > - Settings keys: Document/code are in-sync
     > - All requirements are CI gated
 >

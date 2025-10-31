@@ -82,7 +82,7 @@ ______________________________________________________________________
 - **Scope:** Service charter, hierarchical model, API/SDK contracts, activation workflow, governance controls, integrations, telemetry, and key catalog for the Settings Registry.
 - **Structure:** Numbered sections limited to three levels of depth; appendices surface detailed key maps, metrics, and seed bundle references.
 - **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` when pointing at appendices.
-- **Maintenance:** Run `python python -m docs.tools.lint_docs` before submitting edits. Schema snippets must match `spec/schemas/*` fixtures; CI enforces parity for key catalogs and activation templates.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint` before submitting edits. Schema snippets must match `spec/schemas/*` fixtures; CI enforces parity for key catalogs and activation templates.
 - **Doc change protocol:** Any PR modifying SR APIs, activation logic, bundle schemas, or governance gates must update this document and cite relevant ADRs. Architecture/Security reviewers block merges when code, SDKs, or docs diverge.
 
 ______________________________________________________________________
@@ -670,7 +670,7 @@ ______________________________________________________________________
 #### 8.5.2 Tooling & automation checks (normative)
 
 **Purpose:** Summarize supporting tooling that keeps SR governance consistent. **|**
-**Contract:** Teams run `python python -m docs.tools.lint_docs`, `python -m docs.tools.build.runbook_catalog`, `python -m docs.tools.check_settings_keys`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
+**Contract:** Teams run `python -m docs.tools.manage_docs --lint`, `python -m docs.tools.build.runbook_catalog`, `python -m docs.tools.check_settings_keys`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
 **State:** CI workflows enforce linting, seed bundle validation, and OpenAPI drift detection; runbook catalog renders the runbook index. **|**
 **Failures & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks. **|**
 **Observability:** CI dashboards display job history; governance board reviews automation health monthly. **|**

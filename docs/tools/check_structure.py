@@ -7,7 +7,8 @@ By default the checker inspects source documents under
 * Numeric sections (``## 1``, ``### 3.1`` …) appear in the same order as 
   their accompanying ``_template.md`` file.
 * Each section contains the preamble entries declared in the template, in the
-  same order, with every entry ending in ``**|**`` (and never duplicated).
+  same order. Divider enforcement is shared with the Vale rule
+  ``uDocket-Core.PreambleDivider``.
 * No unexpected preamble entries are present.
 * The "Document controls" table contains all required rows, values are present,
   **and** the values match the YAML front matter.

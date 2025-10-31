@@ -89,7 +89,7 @@ ______________________________________________________________________
 
 **Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
 
-*Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.* *Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables. See Appendices: Glossary and Status Mapping for single‑source definitions.* *State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).* *Failure modes & retries: `python -m docs.tools.lint_docs --check-template` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.* *Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.* *References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
+*Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.* *Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables. See Appendices: Glossary and Status Mapping for single‑source definitions.* *State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).* *Failure modes & retries: `python -m docs.tools.check_structure docs/src/overview docs/src/platform docs/src/automation docs/src/data docs/src/customer docs/src/experience` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.* *Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.* *References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
 
 ### Artifact classes (authoritative definitions)
 
@@ -123,7 +123,7 @@ Guardian policy, risk tiers, and remediation flows continue in §5.2.3 and §7.1
 - No new status or judgment names appear outside §5.2.2–§5.2.3 without an ADR update and a matching lint rule update; CI job `lint-artifact-vocabulary` blocks unknown terms in diffs.
 - APIs emit events whose values are exactly the canonical statuses/judgments; payload schemas MUST reference this section instead of inventing aliases.
 - Mapping tables live only in §5.2.3. Other sections reference them with `See §5.2.3 (canonical mapping)`.
-- Binding breadcrumbs are mandatory for every normative/binding subsection; missing breadcrumbs fail `python -m docs.tools.lint_docs --check-template`.
+- Binding breadcrumbs are mandatory for every normative/binding subsection; missing breadcrumbs fail `python -m docs.tools.check_structure docs/src/overview docs/src/platform docs/src/automation docs/src/data docs/src/customer docs/src/experience`.
 
 ______________________________________________________________________
 
@@ -133,7 +133,7 @@ ______________________________________________________________________
 - **Structure:** Numbered sections with ≤3 levels of depth; appendices mirror section numbers for reference artifacts.
 - **Cross-references:** Use `§<number>` for sections and `App.<letter>` for appendices.
 - **LLM hint:** Each subsection starts with a one-line purpose statement before implementation details.
-- **Maintenance:** Run `python python -m docs.tools.lint_docs` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint` (or see `docs/README.md`) before submitting edits to keep references, formatting, and settings keys synchronized with the codebase.
 - **Audit integration (2025-10-19):** This draft incorporates audit items for CCPA/CPRA coverage (§2.2, §14.2.1), automated LLM moderation (§8.4), and model version pinning/replay rules (§8.1, §8.5). Settings key coverage and traceability now live in [`Settings Registry – Appendix A`](../platform/settings.md#appendix-a-settings-key-map-traceability-index); CI blocks releases if parity ever drifts.
 - **Doc change protocol:** Every PR that modifies regulated behavior (policy, residency, approvals, agents) must link to the corresponding TDD diff; Architecture/Security reviewers block merges when code and spec diverge. Appendix automation (settings map, API snippets) continues to evolve—when feasible, replace manual tables with generated outputs to minimize churn.
 
@@ -2257,7 +2257,7 @@ ______________________________________________________________________
 *Purpose: Point platform teams to the maintained runbook library without duplicating procedures in this document.*\
 *Contract: Operational playbooks reside under `docs/runbooks/` and service-specific specifications; this appendix links to those sources.*\
 *State: Runbook owners track RB identifiers, alert bindings, and evidence requirements in the referenced documents.*\
-*Failure modes & retries: `python -m docs.tools.lint_docs` flags missing runbook links; update the runbook catalog when adding or retiring alerts.*\
+*Failure modes & retries: `python -m docs.tools.manage_docs --lint` flags missing runbook links; update the runbook catalog when adding or retiring alerts.*\
 *Observability: Docs lint metric `docs_runbook_missing_total` and OnCall drill analytics monitor coverage.*
 
 - **Platform runbooks:** `../ops/runbooks.md`

@@ -42,6 +42,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 - Create `docs/src/adr/ADR-XXXX-title.md` (increment number; brief title).
 - Keep one decision per ADR; link from TDD or service pages when referenced.
+- Shortcut: `python -m docs.tools.create_adr "Background worker topology"` generates the next numbered skeleton (`--dry-run` prints instead of writing, `--deciders/--tags` customise metadata).
 
 ## Lint and build locally
 
@@ -51,10 +52,14 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   - `apt-get install -y chromium` (or `brew install chromium` on macOS) so the Mermaid CLI can launch a headless browser
   - Vale CLI ships in the devcontainer; when running locally, download v3.7.1 from the official releases if you want parity.
 - Node tooling expects Node.js 22.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
-- Run the aggregate lint script (or `make lint-docs` if you already activated the repository virtualenv):
-  - `python -m docs.tools.lint_docs` (lints entire `docs/src/`)
-  - Optional: pass one or more targets, e.g. `python -m docs.tools.lint_docs docs/src/platform/settings.md docs/src/overview/tdd.md`
-- The lint runner executes (in order): `python -m docs.tools.build.runbook_catalog --check`, `python -m docs.tools.build.diagram_index --check`, `check_structure.py` (platform/automation/data/customer/experience/ops), `check_appendices.py`, `markdownlint` (npx plus optional global `markdownlint-cli`), `check_settings_keys.py`, `check_links.py` with `STRICT_DOCS=1`, and a strict MkDocs build (`docs/tools/build/mkdocs.py --dry-run`).
+- Use the unified doc manager (`python -m docs.tools.manage_docs`) or the Make targets (`make lint-docs`, `make build-docs`) to run common workflows:
+  - `python -m docs.tools.manage_docs --lint` — read-only checks (alias: `python -m docs.tools.manage_docs --lint`)
+  - `python -m docs.tools.manage_docs --sync` — regenerate runbook/diagram/SLO/API appendices and sync document controls/assets
+  - `python -m docs.tools.manage_docs --build` — strict MkDocs build (temporary site dir on `--dry-run`)
+  - `python -m docs.tools.manage_docs --pdf` — produce TDD/PRD PDFs
+  - Combine flags for bespoke flows, e.g. `python -m docs.tools.manage_docs --lint --sync --dry-run` or `python -m docs.tools.manage_docs --all`
+- `--dry-run` keeps the workspace read-only for sync/build tasks (scripts emit what would have changed and run `--check` variants where available).
+- Lint tasks include: runbook/diagram/API appendices in `--check` mode, structure validation (`platform`, `automation`, `data`, `customer`, `experience`, `ops`), appendix/table verification, markdownlint (`npx markdownlint-cli`), Vale (via `docs/config/vale-ci.ini`), documented settings parity, and strict link checking.
 - Validate service specs against the template: `python -m docs.tools.check_structure docs/src/platform docs/src/automation docs/src/data docs/src/customer`
 - Lint markdown: `npx markdownlint --config docs/config/.markdownlint.json 'docs/src/**/*.md'`.
 - Style checks (Vale):
@@ -85,7 +90,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Sources: `docs/src/` (TDD, platform, automation, data, customer, experience, ADR, runbooks, .assets).
 - Generated: `docs/site/`, `docs/build/` (gitignored).
 - Config: `.markdownlint.json` (extends `docs/config/.markdownlint.json`), `docs/config/mkdocs.yml`, `docs/config/vale.ini`, `docs/config/.markdownlint.json`, `docs/config/mermaidrc.json`, `docs/config/settings_key_skip.txt`.
-- Scripts: `docs/tools/*.sh`.
+- Scripts: `docs/tools/manage_docs.py`, `docs/tools/lint_docs.py`, sync helpers under `docs/tools/sync/`, and build assets under `docs/tools/build/`.
 
 ## Tips
 

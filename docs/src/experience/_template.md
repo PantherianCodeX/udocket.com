@@ -54,7 +54,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
-> Populated from the YAML front matter via `python -m docs.tools.sync_document_controls`. Do not edit the table manually.
+> Populated from the YAML front matter via `python -m docs.tools.sync.document_controls`. Do not edit the table manually.
 
 <!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |

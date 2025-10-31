@@ -79,7 +79,7 @@ ______________________________________________________________________
 - **Scope:** Service charter, source ingestion, editorial workflows, publishing, integrations, and observability for Reference Manager.
 - **Structure:** Sections are limited to three levels of depth; cross-cutting diagrams live in the platform TDD appendices (App.A state flows, App.G ERD).
 - **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` for appendices or §8.3 entries.
-- **Maintenance:** Run `python python -m docs.tools.lint_docs` before submitting edits. Schema snippets must match `spec/schemas/reference_*`; CI verifies locale coverage and bundle manifests.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint` before submitting edits. Schema snippets must match `spec/schemas/reference_*`; CI verifies locale coverage and bundle manifests.
 - **Change protocol:** PRs changing Reference Manager ingestion, bundles, or review workflows must update this document and linked ADRs. Architecture/Security reviewers block merges when services diverge from these contracts.
 
 ______________________________________________________________________

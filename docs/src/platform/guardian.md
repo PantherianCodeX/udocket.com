@@ -81,7 +81,7 @@ Use this guide before changing Guardian policy, queue semantics, or downstream w
 
 - **Scope:** Guardian judgments, policy integration, API surface, queueing, observability, security, and operational controls.
 - **Structure:** Sections follow the 0–10 service spec template; appendices hold payload samples and runbooks.
-- **Maintenance:** Run the docs lint (`python python -m docs.tools.lint_docs`) and link check (`python -m docs.tools.check_links --strict`) prior to submitting Guardian changes.
+- **Maintenance:** Run the docs lint (`python -m docs.tools.manage_docs --lint`) and link check (`python -m docs.tools.check_links --strict`) prior to submitting Guardian changes.
 - **Change protocol:** Include a summary of Guardian impact in PR descriptions and link reviewers to the affected sections (`§2`, `§3`, `§4`, etc.).
 - **References:** TDD §7 (Guardian), ADR-0001, ADR-0002, ADR-0003.
 - **Contacts:** Owners Security Engineering + Platform Architecture; operational mailing list `guardian-oncall@`.
@@ -628,7 +628,7 @@ ______________________________________________________________________
 **Failures & handling:** Failures escalate via §8.3.2 RB-GUARD-001 and may freeze bundle activations. **|**
 **Observability:** Grafana panels, PagerDuty incidents, and synthetic job logs track outcomes. **|**
 **References:** §5 Failure modes, §8 Operational notes, §8.3.2 RB-GUARD-001.
-**Breadcrumbs:** Synthetic config `ops/synthetics/guardian_slo.yaml`, CI hooks `python -m docs.tools.lint_docs` (synthetic link check), tests `tests/synthetics/test_guardian_slo.py`.
+**Breadcrumbs:** Synthetic config `ops/synthetics/guardian_slo.yaml`, CI hooks `python -m docs.tools.manage_docs --lint` (synthetic link check), tests `tests/synthetics/test_guardian_slo.py`.
 
 - Synthetic job `guardian_slo.yaml` submits representative workloads (500 concurrent submissions, 5k/day) and records judgment/queue timing; success requires P95 latency ≤ configured SLO and zero submission timeouts.
 - Synthetic GET requests verify `/readyz` and `/synthetic/status` per environment after deployments; failures open PagerDuty incidents tagged `GUARDIAN_SLO`.
@@ -798,7 +798,7 @@ ______________________________________________________________________
 - **Runbooks:** §8.3 entries RB-GUARD-001/QUEUE/QUAR/MANUAL plus supporting files in `ops/runbooks/guardian/`.
 - **Diagrams:** `docs/src/platform/guardian/diagrams/upload-guardian-approve-v1.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`, `docs/src/automation/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
 - **Schemas & fixtures:** Appendix B, `packages/udocket_core/guardian/contracts/payloads.py`, sample manifests in `docs/examples/lineage/`.
-- **Change protocol:** PRs touching Guardian code/policy must link to this section, run `python python -m docs.tools.lint_docs`, and obtain Architecture + Security approval before deploy.
+- **Change protocol:** PRs touching Guardian code/policy must link to this section, run `python -m docs.tools.manage_docs --lint`, and obtain Architecture + Security approval before deploy.
 
 ______________________________________________________________________
 

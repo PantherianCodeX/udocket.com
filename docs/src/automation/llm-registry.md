@@ -79,7 +79,7 @@ ______________________________________________________________________
 
 - **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.
 - **Structure:** Follows the standard 0–10 template; subsections are marked (binding/normative/informative) per policy vocabulary. Appendices live in ops runbooks for golden sets and moderation configs.
-- **Maintenance:** Run `python -m docs.tools.lint_docs` before submitting changes. Update golden-set fixtures and moderation configs referenced here when models, prompts, or safety settings change.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint` before submitting changes. Update golden-set fixtures and moderation configs referenced here when models, prompts, or safety settings change.
 - **Change protocol:** Any PR touching `llm.providers[]`, `llm.models[]`, failover logic, moderation, or FinOps guardrails must cite this spec and ADR-0003. Security + Architecture approval required for provider additions or residency waivers.
 - **References:** TDD §8 summary, LPE spec §2 (PolicyContext), Settings spec §2 (activation), Ops runbooks RB-LLM-003/RB-LLM-JB.
 - **Contacts:** Platform Architecture (catalog), Security Engineering (safety/residency), Applied AI Programs (golden sets, moderation).

@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the Accounts & Tenants service responsible for organization provisioning, workspace lifecycle, role assignment, SSO/SAML federation, billing flags, and tenant offboarding (TDD §4, §14.1). Differentiates org-level constructs (tenants) from platform-wide identities.
 - **Structure:** Sections mirror the service template: charter and responsibilities, API contract, state management, failure handling, observability, security/compliance, operations, dependencies, and references. Appendices align with Identity service RLS patterns (Identity spec Appendix A) and TDD Appendix S (ownership map).
-- **Maintenance:** Run `python -m docs.tools.lint_docs docs/src/customer/accounts-tenants.md docs/src/platform/identity.md docs/src/overview/tdd.md` before submitting. Changes to lifecycle stages require updates to TDD §14.1 checklists and runbook catalog entries.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint docs/src/customer/accounts-tenants.md docs/src/platform/identity.md docs/src/overview/tdd.md` before submitting. Changes to lifecycle stages require updates to TDD §14.1 checklists and runbook catalog entries.
 - **Change protocol:** Provisioning/offboarding changes must reference this doc, Identity spec, Ops runbooks, and ADR-0001 where Guardian roles adjust. Schema changes require migrations plus doc updates.
 - **References:** TDD §4 Tenancy & Access, §14 retention/offboarding, Identity spec §4, Settings Registry §4 (`tenancy.*`), Ops runbooks `RB-TENANT-*`.
 - **Contacts:** Identity & Access (service ownership), Customer Operations (tenant onboarding/offboarding), escalation `#ops-accounts`, on-call `identity-oncall@`.

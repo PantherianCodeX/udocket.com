@@ -25,6 +25,7 @@ from docs.tools.doc_utils import (  # noqa: E402
     stringify,
     write_or_check,
 )
+from docs.tools.doc_roots import SERVICE_ROOTS  # noqa: E402
 
 SRC_DIR = PROJECT_ROOT / "docs" / "src"
 APPENDIX_FILE = SRC_DIR / "overview" / "tdd" / "appendices" / "slo_index.md"
@@ -79,8 +80,11 @@ def extract_slo_section(path: Path) -> list[str]:
 def collect_entries() -> list[SLOEntry]:
     entries: list[SLOEntry] = []
     doc_paths: list[Path] = []
-    doc_paths.extend(sorted((SRC_DIR / "services").glob("*.md")))
-    doc_paths.extend(sorted((SRC_DIR / "apps").glob("*.md")))
+    for root in SERVICE_ROOTS:
+        root_path = PROJECT_ROOT / root
+        if not root_path.exists():
+            continue
+        doc_paths.extend(sorted(root_path.glob("*.md")))
 
     for doc_path in doc_paths:
         if doc_path.name.startswith("_template"):

@@ -13,7 +13,7 @@ pip install -r requirements-docs.txt
 npm ci
 
 # Run the full lint suite (or `make lint-docs` if your venv is active)
-python -m docs.tools.lint_docs
+python -m docs.tools.manage_docs --lint  # alias: python -m docs.tools.manage_docs --lint
 ```
 
 The aggregator runs:
@@ -23,9 +23,9 @@ The aggregator runs:
 1. `python -m docs.tools.check_structure docs/src/platform docs/src/automation docs/src/data docs/src/customer docs/src/experience docs/src/ops` to enforce template compliance
 1. `python -m docs.tools.check_appendices` for appendix numbering and references
 1. `npx markdownlint --config docs/config/.markdownlint.json 'docs/src/**/*.md'` plus an optional global `markdownlint-cli` invocation when available
+1. `vale --config docs/config/vale-ci.ini --minAlertLevel error …` via the embedded Vale tasks (with an offline style bundle under `docs/config/vale/`)
 1. `python -m docs.tools.check_settings_keys` to keep Appendix E aligned with shipped settings
 1. `python -m docs.tools.check_links` (with `STRICT_DOCS=1`) for anchor and cross-document validation
-1. `python -m docs.tools.build.mkdocs --dry-run` for a strict MkDocs build in a disposable site directory
 
 All steps are wired into the `Docs Validation` GitHub workflow, so a clean run locally mirrors CI.
 
@@ -41,7 +41,7 @@ Authoring guidelines:
 
 - Each runbook section in a source document must start with an H2 heading that contains the word “runbook” so the builder can detect the block.
 - Use consistent anchors by including the RB identifier (for example `RB-LPE-COMPILER`) in the heading; the generator emits `<a id="...">` anchors automatically so other docs can deep-link to the catalog.
-- Keep Purpose/Contract/State/Failure/Observability scaffolding in every runbook to satisfy `lint_docs.py` template checks and provide operators with fast context before the detailed steps.
+- Keep Purpose/Contract/State/Failure/Observability scaffolding in every runbook to satisfy `python -m docs.tools.manage_docs --lint` template checks and provide operators with fast context before the detailed steps.
 - Follow the single runbook template defined here—no alternate classes or formats—so responders see consistent Purpose/Contract/State/Failure/ Observability scaffolding across services, mirroring the Platform Operations standard.
 
 ## Rendering Mermaid diagrams
@@ -66,7 +66,7 @@ The `.vscode/settings.json` file does not force a formatter, so you can delegate
 
 ## Tips
 
-- Run `python -m docs.tools.lint_docs` before committing large edits to catch slips in numbering, appendix references, or settings names.
+- Run `python -m docs.tools.manage_docs --lint` before committing large edits to catch slips in numbering, appendix references, or settings names.
 - If Appendix E must mention a configuration key that is not implemented yet, add it to `docs/config/settings_key_skip.txt` together with a short code comment referencing the follow-up work. Remove entries once the code ships so the key list stays authoritative.
 - Use `pipx`/`npm install --location=global` if you prefer keeping tooling isolated from project virtual environments.
 - Set `STRICT_DOCS=0` when invoking `check_links.py` directly if you only want warnings instead of hard failures.

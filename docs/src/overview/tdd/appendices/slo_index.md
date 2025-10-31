@@ -45,6 +45,30 @@ This appendix lists the SLOs defined in each service and app specification. Refr
 <!-- BEGIN AUTO-GENERATED: slo-index -->
 <!-- AUTO-GENERATED: Run `python -m docs.tools.build.slo_index` to refresh. -->
 
+### [Accounts & Tenants Service](../../../customer/accounts-tenants.md)
+
+**Purpose:** Track lifecycle objectives necessary for production readiness. **|**
+**Contract:** Provisioning P95 ≤ 15 min, zero overdue offboarding > 30 days, SSO metadata refreshed within 48 h of drift detection. **|**
+**State:** Prometheus rules `infra/monitoring/tenants-slo-rules.yaml`, Grafana dashboard “Tenant Lifecycle – SLO”. **|**
+**Failures & handling:** Breaches trigger RB-TENANT-PROVISION or RB-TENANT-OFFBOARD; releases pause until evidence captured. **|**
+**Observability:** Burn-rate alerts `tenant_provision_slo_burn`, `tenant_offboarding_slo_burn`, `tenant_sso_refresh_burn`. **|**
+**Breadcrumbs:** SLO config `infra/monitoring/tenants_slo.json`, tests `tests/integration/test_tenant_slo.py`. **|**
+**References:** TDD §4.2, Appendix I controls map.
+
+______________________________________________________________________
+
+### [Artifact Store Service](../../../data/artifact-store.md)
+
+**Purpose:** Capture artifact integrity and retention objectives. **|**
+**Contract:** Maintain ≥99.9% hash verification success and zero overdue retention tasks beyond 24 h; ExclusiveSwap conflicts remain below 0.1% of promotions. **|**
+**State:** Prometheus rules `infra/monitoring/artifacts-slo-rules.yaml`, burn-rate alerts, synthetic reconciler jobs. **|**
+**Failures & handling:** SLO breaches trigger RB-ARTIFACT-CORRUPTION or RB-RETENTION-DRIFT; releases pause until evidence collected. **|**
+**Observability:** Grafana “Artifact Store – SLO” with panels on hash mismatch rate, retention backlog, promotion conflicts. **|**
+**Breadcrumbs:** SLO configuration `infra/monitoring/artifacts-slo.json`, tests `tests/integration/test_artifact_slo.py`. **|**
+**References:** TDD Appendix I controls map, Appendix J SQL policies.
+
+______________________________________________________________________
+
 ### [Audit & Evidence](../../../data/audit.md)
 
 **Purpose:** Capture the availability and timeliness guarantees that keep audit evidence defensible. **|**
@@ -58,6 +82,35 @@ This appendix lists the SLOs defined in each service and app specification. Refr
 - **Seal continuity:** Hourly seal verification succeeds with ≤1 failed interval per quarter; tracked via `audit_seal_errors_total` and synthetic `audit_verify` job, escalating through RB-AUDIT-004 on breach.
 - **Immutable lag:** `audit_worm_lag_seconds` stays ≤15 minutes; exceeding lag blocks approvals and requires joint remediation with Observability before restart.
 - **Compliance workflows:** Waiver backlog (`waiver_expiring_total`) resolved within 5 business days; DSAR backlog (`dsar_journal_pending_total`) remains within regulatory SLA (45 days CCPA/30 days GDPR) with automated reminders and RB-PRIV-DSAR if breached.
+
+______________________________________________________________________
+
+### [Billing & Subscriptions Service](../../../customer/billing-subscriptions.md)
+
+**Purpose:** Track measurable objectives for billing operations. **|**
+**Contract:** Maintain ≤2% overdue invoices (P95 clearance < 48 h), metering lag < 15 minutes P95, webhook success rate ≥99.5%. **|**
+**State:** Prometheus rules `infra/monitoring/billing-slo-rules.yaml`, FinOps dashboards. **|**
+**Failures & handling:** Breaches trigger RB-BILLING-DELINQUENCY or RB-BILLING-METERING; releases paused until resolved. **|**
+**Observability:** Burn-rate alerts `billing_invoice_slo_burn`, `billing_metering_slo_burn`, webhook alerts `billing_webhook_error_burn`. **|**
+**Breadcrumbs:** SLO config `infra/monitoring/billing_slo.json`, tests `tests/integration/test_billing_slo.py`. **|**
+**References:** TDD §3.9, FinOps dashboards.
+
+______________________________________________________________________
+
+### [Communications Service](../../../customer/communications.md)
+
+**Purpose:** Capture delivery, webhook, in-app, and token reliability goals. **|**
+**Contract:** Notification delivery, webhook ingestion, SSE drop rate, and token validation must satisfy the thresholds below before campaigns launch. **|**
+**State:** Metrics `delivery_success_ratio`, `notifications_receipt_latency_seconds`, `sse_connection_drop_total`, `download_token_validation_total{outcome}`; dashboards “Notifications Delivery”, “Notifications In-App”, “Download Tokens”. **|**
+**Failures & handling:** Breaches invoke RB-NOTIFY-OUTAGE, RB-NOTIFY-WEBHOOK, RB-NOTIFY-INAPP, or RB-NOTIFY-TOKEN prior to resuming automation. **|**
+**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, portal synthetics, and SSE monitors provide evidence. **|**
+**Breadcrumbs:** Prometheus rules `infra/monitoring/notifications-prometheus-rules.yaml`, synthetic definitions `synthetics/notifications_*`, runbooks `docs/src/ops/runbooks/notifications/*.md`. **|**
+**References:** TDD §11, Web App §6, Audit §4.
+
+- **Delivery success:** ≥99.5% of outbound notifications reach provider or user receipt within channel SLA, tracked by `delivery_success_ratio` and `notifications_receipt_latency_seconds`. Breaches trigger RB-NOTIFY-OUTAGE and pause new campaigns until resolved.
+- **Webhook ingestion latency:** Provider callbacks process within 60 seconds P95 (`notifications_receipt_latency_seconds` subset); overruns invoke RB-NOTIFY-WEBHOOK and force retry throttling audits.
+- **In-app realtime health:** SSE drop rate (`sse_connection_drop_total` / connections) stays below 1% rolling 15 minutes; exceeding threshold pages RB-NOTIFY-INAPP before customer-facing impact widens.
+- **Download token validation:** Unexpected deny rate (`download_token_validation_total{outcome="denied"}` minus abuse baseline) remains under 0.5%; anomalies escalate via RB-NOTIFY-TOKEN with security review.
 
 ______________________________________________________________________
 
@@ -155,23 +208,6 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Communications Service](../../../customer/communications.md)
-
-**Purpose:** Capture delivery, webhook, in-app, and token reliability goals. **|**
-**Contract:** Communications delivery, webhook ingestion, SSE drop rate, and token validation must satisfy the thresholds below before campaigns launch. **|**
-**State:** Metrics `delivery_success_ratio`, `notifications_receipt_latency_seconds`, `sse_connection_drop_total`, `download_token_validation_total{outcome}`; dashboards “Notifications Delivery”, “Notifications In-App”, “Download Tokens”. **|**
-**Failures & handling:** Breaches invoke RB-NOTIFY-OUTAGE, RB-NOTIFY-WEBHOOK, RB-NOTIFY-INAPP, or RB-NOTIFY-TOKEN prior to resuming automation. **|**
-**Observability:** Grafana dashboards, Alertmanager burn-rate alerts, portal synthetics, and SSE monitors provide evidence. **|**
-**Breadcrumbs:** Prometheus rules `infra/monitoring/notifications-prometheus-rules.yaml`, synthetic definitions `synthetics/notifications_*`, runbooks `docs/src/ops/runbooks/notifications/*.md`. **|**
-**References:** TDD §11, Web App §6, Audit §4.
-
-- **Delivery success:** ≥99.5% of outbound notifications reach provider or user receipt within channel SLA, tracked by `delivery_success_ratio` and `notifications_receipt_latency_seconds`. Breaches trigger RB-NOTIFY-OUTAGE and pause new campaigns until resolved.
-- **Webhook ingestion latency:** Provider callbacks process within 60 seconds P95 (`notifications_receipt_latency_seconds` subset); overruns invoke RB-NOTIFY-WEBHOOK and force retry throttling audits.
-- **In-app realtime health:** SSE drop rate (`sse_connection_drop_total` / connections) stays below 1% rolling 15 minutes; exceeding threshold pages RB-NOTIFY-INAPP before customer-facing impact widens.
-- **Download token validation:** Unexpected deny rate (`download_token_validation_total{outcome="denied"}` minus abuse baseline) remains under 0.5%; anomalies escalate via RB-NOTIFY-TOKEN with security review.
-
-______________________________________________________________________
-
 ### [Observability](../../../platform/observability.md)
 
 **Purpose:** Outline ingestion, mirroring, correlation, and cost objectives that keep observability trustworthy. **|**
@@ -221,6 +257,18 @@ ______________________________________________________________________
 - **Publish latency:** 95th percentile publish pipeline latency (`reference_manager_publish_latency_seconds`) ≤ 10 minutes; exceeding budget blocks new publishes and invokes RB-RM-PUBLISH.
 - **Adoption acknowledgement:** Bundles adopted within 24 hours P95 (`reference_bundle_adoption_latency_seconds`); backlog alerts enforce RB-RM-ADOPTION.
 - **Compliance enforcement:** License violations (`reference_manager_license_violation_total`) remain zero; detection escalates via RB-RM-LICENSE before additional ingest occurs.
+
+### [Search & Indexing Service](../../../data/search-index.md)
+
+**Purpose:** Establish provisional targets for launch gating. **|**
+**Contract:** Index updates applied within 5 minutes P95, query latency ≤ 500 ms P95, cross-tenant violations remain zero. **|**
+**State:** SLO drafts `infra/monitoring/search-slo-rules.yaml`, Grafana board “Search SLO (draft)”. **|**
+**Failures & handling:** Breaches halt rollout; reopen feature flag only after incident review. **|**
+**Observability:** Burn-rate alerts `search_ingest_slo_burn`, `search_latency_slo_burn`. **|**
+**Breadcrumbs:** SLO design doc `docs/product/search/slo.md`. **|**
+**References:** TDD §6.5, FinOps dashboards.
+
+______________________________________________________________________
 
 ### [Settings Registry](../../../platform/settings.md)
 

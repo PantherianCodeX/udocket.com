@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Covers the shared LangGraph orchestration layer and the canonical pipelines for Transcribe, Analyze, Compose, Timeline, and Relationship agents. This spec also governs graph configuration, schema enforcement, QA gates, and shadow mode deployments.
 - **Structure:** Sections follow the standard 0–10 layout with appendices for schema and error taxonomies. Per-agent responsibilities live in §2; pipeline contracts, tooling, and LangGraph runtime details live in §3; operational guardrails are in §§5–8.
-- **Maintenance:** Run `python -m docs.tools.lint_docs docs/src/automation/langgraph-agents.md` plus targeted lints (`python -m docs.tools.check_links --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint docs/src/automation/langgraph-agents.md` plus targeted lints (`python -m docs.tools.check_links --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
 - **Change protocol:** Any change that alters agent outputs, pipeline structure, or QA gating must update this spec, cite relevant ADRs, and include LangGraph acceptance test results in the PR description. Guardian/Security approvals are mandatory for policy or residency-impacting edits.
 - **References:** TDD §6 summary, Settings Registry spec §5, LLM Registry spec §2, Worker Cluster spec §3, Ops Runbooks `RB-AGENT-\*`, QA harness documentation in tests README.
 - **Contacts:** Applied AI Engineering (primary owners), Platform Architecture (co-owners), Operations Eng (shadow mode), Guardian (safety), `#langgraph-agents` Slack, on-call alias `agents-oncall@`.
@@ -247,7 +247,7 @@ ______________________________________________________________________
 **Contract:** Every agent job produces manifests capturing input hashes, settings snapshot, pipeline + graph versions, tool usage, Guardian/Signer dependencies, and resulting artifact paths. **|**
 **State:** Manifests stored under `storage/media/cases/<case>/ops/<job_id>__<agent>_manifest.json`; audit JSONL streams append to `ops/ops_<agent>.jsonl`; QA logs and acceptance verdicts live alongside artifacts. **|**
 **Failures & handling:** Missing or corrupt manifests trigger `E_INTEGRITY_MISMATCH` and quarantine outputs; pipeline activation blocks if manifests fail schema validation. **|**
-**Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `python -m docs.tools.lint_docs --check-manifests` ensures schema parity during CI. **|**
+**Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `python -m docs.tools.manage_docs --lint --check-manifests` ensures schema parity during CI. **|**
 **Breadcrumbs:** Manifest models `packages/udocket_core/agents/manifests.py`, ops logging `packages/udocket_core/agents/logging.py`, lineage tooling `packages/udocket_core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**
 **References:** TDD §5.2, §6 summary, Compose spec §4, Guardian spec §2.4, Ops runbooks `RB-LINEAGE-BACKFILL`.
 

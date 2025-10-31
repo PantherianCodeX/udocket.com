@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Synchronise document control tables with front matter values.
-
-This helper updates the `Document controls` table in each target Markdown file
-so that the values mirror the YAML front matter (version, status, owners, etc.).
-It is intended for use in developer tooling (e.g. pre-commit hooks) and exits
-with status 0 even when it encounters recoverable issues, emitting warnings
-instead of failing the commit.
-
-Usage examples:
-    python -m docs.tools.sync_document_controls
-    python -m docs.tools.sync_document_controls docs/src/data/digital-signer.md
-    python -m docs.tools.sync_document_controls docs/src/platform docs/src/automation docs/src/data docs/src/customer
-
-The script rewrites files in place when updates are required.
-"""
+"""Synchronise document control tables with front matter values."""
 
 from __future__ import annotations
 
@@ -23,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, Iterator, List
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -42,16 +28,17 @@ MARKER_BEGIN = "<!-- BEGIN AUTO-GENERATED: document-controls -->"
 MARKER_END = "<!-- END AUTO-GENERATED: document-controls -->"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Update document controls from front matter")
     parser.add_argument(
         "paths",
         nargs="*",
         type=Path,
         default=DEFAULT_ROOTS,
-        help="Markdown files or directories to sync (defaults to platform/automation/evidence/customer)",
+        help="Markdown files or directories to sync (defaults to platform/automation/data/etc.)",
     )
-    return parser.parse_args()
+    parser.add_argument("--dry-run", action="store_true", help="Report changes without writing files.")
+    return parser.parse_args(argv)
 
 
 def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
@@ -75,7 +62,7 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
-def sync_file(path: Path) -> bool:
+def sync_file(path: Path, *, dry_run: bool = False) -> bool:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     try:
@@ -108,7 +95,6 @@ def sync_file(path: Path) -> bool:
         if stripped.startswith("## "):
             break
         if stripped.startswith("|"):
-            # no marker present; table starts here
             begin_idx = None
             break
 
@@ -182,14 +168,18 @@ def sync_file(path: Path) -> bool:
     if not markers_added and table_rows == new_rows:
         return False
 
+    if dry_run:
+        print(f"[sync-document-controls] would update {path}")
+        return True
+
     lines[table_start:table_start + len(table_rows)] = new_rows
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[sync-document-controls] updated {path}")
     return True
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     targets = list(collect_targets(args.paths))
     if not targets:
         print("[sync-document-controls] no markdown targets found", file=sys.stderr)
@@ -202,10 +192,14 @@ def main() -> int:
     updated = 0
     for target in targets:
         try:
-            if sync_file(target):
+            if sync_file(target, dry_run=args.dry_run):
                 updated += 1
         except Exception as exc:  # pragma: no cover - defensive
             print(f"[sync-document-controls] warning: failed to process {target}: {exc}", file=sys.stderr)
+
+    if args.dry_run:
+        print(f"[sync-document-controls] dry-run complete ({updated} file(s) would update)")
+        return 0
 
     verify_cmd = [
         sys.executable,

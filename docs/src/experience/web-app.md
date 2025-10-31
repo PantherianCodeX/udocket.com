@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
-- **Maintenance:** Run `python python -m docs.tools.lint_docs docs/src/experience/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
+- **Maintenance:** Run `python -m docs.tools.manage_docs --lint docs/src/experience/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
 - **Change protocol:** UX-affecting PRs update this spec and cite ADR-0002 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
 - **References:** TDD §11 summary, Guardian spec §5, Communications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks `RB-PORTAL-INVALIDATION` and `RB-JOB-WATCHDOG`.
 - **Contacts:** Platform Engineering (frontend owners), Product Management (experience roadmap), Accessibility guild, `#web-app` Slack channel, on-call rotation `webapp-oncall@`.
