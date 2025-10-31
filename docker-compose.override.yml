@@ -2,10 +2,12 @@ services:
   platform:
     build:
       network: host
+      args:
+        DEV_TOOLS: "1"
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
-    command: "sh -lc \"uv pip install --quiet --system watchfiles && python manage.py migrate && python -m watchfiles --target-type=command --filter=apps.platform.config.watchers.PythonAndHTMLFilter --ignore-paths=/app/.venv --ignore-paths=/app/storage --ignore-paths=/app/celerybeat-schedule --grace-period=0.2 'daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application' /app\""
+    command: "sh -lc \"python manage.py migrate && python -m watchfiles --target-type=command --filter=apps.platform.config.watchers.PythonAndHTMLFilter --ignore-paths=/app/apps/platform/.venv --ignore-paths=/app/.venv --ignore-paths=/app/storage --ignore-paths=/app/celerybeat-schedule --grace-period=0.2 'daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application' /app\""
     develop:
       watch:
         - path: infra/docker/Dockerfile.platform
@@ -18,10 +20,12 @@ services:
   platform_worker:
     build:
       network: host
+      args:
+        DEV_TOOLS: "1"
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
-    command: sh -lc "uv pip install --quiet --system watchfiles && celery -A apps.platform.config.celery worker -l info"
+    command: sh -lc "celery -A apps.platform.config.celery worker -l info"
     develop:
       watch:
         - path: infra/docker/Dockerfile.platform
@@ -34,6 +38,8 @@ services:
   platform_beat:
     build:
       network: host
+      args:
+        DEV_TOOLS: "1"
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"

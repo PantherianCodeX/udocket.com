@@ -9,9 +9,31 @@ printf '[devcontainer] Preparing build cache scaffolding…\n'
 
 printf '[devcontainer] Syncing platform environment (dev group)…\n'
 pushd apps/platform >/dev/null
-uv sync --frozen --group dev
+uv sync --frozen --group dev --no-install-project
+VENV_PY="$(pwd)/.venv/bin/python"
 printf '[devcontainer] Refreshing vendored stubs…\n'
-uv run python ../scripts/typing/vendor_stubs.py
+HASH_DIR="$ROOT/.cache/devcontainer"
+mkdir -p "$HASH_DIR"
+HASH_FILE="$HASH_DIR/vendor_stubs.hash"
+if [[ -f "$ROOT/scripts/typing/vendor_stubs.py" ]]; then
+  if [[ -f "$ROOT/apps/platform/uv.lock" ]]; then
+    CURRENT_HASH=$(sha256sum "$ROOT/scripts/typing/vendor_stubs.py" "$ROOT/apps/platform/uv.lock" | sha256sum | awk '{print $1}')
+  else
+    CURRENT_HASH=$(sha256sum "$ROOT/scripts/typing/vendor_stubs.py" | awk '{print $1}')
+  fi
+  if [[ -f "$HASH_FILE" && "$CURRENT_HASH" == "$(cat "$HASH_FILE")" ]]; then
+    printf '[devcontainer] Vendored stubs unchanged; skipping.\n'
+  else
+    if [[ -x "$VENV_PY" ]]; then
+      "$VENV_PY" "$ROOT/scripts/typing/vendor_stubs.py"
+      echo "$CURRENT_HASH" > "$HASH_FILE"
+    else
+      printf '[devcontainer] Warning: platform venv python not found; skipping stub refresh.\n'
+    fi
+  fi
+else
+  printf '[devcontainer] Warning: vendor stubs script missing; skipping.\n'
+fi
 popd >/dev/null
 
 printf '[devcontainer] Syncing docs toolbox environment…\n'

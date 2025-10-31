@@ -10,10 +10,10 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
-4) Sync the platform dependencies (dev extras included):
+4) Sync the platform dependencies (dev extras included) without installing the project itself:
 
    ```bash
-   uv sync --frozen --group dev --project apps/platform
+   uv sync --frozen --group dev --no-install-project --project apps/platform
    ```
 
 5) Build & run the stack:

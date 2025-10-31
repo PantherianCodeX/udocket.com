@@ -9,7 +9,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Workflow**:
   1. Resolve the target virtualenv (default: `.venv`).
   2. Verify `uv` is available; bail with actionable error if not.
-  3. Install (or upgrade) stub wheels by running `uv sync --frozen --only-group dev --project apps/platform`.
+  3. Install (or upgrade) stub wheels by running `uv sync --frozen --group dev --no-install-project --project apps/platform`.
   4. Confirm required overlay paths in `pyrightconfig.json` exist; create empty directories when missing.
 - **Idempotency checks**: The script records an install hash (package + version) in `.cache/typing/bootstrap.json`. Reruns compare hashes and skip unchanged packages.
 - **Exit codes**: `0` on success/no-op, `10` if uv is missing, `20` if locking fails.
