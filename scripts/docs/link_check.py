@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import re
 import sys
-from pathlib import Path
-import os
 from functools import lru_cache
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
+from scripts.docs.doc_roots import AREA_PREFIXES, DOCS_SRC  # noqa: E402
 DOC = ROOT / "docs" / "src" / "overview" / "tdd.md"
-SERVICES_DIR = ROOT / "docs" / "src" / "services"
+DOCS_SRC_ABS = ROOT / DOCS_SRC
+AREA_PATHS = {area: DOCS_SRC_ABS / area for area in AREA_PREFIXES}
 
 def find_diagram_refs(text: str) -> set[str]:
     # Diagrams live alongside their owning documents (overview/tdd or service/app directories).
-    pattern = r"docs/src/(?:overview/tdd|services/[^/]+|apps/[^/]+)/diagrams/[\w\-/]+\.mmd"
+    area_pattern = "|".join(f"{area}/[^/]+" for area in AREA_PREFIXES)
+    pattern = rf"docs/src/(?:overview/tdd|{area_pattern})/diagrams/[\w\-/]+\.mmd"
     return set(re.findall(pattern, text))
 
 def check_diagrams(text: str) -> list[str]:
@@ -79,25 +85,27 @@ def check_sections(text: str) -> list[str]:
     return problems
 
 def find_service_refs(text: str) -> set[str]:
-    refs = set()
-    for match in re.findall(r"\.\./services/([A-Za-z0-9_\-\/]+\.md(?:#[A-Za-z0-9_\-\.]+)?)", text):
-        refs.add(match)
+    refs: set[tuple[str, str]] = set()
+    area_regex = "|".join(AREA_PREFIXES)
+    pattern = rf"\.\./({area_regex})/([A-Za-z0-9_\-\/]+\.md(?:#[A-Za-z0-9_\-\.]+)?)"
+    for area, rest in re.findall(pattern, text):
+        refs.add((area, rest))
     return refs
 
 def check_services(text: str) -> list[str]:
     problems: list[str] = []
-    for ref in sorted(find_service_refs(text)):
+    for area, ref in sorted(find_service_refs(text)):
         if "#" in ref:
             file_part, anchor = ref.split("#", 1)
         else:
             file_part, anchor = ref, ""
-        path = SERVICES_DIR / file_part
+        path = AREA_PATHS[area] / file_part
         if not path.exists():
-            problems.append(f"Service doc referenced but missing: ../services/{file_part}")
+            problems.append(f"Service doc referenced but missing: ../{area}/{file_part}")
             continue
         if anchor and anchor not in load_service_anchors(path):
             problems.append(
-                f"Anchor '#{anchor}' missing in ../services/{file_part}"
+                f"Anchor '#{anchor}' missing in ../{area}/{file_part}"
             )
     return problems
 

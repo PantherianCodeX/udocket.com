@@ -19,11 +19,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_TARGETS = [Path("docs/src")]
-
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
+from scripts.docs.doc_roots import ALL_TEMPLATE_ROOTS  # noqa: E402
+
+DEFAULT_TARGETS = [Path("docs/src")]
 DEFAULT_TARGETS = [ROOT / p for p in DEFAULT_TARGETS]
 TDD_DOC = ROOT / "docs" / "src" / "overview" / "tdd.md"
+STRUCTURE_DIRS = [ROOT / root for root in ALL_TEMPLATE_ROOTS] + [ROOT / "docs/src/ops"]
 
 
 @dataclass
@@ -80,13 +85,15 @@ def build_tasks(targets: list[Path]) -> list[Task]:
             cmd=[py, str(ROOT / "scripts" / "docs" / "build_api_error_codes.py"), "--check"],
         ),
         Task(
+            name="sync_doc_assets.py",
+            cmd=[py, str(ROOT / "scripts" / "docs" / "sync_doc_assets.py")],
+        ),
+        Task(
             name="check_structure.py",
             cmd=[
                 py,
                 str(ROOT / "scripts" / "docs" / "check_structure.py"),
-                str(ROOT / "docs" / "src" / "services"),
-                str(ROOT / "docs" / "src" / "apps"),
-                str(ROOT / "docs" / "src" / "ops"),
+                *[str(path) for path in STRUCTURE_DIRS],
             ],
         ),
         Task(

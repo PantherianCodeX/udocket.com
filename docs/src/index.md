@@ -20,7 +20,7 @@ The aggregator runs:
 
 1. `scripts/docs/build_runbook_catalog.py --check` to ensure the ops catalog matches the latest runbook sections
 1. `scripts/docs/build_diagram_index.py --check` for Mermaid inventory freshness
-1. `scripts/docs/check_structure.py docs/src/services docs/src/apps docs/src/ops` to enforce template compliance
+1. `scripts/docs/check_structure.py docs/src/platform docs/src/automation docs/src/data docs/src/customer docs/src/experience docs/src/ops` to enforce template compliance
 1. `scripts/docs/check_appendices.py` for appendix numbering and references
 1. `npx markdownlint-cli2 --config docs/.markdownlint.json 'docs/src/**/*.md'` plus an optional global `markdownlint-cli2` invocation when available
 1. `scripts/docs/check_settings_keys.py` to keep Appendix E aligned with shipped settings
@@ -46,13 +46,13 @@ Authoring guidelines:
 
 ## Rendering Mermaid diagrams
 
-Source `.mmd` files live under each owner doc’s local `diagrams/` folder. Cross‑cutting TDD diagrams live under `docs/src/overview/tdd/diagrams/`. To render them locally (outputs to `docs/src/build/mermaid/`):
+Source `.mmd` files live under each owner doc’s local `diagrams/` folder. Cross‑cutting TDD diagrams live under `docs/src/overview/tdd/diagrams/`. To render them locally (outputs to `docs/build/mermaid/` and mirrors into `docs/src/_assets/mermaid/`):
 
 ```bash
 scripts/docs/render_mermaid.sh
 ```
 
-Use `--all` to force a full rebuild. Rendered SVGs land in `docs/src/build/mermaid/` (checked in so MkDocs and PDF builds can read them). Reference them in Markdown/HTML using `/build/mermaid/...` so paths remain correct when the site is published. The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
+Use `--all` to force a full rebuild. Rendered SVGs land in `docs/build/mermaid/` (canonical store) and are mirrored to `docs/src/_assets/mermaid/` so MkDocs can serve them. Reference them in Markdown/HTML using `_assets/mermaid/...` so paths remain correct when the site is published. The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
 
 ## VS Code setup
 

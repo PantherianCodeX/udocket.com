@@ -69,9 +69,9 @@ ______________________________________________________________________
 
 ## Reading Guide
 
-- **Scope:** This spec owns immutable audit storage, structured evidence manifests, audit seals, judgment history, DSAR/waiver logging, and compliance traceability. It complements `../services/observability.md`, which focuses on runtime observability.
+- **Scope:** This spec owns immutable audit storage, structured evidence manifests, audit seals, judgment history, DSAR/waiver logging, and compliance traceability. It complements `../platform/observability.md`, which focuses on runtime observability.
 - **Audience:** Compliance engineers, platform architects, Guardian/Signer teams, and auditors verifying evidence chains.
-- **Change protocol:** Any schema or seal change must update this document, reference relevant ADRs, and demonstrate seal verification in staging. Run `python scripts/docs/check_structure.py docs/src/services/audit.md` prior to submission.
+- **Change protocol:** Any schema or seal change must update this document, reference relevant ADRs, and demonstrate seal verification in staging. Run `python scripts/docs/check_structure.py docs/src/data/audit.md` prior to submission.
 - **Related references:** TDD §5 and §12 summarize lifecycle/audit obligations; Guardian (§7) describes judgment payloads; Settings (§7.3) enumerates audit keys; Audit appendices in the TDD now point here.
 
 ______________________________________________________________________
@@ -125,7 +125,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Document Audit & Evidence `ApiError.code` emissions so downstream services and auditors can apply the correct remediation flow. **|**
-**Contract:** Audit APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and surface the codes below for domain-specific failures. **|**
+**Contract:** Audit APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and surface the codes below for domain-specific failures. **|**
 **State:** Codes originate from `apps/platform/audit/api.py` and ledger services, with matching audit events appended to `ops/audit/ops_audit.jsonl`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and contract tests; runtime emissions trigger `audit_api_error_total{code}` alerts. **|**
 **Observability:** Metrics `audit_api_error_total{code}` and dashboards “Audit Seal Integrity” / “Compliance Evidence” monitor error rates; synthetic DSAR drills confirm semantics. **|**
@@ -342,9 +342,9 @@ ______________________________________________________________________
 ## 10) References
 
 - Technical Design Document §5 (artifact lifecycle) and §12 (summary)  
-- Logging specification — `../services/observability.md`  
-- Guardian specification — `../services/guardian.md` §7  
-- Settings specification — `../services/settings.md` §7.3–§7.4  
-- Digital Signer specification — `../services/digital-signer.md` §4  
+- Logging specification — `../platform/observability.md`  
+- Guardian specification — `../platform/guardian.md` §7  
+- Settings specification — `../platform/settings.md` §7.3–§7.4  
+- Digital Signer specification — `../data/digital-signer.md` §4  
 - Ops runbook catalog — `../ops/runbooks.md` (RB-AUDIT-004, RB-WAIVER-GOV, RB-PRIV-DSAR, RB-AUDIT-MANIFEST)  
 - ADR index — `../adr/README.md` (ADR-0001, ADR-0006, ADR-0011)

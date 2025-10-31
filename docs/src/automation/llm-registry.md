@@ -223,7 +223,7 @@ Binding checkpoints (sample)
 - Metrics exported: `llm_call_count`, `llm_tokens_in/out`, `llm_cost_estimate_total{org,case,job,model}` and FinOps reports `FINOPS_REPORT` per org.
 - Controllers mark affected jobs `PAUSED_AWAITING_BUDGET`, emit SSE `job.blocked` with `warning="BUDGET_HELD"`, and log audit `FINOPS_BUDGET_HELD`. Resume requires override or cap increase.
 - Alerts `finops_budget_hold_active_total` and `finops_budget_hold_duration_seconds` page FinOps/Product; resume events log `FINOPS_BUDGET_RESUMED` and auto-clear quarantines once relief confirmed.
-- Diagram `services/lp-engine/diagrams/finops-guard-v1.mmd` visualizes the deploy guard decision flow (shared with LPE spec §7.4).
+- Diagram `automation/lp-engine/diagrams/finops-guard-v1.mmd` visualizes the deploy guard decision flow (shared with LPE spec §7.4).
 
 #### 2.4.1 FinOps deploy guard (binding)
 
@@ -272,7 +272,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Document the `ApiError.code` values emitted by the LLM Registry so calling services handle retries, fallbacks, and throttling consistently. **|**
-**Contract:** Registry APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to registry-specific scenarios. **|**
+**Contract:** Registry APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the table below maps those codes to registry-specific scenarios. **|**
 **State:** Errors surface from `/api/v1/providers/*` endpoints, Settings activation hooks, and moderation/health orchestration; schema parity maintained via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/llm/test_registry_api.py`; runtime emissions trigger `llm_registry_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “LLM Registry – API” and “LLM Health” chart `llm_registry_api_error_total{code}`, `llm_circuit_state`; synthetic registry polls run per deploy. **|**

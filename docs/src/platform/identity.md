@@ -66,7 +66,7 @@ ______________________________________________________________________
 
 - **Scope:** Keycloak realm configuration, org/case membership lattice, session binding, database RLS GUCs, masking, auditing, and break-glass governance. Guardian, Portal, Workers, and all APIs rely on this contract.
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) summarise primary duties; §3 covers authentication and federation; §4 the authorization lattice and database enforcement; §5 session/device binding; §6 masking and break-glass; remaining sections handle failure, observability, ops, and dependencies.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/identity.md docs/src/overview/tdd.md docs/tdd_modularization.md` before landing identity changes. Update runbooks via `build_runbook_catalog.py --check`, rerun `make lint-db` when modifying RLS or masking SQL.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/platform/identity.md docs/src/overview/tdd.md docs/tdd_modularization.md` before landing identity changes. Update runbooks via `build_runbook_catalog.py --check`, rerun `make lint-db` when modifying RLS or masking SQL.
 - **Change protocol:** Realm topology, token lifetimes, masking profiles, or break-glass policies require Security + Architecture approval. Any change impacting GUC setup or secure views must accompany migrations/tests and notify data platform owners.
 - **References:** TDD §4 summary, Guardian spec §5 (quarantine), Settings spec (§2.4, §2.7, `security.*` keys), Worker Cluster spec §2 (watchdogs), Ops runbooks `RB-IDP-FAILOVER`, `RB-BREAK-GLASS`, `RB-RLS-CONTEXT`, `RB-MASK`.
 - **Contacts:** Platform Engineering (identity services), Security Engineering (policy), SRE (session/watchdog automation), on-call alias `identity-oncall@`, Slack `#identity-access`.
@@ -133,7 +133,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Record the `ApiError.code` values emitted by identity and session APIs so clients respond safely to authentication and governance failures. **|**
-**Contract:** Identity surfaces the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to identity-specific flows. **|**
+**Contract:** Identity surfaces the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the table below maps those codes to identity-specific flows. **|**
 **State:** Errors arise from token issuance (`/api/v1/auth/token`), break-glass workflows, device binding checks, and portal/staff session APIs; schemas align with `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/auth/test_api_errors.py`; runtime emissions trigger `identity_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Identity – API Errors” and “Session Integrity” chart `identity_api_error_total{code}`, `identity_device_fp_mismatch_total`; synthetic token flows validate MFA/clock skew guardrails. **|**
@@ -169,7 +169,7 @@ ______________________________________________________________________
 **State:** Authorization lattice tables (`case_member`, `effective_permission`), secure views, masking configuration, break-glass ledger, and cache entries. **|**
 **Failures & handling:** Policy or masking drift triggers RB-RLS-CONTEXT or RB-BREAK-GLASS; break-glass sessions require post-hoc approvals before re-enabling automation. **|**
 **Observability:** Dashboards “Identity – RLS Health”, metrics `rls_context_missing_total`, `masking_transformation_total`, `break_glass_event_total`. **|**
-**Breadcrumbs:** Permission services `packages/udocket_core/permissions/`, masking utilities `packages/udocket_core/masking/`, Settings activation `apps/platform/settings/services/identity.py`, tests `tests/identity/test_state_management.py`. **|**
+**Breadcrumbs:** Permission services `packages/udocket_core/permissions/`, masking utilities `packages/udocket_core/masking/`, Settings activation `apps/platform/settings/platform/identity.py`, tests `tests/identity/test_state_management.py`. **|**
 **References:** Settings §7, Observability §4, Audit §4.
 
 ### 4.1 Authorization lattice & data access (binding)
@@ -418,9 +418,9 @@ SELECT id,
 ## 10) References
 
 - TDD §4 Identity, tenancy & access control (summary).  
-- Settings Registry specification — `../services/settings.md`.  
-- Guardian specification — `../services/guardian.md`.  
-- Worker Cluster specification — `../services/worker-cluster.md`.  
+- Settings Registry specification — `../platform/settings.md`.  
+- Guardian specification — `../platform/guardian.md`.  
+- Worker Cluster specification — `../automation/worker-cluster.md`.  
 - Ops runbook catalog — `../ops/runbooks.md`.
 
 ______________________________________________________________________

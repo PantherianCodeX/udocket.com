@@ -9,19 +9,19 @@ from scripts.docs import link_check as lc
 
 def test_check_diagrams_detects_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(lc, "ROOT", tmp_path)
-    content = "![Diagram](docs/src/services/sample/diagrams/flow.mmd)"
+    content = "![Diagram](docs/src/platform/sample/diagrams/flow.mmd)"
 
     problems = lc.check_diagrams(content)
 
-    assert problems == ["Missing diagram source: docs/src/services/sample/diagrams/flow.mmd"]
+    assert problems == ["Missing diagram source: docs/src/platform/sample/diagrams/flow.mmd"]
 
 
 def test_check_diagrams_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    diagram = tmp_path / "docs" / "src" / "services" / "sample" / "diagrams" / "flow.mmd"
+    diagram = tmp_path / "docs" / "src" / "platform" / "sample" / "diagrams" / "flow.mmd"
     diagram.parent.mkdir(parents=True)
     diagram.write_text("graph TD;", encoding="utf-8")
     monkeypatch.setattr(lc, "ROOT", tmp_path)
-    content = "![Diagram](docs/src/services/sample/diagrams/flow.mmd)"
+    content = "![Diagram](docs/src/platform/sample/diagrams/flow.mmd)"
 
     problems = lc.check_diagrams(content)
 
@@ -81,32 +81,32 @@ def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: p
 
 
 def test_find_service_refs_handles_anchor() -> None:
-    refs = lc.find_service_refs("See ../services/foo.md#section-1 and ../services/bar.md")
+    refs = lc.find_service_refs("See ../platform/foo.md#section-1 and ../automation/bar.md")
 
-    assert refs == {"foo.md#section-1", "bar.md"}
+    assert refs == {("platform", "foo.md#section-1"), ("automation", "bar.md")}
 
 
 def test_check_services_missing_anchor(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    services_dir = tmp_path / "docs" / "src" / "services"
+    services_dir = tmp_path / "docs" / "src" / "platform"
     services_dir.mkdir(parents=True)
     service = services_dir / "foo.md"
     service.write_text("## Heading Without Anchor\n", encoding="utf-8")
-    monkeypatch.setattr(lc, "SERVICES_DIR", services_dir)
+    monkeypatch.setitem(lc.AREA_PATHS, "platform", services_dir)
     lc.load_service_anchors.cache_clear()
 
-    problems = lc.check_services("See ../services/foo.md#missing-anchor")
+    problems = lc.check_services("See ../platform/foo.md#missing-anchor")
 
-    assert problems == ["Anchor '#missing-anchor' missing in ../services/foo.md"]
+    assert problems == ["Anchor '#missing-anchor' missing in ../platform/foo.md"]
 
 
 def test_check_services_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    services_dir = tmp_path / "docs" / "src" / "services"
+    services_dir = tmp_path / "docs" / "src" / "automation"
     services_dir.mkdir(parents=True)
     service = services_dir / "bar.md"
     service.write_text("## Heading {#section-1}\n", encoding="utf-8")
-    monkeypatch.setattr(lc, "SERVICES_DIR", services_dir)
+    monkeypatch.setitem(lc.AREA_PATHS, "automation", services_dir)
     lc.load_service_anchors.cache_clear()
 
-    problems = lc.check_services("See ../services/bar.md#section-1")
+    problems = lc.check_services("See ../automation/bar.md#section-1")
 
     assert problems == []

@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Defines the Artifact Store service that governs storage/media layout under `storage/media/cases/<case_id>/`, lifecycle invariants for Source Assets/Work Products/Deliverables (TDD §5), retention/erasure workflows (TDD §14), and append-only ops ledgers used by downstream agents.
 - **Structure:** Sections follow the 0–10 pattern: purpose and responsibilities, API/file interfaces, state management, failure handbooks, observability, security/compliance, operations, dependencies, and references. Appendices align with ExclusiveSwap invariants and retention tables described in TDD §5.4 and Appendix J.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/artifact-store.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting. Changes to storage layout or retention policy require synchronized updates to migration scripts and Appendix J tables.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/data/artifact-store.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting. Changes to storage layout or retention policy require synchronized updates to migration scripts and Appendix J tables.
 - **Change protocol:** Any schema/layout change (directory naming, hash strategy, retention timers) must reference this spec, TDD §5.2–§5.4, Appendix J, and corresponding migrations. Deleting artifacts or altering retention flows also requires Security + Records approval.
 - **References:** TDD §5 Artifact lifecycle, §14 Retention & Compliance, Appendix J SQL policy patterns, Guardian §5 quarantine governance, Compose §6 deliverable promotion rules, Ops runbooks `RB-ARTIFACT-*`.
 - **Contacts:** Platform Engineering (artifact services), Records & Compliance (retention policy), on-call `storage-oncall@`, escalation `#ops-artifacts`.
@@ -169,7 +169,7 @@ ______________________________________________________________________
 
 **Purpose:** Document Artifact Store specific `ApiError.code` usage so callers know when to retry versus escalate. **|**
 **Contract:** Artifact promotion/deletion piggyback on the platform catalog; Artifact Store introduces no new codes beyond the shared inventory documented here. **|**
-**State:** Error catalog maintained in `docs/src/services/artifact-store/error_codes.yaml`; empty list indicates no service-specific extensions. **|**
+**State:** Error catalog maintained in `docs/src/data/artifact-store/error_codes.yaml`; empty list indicates no service-specific extensions. **|**
 **Failures & handling:** Platform codes map to Guardian/Settings/Compose remediations; no additional runbooks beyond those services. **|**
 **Observability:** Unknown code emissions trigger `artifact_api_error_unknown_total`; dashboards reuse Platform Runtime §3.3 metrics. **|**
 **Breadcrumbs:** REST handlers `apps/platform/artifacts/views.py`, serializer errors `apps/platform/artifacts/serializers.py`, audit streams `ops/ops_artifacts.jsonl`. **|**
@@ -349,7 +349,7 @@ Quarterly drills ensure integrity/retention procedures stay executable and evide
 
 - Semi-annual integrity drill verifying hash reconciler recovery. **|**
 - Quarterly retention playback using synthetic DSAR cases. **|**
-- Evidence stored in `ops/artifacts/drills/<date>/summary.md` with metrics snapshots and archived under `ops/artifacts/evidence/<date>/` with Grafana exports. **|**
+- Evidence stored in `ops/artifacts/drills/<date>/summary.md` with metrics snapshots and archived under `ops/artifac../data/<date>/` with Grafana exports. **|**
 - Compliance reviews sample evidence quarterly; gaps trigger remediation tasks surfaced by `docs_runbook_evidence_missing_total`. **|**
 
 See Ops catalog and Appendix O decision log for templates and evidence requirements.
@@ -401,8 +401,8 @@ ______________________________________________________________________
 
 - TDD §5 Artifact lifecycle and ExclusiveSwap invariant.
 - TDD §14 Retention, DSAR, and erasure governance.
-- Settings Registry specification — `../services/settings.md`.
-- Guardian specification — `../services/guardian.md`.
-- Compose specification — `../services/langgraph-agents.md`.
+- Settings Registry specification — `../platform/settings.md`.
+- Guardian specification — `../platform/guardian.md`.
+- Compose specification — `../automation/langgraph-agents.md`.
 - Ops runbook catalog — `../ops/runbooks.md`.
 - Appendix J — SQL policy patterns (artifact RLS/masking).

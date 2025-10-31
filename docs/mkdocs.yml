@@ -2,6 +2,7 @@ site_name: uDocket Documentation
 repo_url: https://github.com/PantherianCodeX/udocket.com
 
 docs_dir: src
+site_dir: build/site
 use_directory_urls: false
 exclude_docs: |
   **/_template.md
@@ -46,13 +47,13 @@ plugins:
     slide_effect: none
 
 extra_css:
-- assets/stylesheets/diagrams.css
+- _assets/stylesheets/diagrams.css
 
 extra_javascript:
 - https://unpkg.com/mermaid@10/dist/mermaid.min.js
-- js/mermaid-init.js
-- assets/javascripts/vendor/panzoom.min.js
-- assets/javascripts/glightbox-panzoom.js
+- _assets/javascripts/mermaid-init.js
+- _assets/javascripts/vendor/panzoom.min.js
+- _assets/javascripts/glightbox-panzoom.js
 
 nav:
 - Home: index.md
@@ -69,29 +70,29 @@ nav:
   - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
   - SLO Index: overview/tdd/appendices/slo_index.md
   - Diagrams: overview/tdd/appendices/diagrams.md
-- Experience Layer:
-  - Web App: apps/web-app.md
+- Experience:
+  - Web App: experience/web-app.md
 - Platform Control Plane:
-  - Platform Runtime: services/platform-runtime.md
-  - Settings Registry: services/settings.md
-  - Identity & Access: services/identity.md
-  - Guardian: services/guardian.md
-  - Observability: services/observability.md
+  - Platform Runtime: platform/runtime.md
+  - Settings Registry: platform/settings.md
+  - Identity & Access: platform/identity.md
+  - Guardian: platform/guardian.md
+  - Observability: platform/observability.md
 - Automation & Intelligence:
-  - LangGraph Agents: services/langgraph-agents.md
-  - Worker Cluster: services/worker-cluster.md
-  - LLM Registry: services/llm-registry.md
-  - LPE: services/lp-engine.md
-- Data & Evidence:
-  - Artifact Store: services/artifact-store.md
-  - Digital Signer: services/digital-signer.md
-  - Reference Manager: services/ref-manager.md
-  - Search & Indexing: services/search-index.md
-  - Audit & Evidence: services/audit.md
+  - LangGraph Agents: automation/langgraph-agents.md
+  - Worker Cluster: automation/worker-cluster.md
+  - LLM Registry: automation/llm-registry.md
+  - LPE: automation/lp-engine.md
+- Data Platform:
+  - Artifact Store: data/artifact-store.md
+  - Digital Signer: data/digital-signer.md
+  - Reference Manager: data/ref-manager.md
+  - Search & Indexing: data/search-index.md
+  - Audit & Evidence: data/audit.md
 - Customer Operations:
-  - Accounts & Tenants: services/accounts-tenants.md
-  - Billing & Subscriptions: services/billing-subscriptions.md
-  - Communications: services/communications.md
+  - Accounts & Tenants: customer/accounts-tenants.md
+  - Billing & Subscriptions: customer/billing-subscriptions.md
+  - Communications: customer/communications.md
 - Operations Hub:
   - Runbooks: ops/runbooks.md
 - Decision Records:

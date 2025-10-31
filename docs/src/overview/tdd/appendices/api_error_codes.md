@@ -45,7 +45,7 @@ This appendix aggregates the API error code sections from every service and app 
 <!-- BEGIN AUTO-GENERATED: api-error-index -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_api_error_codes.py` to refresh. -->
 
-### [Accounts & Tenants Service](../../../services/accounts-tenants.md#3-3-webhooks-events-binding) {#accounts-tenants-service}
+### [Accounts & Tenants Service](../../../customer/accounts-tenants.md#3-3-webhooks-events-binding) {#accounts-tenants-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `POLICY_BLOCK` | 403 | Yes | accounts_api_error_total<br>tenant_suspension_active_total |
 | `VALIDATION_ERROR` | 400 | No | accounts_api_error_total<br>tenant_activation_latency_seconds |
 
-### [Artifact Store Service](../../../services/artifact-store.md#3-3-api-error-codes-binding) {#artifact-store-service}
+### [Artifact Store Service](../../../data/artifact-store.md#3-3-api-error-codes-binding) {#artifact-store-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `POLICY_BLOCK` | 403 | Yes | artifact_api_error_total<br>artifact_retention_violation_total |
 | `VALIDATION_ERROR` | 400 | No | artifact_api_error_total<br>artifact_store_hash_mismatch_total |
 
-### [Audit & Evidence](../../../services/audit.md#3-3-api-error-codes-binding) {#audit-evidence}
+### [Audit & Evidence](../../../data/audit.md#3-3-api-error-codes-binding) {#audit-evidence}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `QUARANTINED` | 423 | Yes | audit_api_error_total |
 | `VALIDATION_ERROR` | 400 | No | audit_api_error_total |
 
-### [Billing & Subscriptions Service](../../../services/billing-subscriptions.md#3-3-api-error-codes-binding) {#billing-subscriptions-service}
+### [Billing & Subscriptions Service](../../../customer/billing-subscriptions.md#3-3-api-error-codes-binding) {#billing-subscriptions-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `PROVIDER_DEGRADED` | 503 | Yes | billing_api_error_total<br>billing_payment_failed_total |
 | `VALIDATION_ERROR` | 400 | No | billing_api_error_total<br>billing_plan_update_total |
 
-### [Communications Service](../../../services/communications.md#3-3-api-error-codes-binding) {#communications-service}
+### [Communications Service](../../../customer/communications.md#3-3-api-error-codes-binding) {#communications-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -125,7 +125,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | notify_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | notifications_api_error_total |
 
-### [Digital Signer](../../../services/digital-signer.md#3-3-api-error-codes-binding) {#digital-signer}
+### [Digital Signer](../../../data/digital-signer.md#3-3-api-error-codes-binding) {#digital-signer}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -143,7 +143,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `SIGNING_PIPELINE_BLOCKED` | 503 | Yes | signer_api_error_total<br>signer_pipeline_blocked_total |
 | `SIGN_IDEMPOTENCY_CONFLICT` | 409 | No | signer_api_error_total |
 
-### [Guardian Service](../../../services/guardian.md#3-3-api-error-codes-binding) {#guardian-service}
+### [Guardian Service](../../../platform/guardian.md#3-3-api-error-codes-binding) {#guardian-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RESIDENCY_POLICY_BLOCK` | 403 | Yes | guardian_api_error_total<br>guardian_policy_block_total |
 | `SCHEMA_POLICY_BLOCK` | 400 | No | guardian_api_error_total<br>guardian_detector_errors_total |
 
-### [Identity & Access](../../../services/identity.md#3-3-api-error-codes-binding) {#identity-access}
+### [Identity & Access](../../../platform/identity.md#3-3-api-error-codes-binding) {#identity-access}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -183,7 +183,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `POLICY_BLOCK` | 403 | Yes | identity_api_error_total |
 | `RATE_LIMIT` | 429 | No | identity_api_error_total<br>identity_rate_limit_total |
 
-### [LangGraph Agent Orchestration](../../../services/langgraph-agents.md#3-3-api-error-codes-binding) {#langgraph-agent-orchestration}
+### [LangGraph Agent Orchestration](../../../automation/langgraph-agents.md#3-3-api-error-codes-binding) {#langgraph-agent-orchestration}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -201,7 +201,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `QUARANTINED` | 423 | Yes | agent_guardian_block_total |
 | `RATE_LIMIT` | 429 | No | agent_api_error_total<br>agent_rate_limit_total |
 
-### [LLM Registry & Runtime Governance](../../../services/llm-registry.md#3-3-api-error-codes-binding) {#llm-registry-runtime-governance}
+### [LLM Registry & Runtime Governance](../../../automation/llm-registry.md#3-3-api-error-codes-binding) {#llm-registry-runtime-governance}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -219,7 +219,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | llm_registry_api_error_total<br>llm_cost_estimate_total |
 | `VALIDATION_ERROR` | 400 | No | llm_registry_api_error_total |
 
-### [Localization & Policy Engine](../../../services/lp-engine.md#3-3-api-error-codes-binding) {#localization-policy-engine}
+### [Localization & Policy Engine](../../../automation/lp-engine.md#3-3-api-error-codes-binding) {#localization-policy-engine}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -237,7 +237,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | lpe_api_error_total<br>lpe_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | lpe_api_error_total |
 
-### [Observability](../../../services/observability.md#3-3-api-error-codes-binding) {#observability}
+### [Observability](../../../platform/observability.md#3-3-api-error-codes-binding) {#observability}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -255,7 +255,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | telemetry_ingest_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | observability_api_error_total |
 
-### [Platform Runtime](../../../services/platform-runtime.md#33-api-error-codes) {#platform-runtime}
+### [Platform Runtime](../../../platform/runtime.md#33-api-error-codes) {#platform-runtime}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -285,7 +285,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | api_error_total |
 | `VALIDATION_ERROR` | 400 | No | api_error_total |
 
-### [Reference Manager](../../../services/ref-manager.md#3-3-api-error-codes-binding) {#reference-manager}
+### [Reference Manager](../../../data/ref-manager.md#3-3-api-error-codes-binding) {#reference-manager}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -303,7 +303,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `RATE_LIMIT` | 429 | No | reference_api_error_total<br>reference_publish_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | reference_api_error_total |
 
-### [Search & Indexing Service](../../../services/search-index.md#3-3-api-error-codes-binding) {#search-indexing-service}
+### [Search & Indexing Service](../../../data/search-index.md#3-3-api-error-codes-binding) {#search-indexing-service}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -317,7 +317,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `PROVIDER_DEGRADED` | 503 | Yes | search_api_error_total<br>search_index_backlog_total |
 | `VALIDATION_ERROR` | 400 | No | search_api_error_total<br>search_query_validation_total |
 
-### [Settings Registry](../../../services/settings.md#3-3-api-error-codes-binding) {#settings-registry}
+### [Settings Registry](../../../platform/settings.md#3-3-api-error-codes-binding) {#settings-registry}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -337,7 +337,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `SECRET_DISCLOSURE_BLOCKED` | 403 | Yes | settings_error_total |
 | `VALIDATION_ERROR` | 400 | No | settings_error_total |
 
-### [Web Application & Portal](../../../apps/web-app.md#3-3-api-error-codes-binding) {#web-application-portal}
+### [Web Application & Portal](../../../experience/web-app.md#3-3-api-error-codes-binding) {#web-application-portal}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
@@ -353,7 +353,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `PORTAL_DOWNLOAD_PRECONDITION` | 412 | No | portal_download_error_total |
 | `RATE_LIMIT` | 429 | No | ui_api_error_total<br>ui_rate_limit_total |
 
-### [Worker Cluster](../../../services/worker-cluster.md#3-3-api-error-codes-binding) {#worker-cluster}
+### [Worker Cluster](../../../automation/worker-cluster.md#3-3-api-error-codes-binding) {#worker-cluster}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |

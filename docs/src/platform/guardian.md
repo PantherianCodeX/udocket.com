@@ -303,7 +303,7 @@ curl -sS -X POST \
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Guardian-specific `ApiError.code` values so downstream services, UI surfaces, and monitoring dashboards can distinguish policy rejections from transient infrastructure issues. **|**
-**Contract:** Guardian inherits the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and layers detector/policy-specific codes listed below. **|**
+**Contract:** Guardian inherits the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and layers detector/policy-specific codes listed below. **|**
 **State:** Codes originate from submission validation (`apps/platform/guardian/views.py`), pipeline stages (`packages/udocket_core/guardian/pipeline.py`), and review endpoints. **|**
 **Failures & handling:** Unknown codes fail contract tests (`tests/platform/guardian/test_api_errors.py`) and trigger `guardian_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Metrics `guardian_api_error_total{code}`, SSE topics `guardian.judgment.failed`, and dashboards “Guardian Decisions”/“Policy Drift” highlight error rates; synthetic submissions replay canonical failures every deploy. **|**
@@ -796,7 +796,7 @@ ______________________________________________________________________
 - **ADRs:** ADR-0001 Guardian Ready/Quarantine, ADR-0002 API Versioning & Sunset, ADR-0003 Localization & Policy Engine, ADR-0004 OPA Policy Plane.
 - **TDD sections:** TDD §5 Security Architecture, TDD §7 Guardian Integration, TDD Appendix H Operational Guides.
 - **Runbooks:** §8.3 entries RB-GUARD-001/QUEUE/QUAR/MANUAL plus supporting files in `ops/runbooks/guardian/`.
-- **Diagrams:** `docs/src/services/guardian/diagrams/upload-guardian-approve-v1.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`, `docs/src/services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
+- **Diagrams:** `docs/src/platform/guardian/diagrams/upload-guardian-approve-v1.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`, `docs/src/automation/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
 - **Schemas & fixtures:** Appendix B, `packages/udocket_core/guardian/contracts/payloads.py`, sample manifests in `docs/examples/lineage/`.
 - **Change protocol:** PRs touching Guardian code/policy must link to this section, run `python scripts/docs/lint_docs.py`, and obtain Architecture + Security approval before deploy.
 
@@ -806,15 +806,15 @@ ______________________________________________________________________
 
 **Purpose:** Catalog diagrams, manifests, and example payloads that illustrate Guardian workflows referenced in the main sections. **|**
 **Contract:** Files listed here remain the canonical artifacts; updates must keep paths stable and refresh references in §§2–4. **|**
-**State:** Artifacts live under `docs/src/services/guardian/diagrams/` and `docs/examples/lineage/` with deterministic filenames matching the associated job IDs. **|**
+**State:** Artifacts live under `docs/src/platform/guardian/diagrams/` and `docs/examples/lineage/` with deterministic filenames matching the associated job IDs. **|**
 **Failures & handling:** Missing or stale artifacts cause docs lint/link check failures; update the assets or adjust references before merging. **|**
 **Observability:** Docs CI verifies diagram availability via `scripts/docs/render_mermaid.sh` and link checks. **|**
 **References:** §2 Responsibilities, §3 API contract, Appendix B payload schema.
-**Breadcrumbs:** Diagram sources `docs/src/services/guardian/diagrams/`, example manifests `docs/examples/lineage/`, render script `scripts/docs/render_mermaid.sh`.
+**Breadcrumbs:** Diagram sources `docs/src/platform/guardian/diagrams/`, example manifests `docs/examples/lineage/`, render script `scripts/docs/render_mermaid.sh`.
 
 - **Diagrams:**
-- `services/guardian/diagrams/upload-guardian-approve-v1.mmd` (sequence of upload → Guardian → approval).
-- `services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd` (policy propagation and Guardian enforcement).
+- `platform/guardian/diagrams/upload-guardian-approve-v1.mmd` (sequence of upload → Guardian → approval).
+- `automation/lp-engine/diagrams/residency-policy-enforcement-v1.mmd` (policy propagation and Guardian enforcement).
 - `overview/tdd/diagrams/data-lineage-v1.mmd` (artifact lineage through Guardian and Signer).
 - **Examples:**
   - `docs/examples/lineage/transcript_to_compose.json` demonstrating manifest linkage with Guardian judgment IDs.

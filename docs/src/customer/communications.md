@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Governs outbound communications (email, SMS, phone-adjacent alerts, secure download tokens) and in-app notifications emitted by the uDocket platform. Covers outbox/state machines, provider adapters, webhook ingestion, receipts, audit posture, digest generation, and rate limiting. Portal banners and SSE fan-out ride on the same orchestration, so UI sections reference this specification for delivery guarantees. Historically branded “Notifications,” the runtime modules remain under `apps/platform/notifications/*`; this spec widens the domain to all outbound communications.
 - **Structure:** Sections follow the 0–10 template. Responsibilities (§2) enumerate channels and compliance requirements; APIs (§3) describe outbound queues and webhook callbacks; State management (§4) documents schema, RLS, and secure-view contracts; Failure/Observability (§5–§6) map to alerting; Security & Compliance (§7) captures DMARC/SMS obligations; Operations (§8) links to runbooks/digests; Dependencies, references close the doc.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/communications.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting changes. Updates that alter schema, queue semantics, or provider adapters also require `build_runbook_catalog.py --check` to pass. Notify Platform + Ops architecture lists on PRs.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/customer/communications.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting changes. Updates that alter schema, queue semantics, or provider adapters also require `build_runbook_catalog.py --check` to pass. Notify Platform + Ops architecture lists on PRs.
 - **Change protocol:** Any PR affecting `outbox_delivery`/`delivery_receipt` schema, webhook signatures, download token format, or notification templates must reference this spec and ADR-0002. Provider onboarding/offboarding, DMARC policy changes, or SMS compliance updates demand Security + Architecture approval and runbook refreshes per §8.
 - **References:** TDD §11 summary, Settings Registry §5 (keys under `notifications.*`), Guardian §5 (quarantine notifications), LP Engine §7 (localization bundles), Ops runbook catalog (`RB-NOTIFY-\*`), policy references in ADR-0002/0004.
 - **Contacts:** Platform Engineering (service ownership), Operations Engineering (runbooks/delivery providers), on-call `notify-oncall@`, escalation `#ops-notifications`.
@@ -217,7 +217,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Notifications `ApiError.code` values so producers, webhooks, and portal clients handle throttling and policy blocks consistently. **|**
-**Contract:** Notifications reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below map those codes to messaging semantics. **|**
+**Contract:** Notifications reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below map those codes to messaging semantics. **|**
 **State:** Error envelopes originate from outbox APIs, download token issuance, and webhook ingestion; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/notifications/test_api_errors.py`; runtime emissions trigger `notifications_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Notifications – API Errors” and “Notifications – Webhooks” monitor `notifications_api_error_total{code}`, `notify_rate_limit_total`; synthetic sends validate throttling and masking flows. **|**
@@ -544,8 +544,8 @@ ______________________________________________________________________
 ## 10) References
 
 - TDD overview summary — `../overview/tdd.md §11` (Notifications bullet list).
-- Settings Registry specification — `../services/settings.md §5.2` (notifications keys).
-- Localization & Policy Engine — `../services/lp-engine.md §2.1` (locale bundles for notifications).
+- Settings Registry specification — `../platform/settings.md §5.2` (notifications keys).
+- Localization & Policy Engine — `../automation/lp-engine.md §2.1` (locale bundles for notifications).
 - Ops runbook catalog — `../ops/runbooks.md` (`RB-NOTIFY-\*` entries).
 - ADR-0002 — API versioning & sunset policy for notification endpoints.
 - ADR-0003 — Localization & Policy Engine governance for templates.

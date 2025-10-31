@@ -266,7 +266,7 @@ formatter = lpe.get_locale("en-US").formatters
 rendered_date = formatter.date_short(approved_at)
 ```
 
-Residency outcomes derive from `PolicyContext` allowlists while OPA enforces deny-by-default egress rules and returns structured deny codes (`REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`). Waivers embed `{waiver_id, expires_at, justification}` into contexts; Guardian, Portal, and manifest pipelines propagate the waiver reference when used. Continuous scanners compare active contexts against mesh egress manifests and provider regions; drift raises `residency_policy_block_total` alerts and references §8.3.3 for remediation. Refer to `docs/src/services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd` for the activation → evaluation → enforcement sequence.
+Residency outcomes derive from `PolicyContext` allowlists while OPA enforces deny-by-default egress rules and returns structured deny codes (`REGION_NOT_ALLOWED`, `WAIVER_REQUIRED`). Waivers embed `{waiver_id, expires_at, justification}` into contexts; Guardian, Portal, and manifest pipelines propagate the waiver reference when used. Continuous scanners compare active contexts against mesh egress manifests and provider regions; drift raises `residency_policy_block_total` alerts and references §8.3.3 for remediation. Refer to `docs/src/automation/lp-engine/diagrams/residency-policy-enforcement-v1.mmd` for the activation → evaluation → enforcement sequence.
 
 - Drift scanner compares active residency allowlists with mesh egress policies, DNS resolution, and provider metadata, writing findings to `ops/residency/findings/<timestamp>.jsonl` (`{org_id, service, endpoint, allowed, waiver_id?, severity}`) and paging on `residency_drift_detected_total`.
 - Waiver ledger entries (`ops/waivers/WAIVER-*.json`) must include scope, approved regions, expiry, remediation plan, and dual approvals (Security + Architecture); expired entries trigger `waiver_expiring_total` and block activations until resolved.
@@ -318,7 +318,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate LPE-specific `ApiError.code` values so downstream services and automation interpret failures consistently. **|**
-**Contract:** LPE APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below describe how those codes manifest during policy compilation and evaluation. **|**
+**Contract:** LPE APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below describe how those codes manifest during policy compilation and evaluation. **|**
 **State:** Error envelopes originate from `/api/v1/lpe/policy-contexts`, `/api/v1/lpe/compile`, and `/api/v1/lpe/evaluate`; schema parity maintained via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/policy/test_api_errors.py`; runtime emissions trigger `lpe_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “LPE – Compilation” and “LPE – Policy Evaluation” track `lpe_api_error_total{code}`, `lpe_compiler_duration_seconds`; synthetic evaluations verify waivers/residency scenarios. **|**
@@ -382,7 +382,7 @@ ______________________________________________________________________
 **State:** Sandbox bundles, manifest diffs, and decision-log validations persist under `ops/lpe/hot_reload/` and PR artifacts. **|**
 **Failures & handling:** Hot-reload drift or validation failures block merges until reconciled with production manifests. **|**
 **Observability:** CI job `ci-lpe-hot-reload`, scripts `scripts/dev/run_lpe_hot_reload.py`, `scripts/opa/validate_decision_logs.py`. **|**
-**Breadcrumbs:** Local stack compose files `docker-compose.yml`, docs `docs/src/services/lp-engine/diagrams/*`.
+**Breadcrumbs:** Local stack compose files `docker-compose.yml`, docs `docs/src/automation/lp-engine/diagrams/*`.
 
 - `scripts/dev/run_lpe_hot_reload.py` compiles bundles, pushes to sandbox OPA, and diffs digests without staging deploys.
 - `docker compose up --build lpe` mirrors production dependencies (`lpe`, `opa`, `settings`, `reference-manager`) for manual verification.
@@ -509,7 +509,7 @@ ______________________________________________________________________
 ## 6) Observability
 
 **Purpose:** Summarize telemetry, logging, and SLO governance. **|**
-**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../services/observability.md#4-state-management)) and maintains decision-log schema guarantees. **|**
+**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../platform/observability.md#4-state-management)) and maintains decision-log schema guarantees. **|**
 **State:** Grafana dashboards (“LPE – Enforcement & Residency”, “LPE Compiler”, “Localization QA”, “FinOps – LPE”, “SDK Health”) alongside PagerDuty service “Localization & Policy Engine”. Decision logs stored ≥365 days. **|**
 **Failures & handling:** Missing metrics or runbook linkage trigger docs lint failures; SLO burn-rate alerts feed §8.2 triggers. **|**
 **Observability:** Metrics `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`, `lpe_bundle_signature_error_total`, `opa_bundle_status`, `lpe_privacy_framework_enabled_total`, `lpe_compiler_resource_seconds`, `lpe_sdk_cache_error_total`. **|**
@@ -520,7 +520,7 @@ ______________________________________________________________________
 - Synthetic monitors run after each deploy against HIPAA/PHIPA/PIPA contexts; failures block rollout.
 - Decision-log validator `scripts/opa/validate_decision_logs.py` runs in CI and after major releases.
 - Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks.md` and must meet Appendix L baselines before shipping.
-- Logs honour the never-log list ([`Logging §4`](../services/observability.md#4-state-management)); sampling budgets follow dynamic controls in [`Logging §7`](../services/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
+- Logs honour the never-log list ([`Logging §4`](../platform/observability.md#4-state-management)); sampling budgets follow dynamic controls in [`Logging §7`](../platform/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
 
 ### 6.1 SLOs & Targets (binding)
 
@@ -548,7 +548,7 @@ ______________________________________________________________________
 **Breadcrumbs:** `packages/udocket_core/lpe/security.py`, compliance scripts `ops/scripts/lpe/audit_compliance.py`, tests `tests/compliance/test_lpe_retention.py`. **|**
 **References:** Link to residency or policy appendices/ADRs.
 
-- Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow [`Logging §7`](../services/observability.md#7-cost-management--budgets) dynamic controls.
+- Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow [`Logging §7`](../platform/observability.md#7-cost-management--budgets) dynamic controls.
 - Key management: HSM-backed signing keys rotate per policy; evidence stored with bundle manifest records.
 - DSAR & erasure: §8.5.3 workflow captures PolicyContext replay evidence after DSAR operations.
 - FIPS enforcement: When `security.crypto.fips_mode|required`, services consuming OPA bundles invoke `opa_verify_dual_signature()` to assert Ed25519 + ECDSA P-256 signatures. Missing or invalid ECDSA signatures raise `FipsBundleSignatureError`, fire `opa_bundle_fips_signature_missing_total`, and block activation; CI job `ci-opa-bundle-signatures` validates artifacts under `ops/lpe/opa_bundles/*.tar.gz`.
@@ -728,7 +728,7 @@ ______________________________________________________________________
 
 ## 10) References
 
-- Residency policy enforcement diagram — `docs/src/services/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
+- Residency policy enforcement diagram — `docs/src/automation/lp-engine/diagrams/residency-policy-enforcement-v1.mmd`.
 - FIPS tracing for dual-signed policy bundles — TDD App.J.
 - Localization QA evidence templates — `ops/localization/checklists/lpe_release.yaml`.
 - OPA toolkit — `ops/scripts/lpe/deploy_opa_bundle.py`, `scripts/opa/validate_decision_logs.py`.

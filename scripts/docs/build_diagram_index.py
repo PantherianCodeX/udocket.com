@@ -108,7 +108,7 @@ def collect_diagrams() -> Dict[Path | None, list[Diagram]]:
         version = derive_version(metadata, path.stem)
         owner_doc = determine_owner(path)
         source_rel = rel
-        svg_rel = Path("build/mermaid").joinpath(rel).with_suffix(".svg")
+        svg_rel = Path("_assets/mermaid").joinpath(rel).with_suffix(".svg")
 
         group = diagrams.setdefault(owner_doc, [])
         group.append(

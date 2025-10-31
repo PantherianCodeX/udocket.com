@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the staff-facing workspace, reviewer consoles, and the client portal. Covers accessibility, collaboration, security posture, manual/agent edit tooling, conversational assistants, and document assembly flows.
 - **Structure:** Sections follow the standard 0–10 service template. Responsibilities (§2) map to the major UI pillars; APIs (§3) reference capability discovery, SSE topics, and secure download flows; state, failure, observability, and compliance requirements are consolidated in §§4–7.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/apps/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/experience/web-app.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting UI changes. Accessibility or localization updates must retain Appendix references and regenerate Vale/axe snapshots where noted.
 - **Change protocol:** UX-affecting PRs update this spec and cite ADR-0002 when API contracts change. Security posture updates (headers, invalidation flows, break-glass) require Security + Architecture approval.
 - **References:** TDD §11 summary, Guardian spec §5, Communications spec §2.6, Settings Registry §5 (UI policy keys), Ops runbooks `RB-PORTAL-INVALIDATION` and `RB-JOB-WATCHDOG`.
 - **Contacts:** Platform Engineering (frontend owners), Product Management (experience roadmap), Accessibility guild, `#web-app` Slack channel, on-call rotation `webapp-oncall@`.
@@ -253,7 +253,7 @@ The UI coordinates with internal controllers for portal messaging, edit manifest
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Document the `ApiError.code` values that the web application surfaces so UX flows handle retries and blocking states consistently. **|**
-**Contract:** Staff and portal clients reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the UI introduces the cases below for assistant and portal interactions. **|**
+**Contract:** Staff and portal clients reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the UI introduces the cases below for assistant and portal interactions. **|**
 **State:** Codes originate from REST responses (`/api/v1/chat/*`, `/api/v1/portal/*`) and SSE events; enum definitions live alongside the platform schema (`spec/schemas/api_error.schema.json`) with UI adapters in `apps/platform/ui/errors.py`. **|**
 **Failures & handling:** Unknown codes fail UI Spectral lint and unit tests; runtime emissions trigger `ui_api_error_unknown_total` alerts. **|**
 **Observability:** Dashboards “Web App – API Errors” and “Portal Integrity” watch `ui_api_error_total{code}`; synthetic probes cover chat availability and portal download flows. **|**
@@ -283,14 +283,14 @@ The UI coordinates with internal controllers for portal messaging, edit manifest
 
 **Purpose:** Visualise how staff and portal surfaces collaborate with backend services in real time. **|**
 **Contract:** Staff and client flows rely on API, Channels, Guardian, Settings, and Notifications integrations depicted below; changes must preserve these linkages. **|**
-**State:** Diagram source `apps/web-app/diagrams/ui-interaction-topology-v1.mmd` renders to build artifacts for docs/site and PDFs. **|**
+**State:** Diagram source `experience/web-app/diagrams/ui-interaction-topology-v1.mmd` renders to build artifacts for docs/build/site and PDFs. **|**
 **Failures & handling:** Drift between diagram and implementation is treated as documentation debt and must be reconciled during UI changes. **|**
 **Observability:** Docs CI (`render_mermaid.sh`) renders SVG artifacts and alerts when sources are missing. **|**
 **Breadcrumbs:** API controllers `apps/platform/api/*.py`, Channels gateway `apps/platform/ui/channels.py`, Notifications integration `apps/platform/notifications/*`, Guardian verdict publisher `apps/platform/events/guardian.py`. **|**
 **References:** Guardian spec §2, Communications spec §2, Settings spec §3.
 
 ```mermaid
-%% source: apps/web-app/diagrams/ui-interaction-topology-v1.mmd
+%% source: experience/web-app/diagrams/ui-interaction-topology-v1.mmd
 %% owner: apps/web-app.md
 flowchart LR
     subgraph Staff_Workspace
@@ -320,7 +320,7 @@ flowchart LR
 ```
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/mermaid/apps/web-app/diagrams/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
+  <img class="diagram" src="../assets/mermaid/experience/web-app/diagrams/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
   <figcaption style="font-size: 0.9em; color: #555;">Web app staff and portal interaction topology</figcaption>
 </figure>
 
@@ -530,7 +530,7 @@ ______________________________________________________________________
 
 | Dependency | Responsibility | Notes |
 | --- | --- | --- |
-| Communications service | In-app alerts, download tokens, escalation digests | See `../services/communications.md`; SSE topics share infrastructure |
+| Communications service | In-app alerts, download tokens, escalation digests | See `../customer/communications.md`; SSE topics share infrastructure |
 | Guardian | Verdicts, quarantine enforcement, edit/assistant moderation | Guardian judgments gate approvals and portal delivery |
 | LLM Registry | Moderation & safety harness for agent edits and assistants | Settings keys `chat.*`, moderation controls |
 | LP Engine | Localization bundles, policy context for residency and masking | Fallback logic for missing locales |
@@ -544,16 +544,16 @@ ______________________________________________________________________
 ## 10) References
 
 - TDD overview summary — `../overview/tdd.md §11`.
-- Communications service specification — `../services/communications.md`.
-- Guardian specification — `../services/guardian.md`.
-- Settings Registry specification — `../services/settings.md`.
-- LLM Registry specification — `../services/llm-registry.md §2.3`.
-- Digital Signer specification — `../services/digital-signer.md`.
+- Communications service specification — `../customer/communications.md`.
+- Guardian specification — `../platform/guardian.md`.
+- Settings Registry specification — `../platform/settings.md`.
+- LLM Registry specification — `../automation/llm-registry.md §2.3`.
+- Digital Signer specification — `../data/digital-signer.md`.
 - Ops runbook catalog — `../ops/runbooks.md`.
 
 ______________________________________________________________________
 
-## Appendix A — Real-time payloads & components (binding)
+## Appendix A — Real-time payloads & components (binding) {#appendix-a-real-time-payloads-components}
 
 **Purpose:** Capture canonical SSE payloads and UI implementations the web app must honour. **|**
 **Contract:** SSE publishers emit these shapes; UI components consume them without divergence. **|**

@@ -4,16 +4,16 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 ## Add a service page
 
-- Create `docs/src/services/<service>.md` (e.g., `settings.md`).
-- Keep deep technical content here; keep `docs/src/overview/tdd.md` high‑level and link to services.
+- Create a spec under `docs/src/platform/`, `docs/src/automation/`, `docs/src/data/`, or `docs/src/customer/` (for example, `docs/src/platform/settings.md`).
+- Keep deep technical content here; keep `docs/src/overview/tdd.md` high‑level and link to the service spec.
 - Use consistent headings (Sentence case). Vale guides tone and terms.
 
 ## Add a diagram (Mermaid) {#add-a-diagram}
 
 - Save `.mmd` under the owning doc’s local `diagrams/` folder:
   - Cross‑cutting (TDD‑owned): `docs/src/overview/tdd/diagrams/`
-  - Service‑owned: `docs/src/services/<service>/diagrams/`
-  - App‑owned: `docs/src/apps/<app>/diagrams/`
+  - Service‑owned: `docs/src/<area>/<service>/diagrams/`
+  - App‑owned: `docs/src/experience/<app>/diagrams/`
 - In Markdown, prefer a live Mermaid block for the site and an image fallback for PDF using the build path mapping:
   
   ```mermaid
@@ -21,16 +21,16 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   graph TD; A-->B;
   ```
 
-  ![Artifact Overview](build/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
+  ![Artifact Overview](_assets/mermaid/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
 
-- Rendered SVGs live under `docs/src/build/mermaid/` so MkDocs can serve them alongside the Markdown sources. Use `/build/mermaid/...` in image links so paths remain correct regardless of page depth.
+- Rendered SVGs live under `docs/_assets/mermaid/` (mirrored into `docs/src/_assets/mermaid/`) so MkDocs can serve them alongside the Markdown sources. Use `_assets/mermaid/...` in image links so paths remain correct regardless of page depth.
 
 - Before generating PDFs, render diagrams: `bash scripts/docs/render_mermaid.sh` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 
 - Embed rules:
   - Owner docs should contain the Mermaid fence and an adjacent image fallback that points at the pre-rendered SVG.
-  - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/build/mermaid/<REL>.svg`); never duplicate the Mermaid source.
-  - The source path pattern is `docs/src/<REL>.mmd`, and the build artifact lives at `docs/src/build/mermaid/<REL>.svg`.
+  - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/assets/mermaid/<REL>.svg`); never duplicate the Mermaid source.
+  - The source path pattern is `docs/src/<REL>.mmd`, and the build artifact lives at `docs/_assets/mermaid/<REL>.svg` (mirrored to `docs/src/_assets/mermaid/<REL>.svg`).
 - Optional metadata: add `%% id: <slug>`, `%% version: v1`, or `%% owner: <owner-doc>` comments to encode diagram provenance for the index.
 - Keep the appendix up to date by running `python scripts/docs/build_diagram_index.py` whenever diagrams are added, renamed, or removed.
 
@@ -53,14 +53,14 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Node tooling expects Node.js 22.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
 - Run the aggregate lint script (or `make lint-docs` if you already activated the repository virtualenv):
   - `python scripts/docs/lint_docs.py` (lints entire `docs/src/`)
-  - Optional: pass one or more targets, e.g. `python scripts/docs/lint_docs.py docs/src/services/settings.md docs/src/overview/tdd.md`
-- The lint runner executes (in order): `build_runbook_catalog.py --check`, `build_diagram_index.py --check`, `check_structure.py` (services/apps/ops), `check_appendices.py`, `markdownlint-cli2` (npx plus optional global binary), `check_settings_keys.py`, `link_check.py` with `STRICT_DOCS=1`, and a strict MkDocs build (`scripts/docs/build_mkdocs.py --dry-run`).
-- Validate service specs against the template: `python scripts/docs/check_structure.py docs/src/services`
+  - Optional: pass one or more targets, e.g. `python scripts/docs/lint_docs.py docs/src/platform/settings.md docs/src/overview/tdd.md`
+- The lint runner executes (in order): `build_runbook_catalog.py --check`, `build_diagram_index.py --check`, `check_structure.py` (platform/automation/data/customer/experience/ops), `check_appendices.py`, `markdownlint-cli2` (npx plus optional global binary), `check_settings_keys.py`, `link_check.py` with `STRICT_DOCS=1`, and a strict MkDocs build (`scripts/docs/build_mkdocs.py --dry-run`).
+- Validate service specs against the template: `python scripts/docs/check_structure.py docs/src/platform docs/src/automation docs/src/data docs/src/customer`
 - Lint markdown: `npx markdownlint-cli2 'docs/src/**/*.md'`.
 - Style checks (Vale):
   - From `docs/`: `vale src/`
-  - Rules live under `docs/styles/vale/`.
-- Build site: `mkdocs -f docs/mkdocs.yml build --clean` (outputs to `docs/site/`).
+  - Rules live under `docs/src/.vale/`.
+- Build site: `mkdocs -f docs/mkdocs.yml build --clean` (outputs to `docs/build/site/`).
 - Build TDD PDF:
   - `bash scripts/docs/render_mermaid.sh --all`
   - `bash scripts/docs/build_pdf_tdd.sh` (outputs to `docs/build/pdf/tdd.pdf`).
@@ -82,8 +82,8 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 ## File layout reference
 
-- Sources: `docs/src/` (TDD, services, ADR, runbooks, assets).
-- Generated: `docs/site/`, `docs/build/` (gitignored).
+- Sources: `docs/src/` (TDD, platform, automation, data, customer, experience, ADR, runbooks, .assets).
+- Generated: `docs/build/site/`, `docs/build/` (gitignored).
 - Config: `docs/mkdocs.yml`, `docs/.vale.ini`, `docs/.markdownlint.json`, `docs/.mermaidrc`.
 - Scripts: `scripts/docs/*.sh`.
 

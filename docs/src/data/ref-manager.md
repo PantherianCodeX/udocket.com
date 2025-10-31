@@ -255,7 +255,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Reference Manager (`RM`) `ApiError.code` values so downstream automation and reviewers respond deterministically. **|**
-**Contract:** RM APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below cover harvest, publish, and adoption flows. **|**
+**Contract:** RM APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below cover harvest, publish, and adoption flows. **|**
 **State:** Error envelopes originate from `/api/v1/reference/bundles`, `/api/v1/reference/templates`, and adoption acknowledgment endpoints; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/reference/test_api_errors.py`; runtime emissions trigger `reference_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Reference Manager – Publish” and “Reference Manager – Adoption” track `reference_api_error_total{code}`, `reference_manager_publish_guard_failure`; synthetic publishes exercise hotfix + rollback paths. **|**
@@ -655,7 +655,7 @@ ______________________________________________________________________
 - ADRs: ADR-0003 Localization & Policy Engine, ADR-0004 OPA Policy Plane. **|**
 - TDD: TDD §6 Reference Data, TDD Appendix G ERD, TDD Appendix H Operational Guides. **|**
 - Runbooks: §8.3.2 RB-RM-ROLLBACK, §8.3.3 RB-RM-HARVEST, §8.3.4 RB-RM-PUBLISH, §8.3.5 RB-RM-LICENSE, §8.3.6 RB-RM-RESIDENCY. **|**
-- Diagrams: `docs/src/services/ref-manager/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`. **|**
+- Diagrams: `docs/src/data/ref-manager/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`. **|**
 - Scripts & tooling: `ops/reference/rollback_bundle.py`, `scripts/reference/verify_locale_coverage.py`, `ops/reference/pipelines/*.yaml`. **|**
 - Dashboards: `infra/grafana/reference_manager_availability.json`, `infra/grafana/reference_manager_adoption.json`, `infra/grafana/reference_manager_compliance.json`.
 

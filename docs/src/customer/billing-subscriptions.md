@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the Billing & Subscriptions service that governs price plans, entitlements, usage metering, invoicing, delinquency detection, and FinOps hooks referenced in TDD §3.9 (FinOps guardrails) and §14.4 (billing retention). Covers integration with external billing provider, portal subscription UI, and Operations runbooks.
 - **Structure:** Follows standard sections covering charter, responsibilities, API contracts (internal REST + billing provider webhooks), state management, resiliency, observability, security/compliance, operations, dependencies, and references.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/billing-subscriptions.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting. Contract changes must update TDD billing tables and Ops runbooks `RB-BILLING-*`.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/customer/billing-subscriptions.md docs/src/overview/tdd.md docs/tdd_modularization.md` before submitting. Contract changes must update TDD billing tables and Ops runbooks `RB-BILLING-*`.
 - **Change protocol:** Changes to pricing plans, usage quotas, or delinquency behaviour require Finance + Compliance approval and updated Settings keys (`billing.*`). Schema changes require migrations plus doc updates.
 - **References:** TDD §3.9 (FinOps), §4 (tenant holds), §14.4 (billing records), Ops runbooks `RB-BILLING-DELINQUENCY`, Settings spec §5 (`billing.*`), Accounts & Tenants spec.
 - **Contacts:** Finance Ops (billing owner), Platform Engineering (service implementation), escalation `#ops-billing`, on-call `billing-oncall@`.
@@ -177,7 +177,7 @@ ______________________________________________________________________
 
 **Purpose:** Capture Billing-specific error codes beyond the platform catalog. **|**
 **Contract:** Current APIs emit only shared platform codes; this catalog stays empty until billing introduces dedicated codes. **|**
-**State:** Catalog stored in `docs/src/services/billing-subscriptions/error_codes.yaml`. **|**
+**State:** Catalog stored in `docs/src/customer/billing-subscriptions/error_codes.yaml`. **|**
 **Failures & handling:** Callers rely on Platform Runtime §3.3 behaviours; unknown codes trigger alerts. **|**
 **Observability:** Metric `billing_api_error_unknown_total` watches for unmapped codes. **|**
 **Breadcrumbs:** API middleware `apps/platform/billing/api_errors.py`, tests `tests/platform/billing/test_api_errors.py`. **|**
@@ -366,7 +366,7 @@ ______________________________________________________________________
 - Quarterly delinquency tabletop verifying tenant suspension handoff; evidence stored in `ops/billing/drills/<date>/delinquency.md`. **|**
 - Semi-annual invoice reconciliation dry run with synthetic data; evidence includes diff reports and Finance sign-off. **|**
 - Quarterly webhook failure simulation capturing replay metrics and provider engagement notes. **|**
-- Drill and incident evidence archived under `ops/billing/evidence/<date>/`; Grafana snapshots and FinOps exports attached. **|**
+- Drill and incident evidence archived under `ops/billi../data/<date>/`; Grafana snapshots and FinOps exports attached. **|**
 - Compliance reviews audit evidence quarterly; gaps tracked via `billing_evidence_gap_total`. **|**
 - Docs lint monitors for missing folders and blocks merges when absent. **|**
 
@@ -414,8 +414,8 @@ ______________________________________________________________________
 ## 10) References
 
 - TDD §3.9 FinOps guardrails, §4.2 Tenant suspension coupling, §14.4 Billing retention.
-- Accounts & Tenants specification — `../services/accounts-tenants.md`.
-- Settings Registry specification — `../services/settings.md`.
-- Artifact Store specification — `../services/artifact-store.md`.
+- Accounts & Tenants specification — `../customer/accounts-tenants.md`.
+- Settings Registry specification — `../platform/settings.md`.
+- Artifact Store specification — `../data/artifact-store.md`.
 - Ops runbook catalog — `../ops/runbooks.md`.
 - ADR-0002 API Versioning & Sunset (billing APIs use deprecation headers).

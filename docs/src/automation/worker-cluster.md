@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Celery workers, beat schedulers, and task modules that execute agent pipelines, storage operations, notifications, watchdogs, and backfills. Covers queue topology, retries, residency enforcement, settings snapshots, and observability.
 - **Structure:** Follows the standard 0–10 template. Responsibilities (§2) describe orchestration, queue management, watchdog automation, and provider integrations. APIs (§3) reference task entry points, job control RPC endpoints, and SSE updates. State, failure, observability, security, and ops guidance live in §§4–8.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/worker-cluster.md docs/src/overview/tdd.md docs/tdd_modularization.md` plus `build_runbook_catalog.py --check` before landing worker changes. Update task-module AGENTS guides when adding queues or long-running jobs.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/automation/worker-cluster.md docs/src/overview/tdd.md docs/tdd_modularization.md` plus `build_runbook_catalog.py --check` before landing worker changes. Update task-module AGENTS guides when adding queues or long-running jobs.
 - **Change protocol:** Celery queue additions, watchdog changes, provider adapter updates, or retry semantics must reference this spec and note affected Settings keys. Provider failover logic requires Security + Architecture approval.
 - **References:** TDD §12 summary, Transcription agent spec, Communications spec, Guardian spec, Settings Registry keys (`jobs.*`, `watchdog.*`), Ops runbooks `RB-JOB-WATCHDOG`, `RB-LOCK-006`.
 - **Contacts:** Platform Engineering (queue topology), Operations Engineering (KEDA/scaling), Applied AI Programs (agent orchestration), `#worker-cluster` Slack, on-call `workers-oncall@`.
@@ -195,7 +195,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate worker-control `ApiError.code` values so API clients and automation react consistently. **|**
-**Contract:** Worker Cluster reuses the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and applies the scenarios below for job control, upload finalize, and pipeline orchestration requests. **|**
+**Contract:** Worker Cluster reuses the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and applies the scenarios below for job control, upload finalize, and pipeline orchestration requests. **|**
 **State:** Error responses originate from `apps/platform/jobs/views.py`, upload finalize controller `apps/platform/files/views.py`, and worker orchestration services; enums align with `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/jobs/test_error_envelope.py`; runtime emissions trigger `job_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Worker Cluster – API” and “Upload Finalize” watch `job_api_error_total{code}`, `upload_finalize_total{status}`; synthetic controls exercise pause/resume/cancel paths. **|**
@@ -597,8 +597,8 @@ ______________________________________________________________________
 ## 10) References
 
 - TDD overview summary — `../overview/tdd.md §12`.
-- LLM Registry specification — `../services/llm-registry.md`.
-- Communications service specification — `../services/communications.md`.
+- LLM Registry specification — `../automation/llm-registry.md`.
+- Communications service specification — `../customer/communications.md`.
 - Transcription agent implementation — `packages/udocket_core/agents/transcribe_lib.py`.
 - Ops runbook catalog — `../ops/runbooks.md`.
-- Settings Registry specification — `../services/settings.md`.
+- Settings Registry specification — `../platform/settings.md`.

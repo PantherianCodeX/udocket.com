@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Captures the emerging Search & Indexing service providing full-text search, semantic/vector retrieval, and case discovery APIs referenced in TDD §6.5 (analysis consumers) and §11 (portal discovery). Document serves as stub until full implementation lands; where behaviour is TBD the section references product requirements.
 - **Structure:** Standard sections with emphasis on ingestion pipelines, index lifecycle, query APIs, and compliance guardrails (residency, confidentiality).
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/search-index.md docs/src/overview/tdd.md docs/tdd_modularization.md`. Updates require sync with product PRDs and LLM Registry (embedding models).
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/data/search-index.md docs/src/overview/tdd.md docs/tdd_modularization.md`. Updates require sync with product PRDs and LLM Registry (embedding models).
 - **Change protocol:** Any change enabling cross-tenant discovery, new vector providers, or schema modifications must reference ADR backlog and receive Privacy + Architecture approval. Production rollout gated by readiness checklist (Appendix TBD).
 - **References:** TDD §6.5, §11.3, LLM Registry §3 (embedding profiles), Artifact Store §2.3 (promotion signals), Ops runbooks `RB-SEARCH-*`.
 - **Contacts:** Knowledge Systems (implementation), Product Discovery (requirements), escalation `#ops-search`.
@@ -167,7 +167,7 @@ ______________________________________________________________________
 
 **Purpose:** Track search-specific error codes once defined. **|**
 **Contract:** Currently no search-specific codes exist; the catalog remains empty until GA. **|**
-**State:** YAML placeholder `docs/src/services/search-index/error_codes.yaml`. **|**
+**State:** YAML placeholder `docs/src/data/search-index/error_codes.yaml`. **|**
 **Failures & handling:** Platform codes (`POLICY_BLOCK`, `VALIDATION_ERROR`, `PROVIDER_DEGRADED`) cover initial rollout. **|**
 **Observability:** Unknown codes will emit `search_api_error_unknown_total`. **|**
 **Breadcrumbs:** Planned API middleware `apps/platform/search/api_errors.py`. **|**
@@ -342,7 +342,7 @@ Drills rehearse ingestion, erasure, and relevancy scenarios with evidence stored
 
 - Quarterly ingestion backlog tabletop; evidence stored in `ops/search/drills/<date>/ingest.md`. **|**
 - Semi-annual DSAR replay drill verifying tombstone propagation. **|**
-- Relevancy regression simulation after major model changes with evidence archived in `ops/search/evidence/<date>/`. **|**
+- Relevancy regression simulation after major model changes with evidence archived in `ops/sear../data/<date>/`. **|**
 - Compliance reviews track `search_evidence_gap_total`; gaps block GA until resolved. **|**
 
 See Ops catalog and Appendix O decision log for templates and evidence requirements.
@@ -391,7 +391,7 @@ ______________________________________________________________________
 
 - TDD §6.5 Agent consumers of search outputs.
 - TDD §11 Portal discovery roadmap.
-- LLM Registry specification — `../services/llm-registry.md`.
-- Artifact Store specification — `../services/artifact-store.md`.
-- Accounts & Tenants specification — `../services/accounts-tenants.md`.
+- LLM Registry specification — `../automation/llm-registry.md`.
+- Artifact Store specification — `../data/artifact-store.md`.
+- Accounts & Tenants specification — `../customer/accounts-tenants.md`.
 - Product PRD: Search Discovery (link pending).

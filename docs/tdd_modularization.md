@@ -14,7 +14,7 @@ This plan lays out a phased approach to refactor the uDocket documentation. We w
 
 * **Single doc root, clear boundaries**
   * `docs/src/` = human-authored sources (Markdown, Mermaid, images, styles).
-  * `docs/site/` and `docs/build/` = generated/temporary (gitignored).
+  * `docs/build/site/` and `docs/build/` = generated/temporary (gitignored).
   * **No PDFs committed**; publish PDFs as **GitHub Release assets** when you tag.
 * * **One canonical home per topic** (service specs live under services/; shared truths live in appendices; `overview/tdd.md` stays high‑level and links out).
 * * **Stable release mechanics**
@@ -72,7 +72,7 @@ docs/                              ← single doc root
     pdf/
   releases/
   site/
-  styles/vale/
+  src/.vale/
   .vale.ini
   mkdocs.yml
 scripts/
@@ -86,7 +86,7 @@ scripts/
 **.gitignore** (excerpt)
 
 ```gitignore
-/docs/site/
+/docs/build/site/
 /docs/build/
 /docs/src/**/.cache/
 /docs/src/**/.pytest_cache/
@@ -103,7 +103,7 @@ Each service, app, or agent document will follow a shared, **standardized set of
 
 #### Phase 0 enforcement checklist
 
-* Retrofit all existing service specs (`services/guardian.md`, `services/settings.md`, `services/lp-engine.md`, `services/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`Reading Guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
+* Retrofit all existing service specs (`platform/guardian.md`, `platform/settings.md`, `automation/lp-engine.md`, `evidence/ref-manager.md`, etc.) so their H2 hierarchy matches the canonical numbering (`Reading Guide` … `10) References`) and every major section opens with the standardized preamble block (Purpose, Contract, State, Failure, Observability, References, Breadcrumbs).
 * Normalize `## 8) Operational Notes` to include the standard subsections (`### 8.1 Operational Posture`, `### 8.2 Incident Triggers`, `### 8.3 Runbooks & Drills` with nested index/primary/cadence, `### 8.4 Migrations & Backfills`, `### 8.5 Operational Workflows`). Relocate legacy “Appendix R” content into those subsections and call out intentional omissions in-line when a subsection does not apply.
 * Capture any missing sections, absent breadcrumbs, or deviations in a shared Phase 0 worksheet so we can resolve gaps before Phase 1 migrations.
 * Treat Guardian as the first remediation target, then sweep remaining service specs once its structure is compliant.
@@ -127,7 +127,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python scripts/docs/check_structure.py docs/src/services` to confirm compliance before submitting PRs.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python scripts/docs/check_structure.py docs/src/platform docs/src/automation docs/src/data docs/src/customer` to confirm compliance before submitting PRs.
 
 #### Standardized section preamble
 
@@ -154,28 +154,28 @@ These **top-level sections** make every document familiar and navigable. Within 
 **References:** §5.2.4–§5.2.6, §5.4.1, §7.1, App.A.2.
 ```
 
-Prepare a template file (or simply a checklist) with these headings to use as a guide when refactoring each service/app. (E.g., create a `docs/src/services/_template.md` that lists the headings and brief instructions, purely for internal use.)
+Prepare a template file (or simply a checklist) with these headings to use as a guide when refactoring each service/app. (E.g., maintain the shared skeleton in `docs/src/_template.md` and copy it when starting a new spec.)
 
 ### 3.a Diagram Embedding (site + PDF)
 
 Embed diagrams directly in the owning document. Use a Mermaid fence for the site render, followed by a PDF fallback that resolves during Pandoc builds.
 
-Owner doc example (services/lp-engine.md):
+Owner doc example (automation/lp-engine.md):
 
 ```mermaid
-%% source: services/lp-engine/diagrams/policy-context-flow.mmd
+%% source: automation/lp-engine/diagrams/policy-context-flow.mmd
 graph TD; A[Policy Bundle]-->B[Compile Context]; B-->C[OPA Discovery];
 ```
 
-![Policy Context Flow](../../build/mermaid/services/lp-engine/diagrams/policy-context-flow.svg)
+![Policy Context Flow](../../build/mermaid/automation/lp-engine/diagrams/policy-context-flow.svg)
 
 Consumer docs (reuse by reference; no copies):
 
 * Use the built SVG and link to the owner section:
-  * `../../build/mermaid/services/lp-engine/diagrams/policy-context-flow.svg`
-  * Source: services/lp-engine.md §X.Y
+  * `../../build/mermaid/automation/lp-engine/diagrams/policy-context-flow.svg`
+  * Source: automation/lp-engine.md §X.Y
 
-Path rule: if a source lives at `docs/src/<REL>.mmd`, the built SVG is at `docs/src/build/mermaid/<REL>.svg`. Embed using `/build/mermaid/<REL>.svg` so links stay valid from any document depth.
+Path rule: if a source lives at `docs/src/<REL>.mmd`, the built SVG is at `docs/build/mermaid/<REL>.svg`. Embed using `/build/mermaid/<REL>.svg` so links stay valid from any document depth.
 
 Optional metadata (first lines in `.mmd`):
 
@@ -245,10 +245,10 @@ nav:
       - Overview: overview/prd/index.md
       - Product Requirements: overview/prd.md
   - Services:
-      - Guardian: services/guardian.md
-      - Settings Registry: services/settings.md
-      - LPE: services/lp-engine.md
-      - Reference Manager: services/ref-manager.md
+      - Guardian: platform/guardian.md
+      - Settings Registry: platform/settings.md
+      - LPE: automation/lp-engine.md
+      - Reference Manager: evidence/ref-manager.md
   - Apps:
       - Web App: apps/web-app.md
       - Worker Cluster: apps/worker-cluster.md
@@ -284,7 +284,7 @@ nav:
 **.vale.ini:**
 
 ````ini
-StylesPath = styles/vale
+StylesPath = src/.vale
 MinAlertLevel = suggestion
 
 Packages = Google, write-good
@@ -299,7 +299,7 @@ BlockIgnores = (?s)```.*?```|::: mermaid.*?:::
 TokenIgnores = ^#{1,6}\s
 ````
 
-**styles/vale/uDocket-Core/Headings.yml:**
+**src/.vale/uDocket-Core/Headings.yml:**
 
 ```yaml
 extends: capitalization
@@ -309,7 +309,7 @@ scope: heading
 match: '^[A-Z][a-z0-9].*'
 ```
 
-**styles/vale/uDocket-Core/Terms.yml:**
+**src/.vale/uDocket-Core/Terms.yml:**
 
 ```yaml
 extends: existence
@@ -328,7 +328,7 @@ exceptions:
   - 'artifact'        # allow lowercase when used generically
 ```
 
-**styles/vale/uDocket-Policy/BindingLabels.yml:**
+**src/.vale/uDocket-Policy/BindingLabels.yml:**
 
 ```yaml
 extends: existence
@@ -345,7 +345,7 @@ tokens:
 # (optional: use a 'scope' filter by path via Vale's CLI per-file config)
 ```
 
-**styles/vale/uDocket-Policy/Citations.yml:**
+**src/.vale/uDocket-Policy/Citations.yml:**
 
 ```yaml
 extends: substitution
@@ -365,7 +365,7 @@ swap:
 **On every PR and main:**
 
 * Lint MD (`markdownlint`), style (`vale` optional), link check (lychee).
-* Build MkDocs HTML to `docs/site/` (not committed).
+* Build MkDocs HTML to `docs/build/site/` (not committed).
 * Validate Mermaid (fail on syntax errors).
 
 **On tag (e.g., `docs-v0.8.0`):**
@@ -498,7 +498,7 @@ jobs:
   * Canonical spec `docs/src/overview/tdd.md`.
   * Appendices at `docs/src/overview/tdd/appendices/` (glossary, status mapping, etc.).
 * PRD now lives under `docs/src/overview/prd/` with `docs/src/overview/prd.md` and `docs/src/overview/prd/index.md`.
-* Move OPA content into `docs/src/services/lp-engine.md` under “Policy Agent (OPA) Integration”.
+* Move OPA content into `docs/src/automation/lp-engine.md` under “Policy Agent (OPA) Integration”.
 * Runbooks/ops remain under `docs/src/ops/runbooks/`.
 * Diagram ownership:
   * Cross‑cutting diagrams are owned by TDD and live under `docs/src/overview/tdd/diagrams/`.
@@ -513,7 +513,7 @@ jobs:
 
     * Create `docs/src/overview/` with `tdd/` and `prd/` subfolders as above.
     * Ensure `mkdocs.yml`, `.markdownlint.json`, optional `.vale.ini` exist.
-    * Ensure `.gitignore` includes `docs/build/` and `docs/site/`.
+    * Ensure `.gitignore` includes `docs/build/` and `docs/build/site/`.
 
 2. **Migrate content**
 
@@ -523,12 +523,12 @@ jobs:
       * Appendices: `docs/src/overview/tdd/appendices/*.md`
       * Cross‑cutting diagrams: `docs/src/overview/tdd/diagrams/*.mmd`
     * Move PRD content to `docs/src/overview/prd/` (add `index.md` and `prd.md`).
-    * Keep service/app specs under `docs/src/services/` and `docs/src/apps/`; each has its own `diagrams/` folder.
+    * Keep service/app specs under `docs/src/platform|automation|evidence|customer/` and `docs/src/experience/`; each has its own `diagrams/` folder.
 
 3. **Cross-link cleanup**
 
     * Replace repeated tables with links to the canonical appendix.
-    * Replace any OPA mentions in TDD with a link to `services/lp-engine.md#opa-integration`.
+    * Replace any OPA mentions in TDD with a link to `automation/lp-engine.md#opa-integration`.
     * Ensure link paths match `mkdocs.yml` nav.
 
 4. **Build & verify locally**

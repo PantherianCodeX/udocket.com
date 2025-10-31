@@ -276,7 +276,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Settings-specific `ApiError.code` values so platform consumers can build deterministic retry logic. **|**
-**Contract:** Settings Registry reuses the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes) and supplements it with the service-specific codes below. Mutating endpoints surface the same envelope schema and echo `Idempotency-Key` when supplied. **|**
+**Contract:** Settings Registry reuses the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and supplements it with the service-specific codes below. Mutating endpoints surface the same envelope schema and echo `Idempotency-Key` when supplied. **|**
 **State:** Codes map directly to validation branches in `apps/platform/settings/api.py` and activation services. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and contract tests; runtime mis-emissions trigger `settings_error_unknown_total` alerts. **|**
 **Observability:** Metrics `settings_error_total{code}` and `settings_auth_failure_total{reason}` feed the “Settings Registry – Availability” dashboard; synthetic activations assert error semantics before release. **|**
@@ -745,7 +745,7 @@ ______________________________________________________________________
 
 - ADRs: ADR-0002 API Versioning & Sunset, ADR-0003 Localization & Policy Engine, ADR-0004 OPA Policy Plane. - TDD: TDD §5 Security Architecture, TDD §7 Settings Governance, TDD Appendix H Operational Guides.
 - Runbooks: §8.3.2 RB-GOV-008, RB-RES-ENDPOINT, RB-RES-BLOCK, RB-JOB-WATCHDOG, RB-LOCK-006.
-- Diagrams: `docs/src/services/settings/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`.
+- Diagrams: `docs/src/platform/settings/diagrams/*.mmd`, `docs/src/overview/tdd/diagrams/data-lineage-v1.mmd`.
 - Scripts & tooling: `scripts/docs/check_settings_keys.py`, `scripts/sdk/check_openapi_alignment.py`, `ops/scripts/settings_deploy.py`.
 - Metrics dashboards: `infra/grafana/settings_slo.json`, `infra/grafana/settings_drift.json`, `infra/grafana/settings_enforcement.json`.
 
@@ -794,7 +794,7 @@ class SettingDefinition(BaseModel):
 | --- | --- | --- | --- |
 | `regions.allowlist.compute` | ORG | \[na-us-1, na-us-2\] | Allowed compute regions; enforced by §3.8. |
 | `regions.allowlist.storage` | ORG | \[na-us-1, na-us-2\] | Allowed storage regions; enforced by §3.8 and §5.3. |
-| `network.egress.allowed_hosts[]` | SYSTEM\|ORG | \[\] | Host allowlist rendered to ServiceEntry/AuthorizationPolicy; [`platform-runtime §3.2`](../services/platform-runtime.md#32-reference-manifests). |
+| `network.egress.allowed_hosts[]` | SYSTEM\|ORG | \[\] | Host allowlist rendered to ServiceEntry/AuthorizationPolicy; [`platform-runtime §3.2`](../platform/runtime.md#32-reference-manifests). |
 | `analyze.model.id` | ORG\|CASE   | default profile | LLM model profile for Analyze lanes; see §8 and §6.3. |
 | `analyze.token_ceiling` | ORG\|CASE   | 100000 | Max tokens per Analyze job; see §8.3. |
 | `analyze.max_retries` | ORG\|CASE   | 2 | Retry budget per lane; see §6.3 QA loops. |
@@ -808,12 +808,12 @@ class SettingDefinition(BaseModel):
 | `reviews.backlog.alert_minutes` | ORG | 30 | Minutes before `QUEUED_FOR_REVIEW` items trigger reviewer escalation banners/alerts; §7.1.3, §11.1. |
 | `sign.trust_roots[]` | SYSTEM\|ORG | \[\] | Trust roots for signing; §7.2. |
 | `sign.tsa.endpoint` | SYSTEM\|ORG | null | TSA API endpoint; §7.2. |
-| `sign.tsa.max_time_drift_secs` | SYSTEM | 5 | NTP drift tolerance; §7.2, [`platform-runtime §3.1`](../services/platform-runtime.md#31-environment-topology). |
-| `security.tls.min_version` | SYSTEM | TLSv1.3 | Minimum TLS version for ingress; [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture). |
-| `security.tls.cipher_profile` | SYSTEM | default | TLS cipher profile for ingress; [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture). |
-| `security.tls.fips_mode` | SYSTEM | false | Enforce FIPS-approved cipher suites and modules; [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture), §7.2. |
-| `security.tls.legacy_exceptions[]` | SYSTEM | \[\] | Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); [`platform-runtime §3.4`](../services/platform-runtime.md#34-tls-posture), §9.2. |
-| `db.pgbouncer.pool_mode` | SYSTEM | transaction | Allowed PgBouncer pooling mode (`transaction` default, `session` optional); [`platform-runtime §3.2`](../services/platform-runtime.md#32-reference-manifests). |
+| `sign.tsa.max_time_drift_secs` | SYSTEM | 5 | NTP drift tolerance; §7.2, [`platform-runtime §3.1`](../platform/runtime.md#31-environment-topology). |
+| `security.tls.min_version` | SYSTEM | TLSv1.3 | Minimum TLS version for ingress; [`platform-runtime §3.4`](../platform/runtime.md#34-tls-posture). |
+| `security.tls.cipher_profile` | SYSTEM | default | TLS cipher profile for ingress; [`platform-runtime §3.4`](../platform/runtime.md#34-tls-posture). |
+| `security.tls.fips_mode` | SYSTEM | false | Enforce FIPS-approved cipher suites and modules; [`platform-runtime §3.4`](../platform/runtime.md#34-tls-posture), §7.2. |
+| `security.tls.legacy_exceptions[]` | SYSTEM | \[\] | Temporary TLS 1.2 exceptions (≤30 days, alert at T-7); [`platform-runtime §3.4`](../platform/runtime.md#34-tls-posture), §9.2. |
+| `db.pgbouncer.pool_mode` | SYSTEM | transaction | Allowed PgBouncer pooling mode (`transaction` default, `session` optional); [`platform-runtime §3.2`](../platform/runtime.md#32-reference-manifests). |
 | `llm.providers[]` | SYSTEM\|ORG | \[\] | Provider catalog; §8.1. |
 | `llm.models[]` | SYSTEM\|ORG | \[\] | Model catalog and fallback priorities; §8.1. |
 | `llm.models.version_pin` | SYSTEM\|ORG | provider‑specific | Explicit provider model snapshot/version pin; §8.1/§8.5. |
@@ -892,15 +892,15 @@ class SettingDefinition(BaseModel):
 | `storage.remote_hash.enabled` | ORG\|CASE   | false | Record remote hashes for batch inputs; §5.3. |
 | `storage.remote_hash.max_mb` | ORG\|CASE   | 50 | Max remote bytes to hash; §5.3. |
 | `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
-| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../services/observability.md#4-state-management). |
-| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §6`](../services/observability.md#6-access-control--auditing). |
-| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
-| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
-| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
-| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Logging §7`](../services/observability.md#7-cost-management--budgets). |
-| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Logging §4.2`](../services/observability.md#42-client--portal-telemetry). |
+| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../platform/observability.md#4-state-management). |
+| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §6`](../platform/observability.md#6-access-control--auditing). |
+| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
+| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Logging §4.2`](../platform/observability.md#42-client--portal-telemetry). |
 | `evidence_store.redacted_excerpts.enabled` | ORG | true | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2. |
-| `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, [`Audit §4`](../services/audit.md#4-immutable-storage--replication)). |
+| `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, [`Audit §4`](../data/audit.md#4-immutable-storage--replication)). |
 | `llm.finops.guard.threshold_pct` | SYSTEM\|ORG | 10 | MoM regression ceiling for deploy gate; §8.7, §13.5. |
 | `llm.finops.guard.trailing7d_pct` | SYSTEM\|ORG | 25 | Trailing 7-day burn ceiling (% of monthly cap) for deploy gate; §8.7, §13.5. |
 | `llm.finops.override_until` | SYSTEM | null | Optional timestamp (max +72h) to temporarily relax FinOps guard (dual approval required); §8.7. |

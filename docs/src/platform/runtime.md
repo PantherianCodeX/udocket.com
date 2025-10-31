@@ -71,7 +71,7 @@ ______________________________________________________________________
 
 - **Scope:** Captures the shared runtime footprint for all platform services: Kubernetes environments, service mesh guardrails, ingress/egress policy, TLS posture, pod security, and the authoritative service catalog used for capacity planning. The detailed mechanics that individual services implement remain within their dedicated specifications.
 - **Structure:** Sections follow the standard 0–10 template. Responsibilities (§2) summarise environment guardrails; §3 documents binding deployment policies and reference manifests; §4 inventories first-party services. Operations, observability, and dependencies surface the runbooks and systems that keep the runtime compliant.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/platform-runtime.md docs/src/overview/tdd.md docs/tdd_modularization.md` plus `build_runbook_catalog.py --check` before landing infra changes. Update diagrams via `scripts/docs/render_mermaid.sh` whenever topology shifts.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/platform/runtime.md docs/src/overview/tdd.md docs/tdd_modularization.md` plus `build_runbook_catalog.py --check` before landing infra changes. Update diagrams via `scripts/docs/render_mermaid.sh` whenever topology shifts.
 - **Change protocol:** Alterations to TLS policy, pod security baselines, mesh egress allowlists, or the service catalog require Architecture + Security review. Any change that widens residency exposure must also update LPE contexts and App.O waiver entries.
 - **References:** TDD §3 (summary), Settings Registry (`security.tls.*`, `network.egress.allowed_hosts`), Worker Cluster spec (§2), LPE spec (§2.6), Reference Manager spec (§2.1), Ops runbooks `RB-TLS-LEGACY`, `RB-RES-BLOCK`, `RB-K8S-FENCE`.
 - **Contacts:** Platform Engineering (cluster operations), Site Reliability Engineering (mesh & observability), Security Engineering (TLS/FIPS posture), `#platform-runtime` Slack, on-call alias `platform-runtime@`.
@@ -459,7 +459,7 @@ ______________________________________________________________________
 **State:** Service catalog tables, provider notes, FinOps metrics, and residency metadata captured in Reference Manager/LPE bundles. **|**
 **Failures & handling:** Drift detection (docs vs catalog) triggers §5 runbooks; catalog automation blocks releases when stale. **|**
 **Observability:** “Service Catalog Adoption”, FinOps dashboards, and residency scanners reference this catalog. **|**
-**Breadcrumbs:** Catalog source `docs/src/services/platform-runtime.md`, settings keys, Reference Manager catalog, LPE bundles. **|**
+**Breadcrumbs:** Catalog source `docs/src/platform/runtime.md`, settings keys, Reference Manager catalog, LPE bundles. **|**
 **References:** Individual service specifications (`../services/*.md`), Appendix Q, App.L benchmarks.
 
 | Service | Runtime | Responsibilities | Scaling & notes | Observability anchors |
@@ -690,10 +690,10 @@ ______________________________________________________________________
 ## 10) References
 
 - TDD §3 Platform architecture summary.
-- Settings Registry specification — `../services/settings.md §2.4`, `§3`.
-- Worker Cluster specification — `../services/worker-cluster.md §2`.
-- Localization & Policy Engine specification — `../services/lp-engine.md §2.6`.
-- Reference Manager specification — `../services/ref-manager.md §2.1`.
+- Settings Registry specification — `../platform/settings.md §2.4`, `§3`.
+- Worker Cluster specification — `../automation/worker-cluster.md §2`.
+- Localization & Policy Engine specification — `../automation/lp-engine.md §2.6`.
+- Reference Manager specification — `../data/ref-manager.md §2.1`.
 - Ops runbook catalog — `../ops/runbooks.md`.
 - JSON Schema — <https://json-schema.org/>
 - RFC 8594 — Deprecation HTTP Header: <https://www.rfc-editor.org/rfc/rfc8594>

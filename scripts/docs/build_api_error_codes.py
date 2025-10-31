@@ -32,8 +32,10 @@ from scripts.docs.doc_utils import (  # noqa: E402
 )
 
 SRC_DIR = ROOT / "docs" / "src"
-SERVICES_DIR = SRC_DIR / "services"
-APPS_DIR = SRC_DIR / "apps"
+
+from scripts.docs.doc_roots import SERVICE_ROOTS  # noqa: E402
+
+DOC_ROOTS = list(SERVICE_ROOTS)
 APPENDIX_FILE = SRC_DIR / "overview" / "tdd" / "appendices" / "api_error_codes.md"
 APPENDIX_DIR = APPENDIX_FILE.parent
 APPENDIX_LABEL = "api-error-index"
@@ -361,7 +363,11 @@ def _remove_legacy_notes(lines: list[str]) -> None:
 
 
 def _collect_components() -> list[Component]:
-    docs = sorted(SERVICES_DIR.glob("*.md")) + sorted(APPS_DIR.glob("*.md"))
+    docs: list[Path] = []
+    for root in DOC_ROOTS:
+        if not root.exists():
+            continue
+        docs.extend(sorted(root.glob("*.md")))
     components: list[Component] = []
     for doc in docs:
         if doc.name.startswith("_template"):

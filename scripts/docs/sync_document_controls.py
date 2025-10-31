@@ -9,8 +9,8 @@ instead of failing the commit.
 
 Usage examples:
     python scripts/docs/sync_document_controls.py
-    python scripts/docs/sync_document_controls.py docs/src/services/digital-signer.md
-    python scripts/docs/sync_document_controls.py docs/src/services
+    python scripts/docs/sync_document_controls.py docs/src/data/digital-signer.md
+    python scripts/docs/sync_document_controls.py docs/src/platform docs/src/automation docs/src/data docs/src/customer
 
 The script rewrites files in place when updates are required.
 """
@@ -29,6 +29,7 @@ ROOT_DIR = SCRIPT_DIR.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
+from scripts.docs.doc_roots import ALL_TEMPLATE_ROOTS  # noqa: E402
 from scripts.docs.doc_utils import (  # noqa: E402
     DOCUMENT_CONTROL_OPTIONAL_FIELDS,
     build_document_control_map,
@@ -37,7 +38,7 @@ from scripts.docs.doc_utils import (  # noqa: E402
 )
 
 OPTIONAL_FIELDS = DOCUMENT_CONTROL_OPTIONAL_FIELDS
-DEFAULT_ROOT = Path("docs/src/services")
+DEFAULT_ROOTS = [ROOT_DIR / root for root in ALL_TEMPLATE_ROOTS]
 MARKER_BEGIN = "<!-- BEGIN AUTO-GENERATED: document-controls -->"
 MARKER_END = "<!-- END AUTO-GENERATED: document-controls -->"
 
@@ -48,8 +49,8 @@ def parse_args() -> argparse.Namespace:
         "paths",
         nargs="*",
         type=Path,
-        default=[DEFAULT_ROOT],
-        help="Markdown files or directories to sync (defaults to docs/src/services)",
+        default=DEFAULT_ROOTS,
+        help="Markdown files or directories to sync (defaults to platform/automation/evidence/customer)",
     )
     return parser.parse_args()
 

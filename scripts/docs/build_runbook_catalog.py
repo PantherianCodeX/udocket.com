@@ -25,6 +25,7 @@ from scripts.docs.doc_utils import (  # noqa: E402
     stringify,
     write_or_check,
 )
+from scripts.docs.doc_roots import SERVICE_ROOTS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = ROOT / "docs" / "src"
@@ -90,7 +91,7 @@ class Heading:
 def iter_source_files() -> Iterable[Path]:
     """Yield component documentation files that may contain runbook sections."""
 
-    roots = [SRC_DIR / "services", SRC_DIR / "apps"]
+    roots = SERVICE_ROOTS
     seen: set[Path] = set()
     for root in roots:
         if not root.exists():

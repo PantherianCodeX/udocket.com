@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Covers the shared LangGraph orchestration layer and the canonical pipelines for Transcribe, Analyze, Compose, Timeline, and Relationship agents. This spec also governs graph configuration, schema enforcement, QA gates, and shadow mode deployments.
 - **Structure:** Sections follow the standard 0–10 layout with appendices for schema and error taxonomies. Per-agent responsibilities live in §2; pipeline contracts, tooling, and LangGraph runtime details live in §3; operational guardrails are in §§5–8.
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/langgraph-agents.md` plus targeted lints (`scripts/docs/link_check.py --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/automation/langgraph-agents.md` plus targeted lints (`scripts/docs/link_check.py --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
 - **Change protocol:** Any change that alters agent outputs, pipeline structure, or QA gating must update this spec, cite relevant ADRs, and include LangGraph acceptance test results in the PR description. Guardian/Security approvals are mandatory for policy or residency-impacting edits.
 - **References:** TDD §6 summary, Settings Registry spec §5, LLM Registry spec §2, Worker Cluster spec §3, Ops Runbooks `RB-AGENT-\*`, QA harness documentation in tests README.
 - **Contacts:** Applied AI Engineering (primary owners), Platform Architecture (co-owners), Operations Eng (shadow mode), Guardian (safety), `#langgraph-agents` Slack, on-call alias `agents-oncall@`.
@@ -159,12 +159,12 @@ ______________________________________________________________________
 **References:** TDD §6 summary, Settings spec §5.4, LLM Registry spec §2, Worker Cluster spec §3, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-AGENT-ACTIVATION`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/mermaid/services/langgraph-agents/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
+  <img class="diagram" src="../../assets/mermaid/automation/langgraph-agents/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/mermaid/services/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
+  <img class="diagram" src="../../assets/mermaid/automation/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 
@@ -188,7 +188,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate LangGraph agent `ApiError.code` values so service clients, worker orchestration, and UI flows respond deterministically. **|**
-**Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
+**Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
 **State:** Responses originate from `apps/platform/agents/views.py`, pipeline runtime `packages/udocket_core/agents/runtime.py`, and Guardian adapters; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/agents/test_agent_errors.py`; runtime emissions trigger `agent_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Agents – Launch API” and “Agents – Guardian Blocks” chart `agent_api_error_total{code}`, `agent_guardian_block_total`; synthetic launches follow the pause/resume flows. **|**
@@ -371,10 +371,10 @@ ______________________________________________________________________
 
 **Purpose:** Ensure operators have actionable playbooks for agent degradations, activation failures, and QA regressions. **|**
 **Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
-**State:** Runbook markdown lives under `docs/src/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runbooks/evidence/agents/`. **|**
+**State:** Runbook markdown lives under `docs/src/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runboo../data/agents/`. **|**
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
 **Observability:** Ops catalog build (`scripts/docs/build_runbook_catalog.py`), drill checklist dashboards, and on-call retros track preparedness. **|**
-**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, evidence store `ops/runbooks/evidence/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
+**Breadcrumbs:** Runbook catalog `docs/src/ops/runbooks.md`, evidence store `ops/runboo../data/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
 **References:** Ops runbooks index, TDD Appendix B, Worker Cluster spec §3.5, QA governance §6.
 
 - Runbooks must cover activation rollback, shadow divergence, Guardian quarantine escalation, and QA defect surge.
@@ -405,7 +405,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
-- Quarterly drills cover SLO breach recovery, quarantine spikes, backlog management, and manual reconciliation; evidence stored in `ops/runbooks/evidence/agents/<YYYY>/<MM>/` with retrospective notes.
+- Quarterly drills cover SLO breach recovery, quarantine spikes, backlog management, and manual reconciliation; evidence stored in `ops/runboo../data/agents/<YYYY>/<MM>/` with retrospective notes.
 - `scripts/docs/build_runbook_catalog.py --check` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to demonstrate readiness for auditors.
 

@@ -15,8 +15,8 @@ By default the checker inspects source documents under
 Typical usage (CLI/CI friendly):
 
     python scripts/docs/check_structure.py
-    python scripts/docs/check_structure.py docs/src/apps/web-app.md
-    python scripts/docs/check_structure.py docs/src/services docs/src/overview
+    python scripts/docs/check_structure.py docs/src/experience/web-app.md
+    python scripts/docs/check_structure.py docs/src/platform docs/src/automation docs/src/data docs/src/customer docs/src/overview
 """
 
 from __future__ import annotations

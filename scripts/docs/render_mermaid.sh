@@ -8,7 +8,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 SRC_ROOT="${MERMAID_SRC_ROOT:-$ROOT/docs/src}"
-OUT_ROOT="${MERMAID_OUT_ROOT:-$ROOT/docs/src/build/mermaid}"
+OUT_ROOT="${MERMAID_OUT_ROOT:-$ROOT/docs/build/mermaid}"
+ASSET_ROOT="${MERMAID_ASSET_ROOT:-$ROOT/docs/src/.assets/mermaid}"
 FORMAT="${MERMAID_FORMAT:-svg}"   # svg|png
 CLI_BIN="${MERMAID_CLI:-}"
 PUPPETEER_CONFIG="${MERMAID_PUPPETEER_CONFIG:-$ROOT/scripts/docs/puppeteer.config.json}"
@@ -114,3 +115,11 @@ case "$MODE" in
   changed) collect_changed | render ;;
   paths) collect_paths | render ;;
 esac
+
+if [[ -n "$ASSET_ROOT" ]]; then
+  rm -rf "$ASSET_ROOT"
+  mkdir -p "$ASSET_ROOT"
+  if ! cp -a "$OUT_ROOT/." "$ASSET_ROOT/" 2>/dev/null; then
+    echo "warning: failed to mirror Mermaid artifacts into $ASSET_ROOT" >&2
+  fi
+fi

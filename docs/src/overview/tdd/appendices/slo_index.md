@@ -45,7 +45,7 @@ This appendix lists the SLOs defined in each service and app specification. Refr
 <!-- BEGIN AUTO-GENERATED: slo-index -->
 <!-- AUTO-GENERATED: Run `python scripts/docs/build_slo_index.py` to refresh. -->
 
-### [Audit & Evidence](../../../services/audit.md)
+### [Audit & Evidence](../../../data/audit.md)
 
 **Purpose:** Capture the availability and timeliness guarantees that keep audit evidence defensible. **|**
 **Contract:** Seal verification, immutable mirroring, waiver reviews, and DSAR handling must satisfy the thresholds below before approvals continue. **|**
@@ -61,7 +61,7 @@ This appendix lists the SLOs defined in each service and app specification. Refr
 
 ______________________________________________________________________
 
-### [Digital Signer](../../../services/digital-signer.md)
+### [Digital Signer](../../../data/digital-signer.md)
 
 **Purpose:** Define reliability expectations for signing, TSA, and OCSP operations. **|**
 **Contract:** Signing requests, timestamping, and OCSP validation must meet the thresholds below before releases continue. **|**
@@ -77,7 +77,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Guardian Service](../../../services/guardian.md)
+### [Guardian Service](../../../platform/guardian.md)
 
 **Purpose:** Capture Guardian’s core latency and quality guarantees so approvals remain safe. **|**
 **Contract:** Judgment latency, manual review throughput, and false-positive ceiling must meet the thresholds below before artifacts progress. **|**
@@ -91,7 +91,7 @@ ______________________________________________________________________
 - **Manual review throughput:** Reviewer queue backlog P95 ≤ 30 minutes (`review_queue_oldest_seconds`); sustained breaches require manual escalation and review of staffing plan before further launches.
 - **False-positive quarantine ceiling:** `guardian_quarantine_false_positive_total` maintains ≤5 % of total quarantines on rolling 30-day basis; exceeding threshold requires policy tuning and Security sign-off.
 
-### [Identity & Access](../../../services/identity.md)
+### [Identity & Access](../../../platform/identity.md)
 
 **Purpose:** Capture the reliability expectations for authentication, RLS enforcement, and masking governance. **|**
 **Contract:** Token issuance, context setup, and masking/break-glass workflows must meet the thresholds below before releases continue. **|**
@@ -105,7 +105,7 @@ ______________________________________________________________________
 - **RLS context enforcement:** `rls_context_missing_total` remains at zero sustained; any incident triggers RB-RLS-CONTEXT and blocks deployments until resolved.
 - **Masking & break-glass governance:** `logging_neverlog_violation_total` and `break_glass_event_missing_retrospective_total` stay at zero; violations escalate via RB-MASK/RB-BREAK-GLASS within 24 hours.
 
-### [LangGraph Agent Orchestration](../../../services/langgraph-agents.md)
+### [LangGraph Agent Orchestration](../../../automation/langgraph-agents.md)
 
 **Purpose:** Capture availability, quality, latency, and cost expectations for LangGraph pipelines. **|**
 **Contract:** Agent run completion, QA acceptance, lane latency, and token budgets must meet the thresholds below before promotions proceed. **|**
@@ -122,7 +122,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [LLM Registry & Runtime Governance](../../../services/llm-registry.md)
+### [LLM Registry & Runtime Governance](../../../automation/llm-registry.md)
 
 **Purpose:** Capture provider availability, moderation responsiveness, FinOps guardrails, and residency enforcement obligations. **|**
 **Contract:** Provider circuits, moderation pipelines, budget controllers, and residency policy checks must stay within the thresholds below before traffic continues. **|**
@@ -139,7 +139,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Localization & Policy Engine](../../../services/lp-engine.md)
+### [Localization & Policy Engine](../../../automation/lp-engine.md)
 
 **Purpose:** Capture PolicyContext availability, compile latency, and residency enforcement expectations. **|**
 **Contract:** Lookups, compiles, and policy blocks must satisfy the thresholds below before activations or bundle promotions proceed. **|**
@@ -155,7 +155,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Communications Service](../../../services/communications.md)
+### [Communications Service](../../../customer/communications.md)
 
 **Purpose:** Capture delivery, webhook, in-app, and token reliability goals. **|**
 **Contract:** Communications delivery, webhook ingestion, SSE drop rate, and token validation must satisfy the thresholds below before campaigns launch. **|**
@@ -172,7 +172,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Observability](../../../services/observability.md)
+### [Observability](../../../platform/observability.md)
 
 **Purpose:** Outline ingestion, mirroring, correlation, and cost objectives that keep observability trustworthy. **|**
 **Contract:** Log ingestion, immutable mirroring, trace correlation, and cost budgets must satisfy the thresholds below before deploy gates reopen. **|**
@@ -191,7 +191,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Platform Runtime](../../../services/platform-runtime.md)
+### [Platform Runtime](../../../platform/runtime.md)
 
 **Purpose:** Define reliability expectations for the shared runtime footprint. **|**
 **Contract:** Kubernetes control plane, Flux convergence, and guardrail enforcement must meet the thresholds below before releases proceed. **|**
@@ -207,7 +207,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Reference Manager](../../../services/ref-manager.md)
+### [Reference Manager](../../../data/ref-manager.md)
 
 **Purpose:** Capture content ingestion, publish, adoption, and compliance objectives for the reference manager. **|**
 **Contract:** Harvest availability, publish latency, adoption acknowledgements, and license enforcement must meet the thresholds below before new bundles ship. **|**
@@ -222,7 +222,7 @@ ______________________________________________________________________
 - **Adoption acknowledgement:** Bundles adopted within 24 hours P95 (`reference_bundle_adoption_latency_seconds`); backlog alerts enforce RB-RM-ADOPTION.
 - **Compliance enforcement:** License violations (`reference_manager_license_violation_total`) remain zero; detection escalates via RB-RM-LICENSE before additional ingest occurs.
 
-### [Settings Registry](../../../services/settings.md)
+### [Settings Registry](../../../platform/settings.md)
 
 **Purpose:** Capture registry availability, activation latency, cache freshness, and residency enforcement guarantees. **|**
 **Contract:** API availability, activation duration, cache invalidation, and residency checks must satisfy the thresholds below before new settings are promoted. **|**
@@ -237,7 +237,7 @@ ______________________________________________________________________
 - **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys.
 - **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-\* and requires waiver or remediation before continuing.
 
-### [Web Application & Portal](../../../apps/web-app.md)
+### [Web Application & Portal](../../../experience/web-app.md)
 
 **Purpose:** Capture availability, latency, notification, and assistant policy goals for the web experience. **|**
 **Contract:** Portal uptime, latency, SSE reliability, and assistant guardrails must meet the thresholds below before releases ship. **|**
@@ -254,7 +254,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### [Worker Cluster](../../../services/worker-cluster.md)
+### [Worker Cluster](../../../automation/worker-cluster.md)
 
 **Purpose:** Capture queue throughput, job completion, and watchdog timing guarantees. **|**
 **Contract:** Queue latency, completion ratio, watchdog heartbeat, and upload scanning throughput must stay within the thresholds below before new jobs launch. **|**

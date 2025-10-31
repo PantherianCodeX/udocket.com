@@ -5,7 +5,6 @@
 /typings/vendor/
 /reports/
 automation_manifest.json
-docs/src/build/
 
 # typewiz cache
 .typewiz_cache/
@@ -169,8 +168,8 @@ __azurite_db_*.json
 .ropeproject
 
 # mkdocs documentation
-docs/site
 docs/build
+docs/src/_assets/mermaid/
 docs/src/**/.cache/
 docs/src/**/.pytest_cache/
 

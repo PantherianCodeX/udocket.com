@@ -336,8 +336,8 @@ def test_heading_anchor_added_when_missing() -> None:
         generator.SUMMARY_END,
     ]
     component = generator.Component(
-        doc_path=Path("docs/src/services/example.md"),
-        yaml_path=Path("docs/src/services/example/error_codes.yaml"),
+        doc_path=Path("docs/src/platform/example.md"),
+        yaml_path=Path("docs/src/platform/example/error_codes.yaml"),
         display_name="Example",
         section_anchor="3-3-example",
         index_anchor="example",

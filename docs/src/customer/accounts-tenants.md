@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Describes the Accounts & Tenants service responsible for organization provisioning, workspace lifecycle, role assignment, SSO/SAML federation, billing flags, and tenant offboarding (TDD §4, §14.1). Differentiates org-level constructs (tenants) from platform-wide identities.
 - **Structure:** Sections mirror the service template: charter and responsibilities, API contract, state management, failure handling, observability, security/compliance, operations, dependencies, and references. Appendices align with Identity service RLS patterns (Identity spec Appendix A) and TDD Appendix S (ownership map).
-- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/services/accounts-tenants.md docs/src/services/identity.md docs/src/overview/tdd.md` before submitting. Changes to lifecycle stages require updates to TDD §14.1 checklists and runbook catalog entries.
+- **Maintenance:** Run `python scripts/docs/lint_docs.py docs/src/customer/accounts-tenants.md docs/src/platform/identity.md docs/src/overview/tdd.md` before submitting. Changes to lifecycle stages require updates to TDD §14.1 checklists and runbook catalog entries.
 - **Change protocol:** Provisioning/offboarding changes must reference this doc, Identity spec, Ops runbooks, and ADR-0001 where Guardian roles adjust. Schema changes require migrations plus doc updates.
 - **References:** TDD §4 Tenancy & Access, §14 retention/offboarding, Identity spec §4, Settings Registry §4 (`tenancy.*`), Ops runbooks `RB-TENANT-*`.
 - **Contacts:** Identity & Access (service ownership), Customer Operations (tenant onboarding/offboarding), escalation `#ops-accounts`, on-call `identity-oncall@`.
@@ -176,7 +176,7 @@ ______________________________________________________________________
 
 **Purpose:** Declare Accounts & Tenants error codes beyond the platform baseline. **|**
 **Contract:** Current REST endpoints reuse core platform codes; no Accounts-specific codes exist yet but the catalog remains to track future additions. **|**
-**State:** Stored in `docs/src/services/accounts-tenants/error_codes.yaml`. **|**
+**State:** Stored in `docs/src/customer/accounts-tenants/error_codes.yaml`. **|**
 **Failures & handling:** Rely on platform responses (`CONFLICT`, `POLICY_BLOCK`, `VALIDATION_ERROR`) detailed in Platform Runtime §3.3. **|**
 **Observability:** Unknown codes emit `accounts_api_error_unknown_total` and page on-call. **|**
 **Breadcrumbs:** API views `apps/platform/accounts/api.py`, audit events `tenant_event`, tests `tests/platform/accounts/test_api.py`. **|**
@@ -360,7 +360,7 @@ Quarterly and semi-annual drills rehearse provisioning, offboarding, and SSO rec
 - Semi-annual offboarding rehearsal; evidence includes export manifests and DSAR confirmations. **|**
 - Quarterly SSO rotation tabletop; notes recorded in `ops/tenants/drills/<date>/sso.md`. **|**
 
-- Incident and drill artifacts archived under `ops/tenants/evidence/<date>/`; Grafana snapshots included. **|**
+- Incident and drill artifacts archived under `ops/tenan../data/<date>/`; Grafana snapshots included. **|**
 - Compliance reviews sample evidence twice yearly; gaps create action items tracked in governance dashboard. **|**
 - Docs lint monitors `docs_runbook_evidence_missing_total` for stale or missing folders. **|**
 
@@ -410,8 +410,8 @@ ______________________________________________________________________
 ## 10) References
 
 - TDD §4 Tenancy & Access, §14.1 Tenant provisioning/offboarding.
-- Identity & Access specification — `../services/identity.md`.
-- Settings Registry specification — `../services/settings.md`.
-- Artifact Store specification — `../services/artifact-store.md`.
-- Billing & Subscriptions specification — `../services/billing-subscriptions.md`.
+- Identity & Access specification — `../platform/identity.md`.
+- Settings Registry specification — `../platform/settings.md`.
+- Artifact Store specification — `../data/artifact-store.md`.
+- Billing & Subscriptions specification — `../customer/billing-subscriptions.md`.
 - Ops runbook catalog — `../ops/runbooks.md`.

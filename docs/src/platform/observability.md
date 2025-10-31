@@ -69,10 +69,10 @@ ______________________________________________________________________
 
 ## Reading Guide
 
-- **Scope:** This specification governs the observability stack (logs, metrics, traces), structured logging schema, ingest pipeline, sampling and cost controls, and operator access workflows. Audit evidence, manifests, and seal pipelines are documented separately in `../services/audit.md`.
+- **Scope:** This specification governs the observability stack (logs, metrics, traces), structured logging schema, ingest pipeline, sampling and cost controls, and operator access workflows. Audit evidence, manifests, and seal pipelines are documented separately in `../data/audit.md`.
 - **Audience:** SRE, Platform, service owners, and compliance reviewers who need consistent telemetry behavior and log governance.
 - **Related specs:** TDD §12 provides the overview; Settings (§7.2) enumerates telemetry knobs; Guardian (§7) and LP Engine (§5) describe dependent judgments and policy contexts.
-- **Change process:** Any pipeline, schema, or access control change must link this spec in the PR description, update `settings.md` keys, and include roll-forward/rollback plans. Run `python scripts/docs/check_structure.py docs/src/services/observability.md` before submission.
+- **Change process:** Any pipeline, schema, or access control change must link this spec in the PR description, update `settings.md` keys, and include roll-forward/rollback plans. Run `python scripts/docs/check_structure.py docs/src/platform/observability.md` before submission.
 
 ______________________________________________________________________
 
@@ -125,7 +125,7 @@ ______________________________________________________________________
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
 **Purpose:** Enumerate Observability `ApiError.code` values so teams updating alert rules, dashboards, or telemetry exports react consistently when operations fail. **|**
-**Contract:** Observability APIs reuse the platform catalog in [`Platform Runtime §3.3`](../services/platform-runtime.md#33-api-error-codes); the table below maps those codes to observability-specific workflows. **|**
+**Contract:** Observability APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the table below maps those codes to observability-specific workflows. **|**
 **State:** Errors stem from alert CRUD APIs, dashboard export tooling, and telemetry ingestion guardrails; schema parity enforced via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/observability/test_api_errors.py`; runtime emissions raise `observability_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Observability – API Errors” and “Ingestion Health” track `observability_api_error_total{code}`, `telemetry_ingest_rate_limit_total`; synthetic alert CRUD flows run per deploy. **|**
@@ -352,9 +352,9 @@ ______________________________________________________________________
 ## 10) References
 
 - Technical Design Document §12 (summary)  
-- Settings Service specification — `../services/settings.md` (§7.2 telemetry keys)  
-- Audit & Evidence specification — `../services/audit.md`  
-- Guardian specification — `../services/guardian.md` §7  
-- LP Engine specification — `../services/lp-engine.md` §5  
+- Settings Service specification — `../platform/settings.md` (§7.2 telemetry keys)  
+- Audit & Evidence specification — `../data/audit.md`  
+- Guardian specification — `../platform/guardian.md` §7  
+- LP Engine specification — `../automation/lp-engine.md` §5  
 - Ops runbook catalog — `../ops/runbooks.md` (RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK)  
 - ADR index — `../adr/README.md` (ADR-0004 logging posture, ADR-0006 immutable sink)

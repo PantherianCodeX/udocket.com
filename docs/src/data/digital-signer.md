@@ -178,7 +178,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Validator `packages/udocket_core/signer/verification.py`, cache `packages/udocket_core/signer/cache.py`, tests `tests/platform/operations/test_signer_verification.py`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/mermaid/services/digital-signer/diagrams/signing-delivery-v1.svg" alt="Signing and delivery flow">
+  <img class="diagram" src="../../build/merma../data/digital-signer/diagrams/signing-delivery-v1.svg" alt="Signing and delivery flow">
   <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
 </figure>
 
@@ -512,7 +512,7 @@ ______________________________________________________________________
 
 ## 10) References
 
-- Signing & delivery diagram — `docs/src/services/digital-signer/diagrams/signing-delivery-v1.mmd`.
+- Signing & delivery diagram — `docs/src/data/digital-signer/diagrams/signing-delivery-v1.mmd`.
 - TSA/OCSP outage runbook — `ops/runbooks/signer/tsa_ocsp_outage.md`.
 - FIPS attestation guard — `packages/udocket_core/security/fips_guard.py`.
 - Signature policy resolver — `apps/platform/operations/signer_policy.py`.
