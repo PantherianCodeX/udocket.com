@@ -23,4 +23,3 @@ Generate PDFs with the shared WeasyPrint styling:
 ```bash
 uv run python tools/pdf_build.py
 ```
-

@@ -39,7 +39,7 @@ services:
       CELERY_TASK_ALWAYS_EAGER: "0"
     command:
       - sh
-      - -lc
+      - -c
       - celery -A apps.platform.config.celery worker -l info
     develop:
       watch:
@@ -60,7 +60,7 @@ services:
       CELERY_TASK_ALWAYS_EAGER: "0"
     command:
       - sh
-      - -lc
+      - -c
       - celery -A apps.platform.config.celery beat -l info
     develop:
       watch:

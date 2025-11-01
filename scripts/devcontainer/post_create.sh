@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${UV_LINK_MODE:=copy}"
+export UV_LINK_MODE
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 printf '[devcontainer] Preparing build cache scaffolding…\n'
 ./scripts/setup_buildx_cache.sh
+
+printf '[devcontainer] Priming platform build cache…\n'
+./scripts/devcontainer/warm_buildx_cache.sh
 
 printf '[devcontainer] Syncing platform environment (dev group)…\n'
 pushd apps/platform >/dev/null

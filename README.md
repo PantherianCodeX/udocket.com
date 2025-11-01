@@ -29,16 +29,25 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 ### Optional: enable BuildKit cache reuse
 
 - Create a container-based builder once: `docker buildx create --name udocket --driver docker-container --bootstrap --use`.
-- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths) or run `make compose-build-cache`:
+- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths) via `make clear-build-cache` (runs `scripts/setup_buildx_cache.sh` under the hood):
 
   ```bash
   ./scripts/setup_buildx_cache.sh
   ```
 
 - Cache directories live under `.docker/buildx-cache/` (platform, platform_worker, platform_beat, keycloak, platform-dev, docs). Host and devcontainer builds share them automatically.
-- `make compose-build-cache SERVICES="platform platform_worker platform_beat"` wraps `docker compose build` with the cache override for faster rebuilds.
+- `make warm-build-cache` primes the toolchain layers for the platform and devcontainer builds so subsequent `docker compose build` runs remain fast.
 - To read/write caches, include the override: `docker compose -f docker-compose.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
 - VS Code devcontainer users can opt in by appending `../docker-compose.cache.yml` to the `dockerComposeFile` list in `.devcontainer/devcontainer.json`.
+
+### Maintenance shortcuts
+
+- Run `make help` to list all curated commands (builds, linting, cache maintenance, Docker utilities).
+- Use `make docker-compose-reset` when you need a clean slate: stops the stack, deletes images built by the project, clears volumes, and removes orphan containers.
+- `make docker-prune-all` performs `docker container/image/network/volume prune --force` in one go.
+- `make buildx-du`, `make buildx-prune`, and `make buildx-reset` show/prune cache usage and delete non-default builders safely.
+- `make docker-contexts` lists Docker contexts; `make docker-context-rm CONTEXT=name` removes a specific one, and `make docker-context-clean` drops everything except `default`.
+- `make docker-maintenance` bundles the heavy-duty cleanup (compose reset, prunes, builder cleanup) followed by `docker system df` to verify reclaimed space.
 
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.

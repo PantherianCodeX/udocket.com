@@ -60,7 +60,7 @@ services:
       RUN_PLATFORM_MIGRATIONS: "0"
       RUN_PLATFORM_BOOTSTRAP: "0"
     command: >-
-      sh -lc "python -c 'import time; time.sleep(2)' &&
+      sh -c "python -c 'import time; time.sleep(2)' &&
       celery -A apps.platform.config.celery worker -l ${CELERY_LOG_LEVEL:-info} --events"
     volumes:
       - ./storage:/app/storage
@@ -88,7 +88,7 @@ services:
       CELERY_RESULT_BACKEND: django-db
       RUN_PLATFORM_MIGRATIONS: "0"
       RUN_PLATFORM_BOOTSTRAP: "0"
-    command: sh -lc "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
+    command: sh -c "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env:ro
