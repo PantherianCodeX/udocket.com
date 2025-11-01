@@ -10,8 +10,9 @@ COMPOSE_DEVCONTAINER := .devcontainer/docker-compose.devcontainer.yml
 DEVCONTAINER_COMPOSE := $(DC) -f $(COMPOSE_BASE) -f $(COMPOSE_OVERRIDE) -f $(COMPOSE_CACHE) -f $(COMPOSE_DEVCONTAINER)
 DOCS_COMPOSE := $(DC) -f $(COMPOSE_BASE) -f $(COMPOSE_CACHE)
 
+
 .PHONY: help init-precommit typing type-baseline type-strict tests ci-check typing-audit typing-dashboard typing-readiness typing-ci \
-	typing-clean-cache clean-typewiz-cache clean-mypy-cache clean-pytest-cache clean-pyright-cache clean-coverage-cache clean-all-caches \
+	cache-clean-typewiz cache-clean-mypy cache-clean-pytest cache-clean-pyright cache-clean-coverage cache-clean-pycache cache-clean-all \
 	build-devcontainer up-devcontainer down-devcontainer build-docs-image warm-build-cache clear-build-cache \
 	docker-compose-reset docker-prune-all buildx-du buildx-prune buildx-reset docker-contexts docker-context-rm docker-context-clean \
 	docker-system-df docker-maintenance
@@ -60,7 +61,7 @@ typewiz-readiness: typing-audit ## Show Typewiz readiness summary (blocked/ready
 
 # --- cache cleaning ---
 cache-clean-typewiz: ## Drop Typewiz caches and generated reports
-	rm -f .typewiz_cache.json
+	rm -rf .typewiz_cache
 	rm -rf reports/typing
 
 cache-clean-mypy: ## Remove mypy cache directory
@@ -76,7 +77,11 @@ cache-clean-coverage: ## Remove coverage artifacts
 	rm -f .coverage
 	rm -rf htmlcov
 
-cache-clean-all: cache-clean-typewiz cache-clean-mypy cache-clean-pytest cache-clean-pyright cache-clean-coverage ## Remove all local caches (typing, tests, coverage)
+cache-clean-pycache: ## Remove Python bytecode and __pycache__ dirs across repo
+	find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.py[co]' \) -delete
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+
+cache-clean-all: cache-clean-typewiz cache-clean-mypy cache-clean-pytest cache-clean-pyright cache-clean-coverage cache-clean-pycache ## Remove all local caches (typing, tests, coverage, bytecode)
 
 # --- docker build ---
 devcontainer-build: ## Build the VS Code devcontainer image
