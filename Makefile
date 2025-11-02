@@ -97,7 +97,7 @@ BAKE_CACHE_FLAGS += $(BAKE_EXTRA_FLAGS)
 CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; exit 1; fi
 
 .PHONY: \
-  help \
+  help buildx.help docker.help context.help containers.help images.help networks.help volumes.help \
   ci.precommit.install ci.check \
   pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
@@ -403,4 +403,33 @@ help:
 	@printf $(HELP_CMD_FORMAT) "SERVICES=\"platform docs\"" " Scope stack actions"
 	@printf $(HELP_CMD_FORMAT) "PLATFORMS=linux/amd64,linux/arm64" "Multi-arch Bake builds"
 	@printf $(HELP_CMD_FORMAT) "FOLLOW=0" " Disable streaming in stack.logs"
-	@printf "\nSee \033[32mREADME.md#Common Make arguments \033[0mfor additional options.\n\n"
+	@printf "\nHint: use \033[36mmake buildx.help\033[0m (or docker/context/containers/images/networks/volumes.help) for focused lists.\n"
+	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options.\n\n"
+
+buildx.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker • Buildx"
+	@grep -E '^[bB]uildx[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+
+docker.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker System"
+	@grep -E '^[dD]ocker[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+
+context.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker • Contexts"
+	@grep -E '^[cC]ontext[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+
+containers.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker • Containers"
+	@grep -E '^[cC]ontainers[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+
+images.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker • Images"
+	@grep -E '^[iI]mages[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+
+networks.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker • Networks"
+	@grep -E '^[nN]etworks[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+
+volumes.help:
+	@printf $(HELP_GROUP_FORMAT) "Docker • Volumes"
+	@grep -E '^[vV]olumes[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
