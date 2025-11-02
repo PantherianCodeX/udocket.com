@@ -29,25 +29,37 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 ### Optional: enable BuildKit cache reuse
 
 - Create a container-based builder once: `docker buildx create --name udocket --driver docker-container --bootstrap --use`.
-- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths) via `make clear-build-cache` (runs `scripts/setup_buildx_cache.sh` under the hood):
+- Pre-create cache directories (idempotent; use `sudo` if previous builds created root-owned paths) via `make build.cache.clean` (runs `scripts/setup_buildx_cache.sh` under the hood):
 
   ```bash
   ./scripts/setup_buildx_cache.sh
   ```
 
 - Cache directories live under `.docker/buildx-cache/` (platform, platform_worker, platform_beat, keycloak, platform-dev, docs). Host and devcontainer builds share them automatically.
-- `make warm-build-cache` primes the toolchain layers for the platform and devcontainer builds so subsequent `docker compose build` runs remain fast.
+- `make images.cache.warm` primes the BuildKit cache layers for the platform, docs, and keycloak images when you want warmer Bake runs without producing artifacts.
 - To read/write caches, include the override: `docker compose -f docker-compose.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
 - VS Code devcontainer users can opt in by appending `../docker-compose.cache.yml` to the `dockerComposeFile` list in `.devcontainer/devcontainer.json`.
 
 ### Maintenance shortcuts
 
 - Run `make help` to list all curated commands (builds, linting, cache maintenance, Docker utilities).
-- Use `make docker-compose-reset` when you need a clean slate: stops the stack, deletes images built by the project, clears volumes, and removes orphan containers.
-- `make docker-prune-all` performs `docker container/image/network/volume prune --force` in one go.
-- `make buildx-du`, `make buildx-prune`, and `make buildx-reset` show/prune cache usage and delete non-default builders safely.
-- `make docker-contexts` lists Docker contexts; `make docker-context-rm CONTEXT=name` removes a specific one, and `make docker-context-clean` drops everything except `default`.
-- `make docker-maintenance` bundles the heavy-duty cleanup (compose reset, prunes, builder cleanup) followed by `docker system df` to verify reclaimed space.
+- Use `make compose.reset CONFIRM=1` when you need a clean slate: stops the stack, deletes project images, clears volumes and removes orphan containers.
+- `make docker.prune CONFIRM=1` performs the equivalent of `docker container/image/network/volume prune --force` in one go.
+- `make buildx.du`, `make buildx.prune CONFIRM=1`, and `make buildx.builders.reset CONFIRM=1` show cache size, prune caches, and delete non-default builders safely.
+- `make context.list` lists Docker contexts; `make context.remove CONTEXT=name CONFIRM=1` removes a specific one, and `make context.clean CONFIRM=1` drops everything except `default`.
+- `make docker.reset CONFIRM=1` bundles the heavy-duty cleanup (compose reset, prunes, builder cleanup) followed by `docker du` to verify reclaimed space.
+
+### Common Make arguments
+
+Most targets accept optional variables so you can customize behaviour without editing the Makefile:
+
+- `CONFIRM=1` — required for destructive actions (prune, reset, delete) as a safety interlock.
+- `SERVICES="platform platform_worker"` — scope stack commands such as `make stack.up` to a subset of services.
+- `PLATFORMS=linux/amd64,linux/arm64` — run `make images.build` for multiple architectures via Buildx Bake.
+- `PROGRESS=auto` — switch Bake progress output from the default `plain` stream to an interactive view.
+- `LOAD=1` or `PUSH=1` — flags for `make images.build` to load into the local Docker daemon or push to the configured registry.
+- `TAG=v1.2.3` / `REGISTRY=ghcr.io/acme` — override image tags/registry when baking release artifacts.
+- `FOLLOW=0` — disable log streaming in `make stack.logs` and print the current buffer instead.
 
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.

@@ -109,7 +109,7 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   docs.env.build docs.env.up docs.env.down docs.env.shell \
   docs.tools.build docs.tools.lint docs.tools.sync docs.tools.preview \
   dev.build dev.up dev.down dev.shell \
-  db.psql.shell db.keycloak.shell \
+  psql.shell keycloak.psql.shell \
   redis.shell redis.ping \
   docker.du docker.prune docker.reset \
   context.list context.remove context.clean \
@@ -118,21 +118,26 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   networks.list networks.prune networks.reset \
   volumes.list volumes.prune volumes.reset \
   compose.ps compose.reset compose.reset.all \
-  buildx.du buildx.setup buildx.inspect buildx.clean buildx.prune buildx.reset buildx.builders.reset buildx.reset.all
+  buildx.du buildx.setup buildx.inspect buildx.clean buildx.prune buildx.reset buildx.reset.builders buildx.reset.all
 
 .DEFAULT_GOAL := help
 
 help: ## Show this help
 	@awk 'BEGIN {FS=":.*##"} \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5); next } \
-		/^[a-zA-Z0-9_.-]+:.*##/ { printf "  \033[36m%-32s\033[0m %s\n", $$1, $$2 }' \
+		/^[a-zA-Z0-9_.-•]+:.*##/ { printf "  \033[36m%-32s\033[0m %s\n", $$1, $$2 }' \
 		$(MAKEFILE_LIST)
+	@printf "\nCommon arguments (override per call):\n"
+	@printf "  \033[36mCONFIRM=1\033[0m        unlock guarded destructive commands\n"
+	@printf "  \033[36mSERVICES=\"platform platform_worker\"\033[0m  scope stack actions\n"
+	@printf "  \033[36mPLATFORMS=linux/amd64,linux/arm64\033[0m  multi-arch Bake builds\n"
+	@printf "  \033[36mFOLLOW=0\033[0m         disable streaming in stack.logs\n"
+	@printf "\nSee README.md#Common Make arguments for additional options.\n"
 
 ##@ CI
 ci.precommit.install: ## Install pre-commit and register git hooks
 	$(UV) pip install --quiet pre-commit || true
 	pre-commit install
-
 ci.check: typing.run pytest.all ## Run typing checks and tests (CI parity)
 
 ##@ Tests
@@ -149,33 +154,29 @@ pytest.clean: ## Remove pytest cache directory
 
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
-
 typing.baseline: ## Run pyright and mypy type checks
 	pyright
 	mypy
-
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
 	$(PYTHON) scripts/typing/check_strict.py --tool both
-
-typing.ci: reports/typing ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
+typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
 	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format json --output reports/typing/dashboard.json || true
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
 
 ##@ Typewiz
-typewiz.audit: reports/typing ## Generate Typewiz audit manifest
+typewiz.audit: ## Generate Typewiz audit manifest
 	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json
-
-typewiz.dashboard: typewiz.audit ## Render Typewiz dashboards (MD + HTML)
+typewiz.dashboard: ## Render Typewiz dashboards (MD + HTML)
+	$(MAKE) typewiz.audit
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html
-
-typewiz.readiness: typewiz.audit ## Show Typewiz readiness summary (blocked/ready folders)
+typewiz.readiness: ## Show Typewiz readiness summary (blocked/ready folders)
+	$(MAKE) typewiz.audit
 	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 || true
 	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 || true
-
 typewiz.clean: ## Drop Typewiz caches and generated reports
 	rm -rf .typewiz_cache
 	rm -rf reports/typing
@@ -183,18 +184,14 @@ typewiz.clean: ## Drop Typewiz caches and generated reports
 ##@ Other Cache Cleaning
 clean.mypy: ## Remove mypy cache directory
 	rm -rf .mypy_cache
-
 clean.pyright: ## Remove Pyright cache directory
 	rm -rf .pyrightcache
-
 clean.pycache: ## Remove Python bytecode and __pycache__ dirs across repo
 	find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.py[co]' \) -delete
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
-
 coverage.clean: ## Remove coverage artifacts
 	rm -f .coverage
 	rm -rf htmlcov
-
 clean.all: typewiz.clean clean.mypy pytest.clean clean.pyright coverage.clean clean.pycache ## Remove all local caches (typing, typewiz, tests, coverage, bytecode)
 
 ##@ Images
@@ -204,116 +201,94 @@ images.build: ## Build images via Buildx Bake (defaults to Bake, release-aware p
 	else \
 	  $(DC) build $(IMAGES); \
 	fi
-
 images.load: ## Build images and load into the local Docker daemon
 	$(MAKE) images.build LOAD=1
-
 images.push: ## Build images and push to the configured registry
 	$(MAKE) images.build PUSH=1
-
 images.cache.warm: ## Prime toolchain layers via Bake cache target
 	docker buildx bake $(BAKE_CACHE_FLAGS) cache-warm
 
 ##@ Platform
 stack.up: ## Start core stack detached (override with SERVICES="..." as needed)
 	$(DC) up -d $(SERVICES)
-
 stack.down: ## Stop stack containers
 	$(DC) down
-
 stack.build: ## Build platform-facing images (Bake pipeline)
 	$(MAKE) images.build IMAGES="platform keycloak"
-
 stack.restart: ## Restart stack services (override with SERVICES="...")
 	$(DC) restart $(SERVICES)
-
 stack.logs: ## Tail logs from core stack (FOLLOW=0 to disable streaming)
 	@if [ "$(FOLLOW)" = "0" ]; then \
 	  $(DC) logs $(SERVICES); \
 	else \
 	  $(DC) logs -f $(SERVICES); \
 	fi
-
 stack.ps: ## Show container status for this project
 	$(DC) ps
 
 ##@ Platform • Shells
 platform.shell: ## Open a shell inside the platform container
 	$(DC) exec platform bash -l
-
 worker.shell: ## Open a shell inside the Celery worker container
 	$(DC) exec platform_worker bash -l
-
 beat.shell: ## Open a shell inside the Celery beat container
 	$(DC) exec platform_beat bash -l
 
-keycloak.shell: ## Open a shell inside the Keycloak container
-	$(DC) exec keycloak bash -l
+##@ Platform • Databases
+psql.shell: ## Connect to the primary PostgreSQL service using psql
+	$(DC) exec postgres bash -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 ##@ Docs • Environment
 docs.env.build: ## Build the docs toolbox image (Bake-driven)
 	$(MAKE) images.build IMAGES=docs
-
 docs.env.up: ## Start the docs toolbox service detached
 	$(DOCS_COMPOSE) up -d $(DOCS_SERVICE)
-
 docs.env.down: ## Stop the docs toolbox service and remove resources
 	$(DOCS_COMPOSE) down
-
 docs.env.shell: ## Open a shell inside the docs toolbox container
 	$(DOCS_COMPOSE) exec $(DOCS_SERVICE) bash -l
 
 ##@ Docs • Tools
 docs.tools.build: ## Render docs output (PDF/HTML as configured)
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.tools.manage_docs --build"
-
 docs.tools.lint: ## Run docs linting pipeline inside the toolbox
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.tools.manage_docs --lint"
-
 docs.tools.sync: ## Sync docs artifacts (fetch/update remote content)
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.tools.manage_docs --sync"
-
 docs.tools.preview: ## Serve docs locally with live reload
 	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run mkdocs serve --config-file mkdocs.yml --dev-addr 0.0.0.0:8010"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image
 	$(DEVCONTAINER_COMPOSE) build $(DEV_SERVICE)
-
 dev.up: ## Start the devcontainer service detached
 	$(DEVCONTAINER_COMPOSE) up -d $(DEV_SERVICE)
-
 dev.down: ## Stop the devcontainer stack
 	$(DEVCONTAINER_COMPOSE) down
-
 dev.shell: ## Open a shell inside the devcontainer service
 	$(DEVCONTAINER_COMPOSE) exec $(DEV_SERVICE) bash -l
 
-##@ Databases
-db.psql.shell: ## Connect to the primary PostgreSQL service using psql
-	$(DC) exec postgres bash -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
-
-db.keycloak.shell: ## Connect to the Keycloak PostgreSQL service using psql
+##@ KeyCloak
+keycloak.shell: ## Open a shell inside the Keycloak container
+	$(DC) exec keycloak bash -l
+keycloak.psql.shell: ## Connect to the Keycloak PostgreSQL service using psql
 	$(DC) exec postgres-keycloak bash -lc 'psql -U keycloak -d keycloak'
 
 ##@ Redis
 redis.shell: ## Open a Redis CLI session inside the redis container
 	$(DC) exec redis redis-cli
-
 redis.ping: ## Run a Redis PING health-check command
 	$(DC) exec redis redis-cli -n 1 ping
 
 ##@ Docker System
 docker.du: ## Display Docker disk usage summary
 	docker system df
-
 docker.prune: ## Remove dangling containers/images/networks/volumes (global)
 	$(CONFIRM_CMD)
 	docker container prune --force
 	docker image prune --all --force
 	docker network prune --force
 	docker volume prune --force
-
 docker.reset: ## Run full Docker & Buildx cleanup sequence
 	$(CONFIRM_CMD)
 	@$(MAKE) compose.reset CONFIRM=1
@@ -325,12 +300,10 @@ docker.reset: ## Run full Docker & Buildx cleanup sequence
 ##@ Docker • Contexts
 context.list: ## List available Docker contexts
 	docker context ls
-
 context.remove: ## Remove a Docker context (usage: make context.remove CONTEXT=name)
 	@if [ -z "$(CONTEXT)" ]; then echo "CONTEXT is required (usage: make context.remove CONTEXT=name)"; exit 1; fi
 	$(CONFIRM_CMD)
 	docker context rm "$(CONTEXT)"
-
 context.clean: ## Remove all non-default Docker contexts
 	$(CONFIRM_CMD)
 	docker context ls --format '{{.Name}}' | awk '$$1 != "default"' | xargs -r -n1 docker context rm
@@ -338,22 +311,17 @@ context.clean: ## Remove all non-default Docker contexts
 ##@ Docker • Containers
 containers.list: ## List all Docker containers
 	docker ps -a
-
 containers.list-running: ## List running Docker containers
 	docker ps
-
 containers.stop.all: ## Stop all running Docker containers
 	$(CONFIRM_CMD)
 	docker ps -q | xargs -r docker stop
-
 containers.remove.all: ## Remove all Docker containers
 	$(CONFIRM_CMD)
 	docker ps -a -q | xargs -r docker rm
-
 containers.prune: ## Remove all stopped Docker containers
 	$(CONFIRM_CMD)
 	docker container prune --force
-
 containers.reset: ## Stop and remove all Docker containers
 	$(CONFIRM_CMD)
 	@$(MAKE) containers.stop.all CONFIRM=1
@@ -362,15 +330,12 @@ containers.reset: ## Stop and remove all Docker containers
 ##@ Docker • Images
 images.list: ## List all Docker images
 	docker images -a
-
 images.remove.all: ## Remove all Docker images
 	$(CONFIRM_CMD)
 	docker images -a -q | xargs -r docker rmi -f
-
 images.prune: ## Remove dangling Docker images
 	$(CONFIRM_CMD)
 	docker image prune --all --force
-
 images.reset: ## Remove all Docker images
 	$(CONFIRM_CMD)
 	docker images -a -q | xargs -r docker rmi -f
@@ -378,11 +343,9 @@ images.reset: ## Remove all Docker images
 ##@ Docker • Networks
 networks.list: ## List all Docker networks
 	docker network ls
-
 networks.prune: ## Remove all dangling Docker networks
 	$(CONFIRM_CMD)
 	docker network prune --force
-
 networks.reset: ## Remove all Docker networks
 	$(CONFIRM_CMD)
 	docker network ls --format '{{.ID}}' | xargs -r docker network rm
@@ -390,11 +353,9 @@ networks.reset: ## Remove all Docker networks
 ##@ Docker • Volumes
 volumes.list: ## List all Docker volumes
 	docker volume ls
-
 volumes.prune: ## Remove all dangling Docker volumes
 	$(CONFIRM_CMD)
 	docker volume prune --force
-
 volumes.reset: ## Remove all Docker volumes
 	$(CONFIRM_CMD)
 	docker volume ls --format '{{.Name}}' | xargs -r docker volume rm
@@ -402,11 +363,9 @@ volumes.reset: ## Remove all Docker volumes
 ##@ Docker • Compose
 compose.ps: ## List Docker containers for this project
 	$(DC) ps
-
 compose.reset: ## Stop stack, remove images/volumes/orphans for this project
 	$(CONFIRM_CMD)
 	$(DC) down --rmi all --volumes --remove-orphans
-
 compose.reset.all: ## Full reset of Docker Compose resources for this project
 	$(CONFIRM_CMD)
 	@$(MAKE) compose.reset CONFIRM=1
@@ -417,32 +376,25 @@ compose.reset.all: ## Full reset of Docker Compose resources for this project
 ##@ Docker • Buildx
 buildx.du: ## Show BuildKit cache disk usage
 	docker buildx du || true
-
 buildx.setup: ## Ensure Buildx builder is created and active
 	./scripts/setup_buildx_builder.sh
-
 buildx.inspect: ## Show Buildx builder details
 	docker buildx inspect --bootstrap
-
 buildx.clean: ## Remove Buildx cache directories
 	$(CONFIRM_CMD)
 	rm -rf .docker/buildx-cache
-
+buildx.prune: ## Prune all BuildKit caches for the active builder
+	$(CONFIRM_CMD)
+	docker buildx prune --all --force
 buildx.reset: ## Refresh Buildx cache directories
 	$(CONFIRM_CMD)
 	@$(MAKE) buildx.clean CONFIRM=1
 	@$(MAKE) buildx.setup
-
-buildx.prune: ## Prune all BuildKit caches for the active builder
-	$(CONFIRM_CMD)
-	docker buildx prune --all --force
-
-buildx.builders.reset: ## Remove all non-default BuildKit builders
+buildx.reset.builders: ## Remove all non-default BuildKit builders
 	$(CONFIRM_CMD)
 	docker buildx ls | awk 'NR>1 && $$1 != "default" {print $$1}' | xargs -r -n1 docker buildx rm
-
 buildx.reset.all: ## Full Buildx cleanup (caches and builders)
 	$(CONFIRM_CMD)
 	@$(MAKE) buildx.prune CONFIRM=1
 	@$(MAKE) buildx.clean CONFIRM=1
-	@$(MAKE) buildx.builders.reset CONFIRM=1
+	@$(MAKE) buildx.reset.builders CONFIRM=1
