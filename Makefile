@@ -97,7 +97,10 @@ BAKE_CACHE_FLAGS += $(BAKE_EXTRA_FLAGS)
 CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; exit 1; fi
 
 .PHONY: \
-  help buildx.help docker.help context.help containers.help images.help networks.help volumes.help \
+  help \
+  ci.help tests.help typing.help typewiz.help clean.help images.help platform.help platform.shells.help platform.databases.help \
+  doctools.env.help doctools.tools.help dev.help keycloak.help redis.help \
+  docker.system.help docker.contexts.help docker.containers.help docker.images.help docker.networks.help docker.volumes.help compose.help buildx.help \
   ci.precommit.install ci.check \
   pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
@@ -389,6 +392,12 @@ buildx.reset.all: ## Full Buildx cleanup (caches and builders)
 .DEFAULT_GOAL := help
 HELP_GROUP_FORMAT := "\n\033[1m%s\033[0m\n"
 HELP_CMD_FORMAT := "  \033[36m%-32s\033[0m %s\n"
+
+define PRINT_HELP_GROUP
+	@printf $(HELP_GROUP_FORMAT) "$(1)"
+	@grep -E '^$(2).*:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+endef
+
 help:
 	@printf $(HELP_GROUP_FORMAT) "uDocket Makefile Commands"
 	@printf $(HELP_GROUP_FORMAT) "Usage:"
@@ -403,33 +412,71 @@ help:
 	@printf $(HELP_CMD_FORMAT) "SERVICES=\"platform docs\"" " Scope stack actions"
 	@printf $(HELP_CMD_FORMAT) "PLATFORMS=linux/amd64,linux/arm64" "Multi-arch Bake builds"
 	@printf $(HELP_CMD_FORMAT) "FOLLOW=0" " Disable streaming in stack.logs"
-	@printf "\nHint: use \033[36mmake buildx.help\033[0m (or docker/context/containers/images/networks/volumes.help) for focused lists.\n"
+	@printf "\nHint: run \033[36mmake <group>.help\033[0m (for example, \'tests.help\' or \'docker.images.help\') for focused command lists.\n"
 	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options.\n\n"
 
-buildx.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker • Buildx"
-	@grep -E '^[bB]uildx[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+ci.help:
+	$(call PRINT_HELP_GROUP,CI,ci\.)
 
-docker.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker System"
-	@grep -E '^[dD]ocker[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+tests.help:
+	$(call PRINT_HELP_GROUP,Tests,pytest\.)
 
-context.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker • Contexts"
-	@grep -E '^[cC]ontext[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+typing.help:
+	$(call PRINT_HELP_GROUP,Typing,typing\.)
 
-containers.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker • Containers"
-	@grep -E '^[cC]ontainers[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+typewiz.help:
+	$(call PRINT_HELP_GROUP,Typewiz,typewiz\.)
+
+clean.help:
+	$(call PRINT_HELP_GROUP,Other Cache Cleaning,(clean|coverage)\.)
 
 images.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker • Images"
-	@grep -E '^[iI]mages[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+	$(call PRINT_HELP_GROUP,Images,images\.(build|load|push|cache\.warm))
 
-networks.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker • Networks"
-	@grep -E '^[nN]etworks[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+platform.help:
+	$(call PRINT_HELP_GROUP,Platform,stack\.)
 
-volumes.help:
-	@printf $(HELP_GROUP_FORMAT) "Docker • Volumes"
-	@grep -E '^[vV]olumes[._][^:]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
+platform.shells.help:
+	$(call PRINT_HELP_GROUP,Platform Shells,(platform|worker|beat)\.shell)
+
+platform.databases.help:
+	$(call PRINT_HELP_GROUP,Platform Databases,psql\.shell)
+
+doctools.env.help:
+	$(call PRINT_HELP_GROUP,Doctools Environment,doctools\.)
+
+doctools.tools.help:
+	$(call PRINT_HELP_GROUP,Doctools Tools,docs\.(build|lint|sync|preview))
+
+dev.help:
+	$(call PRINT_HELP_GROUP,Devcontainer Environment,dev\.)
+
+keycloak.help:
+	$(call PRINT_HELP_GROUP,KeyCloak,keycloak\.)
+
+redis.help:
+	$(call PRINT_HELP_GROUP,Redis,redis\.)
+
+docker.system.help:
+	$(call PRINT_HELP_GROUP,Docker System,docker\.(du|prune|reset))
+
+docker.contexts.help:
+	$(call PRINT_HELP_GROUP,Docker Contexts,context\.)
+
+docker.containers.help:
+	$(call PRINT_HELP_GROUP,Docker Containers,containers\.)
+
+docker.images.help:
+	$(call PRINT_HELP_GROUP,Docker Images,images\.(list|remove\.all|prune|reset))
+
+docker.networks.help:
+	$(call PRINT_HELP_GROUP,Docker Networks,networks\.)
+
+docker.volumes.help:
+	$(call PRINT_HELP_GROUP,Docker Volumes,volumes\.)
+
+compose.help:
+	$(call PRINT_HELP_GROUP,Docker Compose,compose\.)
+
+buildx.help:
+	$(call PRINT_HELP_GROUP,Docker Buildx,buildx[._])
