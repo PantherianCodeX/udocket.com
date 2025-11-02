@@ -94,7 +94,15 @@ endif
 BAKE_CACHE_FLAGS := --progress=$(PROGRESS) --set common.platforms=$(PLATFORMS)
 BAKE_CACHE_FLAGS += $(BAKE_EXTRA_FLAGS)
 
-CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; exit 1; fi
+ALWAYS_CONFIRM ?=
+ifeq ($(strip $(CONFIRM)),1)
+  ALWAYS_CONFIRM := 1
+endif
+ifeq ($(strip $(ALWAYS_CONFIRM)),1)
+  CONFIRM := 1
+endif
+
+CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 (or ALWAYS_CONFIRM=1) to run $@"; exit 1; fi
 
 .PHONY: \
   help \
@@ -316,10 +324,10 @@ docker.system.prune: ## Remove dangling containers/images/networks/volumes (glob
 
 docker.system.reset: ## Run full Docker & Buildx cleanup sequence
 	$(CONFIRM_CMD)
-	@$(MAKE) compose.reset CONFIRM=1
-	@$(MAKE) docker.system.prune CONFIRM=1
-	@$(MAKE) buildx.prune CONFIRM=1
-	@$(MAKE) buildx.reset CONFIRM=1
+	@$(MAKE) compose.reset ALWAYS_CONFIRM=1
+	@$(MAKE) docker.system.prune ALWAYS_CONFIRM=1
+	@$(MAKE) buildx.prune ALWAYS_CONFIRM=1
+	@$(MAKE) buildx.reset ALWAYS_CONFIRM=1
 	@$(MAKE) docker.system.du
 
 ##@ Docker Contexts
@@ -356,8 +364,8 @@ docker.containers.prune: ## Remove all stopped Docker containers
 
 docker.containers.reset: ## Stop and remove all Docker containers
 	$(CONFIRM_CMD)
-	@$(MAKE) docker.containers.stop.all CONFIRM=1
-	@$(MAKE) docker.containers.remove.all CONFIRM=1
+	@$(MAKE) docker.containers.stop.all ALWAYS_CONFIRM=1
+	@$(MAKE) docker.containers.remove.all ALWAYS_CONFIRM=1
 
 ##@ Docker Images
 docker.images.list: ## List all Docker images
@@ -409,10 +417,10 @@ compose.reset: ## Stop stack, remove images/volumes/orphans for this project
 
 compose.reset.all: ## Full reset of Docker Compose resources for this project
 	$(CONFIRM_CMD)
-	@$(MAKE) compose.reset CONFIRM=1
-	@$(MAKE) docker.images.prune CONFIRM=1
-	@$(MAKE) docker.volumes.prune CONFIRM=1
-	@$(MAKE) docker.networks.prune CONFIRM=1
+	@$(MAKE) compose.reset ALWAYS_CONFIRM=1
+	@$(MAKE) docker.images.prune ALWAYS_CONFIRM=1
+	@$(MAKE) docker.volumes.prune ALWAYS_CONFIRM=1
+	@$(MAKE) docker.networks.prune ALWAYS_CONFIRM=1
 
 ##@ Buildx
 buildx.du: ## Show BuildKit cache disk usage
@@ -439,6 +447,6 @@ buildx.reset: ## Remove all non-default BuildKit builders
 
 buildx.reset.all: ## Full Buildx cleanup (caches and builders)
 	$(CONFIRM_CMD)
-	@$(MAKE) buildx.prune CONFIRM=1
-	@$(MAKE) buildx.clean CONFIRM=1
-	@$(MAKE) buildx.reset CONFIRM=1
+	@$(MAKE) buildx.prune ALWAYS_CONFIRM=1
+	@$(MAKE) buildx.clean ALWAYS_CONFIRM=1
+	@$(MAKE) buildx.reset ALWAYS_CONFIRM=1
