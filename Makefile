@@ -99,10 +99,10 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
 .PHONY: \
   help \
   ci.precommit.install ci.check \
-  tests.pytest \
+  pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
   typewiz.audit typewiz.dashboard typewiz.readiness typewiz.clean \
-  clean.all build.cache.clean cache.clean.mypy cache.clean.pytest cache.clean.pyright cache.clean.coverage cache.clean.pycache \
+  clean.all clean.mypy clean.pyright clean.pycache coverage.clean \
   images.build images.load images.push images.cache.warm \
   stack.up stack.down stack.build stack.restart stack.logs stack.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
@@ -133,11 +133,19 @@ ci.precommit.install: ## Install pre-commit and register git hooks
 	$(UV) pip install --quiet pre-commit || true
 	pre-commit install
 
-ci.check: typing.run tests.pytest ## Run typing checks and tests (CI parity)
+ci.check: typing.run pytest.all ## Run typing checks and tests (CI parity)
 
 ##@ Tests
-tests.pytest: ## Execute pytest suite quietly
+pytest.all: ## Execute pytest suite quietly
 	pytest -q
+pytest.verbose: ## Execute pytest suite with verbose output
+	pytest -v
+pytest.failfast: ## Execute pytest suite, stopping on first failure
+	pytest -x
+pytest.cov: ## Execute pytest suite with coverage reporting
+	pytest --cov=apps/platform
+pytest.clean: ## Remove pytest cache directory
+	rm -rf .pytest_cache
 
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
@@ -173,28 +181,21 @@ typewiz.clean: ## Drop Typewiz caches and generated reports
 	rm -rf reports/typing
 
 ##@ Other Cache Cleaning
-cache.clean.mypy: ## Remove mypy cache directory
+clean.mypy: ## Remove mypy cache directory
 	rm -rf .mypy_cache
 
-cache.clean.pytest: ## Remove pytest cache directory
-	rm -rf .pytest_cache
-
-cache.clean.pyright: ## Remove Pyright cache directory
+clean.pyright: ## Remove Pyright cache directory
 	rm -rf .pyrightcache
 
-cache.clean.coverage: ## Remove coverage artifacts
-	rm -f .coverage
-	rm -rf htmlcov
-
-cache.clean.pycache: ## Remove Python bytecode and __pycache__ dirs across repo
+clean.pycache: ## Remove Python bytecode and __pycache__ dirs across repo
 	find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.py[co]' \) -delete
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 
-clean.all: typewiz.clean cache.clean.mypy cache.clean.pytest cache.clean.pyright cache.clean.coverage cache.clean.pycache ## Remove all local caches (typing, typewiz, tests, coverage, bytecode)
+coverage.clean: ## Remove coverage artifacts
+	rm -f .coverage
+	rm -rf htmlcov
 
-build.cache.clean: ## Remove BuildKit cache directories and recreate scaffolding
-	rm -rf .docker/buildx-cache
-	./scripts/setup_buildx_cache.sh
+clean.all: typewiz.clean clean.mypy pytest.clean clean.pyright coverage.clean clean.pycache ## Remove all local caches (typing, typewiz, tests, coverage, bytecode)
 
 ##@ Images
 images.build: ## Build images via Buildx Bake (defaults to Bake, release-aware push)
