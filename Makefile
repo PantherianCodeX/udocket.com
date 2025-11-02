@@ -97,15 +97,12 @@ BAKE_CACHE_FLAGS += $(BAKE_EXTRA_FLAGS)
 CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; exit 1; fi
 
 .PHONY: \
-  help \
-  ci.help tests.help typing.help typewiz.help clean.help images.help platform.help platform.shells.help platform.databases.help \
-  doctools.env.help doctools.tools.help dev.help keycloak.help redis.help \
-  docker.system.help docker.contexts.help docker.containers.help docker.images.help docker.networks.help docker.volumes.help compose.help buildx.help \
+  help %.help \
   ci.precommit.install ci.check \
   pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
   typewiz.audit typewiz.dashboard typewiz.readiness typewiz.clean \
-  clean.all clean.mypy clean.pyright clean.pycache coverage.clean \
+  clean.all clean.mypy clean.pyright clean.pycache clean.coverage \
   images.build images.load images.push images.cache.warm \
   stack.up stack.down stack.build stack.restart stack.logs stack.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
@@ -178,10 +175,10 @@ clean.pyright: ## Remove Pyright cache directory
 clean.pycache: ## Remove Python bytecode and __pycache__ dirs across repo
 	find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.py[co]' \) -delete
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
-coverage.clean: ## Remove coverage artifacts
+clean.coverage: ## Remove coverage artifacts
 	rm -f .coverage
 	rm -rf htmlcov
-clean.all: typewiz.clean clean.mypy pytest.clean clean.pyright coverage.clean clean.pycache ## Remove all local caches (typing, typewiz, tests, coverage, bytecode)
+clean.all: typewiz.clean clean.mypy pytest.clean clean.pyright clean.coverage clean.pycache ## Remove all local caches (typing, typewiz, tests, coverage, bytecode)
 
 ##@ Images
 images.build: ## Build images via Buildx Bake (defaults to Bake, release-aware push)
@@ -393,11 +390,6 @@ buildx.reset.all: ## Full Buildx cleanup (caches and builders)
 HELP_GROUP_FORMAT := "\n\033[1m%s\033[0m\n"
 HELP_CMD_FORMAT := "  \033[36m%-32s\033[0m %s\n"
 
-define PRINT_HELP_GROUP
-	@printf $(HELP_GROUP_FORMAT) "$(1)"
-	@grep -E '^$(2).*:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS=":.*##"} { printf $(HELP_CMD_FORMAT), $$1, $$2 }'
-endef
-
 help:
 	@printf $(HELP_GROUP_FORMAT) "uDocket Makefile Commands"
 	@printf $(HELP_GROUP_FORMAT) "Usage:"
@@ -412,71 +404,8 @@ help:
 	@printf $(HELP_CMD_FORMAT) "SERVICES=\"platform docs\"" " Scope stack actions"
 	@printf $(HELP_CMD_FORMAT) "PLATFORMS=linux/amd64,linux/arm64" "Multi-arch Bake builds"
 	@printf $(HELP_CMD_FORMAT) "FOLLOW=0" " Disable streaming in stack.logs"
-	@printf "\nHint: run \033[36mmake <group>.help\033[0m (for example, \'tests.help\' or \'docker.images.help\') for focused command lists.\n"
-	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options.\n\n"
+	@printf "\nHint: run \033[36mmake <group>.help\033[0m for a specific group (e.g., 'tests.help').\n"
+	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options."
 
-ci.help:
-	$(call PRINT_HELP_GROUP,CI,ci\.)
-
-tests.help:
-	$(call PRINT_HELP_GROUP,Tests,pytest\.)
-
-typing.help:
-	$(call PRINT_HELP_GROUP,Typing,typing\.)
-
-typewiz.help:
-	$(call PRINT_HELP_GROUP,Typewiz,typewiz\.)
-
-clean.help:
-	$(call PRINT_HELP_GROUP,Other Cache Cleaning,(clean|coverage)\.)
-
-images.help:
-	$(call PRINT_HELP_GROUP,Images,images\.(build|load|push|cache\.warm))
-
-platform.help:
-	$(call PRINT_HELP_GROUP,Platform,stack\.)
-
-platform.shells.help:
-	$(call PRINT_HELP_GROUP,Platform Shells,(platform|worker|beat)\.shell)
-
-platform.databases.help:
-	$(call PRINT_HELP_GROUP,Platform Databases,psql\.shell)
-
-doctools.env.help:
-	$(call PRINT_HELP_GROUP,Doctools Environment,doctools\.)
-
-doctools.tools.help:
-	$(call PRINT_HELP_GROUP,Doctools Tools,docs\.(build|lint|sync|preview))
-
-dev.help:
-	$(call PRINT_HELP_GROUP,Devcontainer Environment,dev\.)
-
-keycloak.help:
-	$(call PRINT_HELP_GROUP,KeyCloak,keycloak\.)
-
-redis.help:
-	$(call PRINT_HELP_GROUP,Redis,redis\.)
-
-docker.system.help:
-	$(call PRINT_HELP_GROUP,Docker System,docker\.(du|prune|reset))
-
-docker.contexts.help:
-	$(call PRINT_HELP_GROUP,Docker Contexts,context\.)
-
-docker.containers.help:
-	$(call PRINT_HELP_GROUP,Docker Containers,containers\.)
-
-docker.images.help:
-	$(call PRINT_HELP_GROUP,Docker Images,images\.(list|remove\.all|prune|reset))
-
-docker.networks.help:
-	$(call PRINT_HELP_GROUP,Docker Networks,networks\.)
-
-docker.volumes.help:
-	$(call PRINT_HELP_GROUP,Docker Volumes,volumes\.)
-
-compose.help:
-	$(call PRINT_HELP_GROUP,Docker Compose,compose\.)
-
-buildx.help:
-	$(call PRINT_HELP_GROUP,Docker Buildx,buildx[._])
+%.help:
+	@python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"

@@ -48,7 +48,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 - `make buildx.du`, `make buildx.prune CONFIRM=1`, and `make buildx.builders.reset CONFIRM=1` show cache size, prune caches, and delete non-default builders safely.
 - `make context.list` lists Docker contexts; `make context.remove CONTEXT=name CONFIRM=1` removes a specific one, and `make context.clean CONFIRM=1` drops everything except `default`.
 - `make docker.reset CONFIRM=1` bundles the heavy-duty cleanup (compose reset, prunes, builder cleanup) followed by `docker du` to verify reclaimed space.
-- Need help by topic? Run `make <group>.help` (for example, `make tests.help`, `make docker.images.help`, `make buildx.help`) for a filtered list of commands in that area.
+- Need help by topic? Run `make <group>.help` for a filtered list (labels are lowercased with punctuation mapped to dots, e.g. `make tests.help`, `make docker.images.help`, `make docker.buildx.help`).
 
 ### Common Make arguments
 
