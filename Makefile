@@ -106,8 +106,8 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   images.build images.load images.push images.cache.warm \
   stack.up stack.down stack.build stack.restart stack.logs stack.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
-  docs.env.build docs.env.up docs.env.down docs.env.shell \
-  docs.tools.build docs.tools.lint docs.tools.sync docs.tools.preview \
+  doctools.build doctools.up doctools.down doctools.shell \
+  docs.build docs.lint docs.sync docs.preview \
   dev.build dev.up dev.down dev.shell \
   psql.shell keycloak.psql.shell \
   redis.shell redis.ping \
@@ -119,20 +119,6 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   volumes.list volumes.prune volumes.reset \
   compose.ps compose.reset compose.reset.all \
   buildx.du buildx.setup buildx.inspect buildx.clean buildx.prune buildx.reset buildx.reset.builders buildx.reset.all
-
-.DEFAULT_GOAL := help
-
-help: ## Show this help
-	@awk 'BEGIN {FS=":.*##"} \
-		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0,5); next } \
-		/^[a-zA-Z0-9_.-•]+:.*##/ { printf "  \033[36m%-32s\033[0m %s\n", $$1, $$2 }' \
-		$(MAKEFILE_LIST)
-	@printf "\nCommon arguments (override per call):\n"
-	@printf "  \033[36mCONFIRM=1\033[0m        unlock guarded destructive commands\n"
-	@printf "  \033[36mSERVICES=\"platform platform_worker\"\033[0m  scope stack actions\n"
-	@printf "  \033[36mPLATFORMS=linux/amd64,linux/arm64\033[0m  multi-arch Bake builds\n"
-	@printf "  \033[36mFOLLOW=0\033[0m         disable streaming in stack.logs\n"
-	@printf "\nSee README.md#Common Make arguments for additional options.\n"
 
 ##@ CI
 ci.precommit.install: ## Install pre-commit and register git hooks
@@ -238,24 +224,24 @@ beat.shell: ## Open a shell inside the Celery beat container
 psql.shell: ## Connect to the primary PostgreSQL service using psql
 	$(DC) exec postgres bash -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
-##@ Docs • Environment
-docs.env.build: ## Build the docs toolbox image (Bake-driven)
+##@ Doctools • Environment
+doctools.build: ## Build the docs toolbox image (Bake-driven)
 	$(MAKE) images.build IMAGES=docs
-docs.env.up: ## Start the docs toolbox service detached
+doctools.up: ## Start the docs toolbox service detached
 	$(DOCS_COMPOSE) up -d $(DOCS_SERVICE)
-docs.env.down: ## Stop the docs toolbox service and remove resources
+doctools.down: ## Stop the docs toolbox service and remove resources
 	$(DOCS_COMPOSE) down
-docs.env.shell: ## Open a shell inside the docs toolbox container
+doctools.shell: ## Open a shell inside the docs toolbox container
 	$(DOCS_COMPOSE) exec $(DOCS_SERVICE) bash -l
 
-##@ Docs • Tools
-docs.tools.build: ## Render docs output (PDF/HTML as configured)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.tools.manage_docs --build"
-docs.tools.lint: ## Run docs linting pipeline inside the toolbox
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.tools.manage_docs --lint"
-docs.tools.sync: ## Sync docs artifacts (fetch/update remote content)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.tools.manage_docs --sync"
-docs.tools.preview: ## Serve docs locally with live reload
+##@ Doctools • Tools
+docs.build: ## Render docs output (PDF/HTML as configured)
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.manage_docs --build"
+docs.lint: ## Run docs linting pipeline inside the toolbox
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.manage_docs --lint"
+docs.sync: ## Sync docs artifacts (fetch/update remote content)
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.manage_docs --sync"
+docs.preview: ## Serve docs locally with live reload
 	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run mkdocs serve --config-file mkdocs.yml --dev-addr 0.0.0.0:8010"
 
 ##@ Devcontainer • Environment
@@ -398,3 +384,23 @@ buildx.reset.all: ## Full Buildx cleanup (caches and builders)
 	@$(MAKE) buildx.prune CONFIRM=1
 	@$(MAKE) buildx.clean CONFIRM=1
 	@$(MAKE) buildx.reset.builders CONFIRM=1
+
+
+.DEFAULT_GOAL := help
+HELP_GROUP_FORMAT := "\n\033[1m%s\033[0m\n"
+HELP_CMD_FORMAT := "  \033[36m%-32s\033[0m %s\n"
+help:
+	@printf $(HELP_GROUP_FORMAT) "uDocket Makefile Commands"
+	@printf $(HELP_GROUP_FORMAT) "Usage:"
+	@printf "  \033[36m%s\033[0m%s\033[36m%-26s\033[0m%s\n" "make " "or" " make help" " View this help message"
+	@awk 'BEGIN {FS=":.*##"} \
+		/^##@/ { printf $(HELP_GROUP_FORMAT), substr($$0,5); next } \
+		/^[a-zA-Z0-9_.-•]+:.*##/ { printf $(HELP_CMD_FORMAT), $$1, $$2 }' \
+		$(MAKEFILE_LIST)
+	@printf "\n"
+	@printf $(HELP_GROUP_FORMAT) "Common arguments (override per call):"
+	@printf $(HELP_CMD_FORMAT) "CONFIRM=1" " Unlock guarded destructive commands"
+	@printf $(HELP_CMD_FORMAT) "SERVICES=\"platform docs\"" " Scope stack actions"
+	@printf $(HELP_CMD_FORMAT) "PLATFORMS=linux/amd64,linux/arm64" "Multi-arch Bake builds"
+	@printf $(HELP_CMD_FORMAT) "FOLLOW=0" " Disable streaming in stack.logs"
+	@printf "\nSee \033[32mREADME.md#Common Make arguments \033[0mfor additional options.\n\n"
