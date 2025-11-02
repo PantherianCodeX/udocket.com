@@ -231,9 +231,9 @@ You may expose a thin CLI under `scripts/`:
 ```
 python -m .agents.analyze_lib \
   --case <CASE_ID> \
-  --case-dir /app/storage/media/cases/<CASE_ID> \
+  --case-dir ${STORAGE_ROOT}/media/cases/<CASE_ID> \
   --job <JOB_ID> \
-  --input /app/storage/media/cases/<CASE_ID>/transcript/<job>__transcript.txt
+  --input ${STORAGE_ROOT}/media/cases/<CASE_ID>/transcript/<job>__transcript.txt
 ```
 Stdout (success): `{ "status":"ok", "summary_file":"<abs_path>", "words":1234, "source_transcript":"<abs_path>" }`
 

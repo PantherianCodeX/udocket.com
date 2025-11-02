@@ -65,7 +65,7 @@ Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
   - Job meta (per job): `storage/media/cases/<case>/ops/<job_id>_transcription_log.json`
   - Human log (per job): `storage/media/cases/<case>/ops/<job_id>_transcription.log`
   - Case ops audit: `storage/media/cases/<case>/ops/ops_transcription.jsonl`
-- One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"/app/storage/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
+- One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"${STORAGE_ROOT}/media/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
 
 ## Analysis Agents
 
@@ -199,9 +199,9 @@ General guidelines:
   cfg = TranscriptionConfig.from_env()
   agent = TranscriptionAgent(cfg)
   agent.transcribe(
-      input="/app/storage/media/cases/<CASE>/audio/<job>__file.wav",
+      input=f"{STORAGE_ROOT}/media/cases/<CASE>/audio/<job>__file.wav",
       case_id="<CASE>",
-      case_dir=Path("/app/storage/media/cases/<CASE>"),
+      case_dir=Path(STORAGE_ROOT) / "media" / "cases" / "<CASE>",
       job_id="<JOB>",
       language="en-CA",
       mode="batch",

@@ -120,13 +120,13 @@ RUN if [ "$DEV_TOOLS" = "1" ]; then \
 FROM toolchain AS python-deps
 ARG DEV_TOOLS
 
-WORKDIR /app
+WORKDIR /udocket
 
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
-COPY apps/platform/pyproject.toml apps/platform/uv.lock /app/apps/platform/
+COPY apps/platform/pyproject.toml apps/platform/uv.lock /udocket/apps/platform/
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev --no-install-project --project apps/platform \
@@ -134,10 +134,10 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
 
 FROM python-deps AS app
 
-WORKDIR /app
+WORKDIR /udocket
 
 # Copy project source last to keep dependency layers hot
-COPY . /app
+COPY . /udocket
 
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV VIRTUAL_ENV=/opt/venv

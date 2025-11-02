@@ -7,7 +7,7 @@ import environ
 
 from config.settings import settings
 
-BASE_DIR = Path(__file__).resolve().parents[4]  # repo root (/app)
+BASE_DIR = Path(__file__).resolve().parents[4]  # repo root (default /udocket)
 env = environ.Env()
 
 storage_root_path = settings.ensure_storage_root()

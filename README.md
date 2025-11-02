@@ -1,6 +1,6 @@
 # uDocket MVP Skeleton (Dockerized) — v0.12
 
-This package includes fixes for Pydantic v2 (uses `pydantic-settings`), explicit `PYTHONPATH=/app`,
+This package includes fixes for Pydantic v2 (uses `pydantic-settings`), explicit `PYTHONPATH=/udocket`,
 and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 ## Quick start

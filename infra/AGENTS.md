@@ -12,7 +12,8 @@ Scope: `infra/` (Dockerfiles, compose, logging), `.devcontainer/` for editor env
 
 ## Environment
 - `.env` provides shared variables; platform sets `DJANGO_SETTINGS_MODULE=apps.platform.config.settings.prod` in compose.
-- Mount `./storage:/app/storage` for persistent media/db in dev.
+- `APP_ROOT` defaults to `/udocket` inside containers; adjust if you diverge from the standard layout.
+- Mount `./storage:/udocket/storage` for persistent media/db in dev.
 
 ## Dockerfile Standards & Build Cache
 - `infra/docker/Dockerfile.platform` keeps apt metadata setup (`apt-get update`, repo keyrings) isolated from package installs. Add new dependencies to the logical `RUN` block that matches their domain (core runtime vs. developer build toolchain vs. CLI/utilities) so cache busts stay scoped.

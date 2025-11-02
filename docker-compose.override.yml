@@ -16,10 +16,10 @@ services:
             --target-type=command \
             --filter=apps.platform.config.watchers.PythonAndHTMLFilter \
             --ignore-paths=/opt/venv \
-            --ignore-paths=/app/storage \
-            --ignore-paths=/app/celerybeat-schedule \
+            --ignore-paths=${APP_ROOT:-/udocket}/storage \
+            --ignore-paths=${APP_ROOT:-/udocket}/celerybeat-schedule \
             --grace-period=0.2 \
-            "daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" /app
+            "daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" ${APP_ROOT:-/udocket}
     develop:
       watch:
         - path: infra/docker/Dockerfile.platform

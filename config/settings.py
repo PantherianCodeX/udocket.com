@@ -15,7 +15,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
 
 
-FALLBACK_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_APP_ROOT = Path(os.environ.get("APP_ROOT", str(REPO_ROOT))).expanduser()
+DEFAULT_STORAGE_ROOT = DEFAULT_APP_ROOT / "storage"
+FALLBACK_STORAGE_ROOT = REPO_ROOT / "storage"
 
 
 def _read_text(path: Path) -> str | None:
@@ -547,7 +550,7 @@ class Settings(BaseSettings):
     LANGUAGE: str = "en-CA"
 
     # Storage
-    STORAGE_ROOT: Path = Field(default=Path("/app/storage"))
+    STORAGE_ROOT: Path = Field(default=DEFAULT_STORAGE_ROOT)
     MAX_UPLOAD_MB: int = 500
 
     # Database
@@ -746,7 +749,7 @@ class Settings(BaseSettings):
         elif isinstance(storage_root_value, str) and storage_root_value:
             storage_root = Path(storage_root_value)
         else:
-            storage_root = Path("/app/storage")
+            storage_root = DEFAULT_STORAGE_ROOT
         data_dict["STORAGE_ROOT"] = storage_root
 
         db_url_value = data_dict.get("DATABASE_URL")

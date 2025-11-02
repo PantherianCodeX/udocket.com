@@ -3,10 +3,10 @@ x-develop:
     watch:
       - action: sync
         path: apps/platform
-        target: /app/apps/platform
+        target: /udocket/apps/platform
       - action: sync
         path: packages
-        target: /app/packages
+        target: /udocket/packages
       - action: rebuild
         path: apps/platform/pyproject.toml
       - action: rebuild
@@ -26,15 +26,16 @@ services:
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
-      STORAGE_ROOT: /app/storage
+      STORAGE_ROOT: /udocket/storage
+      APP_ROOT: /udocket
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
       RUN_PLATFORM_MIGRATIONS: "1"
       RUN_PLATFORM_BOOTSTRAP: "1"
     volumes:
-      - ./storage:/app/storage
-      - ./.env:/app/.env:ro
+      - ./storage:/udocket/storage
+      - ./.env:/udocket/.env:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -53,7 +54,8 @@ services:
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
-      STORAGE_ROOT: /app/storage
+      STORAGE_ROOT: /udocket/storage
+      APP_ROOT: /udocket
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
@@ -63,8 +65,8 @@ services:
       sh -c "python -c 'import time; time.sleep(2)' &&
       celery -A apps.platform.config.celery worker -l ${CELERY_LOG_LEVEL:-info} --events"
     volumes:
-      - ./storage:/app/storage
-      - ./.env:/app/.env:ro
+      - ./storage:/udocket/storage
+      - ./.env:/udocket/.env:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -82,7 +84,8 @@ services:
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.prod
-      STORAGE_ROOT: /app/storage
+      STORAGE_ROOT: /udocket/storage
+      APP_ROOT: /udocket
       REDIS_URL: redis://redis:6379/1
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: django-db
@@ -90,8 +93,8 @@ services:
       RUN_PLATFORM_BOOTSTRAP: "0"
     command: sh -c "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
     volumes:
-      - ./storage:/app/storage
-      - ./.env:/app/.env:ro
+      - ./storage:/udocket/storage
+      - ./.env:/udocket/.env:ro
     depends_on:
       redis:
         condition: service_healthy

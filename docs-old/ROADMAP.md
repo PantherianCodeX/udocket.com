@@ -97,7 +97,7 @@ All roadmap slices must maintain or improve our strong typing baseline—see `do
 
 11) Storage & Media Handling
    - Keep `storage/media/cases/<CASE_ID>/...` directory conventions unchanged for compatibility.
-   - Wrap file interactions with Django’s `FileSystemStorage` pointing to `MEDIA_ROOT` (`/app/storage/media` by default).
+   - Wrap file interactions with Django’s `FileSystemStorage` pointing to `MEDIA_ROOT` (`/udocket/storage/media` by default).
    - Compute SHA‑256 for each artifact file and store it on `CaseArtifact.checksum`.
    - Optional: publish artifacts to Azure Blob Storage using SAS tokens aligned with current conventions.
 
