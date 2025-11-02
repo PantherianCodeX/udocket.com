@@ -3,11 +3,11 @@
   "stubPath": "typings",
   "typeCheckingMode": "strict",
   "include": [
-    "docs/tools"
+    "packages/udocket_docs/src/doc_tools"
   ],
   "executionEnvironments": [
     {
-      "root": "docs/tools",
+      "root": "packages/udocket_docs/src/doc_tools",
       "extraPaths": [
         ".",
         "typings"

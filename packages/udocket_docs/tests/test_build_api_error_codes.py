@@ -5,7 +5,7 @@ from textwrap import dedent
 
 import pytest
 
-from docs.tools.build import api_error_codes as generator
+from doc_tools.build import api_error_codes as generator
 
 
 SUMMARY_TABLE = "| Code | Scenario | Client guidance |"
@@ -19,7 +19,7 @@ def _write(path: Path, content: str) -> Path:
 
 
 def _setup_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    docs_root = tmp_path / "docs" / "src"
+    docs_root = tmp_path / "docs"
     appendix = _write(
         docs_root / "overview" / "tdd" / "appendices" / "api_error_codes.md",
         "\n".join(
@@ -32,9 +32,9 @@ def _setup_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         ),
     )
 
-    monkeypatch.setattr(generator, "SRC_DIR", docs_root)
-    roots = [docs_root / "services", docs_root / "apps"]
-    monkeypatch.setattr(generator, "DOC_ROOTS", roots)
+    monkeypatch.setattr(generator, "DOCS_DIR", docs_root)
+    roots = [Path("services"), Path("apps")]
+    monkeypatch.setattr(generator, "DOC_ROOTS", [docs_root / root for root in roots])
     monkeypatch.setattr(generator, "APPENDIX_FILE", appendix)
     monkeypatch.setattr(generator, "APPENDIX_DIR", appendix.parent)
     return docs_root
@@ -336,8 +336,8 @@ def test_heading_anchor_added_when_missing() -> None:
         generator.SUMMARY_END,
     ]
     component = generator.Component(
-        doc_path=Path("docs/src/platform/example.md"),
-        yaml_path=Path("docs/src/platform/example/error_codes.yaml"),
+        doc_path=Path("docs/platform/example.md"),
+        yaml_path=Path("docs/platform/example/error_codes.yaml"),
         display_name="Example",
         section_anchor="3-3-example",
         index_anchor="example",

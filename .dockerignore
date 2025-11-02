@@ -33,6 +33,7 @@ scripts/
 tests/
 reports/
 **/*.md
+!packages/udocket_docs/README.md
 __AUTO__
 
 # BuildKit/Buildx caches

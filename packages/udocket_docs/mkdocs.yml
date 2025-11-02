@@ -1,8 +1,8 @@
 site_name: uDocket Documentation
 repo_url: https://github.com/PantherianCodeX/udocket.com
 
-docs_dir: docs
-site_dir: site
+docs_dir: ../../docs
+site_dir: ../../doc-builds/sites/dev
 dev_addr: 0.0.0.0:8010
 use_directory_urls: false
 exclude_docs: |
@@ -46,16 +46,19 @@ plugins:
     draggable: false
     effect: none
     slide_effect: none
+- include-build-assets:
+    source_dir: packages/udocket_docs/build
+    site_prefix: build
 
 extra_css:
-- _assets/stylesheets/weasy.css
-- _assets/stylesheets/diagrams.css
+- assets/stylesheets/weasy.css
+- assets/stylesheets/diagrams.css
 
 extra_javascript:
 - https://unpkg.com/mermaid@10/dist/mermaid.min.js
-- _assets/javascripts/mermaid-init.js
-- _assets/javascripts/vendor/panzoom.min.js
-- _assets/javascripts/glightbox-panzoom.js
+- assets/javascripts/mermaid-init.js
+- assets/javascripts/vendor/panzoom.min.js
+- assets/javascripts/glightbox-panzoom.js
 
 nav:
 - Home: index.md

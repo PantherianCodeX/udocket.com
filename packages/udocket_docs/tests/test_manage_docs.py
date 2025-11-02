@@ -6,7 +6,7 @@ from typing import List
 
 import pytest
 
-from docs.tools import manage_docs as md
+from doc_tools import manage_docs as md
 
 
 class DummyResult:
@@ -151,7 +151,7 @@ def test_main_failure_counts_errors(monkeypatch: pytest.MonkeyPatch, capsys: pyt
 
 
 def test_main_requires_tdd_doc(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(md, "ROOT", tmp_path, raising=False)
+    monkeypatch.setattr(md, "REPO_ROOT", tmp_path, raising=False)
     monkeypatch.setattr(md, "organise_tasks", lambda categories: [], raising=False)
 
     rc = md.main(["--lint"])
@@ -162,8 +162,32 @@ def test_main_requires_tdd_doc(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, 
 
 
 def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    structure_dir = tmp_path / "docs" / "src"
+    monkeypatch.setattr(md, "REPO_ROOT", tmp_path, raising=False)
+
+    structure_dir = tmp_path / "docs"
     structure_dir.mkdir(parents=True)
+    config_dir = tmp_path / "packages" / "udocket_docs" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    service_dir = structure_dir / "platform"
+    ops_dir = structure_dir / "ops"
+    service_dir.mkdir(parents=True, exist_ok=True)
+    ops_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(md.paths, "DOCS_ROOT", structure_dir, raising=False)
+    monkeypatch.setattr(md.paths, "CONFIG_ROOT", config_dir, raising=False)
+    monkeypatch.setattr(md.paths, "SERVICE_ROOTS", [service_dir], raising=False)
+
+    monkeypatch.setattr(md, "DOCS_DIR", structure_dir, raising=False)
+    monkeypatch.setattr(md, "CONFIG_DIR", config_dir, raising=False)
+    md.STRUCTURE_DIRS = [service_dir, ops_dir]
+    monkeypatch.setattr(
+        md,
+        "VALE_CI_CONFIG",
+        str((config_dir / "vale-ci.ini").relative_to(tmp_path)),
+        raising=False,
+    )
+
     ctx = md.RunContext(dry_run=False, targets=[structure_dir])
     dry_ctx = md.RunContext(dry_run=True, targets=[structure_dir])
 
@@ -172,10 +196,10 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert md.builder_api_error_codes_check(ctx)[-1] == "--check"
 
     structure_cmd = md.builder_check_structure(ctx)
-    assert "docs.tools.check_structure" in structure_cmd
+    assert "doc_tools.check_structure" in structure_cmd
     assert str(structure_dir) in structure_cmd
 
-    assert md.builder_check_appendices(ctx)[-1] == "docs.tools.check_appendices"
+    assert md.builder_check_appendices(ctx)[-1] == "doc_tools.check_appendices"
 
     markdown_cmd = md.builder_markdownlint(ctx)
     assert markdown_cmd[0] == "npx"
@@ -183,8 +207,8 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert md.builder_vale_sync(ctx)[0] == "vale"
     assert "--config" in md.builder_vale(ctx)
 
-    assert md.builder_check_settings(ctx)[-1] == "docs.tools.check_settings_keys"
-    assert md.builder_check_links(ctx)[-1] == "docs.tools.check_links"
+    assert md.builder_check_settings(ctx)[-1] == "doc_tools.check_settings_keys"
+    assert md.builder_check_links(ctx)[-1] == "doc_tools.check_links"
 
     sync_cmd = md.builder_sync_doc_controls(ctx)
     assert sync_cmd[-1] == str(structure_dir)
@@ -192,20 +216,20 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert sync_dry_cmd[-1] == "--dry-run"
 
     assets_cmd = md.builder_sync_doc_assets(ctx)
-    assert assets_cmd[-1] == "docs.tools.sync.doc_assets"
+    assert assets_cmd[-1] == "doc_tools.sync.doc_assets"
     assets_dry_cmd = md.builder_sync_doc_assets(dry_ctx)
     assert assets_dry_cmd[-1] == "--dry-run"
 
-    assert md.builder_runbook_update(ctx)[-1] == "docs.tools.build.runbook_catalog"
+    assert md.builder_runbook_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.runbook_catalog"]
     assert md.builder_runbook_update(dry_ctx)[-1] == "--check"
 
-    assert md.builder_diagram_update(ctx)[-1] == "docs.tools.build.diagram_index"
+    assert md.builder_diagram_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.diagram_index"]
     assert md.builder_diagram_update(dry_ctx)[-1] == "--check"
 
-    assert md.builder_slo_update(ctx)[-1] == "docs.tools.build.slo_index"
+    assert md.builder_slo_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.slo_index"]
     assert md.builder_slo_update(dry_ctx)[-1] == "--check"
 
-    assert md.builder_api_error_update(ctx)[-1] == "docs.tools.build.api_error_codes"
+    assert md.builder_api_error_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.api_error_codes"]
     assert md.builder_api_error_update(dry_ctx)[-1] == "--check"
 
     mkdocs_cmd = md.builder_mkdocs(ctx)
@@ -215,8 +239,8 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     assert md.builder_pdf_tdd(dry_ctx) is None
     pdf_cmd = md.builder_pdf_tdd(ctx)
-    assert pdf_cmd and pdf_cmd[0] == "bash"
+    assert pdf_cmd == [md.PYTHON, "-m", "doc_tools.pdf_build", "--target", "tdd"]
 
     assert md.builder_pdf_prd(dry_ctx) is None
     pdf_prd_cmd = md.builder_pdf_prd(ctx)
-    assert pdf_prd_cmd and pdf_prd_cmd[0] == "bash"
+    assert pdf_prd_cmd == [md.PYTHON, "-m", "doc_tools.pdf_build", "--target", "prd"]

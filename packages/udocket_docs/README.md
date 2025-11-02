@@ -2,7 +2,7 @@
 
 This package hosts the documentation toolchain for the uDocket platform. It includes:
 
-- MkDocs configuration (`mkdocs.yml`) and Markdown sources under `docs/`.
+- MkDocs configuration (`packages/udocket_docs/mkdocs.yml`) and Markdown sources under `docs/`.
 - Custom MkDocs plugins and shared tooling under `src/` and `tools/`.
 - WeasyPrint assets for PDF rendering that mirror the MkDocs site styling.
 
@@ -15,7 +15,7 @@ uv sync --frozen --extra dev
 Build the site locally:
 
 ```bash
-uv run --package mkdocs mkdocs serve --config-file mkdocs.yml --watch-theme
+uv run --package mkdocs mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --watch-theme
 ```
 
 Generate PDFs with the shared WeasyPrint styling:

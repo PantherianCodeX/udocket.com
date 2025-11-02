@@ -8,9 +8,9 @@ from typing import Callable, List
 
 import pytest
 
-from docs.tools import check_structure as cs
-from docs.tools import doc_utils
-from docs.tools.check_structure import (
+from doc_tools import check_structure as cs
+from doc_tools import doc_utils
+from doc_tools.check_structure import (
     SectionSpec,
     TableRowSpec,
     TableSpec,
@@ -146,7 +146,7 @@ def test_parse_args_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
     args = cs_parse_args()
 
-    assert args.paths == [Path("docs/src")]
+    assert args.paths == [Path("docs")]
     assert args.template is None
     assert args.frontmatter is False
 

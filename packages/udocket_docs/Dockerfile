@@ -5,11 +5,12 @@ ARG VALE_VERSION=3.7.1
 
 ENV PIP_NO_CACHE_DIR=0 \
     UV_COMPILE_BYTECODE=0 \
+    UV_LINK_MODE=copy \
     PATH="/root/.cargo/bin:${PATH}" \
     PUPPETEER_SKIP_DOWNLOAD=1 \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-WORKDIR /workspace
+WORKDIR /udocket
 
 # Core system dependencies for docs tooling.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -72,27 +73,33 @@ UV_INSTALL_DIR=/usr/local/bin sh "$script"
 EOF
 
 # Copy dependency metadata first to maximise cache hits.
-COPY pyproject.toml uv.lock package.json package-lock.json README.md ./
+COPY packages/udocket_docs/pyproject.toml packages/udocket_docs/pyproject.toml
+COPY packages/udocket_docs/uv.lock packages/udocket_docs/uv.lock
+COPY packages/udocket_docs/package.json packages/udocket_docs/package.json
+COPY packages/udocket_docs/package-lock.json packages/udocket_docs/package-lock.json
+COPY packages/udocket_docs/README.md packages/udocket_docs/README.md
+COPY packages/udocket_docs/src packages/udocket_docs/src
 
 # Install Python deps into the default uv-managed virtual environment (project omitted for now).
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --frozen --extra dev --no-install-project
+    uv sync --frozen --extra dev --no-install-project --project packages/udocket_docs
 
 # Install Node tooling.
 RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    if [ -f package-lock.json ]; then npm ci; fi
+    if [ -f packages/udocket_docs/package-lock.json ]; then (cd packages/udocket_docs && npm ci); fi
 
 # Copy the remaining repository context.
 COPY . .
 
 # Install project itself now that sources are present.
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --frozen --extra dev
+    uv sync --frozen --extra dev --project packages/udocket_docs
 
-ENV VIRTUAL_ENV=/workspace/.venv
-ENV PATH="/workspace/.venv/bin:${PATH}"
+# Install local MkDocs plugins (editable) for development workflows.
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv pip install --python packages/udocket_docs/.venv/bin/python -e packages/udocket_docs/plugins/udocket_mkdocs_plugins
 
-# Optional warm mkdocs build to prime caches; ignore failures in dev builds.
-RUN uv run mkdocs build --config-file mkdocs.yml --site-dir site || true
+ENV VIRTUAL_ENV=/udocket/packages/udocket_docs/.venv
+ENV PATH="/udocket/packages/udocket_docs/.venv/bin:${PATH}"
 
 CMD ["bash"]

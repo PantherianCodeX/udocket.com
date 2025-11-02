@@ -14,6 +14,15 @@ COMPOSE_DEVCONTAINER := .devcontainer/docker-compose.devcontainer.yml
 DEVCONTAINER_COMPOSE := $(DC) -f $(COMPOSE_BASE) -f $(COMPOSE_OVERRIDE) -f $(COMPOSE_CACHE) -f $(COMPOSE_DEVCONTAINER)
 DOCS_COMPOSE := $(DC) -f $(COMPOSE_BASE) -f $(COMPOSE_CACHE)
 
+define compose_shell
+	@container_id="$$( $(1) ps -q $(2) 2>/dev/null )"; \
+	if [ -n "$$container_id" ]; then \
+	  $(1) exec $(2) bash -l; \
+	else \
+	  $(1) run --rm $(2) bash -l; \
+	fi
+endef
+
 # Image/build orchestration
 USE_BUILD ?= 1
 PLATFORMS ?= linux/amd64
@@ -214,11 +223,11 @@ stack.ps: ## Show container status for this project
 
 ##@ Platform • Shells
 platform.shell: ## Open a shell inside the platform container
-	$(DC) exec platform bash -l
+	$(call compose_shell,$(DC),platform)
 worker.shell: ## Open a shell inside the Celery worker container
-	$(DC) exec platform_worker bash -l
+	$(call compose_shell,$(DC),platform_worker)
 beat.shell: ## Open a shell inside the Celery beat container
-	$(DC) exec platform_beat bash -l
+	$(call compose_shell,$(DC),platform_beat)
 
 ##@ Platform • Databases
 psql.shell: ## Connect to the primary PostgreSQL service using psql
@@ -232,17 +241,43 @@ doctools.up: ## Start the docs toolbox service detached
 doctools.down: ## Stop the docs toolbox service and remove resources
 	$(DOCS_COMPOSE) down
 doctools.shell: ## Open a shell inside the docs toolbox container
-	$(DOCS_COMPOSE) exec $(DOCS_SERVICE) bash -l
+	$(call compose_shell,$(DOCS_COMPOSE),$(DOCS_SERVICE))
 
 ##@ Doctools • Tools
 docs.build: ## Render docs output (PDF/HTML as configured)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.manage_docs --build"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --build"
 docs.lint: ## Run docs linting pipeline inside the toolbox
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.manage_docs --lint"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (fetch/update remote content)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run python -m docs.manage_docs --sync"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --sync"
 docs.preview: ## Serve docs locally with live reload
-	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; cd packages/udocket_docs && $(UV) run mkdocs serve --config-file mkdocs.yml --dev-addr 0.0.0.0:8010"
+	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr 0.0.0.0:8010"
+
+DOCS_TEST_ARGS := $(filter-out docs.test,$(MAKECMDGOALS))
+DOCS_COV_ARGS := $(filter-out docs.test.coverage,$(MAKECMDGOALS))
+
+escape_dquotes = $(subst ",\",$(1))
+
+.PHONY: docs.test docs.test.coverage
+
+ifeq ($(firstword $(MAKECMDGOALS)),docs.test)
+  DOCS_EXTRA_GOALS := $(DOCS_TEST_ARGS)
+else ifeq ($(firstword $(MAKECMDGOALS)),docs.test.coverage)
+  DOCS_EXTRA_GOALS := $(DOCS_COV_ARGS)
+else
+  DOCS_EXTRA_GOALS :=
+endif
+
+ifneq ($(strip $(DOCS_EXTRA_GOALS)),)
+%:
+	@:
+endif
+
+docs.test: $(DOCS_TEST_ARGS)
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_TEST_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner"
+
+docs.test.coverage: $(DOCS_COV_ARGS)
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_COV_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image
@@ -252,11 +287,11 @@ dev.up: ## Start the devcontainer service detached
 dev.down: ## Stop the devcontainer stack
 	$(DEVCONTAINER_COMPOSE) down
 dev.shell: ## Open a shell inside the devcontainer service
-	$(DEVCONTAINER_COMPOSE) exec $(DEV_SERVICE) bash -l
+	$(call compose_shell,$(DEVCONTAINER_COMPOSE),$(DEV_SERVICE))
 
 ##@ KeyCloak
 keycloak.shell: ## Open a shell inside the Keycloak container
-	$(DC) exec keycloak bash -l
+	$(call compose_shell,$(DC),keycloak)
 keycloak.psql.shell: ## Connect to the Keycloak PostgreSQL service using psql
 	$(DC) exec postgres-keycloak bash -lc 'psql -U keycloak -d keycloak'
 

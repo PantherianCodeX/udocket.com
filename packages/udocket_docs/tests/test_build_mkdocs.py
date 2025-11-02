@@ -5,7 +5,8 @@ from typing import Dict, List
 
 import pytest
 
-from docs.tools.build import mkdocs as bm
+from doc_tools.build import mkdocs as bm
+from doc_tools import paths
 
 
 class DummyCompletedProcess:
@@ -23,8 +24,9 @@ def test_run_mkdocs_invokes_cli_default(monkeypatch: pytest.MonkeyPatch, tmp_pat
         called["cwd"] = str(cwd)
         return DummyCompletedProcess()
 
-    monkeypatch.setattr(bm, "ROOT", tmp_path)
-    config = tmp_path / "docs" / "config" / "mkdocs.yml"
+    monkeypatch.setattr(bm, "REPO_ROOT", tmp_path, raising=False)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path, raising=False)
+    config = tmp_path / "packages" / "udocket_docs" / "mkdocs.yml"
     config.parent.mkdir(parents=True)
     config.write_text("site_name: docs\n", encoding="utf-8")
     monkeypatch.setattr(bm, "MKDOCS_CONFIG", config)
@@ -67,8 +69,9 @@ def test_run_mkdocs_dry_run_cleans_temp(monkeypatch: pytest.MonkeyPatch, tmp_pat
     def fake_rmtree(path: str, ignore_errors: bool = True) -> None:
         cleaned.append(path)
 
-    monkeypatch.setattr(bm, "ROOT", tmp_path)
-    config = tmp_path / "docs" / "config" / "mkdocs.yml"
+    monkeypatch.setattr(bm, "REPO_ROOT", tmp_path, raising=False)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path, raising=False)
+    config = tmp_path / "packages" / "udocket_docs" / "mkdocs.yml"
     config.parent.mkdir(parents=True)
     config.write_text("site_name: docs\n", encoding="utf-8")
     monkeypatch.setattr(bm, "MKDOCS_CONFIG", config)
@@ -92,8 +95,9 @@ def test_run_mkdocs_escalates_anchor_warning(monkeypatch: pytest.MonkeyPatch, tm
     def fake_run(cmd, cwd, stdout, stderr, text, check):  # type: ignore[no-untyped-def]
         return DummyCompletedProcess(stdout=output)
 
-    monkeypatch.setattr(bm, "ROOT", tmp_path)
-    config = tmp_path / "docs" / "config" / "mkdocs.yml"
+    monkeypatch.setattr(bm, "REPO_ROOT", tmp_path, raising=False)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path, raising=False)
+    config = tmp_path / "packages" / "udocket_docs" / "mkdocs.yml"
     config.parent.mkdir(parents=True)
     config.write_text("site_name: docs\n", encoding="utf-8")
     monkeypatch.setattr(bm, "MKDOCS_CONFIG", config)

@@ -5,11 +5,11 @@ from textwrap import dedent
 
 import pytest
 
-from docs.tools.build import slo_index as bsi
+from doc_tools.build import slo_index as bsi
 
 
 def _setup_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    docs_root = tmp_path / "docs" / "src"
+    docs_root = tmp_path / "docs"
     services_dir = docs_root / "services"
     services_dir.mkdir(parents=True)
     apps_dir = docs_root / "apps"
@@ -28,8 +28,8 @@ def _setup_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
 
     monkeypatch.setattr(bsi, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(bsi, "SERVICE_ROOTS", [Path("docs/src/services"), Path("docs/src/apps")])
-    monkeypatch.setattr(bsi, "SRC_DIR", docs_root)
+    monkeypatch.setattr(bsi, "DOCS_DIR", docs_root)
+    monkeypatch.setattr(bsi, "SERVICE_ROOTS", [Path("services"), Path("apps")])
     monkeypatch.setattr(bsi, "APPENDIX_FILE", appendix)
     monkeypatch.setattr(bsi, "APPENDIX_DIR", appendix.parent)
     return docs_root

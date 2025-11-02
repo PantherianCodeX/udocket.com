@@ -8,12 +8,12 @@ from urllib.parse import urljoin
 
 import pytest
 
-from docs.tools import check_structure as cs
-from docs.tools import doc_utils
+from doc_tools import check_structure as cs
+from doc_tools import doc_utils
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DOCS_SRC = REPO_ROOT / "docs" / "src"
+DOCS_SRC = REPO_ROOT / "docs"
 EXTERNAL_SCHEMES = ("http://", "https://", "mailto:", "tel:", "javascript:", "data:")
 LINK_RE = re.compile(r'href="([^"]+)"')
 
@@ -23,11 +23,17 @@ def built_site(tmp_path_factory: pytest.TempPathFactory) -> Path:
     site_dir = tmp_path_factory.mktemp("site")
     env = os.environ.copy()
     cmd = [
+        "uv",
+        "run",
+        "--project",
+        "packages/udocket_docs",
+        "--extra",
+        "dev",
         "mkdocs",
         "build",
         "--strict",
         "-f",
-        str(REPO_ROOT / "docs" / "config" / "mkdocs.yml"),
+        str(REPO_ROOT / "packages" / "udocket_docs" / "mkdocs.yml"),
         "-d",
         str(site_dir),
     ]
@@ -36,7 +42,7 @@ def built_site(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def test_docs_lint_script_runs_on_repo() -> None:
-    cmd = ["python", "-m", "docs.tools.lint_docs"]
+    cmd = ["python", "-m", "doc_tools.lint_docs"]
     subprocess.run(cmd, check=True, cwd=REPO_ROOT)
 
 
@@ -88,6 +94,12 @@ def test_site_internal_links_resolve(built_site: Path) -> None:
 
 def test_docs_scripts_typecheck() -> None:
     cmd = [
+        "uv",
+        "run",
+        "--project",
+        "packages/udocket_docs",
+        "--extra",
+        "dev",
         "pyright",
         "--project",
         str(REPO_ROOT / "pyrightconfig.docs-scripts.json"),

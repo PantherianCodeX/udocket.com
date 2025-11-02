@@ -5,18 +5,18 @@ from textwrap import dedent
 
 import pytest
 
-from docs.tools.build import runbook_catalog as brc
+from doc_tools.build import runbook_catalog as brc
 
 
 def _setup_tmp_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-    docs_root = tmp_path / "docs" / "src"
+    docs_root = tmp_path / "docs"
     area_root = docs_root / "platform"
     area_root.mkdir(parents=True, exist_ok=True)
     output = docs_root / "ops" / "runbooks.md"
     output.parent.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(brc, "SRC_DIR", docs_root)
+    monkeypatch.setattr(brc, "DOCS_DIR", docs_root)
     monkeypatch.setattr(brc, "OUTPUT_FILE", output)
-    monkeypatch.setattr(brc, "SERVICE_ROOTS", [area_root])
+    monkeypatch.setattr(brc, "SERVICE_ROOTS", [Path("platform")])
     return area_root, output
 
 
@@ -133,14 +133,14 @@ def test_build_catalog_skips_table_anchor_injection(tmp_path: Path, monkeypatch:
 
 
 def test_iter_source_files_skips_templates_and_missing_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    docs_root = tmp_path / "docs" / "src"
+    docs_root = tmp_path / "docs"
     platform_root = docs_root / "platform"
     platform_root.mkdir(parents=True, exist_ok=True)
     portal_doc = platform_root / "portal.md"
     portal_doc.write_text("### Runbook", encoding="utf-8")
     (platform_root / "_template.md").write_text("ignored", encoding="utf-8")
-    monkeypatch.setattr(brc, "SRC_DIR", docs_root)
-    monkeypatch.setattr(brc, "SERVICE_ROOTS", [platform_root])
+    monkeypatch.setattr(brc, "DOCS_DIR", docs_root)
+    monkeypatch.setattr(brc, "SERVICE_ROOTS", [Path("platform")])
 
     sources = list(brc.iter_source_files())
 

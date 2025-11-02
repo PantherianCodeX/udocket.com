@@ -100,11 +100,12 @@ services:
 
   docs:
     build:
-      context: packages/udocket_docs
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: packages/udocket_docs/Dockerfile
     image: udocket-docs-toolbox:dev
+    working_dir: /udocket
     volumes:
-      - .:/workspace:cached
+      - .:/udocket:cached
     tty: true
     command: sleep infinity
     environment:
@@ -161,7 +162,7 @@ services:
     volumes:
       - keycloak-db-data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "15433:5432"
 
   keycloak:
     build:

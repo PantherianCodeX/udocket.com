@@ -8,9 +8,9 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "mmd:all": "bash tools/render_mermaid.sh --all --verbose",
-    "mmd:changed": "bash tools/render_mermaid.sh --changed --verbose",
-    "mmd:paths": "bash tools/render_mermaid.sh --paths"
+    "mmd:all": "uv run --project packages/udocket_docs python -m doc_tools.render_mermaid --all --verbose",
+    "mmd:changed": "uv run --project packages/udocket_docs python -m doc_tools.render_mermaid --verbose",
+    "mmd:paths": "uv run --project packages/udocket_docs python -m doc_tools.render_mermaid --paths"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^11.12.0",

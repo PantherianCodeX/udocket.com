@@ -4,24 +4,24 @@ from pathlib import Path
 
 import pytest
 
-from docs.tools import check_links as lc
+from doc_tools import check_links as lc
 
 
 def test_check_diagrams_detects_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(lc, "ROOT", tmp_path)
-    content = "![Diagram](docs/src/platform/sample/diagrams/flow.mmd)"
+    content = "![Diagram](docs/platform/sample/diagrams/flow.mmd)"
 
     problems = lc.check_diagrams(content)
 
-    assert problems == ["Missing diagram source: docs/src/platform/sample/diagrams/flow.mmd"]
+    assert problems == ["Missing diagram source: docs/platform/sample/diagrams/flow.mmd"]
 
 
 def test_check_diagrams_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    diagram = tmp_path / "docs" / "src" / "platform" / "sample" / "diagrams" / "flow.mmd"
+    diagram = tmp_path / "docs" / "platform" / "sample" / "diagrams" / "flow.mmd"
     diagram.parent.mkdir(parents=True)
     diagram.write_text("graph TD;", encoding="utf-8")
     monkeypatch.setattr(lc, "ROOT", tmp_path)
-    content = "![Diagram](docs/src/platform/sample/diagrams/flow.mmd)"
+    content = "![Diagram](docs/platform/sample/diagrams/flow.mmd)"
 
     problems = lc.check_diagrams(content)
 
@@ -49,7 +49,7 @@ def test_check_sections_missing_reference() -> None:
 
 
 def test_main_strict_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    doc = tmp_path / "docs" / "src" / "overview"
+    doc = tmp_path / "docs" / "overview"
     doc.mkdir(parents=True)
     path = doc / "tdd.md"
     path.write_text("See App.Z.", encoding="utf-8")
@@ -65,7 +65,7 @@ def test_main_strict_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ca
 
 
 def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    doc = tmp_path / "docs" / "src" / "overview"
+    doc = tmp_path / "docs" / "overview"
     doc.mkdir(parents=True)
     path = doc / "tdd.md"
     path.write_text("## 1) Intro\nSee App.A.\n## Appendix A\n", encoding="utf-8")
@@ -87,7 +87,7 @@ def test_find_service_refs_handles_anchor() -> None:
 
 
 def test_check_services_missing_anchor(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    services_dir = tmp_path / "docs" / "src" / "platform"
+    services_dir = tmp_path / "docs" / "platform"
     services_dir.mkdir(parents=True)
     service = services_dir / "foo.md"
     service.write_text("## Heading Without Anchor\n", encoding="utf-8")
@@ -100,7 +100,7 @@ def test_check_services_missing_anchor(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 
 def test_check_services_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    services_dir = tmp_path / "docs" / "src" / "automation"
+    services_dir = tmp_path / "docs" / "automation"
     services_dir.mkdir(parents=True)
     service = services_dir / "bar.md"
     service.write_text("## Heading {#section-1}\n", encoding="utf-8")

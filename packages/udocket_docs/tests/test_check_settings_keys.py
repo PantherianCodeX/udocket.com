@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from docs.tools import check_settings_keys as csk
+from doc_tools import check_settings_keys as csk
 
 
 class fake_completed:

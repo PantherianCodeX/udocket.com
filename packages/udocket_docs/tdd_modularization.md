@@ -13,7 +13,7 @@ This plan lays out a phased approach to refactor the uDocket documentation. We w
 ### 0. Principles
 
 * **Single doc root, clear boundaries**
-  * `docs/src/` = human-authored sources (Markdown, Mermaid, images, styles).
+  * `docs/` = human-authored sources (Markdown, Mermaid, images, styles).
   * `docs/site/` and `docs/build/` = generated/temporary (gitignored).
   * **No PDFs committed**; publish PDFs as **GitHub Release assets** when you tag.
 * * **One canonical home per topic** (service specs live under services/; shared truths live in appendices; `overview/tdd.md` stays high‑level and links out).
@@ -73,7 +73,7 @@ docs/                              ← single doc root
   releases/
   site/
   config/
-    .markdownlint.json (extends docs/config/.markdownlint.json)
+    .markdownlint.json (extends packages/udocket_docs/config/.markdownlint.json)
     mermaid.config.json
     mermaidrc.json
     mkdocs.yml
@@ -82,10 +82,9 @@ docs/                              ← single doc root
     vale/
 scripts/
   docs/
-    build_site.sh
-    build_pdf_prd.sh
-    build_pdf_tdd.sh
-    render_mermaid.sh
+    uv run --project packages/udocket_docs python -m doc_tools.render_mermaid
+    uv run --project packages/udocket_docs python -m doc_tools.pdf_build --target prd
+    uv run --project packages/udocket_docs python -m doc_tools.pdf_build --target tdd
 ```
 
 **.gitignore** (excerpt)
@@ -93,8 +92,8 @@ scripts/
 ```gitignore
 /docs/site/
 /docs/build/
-/docs/src/**/.cache/
-/docs/src/**/.pytest_cache/
+/docs/**/.cache/
+/docs/**/.pytest_cache/
 ```
 
 > **Publish PDFs to GitHub Releases** on tagged versions and keep `docs/releases/manifest.json` in repo pointing to those assets (lighter repo history).
@@ -132,7 +131,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python -m docs.tools.check_structure docs/src/platform docs/src/automation docs/src/data docs/src/customer` to confirm compliance before submitting PRs.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer` to confirm compliance before submitting PRs.
 
 #### Standardized section preamble
 
@@ -159,7 +158,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 **References:** §5.2.4–§5.2.6, §5.4.1, §7.1, App.A.2.
 ```
 
-Prepare a template file (or simply a checklist) with these headings to use as a guide when refactoring each service/app. (E.g., maintain the shared skeleton in `docs/src/_template.md` and copy it when starting a new spec.)
+Prepare a template file (or simply a checklist) with these headings to use as a guide when refactoring each service/app. (E.g., maintain the shared skeleton in `docs/_template.md` and copy it when starting a new spec.)
 
 ### 3.a Diagram Embedding (site + PDF)
 
@@ -180,7 +179,7 @@ Consumer docs (reuse by reference; no copies):
   * `../../build/mermaid/automation/lp-engine/diagrams/policy-context-flow.svg`
   * Source: automation/lp-engine.md §X.Y
 
-Path rule: if a source lives at `docs/src/<REL>.mmd`, the built SVG is at `docs/build/mermaid/<REL>.svg`. Embed using `/build/mermaid/<REL>.svg` so links stay valid from any document depth.
+Path rule: if a source lives at `docs/<REL>.mmd`, the built SVG is at `packages/udocket_docs/build/diagrams/<REL>.svg`. Embed using `/build/diagrams/<REL>.svg` so links stay valid from any document depth.
 
 Optional metadata (first lines in `.mmd`):
 
@@ -203,16 +202,16 @@ Identify information that appears in multiple places or applies to the system as
 
 Ensure the documentation toolchain is ready for the new structure:
 
-* **MkDocs/Nav:** Update `docs/config/mkdocs.yml` navigation to point to `overview/tdd.md`, `overview/tdd/*`, and `overview/prd/*` alongside `services/` and `apps/`.
+* **MkDocs/Nav:** Update `packages/udocket_docs/mkdocs.yml` navigation to point to `overview/tdd.md`, `overview/tdd/*`, and `overview/prd/*` alongside `services/` and `apps/`.
 * **Link Checking:** Anticipate broken links due to file moves and renames; set up redirects if desired via MkDocs plugins.
-* **Docs lint:** Run `python -m docs.tools.lint_docs` (optionally with per-file targets) after restructuring to validate references, appendices, and template scaffolding.
+* **Docs lint:** Run `python -m doc_tools.lint_docs` (optionally with per-file targets) after restructuring to validate references, appendices, and template scaffolding.
 * **Vale Style Rules:** Update file path patterns; consider adding rules to enforce presence of the standard sections.
 * **Pandoc/PDF build:** Update scripts/config to include `overview/tdd.md`, `overview/prd.md`, and any appendices.
 * **Branch Protection/CI settings:** Run the docs CI (build, lint, link check) on this branch to catch issues early.
 
 ### 6. MkDocs config, plugins & PDF
 
-`docs/config/mkdocs.yml` (essentials you’ll likely want):
+`packages/udocket_docs/mkdocs.yml` (essentials you’ll likely want):
 
 ```yaml
 site_name: uDocket Docs
@@ -267,7 +266,7 @@ nav:
 **PDF** options:
 
 * **mkdocs-with-pdf** plugin (quickest). Good enough for many teams.
-* **WeasyPrint**/Chrome print-to-PDF with a dedicated print stylesheet (`docs/src/assets/css/print.css`) for PRD/TDD pages.
+* **WeasyPrint**/Chrome print-to-PDF with a dedicated print stylesheet (`docs/assets/css/print.css`) for PRD/TDD pages.
 * **Pandoc** pipeline for PRD/TDD only (best control over ToC, headers/footers). You can pipe Markdown → PDF with a template.
 
 > In Markdown where you had ```mermaid fences, add a PDF-friendly image include right below as a fallback, e.g.:
@@ -286,7 +285,7 @@ nav:
 
 ### 7. Vale — “nicely configured” styles
 
-**docs/config/vale.ini:**
+**packages/udocket_docs/config/vale.ini:**
 
 ````ini
 StylesPath = vale
@@ -410,18 +409,18 @@ jobs:
           pip install pandocfilters
           sudo apt-get update && sudo apt-get install -y pandoc
       - name: Markdownlint
-        run: npx markdownlint --config docs/config/.markdownlint.json '**/*.md' '#node_modules'
+        run: npx markdownlint --config packages/udocket_docs/config/.markdownlint.json '**/*.md' '#node_modules'
       - name: Vale
-        run: vale --config docs/config/vale.ini docs/src/
+        run: vale --config packages/udocket_docs/config/vale.ini docs/
       - name: Mermaid pre-render (validate diagrams)
-        run: bash docs/tools/prerender_mermaid.sh
+        run: uv run --project packages/udocket_docs python -m doc_tools.render_mermaid
       - name: MkDocs build (HTML)
         run: mkdocs build --clean
       - name: Pandoc dry-run (PRD/TDD only)
         run: |
-          mkdir -p docs/build/pdf
-          bash docs/tools/build/pdf_prd.sh
-          bash docs/tools/build/pdf_tdd.sh
+          mkdir -p doc-builds/pdf/dev
+          uv run --project packages/udocket_docs python -m doc_tools.pdf_build --target prd
+          uv run --project packages/udocket_docs python -m doc_tools.pdf_build --target tdd
 
   linkcheck:
     runs-on: ubuntu-latest
@@ -430,7 +429,7 @@ jobs:
       - name: Lychee link checker
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --verbose --no-progress 'docs/src/**/*.md' --exclude-mail
+          args: --verbose --no-progress 'docs/**/*.md' --exclude-mail
 ```
 
 > This CI proves your docs build on every PR/main, but **does not publish**.
@@ -468,14 +467,14 @@ jobs:
       - name: Build site
         run: mkdocs build --clean
       - name: Pre-render Mermaid
-        run: bash docs/tools/prerender_mermaid.sh
+        run: uv run --project packages/udocket_docs python -m doc_tools.render_mermaid
       - name: Build PDFs (PRD/TDD)
         run: |
-          mkdir -p docs/build/pdf
-          bash docs/tools/build/pdf_prd.sh
-          bash docs/tools/build/pdf_tdd.sh
+          mkdir -p doc-builds/pdf/dev
+          uv run --project packages/udocket_docs python -m doc_tools.pdf_build --target prd
+          uv run --project packages/udocket_docs python -m doc_tools.pdf_build --target tdd
       - name: Checksums & manifest
-        run: bash docs/tools/hash_and_manifest.sh
+        run: bash uv run --project packages/udocket_docs python -m doc_tools.hash_and_manifest
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -485,9 +484,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            docs/build/pdf/prd.pdf
-            docs/build/pdf/tdd.pdf
-            docs/build/pdf/manifest.json
+            doc-builds/pdf/dev/prd.pdf
+            doc-builds/pdf/dev/tdd.pdf
+            doc-builds/pdf/dev/manifest.json
 ```
 
 **Key point:** This pipeline **does nothing** until you push `vX.Y.Z`. That satisfies “doc releases won’t start until the first release is ready.”
@@ -498,15 +497,15 @@ jobs:
 
 ### 9. How this maps to your refactor
 
-* TDD now lives under `docs/src/overview/tdd/` with:
-  * Entry page `docs/src/overview/tdd.md` (high-level) and
-  * Canonical spec `docs/src/overview/tdd.md`.
-  * Appendices at `docs/src/overview/tdd/appendices/` (glossary, status mapping, etc.).
-* PRD now lives under `docs/src/overview/prd/` with `docs/src/overview/prd.md` and `docs/src/overview/prd/index.md`.
-* Move OPA content into `docs/src/automation/lp-engine.md` under “Policy Agent (OPA) Integration”.
-* Runbooks/ops remain under `docs/src/ops/runbooks/`.
+* TDD now lives under `docs/overview/tdd/` with:
+  * Entry page `docs/overview/tdd.md` (high-level) and
+  * Canonical spec `docs/overview/tdd.md`.
+  * Appendices at `docs/overview/tdd/appendices/` (glossary, status mapping, etc.).
+* PRD now lives under `docs/overview/prd/` with `docs/overview/prd.md` and `docs/overview/prd/index.md`.
+* Move OPA content into `docs/automation/lp-engine.md` under “Policy Agent (OPA) Integration”.
+* Runbooks/ops remain under `docs/ops/runbooks/`.
 * Diagram ownership:
-  * Cross‑cutting diagrams are owned by TDD and live under `docs/src/overview/tdd/diagrams/`.
+  * Cross‑cutting diagrams are owned by TDD and live under `docs/overview/tdd/diagrams/`.
   * Service/app diagrams live under each doc’s local `diagrams/`.
   * Appendices provide an optional “Diagrams Index” page that links to canonical owner sections; they do not store sources.
 
@@ -516,31 +515,32 @@ jobs:
 
 1. **Create structure & config**
 
-    * Create `docs/src/overview/` with `tdd/` and `prd/` subfolders as above.
-    * Ensure `.markdownlint.json` (extending `docs/config/.markdownlint.json`), `docs/config/mkdocs.yml`, `docs/config/.markdownlint.json`, optional `docs/config/vale.ini` exist.
+    * Create `docs/overview/` with `tdd/` and `prd/` subfolders as above.
+    * Ensure `.markdownlint.json` (extending `packages/udocket_docs/config/.markdownlint.json`), `packages/udocket_docs/mkdocs.yml`, `packages/udocket_docs/config/.markdownlint.json`, optional `packages/udocket_docs/config/vale.ini` exist.
     * Ensure `.gitignore` includes `docs/build/` and `docs/site/`.
 
 2. **Migrate content**
 
-    * Move existing TDD content to `docs/src/overview/tdd/`:
-      * High-level entry: `docs/src/overview/tdd.md`
-      * Canonical spec: `docs/src/overview/tdd.md`
-      * Appendices: `docs/src/overview/tdd/appendices/*.md`
-      * Cross‑cutting diagrams: `docs/src/overview/tdd/diagrams/*.mmd`
-    * Move PRD content to `docs/src/overview/prd/` (add `index.md` and `prd.md`).
-    * Keep service/app specs under `docs/src/platform|automation|evidence|customer/` and `docs/src/experience/`; each has its own `diagrams/` folder.
+    * Move existing TDD content to `docs/overview/tdd/`:
+      * High-level entry: `docs/overview/tdd.md`
+      * Canonical spec: `docs/overview/tdd.md`
+      * Appendices: `docs/overview/tdd/appendices/*.md`
+      * Cross‑cutting diagrams: `docs/overview/tdd/diagrams/*.mmd`
+    * Move PRD content to `docs/overview/prd/` (add `index.md` and `prd.md`).
+    * Keep service/app specs under `docs/platform|automation|evidence|customer/` and `docs/experience/`; each has its own `diagrams/` folder.
 
 3. **Cross-link cleanup**
 
     * Replace repeated tables with links to the canonical appendix.
     * Replace any OPA mentions in TDD with a link to `automation/lp-engine.md#opa-integration`.
-    * Ensure link paths match `docs/config/mkdocs.yml` nav.
+    * Ensure link paths match `packages/udocket_docs/mkdocs.yml` nav.
 
 4. **Build & verify locally**
 
-    * `docs/tools/render_mermaid.sh` → render diagrams to SVG/PNG
-    * `docs/tools/build/site.sh` → mkdocs build
-    * `docs/tools/build/pdf_tdd.sh` → generate TDD PDF
+    * `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid` → render diagrams to SVG/PNG
+    * `uv run --project packages/udocket_docs python -m doc_tools.build.mkdocs` → mkdocs build
+    * `uv run --project packages/udocket_docs python -m doc_tools.pdf_build` → generate PDFs (use `--target` to scope)
+    * `uv run --project packages/udocket_docs python -m doc_tools.hash_and_manifest` → hash PDFs + manifest
     * Fix lint/link/Mermaid errors.
 
 5. **CI**
@@ -569,7 +569,7 @@ jobs:
 * **Vale** runs on every PR — keeps voice/terms consistent and policy sections labeled.
 * **CODEOWNERS** for PRD/TDD/services ensures the right SMEs approve changes.
 * **No duplication**: if two pages need the same content (e.g., Guardian mapping), it lives in **Appendices**; other pages link to it.
-* **ADR index**: keep ADRs in `docs/src/adr/` and link from TDD/PRD where decisions are referenced.
+* **ADR index**: keep ADRs in `docs/adr/` and link from TDD/PRD where decisions are referenced.
 
 ---
 
@@ -688,7 +688,7 @@ jobs:
 
 ### 2. Diagram Creation Process
 
-1. Store Mermaid sources under `docs/src/overview/tdd/diagrams/` (e.g., `system-context.mmd`, `artifact-lifecycle.mmd`, etc.).
+1. Store Mermaid sources under `docs/overview/tdd/diagrams/` (e.g., `system-context.mmd`, `artifact-lifecycle.mmd`, etc.).
 2. Embed via Mermaid code blocks or pre-render for PDFs as needed.
 3. Add captions and brief explanatory text around each diagram.
 
@@ -731,7 +731,7 @@ jobs:
     * **Markdown Lint & Vale:** Update rules/paths; consider rule to enforce core sections.
 
 2. Documentation for Docs (Contributor Guide)
-    * Explain structure under `docs/src/overview/tdd/` and the standard sections.
+    * Explain structure under `docs/overview/tdd/` and the standard sections.
     * Encourage centralization via appendices; outline diagram process.
     * Note style rules (Vale), policy labels, and relative linking conventions.
 
@@ -787,7 +787,7 @@ jobs:
 ### Project Setup
 
 * [x] Branch `docs/stack` created.
-* [x] New `docs/src/overview/tdd/` directory structure in place (with `overview/tdd.md`, appendices, diagrams).
+* [x] New `docs/overview/tdd/` directory structure in place (with `overview/tdd.md`, appendices, diagrams).
 * [x] MkDocs nav updated for new structure.
 * [x] Standard section template prepared for service/app docs.
 * [x] Initial CI config adjustments sketched out (paths, file names).
