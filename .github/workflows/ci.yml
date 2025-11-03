@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: rhysd/actionlint@v1
+      - name: Run actionlint (docker)
+        uses: docker://rhysd/actionlint:v1.7.8
 
   test:
     needs: [lint-workflows]
