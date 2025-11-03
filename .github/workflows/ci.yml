@@ -13,6 +13,18 @@ jobs:
   test:
     needs: [lint-workflows]
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.task == 'typewiz' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - pytest
+          - pyright
+          - mypy
+          - strict_pragmas
+          - strict_manifest
+          - docs_tools
+          - typewiz
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,14 +33,23 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
-      - name: Sync dependencies
+      - name: Sync platform dependencies
+        if: ${{ matrix.task != 'docs_tools' }}
         working-directory: apps/platform
         run: |
           set -euo pipefail
-          printf '%s\n' "Starting: sync dependencies" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Starting: sync dependencies (${{ matrix.task }})" >> "$GITHUB_STEP_SUMMARY"
           uv sync --frozen --group dev --no-install-project
-          printf '%s\n' "Finished: sync dependencies" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Finished: sync dependencies (${{ matrix.task }})" >> "$GITHUB_STEP_SUMMARY"
+      - name: Sync docs dependencies
+        if: ${{ matrix.task == 'docs_tools' }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: sync docs dependencies" >> "$GITHUB_STEP_SUMMARY"
+          uv sync --frozen --extra dev --project packages/udocket_docs
+          printf '%s\n' "Finished: sync docs dependencies" >> "$GITHUB_STEP_SUMMARY"
       - name: Run migrations
+        if: ${{ matrix.task == 'pytest' }}
         env:
           DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
           DATABASE_URL: sqlite:///./udocket_ci.db
@@ -37,30 +58,8 @@ jobs:
           printf '%s\n' "Starting: run migrations" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform python manage.py migrate --noinput
           printf '%s\n' "Finished: run migrations" >> "$GITHUB_STEP_SUMMARY"
-      - name: Type checks (pyright baseline)
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform pyright
-          printf '%s\n' "Finished: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Type checks (mypy baseline)
-        env:
-          MYPY_CACHE_DIR: .mypy_cache
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform mypy
-          printf '%s\n' "Finished: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Enforce strict pragma presence
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform python scripts/typing/ci_enforce_strict.py
-          printf '%s\n' "Finished: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Run tests
+      - name: Pytest
+        if: ${{ matrix.task == 'pytest' }}
         env:
           DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
           DATABASE_URL: sqlite:///./udocket_ci.db
@@ -71,56 +70,55 @@ jobs:
           printf '%s\n' "Starting: pytest" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform pytest -q tests
           printf '%s\n' "Finished: pytest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Pyright
+        if: ${{ matrix.task == 'pyright' }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform pyright
+          printf '%s\n' "Finished: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
+      - name: Mypy
+        if: ${{ matrix.task == 'mypy' }}
+        env:
+          MYPY_CACHE_DIR: .mypy_cache
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform mypy
+          printf '%s\n' "Finished: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce strict pragmas
+        if: ${{ matrix.task == 'strict_pragmas' }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform python scripts/typing/ci_enforce_strict.py
+          printf '%s\n' "Finished: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
       - name: Strict manifest check
+        if: ${{ matrix.task == 'strict_manifest' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: strict manifest check" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform python scripts/typing/check_strict.py
           printf '%s\n' "Finished: strict manifest check" >> "$GITHUB_STEP_SUMMARY"
-      - name: Docs toolbox tests (coverage enforced)
+      - name: Docs toolbox tests
+        if: ${{ matrix.task == 'docs_tools' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: docs toolbox tests (coverage)" >> "$GITHUB_STEP_SUMMARY"
-          uv sync --frozen --extra dev --project packages/udocket_docs
           uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage
           printf '%s\n' "Finished: docs toolbox tests (coverage)" >> "$GITHUB_STEP_SUMMARY"
-
-  typewiz-audit:
-    name: Typewiz Audit
-    runs-on: ubuntu-latest
-    needs: [test]
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.5.*"
-      - name: Sync dependencies
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: sync dependencies (typewiz-audit)" >> "$GITHUB_STEP_SUMMARY"
-          uv sync --frozen --group dev --no-install-project --project apps/platform
-          printf '%s\n' "Finished: sync dependencies (typewiz-audit)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run typewiz audit
+      - name: Typewiz audit
+        if: ${{ matrix.task == 'typewiz' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
           mkdir -p reports/typing
           uv run --project apps/platform typewiz audit --mode current --manifest reports/typing/typing_audit.json
-          printf '%s\n' "Finished: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
-      - name: Build dashboards
-        if: always()
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: build typewiz dashboards" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
           uv run --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
-          printf '%s\n' "Finished: build typewiz dashboards" >> "$GITHUB_STEP_SUMMARY"
-      - name: Readiness summary
-        if: always()
+          printf '%s\n' "Finished: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
+      - name: Typewiz readiness summary
+        if: ${{ matrix.task == 'typewiz' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
@@ -129,7 +127,7 @@ jobs:
           printf '%s\n' "Typewiz ready folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
       - name: Upload typewiz artifacts
-        if: always()
+        if: ${{ matrix.task == 'typewiz' }}
         uses: actions/upload-artifact@v4
         with:
           name: typewiz-reports
@@ -142,6 +140,10 @@ jobs:
     name: Supply Chain
     runs-on: ubuntu-latest
     needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [platform, docs]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -151,6 +153,7 @@ jobs:
         with:
           version: "0.5.*"
       - name: Verify platform lockfile
+        if: ${{ matrix.image == 'platform' }}
         working-directory: apps/platform
         run: |
           set -euo pipefail
@@ -158,6 +161,7 @@ jobs:
           uv lock --check
           printf '%s\n' "Finished: verify platform lockfile" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify docs lockfile
+        if: ${{ matrix.image == 'docs' }}
         working-directory: packages/udocket_docs
         run: |
           set -euo pipefail
@@ -165,6 +169,7 @@ jobs:
           uv lock --check
           printf '%s\n' "Finished: verify docs lockfile" >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure lockfiles committed
+        if: ${{ matrix.image == 'platform' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: ensure lockfiles committed" >> "$GITHUB_STEP_SUMMARY"
@@ -180,34 +185,38 @@ jobs:
           mkdir -p sbom
           printf '%s\n' "Finished: prepare sbom directory" >> "$GITHUB_STEP_SUMMARY"
       - name: Build platform image
+        if: ${{ matrix.image == 'platform' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: build platform image" >> "$GITHUB_STEP_SUMMARY"
-          docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load .
+          docker buildx build --file infra/docker/Dockerfile.platform --target app --tag udocket-platform:ci --load .
           printf '%s\n' "Finished: build platform image" >> "$GITHUB_STEP_SUMMARY"
       - name: Build docs image
+        if: ${{ matrix.image == 'docs' }}
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: build docs image" >> "$GITHUB_STEP_SUMMARY"
-          docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load packages/udocket_docs
+          docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load .
           printf '%s\n' "Finished: build docs image" >> "$GITHUB_STEP_SUMMARY"
       - name: Generate platform SBOM
+        if: ${{ matrix.image == 'platform' }}
         uses: anchore/sbom-action@v0
         with:
           image: udocket-platform:ci
           format: cyclonedx-json
           output-file: sbom/udocket-platform.cyclonedx.json
       - name: Generate docs SBOM
+        if: ${{ matrix.image == 'docs' }}
         uses: anchore/sbom-action@v0
         with:
           image: udocket-docs:ci
           format: cyclonedx-json
           output-file: sbom/udocket-docs.cyclonedx.json
-      - name: Upload SBOM artifacts
+      - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-bundle
-          path: sbom
+          name: sbom-${{ matrix.image }}
+          path: ${{ format('sbom/udocket-{0}.cyclonedx.json', matrix.image) }}
 
   stack-smoke:
     name: Stack Smoke
