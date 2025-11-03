@@ -10,10 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run actionlint (docker)
-        uses: docker://ghcr.io/rhysd/actionlint:latest
+        uses: docker://rhysd/actionlint:latest
         with:
-          args: ./.github/workflows/**/*.yml
-
+          args: .
   test:
     needs: [lint-workflows]
     runs-on: ubuntu-latest
