@@ -38,3 +38,12 @@ def test_unique_title_takes_highest_suffix() -> None:
 def test_unique_title_preserves_other_titles() -> None:
     existing = ["Analyze", "Transcript-2"]
     assert text.unique_title("Transcript", existing) == "Transcript-3"
+
+
+def test_slugify_without_separator() -> None:
+    assert text.slugify("Hello  World!", separator="") == "helloworld"
+
+
+def test_unique_title_ignores_non_numeric_suffix() -> None:
+    existing = ["TitleAlpha", "Title-2"]
+    assert text.unique_title("Title", existing) == "Title-3"

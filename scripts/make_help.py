@@ -8,6 +8,18 @@ import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
+THIS_DIR = Path(__file__).resolve().parent
+try:
+    sys.path.remove(str(THIS_DIR))
+except ValueError:
+    pass
+else:
+    sys.path.append(str(THIS_DIR))
+
+REPO_ROOT = THIS_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
+
 from packages.udocket_common.text import slugify
 
 

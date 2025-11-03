@@ -1,47 +1,37 @@
 from __future__ import annotations
 
-import os
+# pyright: strict
+
+"""Path helpers backed by doc_tools settings."""
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Sequence, cast
 
 import yaml
 
-_REPO_ROOT_DEFAULT = Path(__file__).resolve().parents[2]
-
-
-def _expanded(value: str | None, default: Path) -> Path:
-    if value is None or not value.strip():
-        return default
-    return Path(value).expanduser()
-
-
-def _is_repo_root(candidate: Path) -> bool:
-    return (candidate / "docs").exists() and (candidate / "packages").exists()
-
-
-def _detect_repo_root(default: Path) -> Path:
-    if _is_repo_root(default):
-        return default
-    for parent in default.parents:
-        if _is_repo_root(parent):
-            return parent
-    return default
-
-
-REPO_ROOT = _expanded(os.getenv("UDOCKET_REPO_ROOT"), _detect_repo_root(_REPO_ROOT_DEFAULT))
-DOCS_PACKAGE_ROOT = _expanded(
-    os.getenv("UDOCKET_DOCS_PACKAGE_ROOT"), REPO_ROOT / "packages" / "udocket_docs"
+from .settings import (
+    resolve_build_root,
+    resolve_config_root,
+    resolve_doc_builds_root,
+    resolve_docs_root,
+    resolve_package_root,
+    resolve_repo_root,
+    resolve_diagram_index_path,
 )
-DOCS_ROOT = _expanded(os.getenv("UDOCKET_DOCS_ROOT"), REPO_ROOT / "docs")
-CONFIG_ROOT = _expanded(os.getenv("UDOCKET_DOCS_CONFIG_ROOT"), DOCS_PACKAGE_ROOT / "config")
-BUILD_ROOT = _expanded(os.getenv("UDOCKET_DOCS_BUILD_ROOT"), DOCS_PACKAGE_ROOT / "build")
-DOC_BUILDS_ROOT = _expanded(os.getenv("UDOCKET_DOC_BUILDS_ROOT"), REPO_ROOT / "doc-builds")
+
+
+REPO_ROOT = resolve_repo_root()
+DOCS_PACKAGE_ROOT = resolve_package_root()
+DOCS_ROOT = resolve_docs_root()
+CONFIG_ROOT = resolve_config_root()
+BUILD_ROOT = resolve_build_root()
+DOC_BUILDS_ROOT = resolve_doc_builds_root()
 SITE_OUTPUT_ROOT = DOC_BUILDS_ROOT / "sites"
 PDF_OUTPUT_ROOT = DOC_BUILDS_ROOT / "pdf"
 SITE_DEV_DIR = SITE_OUTPUT_ROOT / "dev"
 PDF_DEV_DIR = PDF_OUTPUT_ROOT / "dev"
-DIAGRAM_INDEX_PATH = DOCS_ROOT / "overview" / "tdd" / "appendices" / "diagrams.md"
+DIAGRAM_INDEX_PATH = resolve_diagram_index_path()
 
 CONFIG_PATH = CONFIG_ROOT / "docs_config.yaml"
 _DEFAULT_SERVICE_AREAS: Sequence[str] = (
@@ -107,3 +97,4 @@ __all__ = [
     "area_path",
     "load_service_areas",
 ]
+

@@ -33,6 +33,12 @@ def test_uuid5_from_content_handles_bytes() -> None:
     assert value == ids.uuid5_from_content("alpha", "beta")
 
 
+def test_uuid5_from_content_accepts_uuid_objects() -> None:
+    namespace_uuid = UUID("12345678-1234-5678-1234-567812345678")
+    derived = ids.uuid5_from_content(namespace_uuid)
+    assert derived == ids.uuid5_from_content(str(namespace_uuid))
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [

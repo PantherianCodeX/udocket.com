@@ -7,6 +7,9 @@ x-develop:
       - action: sync
         path: packages
         target: /udocket/packages
+      - action: sync
+        path: manage.py
+        target: /udocket/manage.py
       - action: rebuild
         path: apps/platform/pyproject.toml
       - action: rebuild
@@ -28,15 +31,15 @@ services:
       - sh
       - -lc
       - |
-          python manage.py migrate && \
-          python -m watchfiles \
+          /opt/venv/bin/python manage.py migrate && \
+          /opt/venv/bin/python -m watchfiles \
             --target-type=command \
             --filter=apps.platform.config.watchers.PythonAndHTMLFilter \
             --ignore-paths=/opt/venv \
             --ignore-paths=${APP_ROOT:-/udocket}/storage \
             --ignore-paths=${APP_ROOT:-/udocket}/celerybeat-schedule \
             --grace-period=0.2 \
-            "daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" ${APP_ROOT:-/udocket}
+            "/opt/venv/bin/daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" ${APP_ROOT:-/udocket}
     volumes:
       - ./storage:/udocket/storage
     ports:

@@ -89,14 +89,16 @@ ifneq ($(strip $(REGISTRY)),)
   KEYCLOAK_TAGS_LIST += $(REGISTRY)/$(KEYCLOAK_IMAGE):$(TAG)
 endif
 
-PLATFORM_TAGS := $(subst $(space),$(comma),$(strip $(PLATFORM_TAGS_LIST)))
-DOCS_TAGS := $(subst $(space),$(comma),$(strip $(DOCS_TAGS_LIST)))
-KEYCLOAK_TAGS := $(subst $(space),$(comma),$(strip $(KEYCLOAK_TAGS_LIST)))
+define buildx_tags_flag
+$(if $(strip $(2)),--set $(1).tags=$(firstword $(2))$(foreach tag,$(wordlist 2,$(words $(2)),$(2)), --set $(1).tags+=$(tag)))
+endef
 
-BAKE_IMAGE_FLAGS := --progress=$(PROGRESS) --set common.platforms=$(PLATFORMS)
-BAKE_IMAGE_FLAGS += --set platform.tags=$(PLATFORM_TAGS)
-BAKE_IMAGE_FLAGS += --set docs.tags=$(DOCS_TAGS)
-BAKE_IMAGE_FLAGS += --set keycloak.tags=$(KEYCLOAK_TAGS)
+BAKE_FILES := -f bake.hcl
+
+BAKE_IMAGE_FLAGS := $(BAKE_FILES) --progress=$(PROGRESS) --set *.platform=$(PLATFORMS)
+BAKE_IMAGE_FLAGS += $(call buildx_tags_flag,platform,$(PLATFORM_TAGS_LIST))
+BAKE_IMAGE_FLAGS += $(call buildx_tags_flag,docs,$(DOCS_TAGS_LIST))
+BAKE_IMAGE_FLAGS += $(call buildx_tags_flag,keycloak,$(KEYCLOAK_TAGS_LIST))
 BAKE_IMAGE_FLAGS += $(BAKE_EXTRA_FLAGS)
 
 ifneq ($(strip $(DO_LOAD)),0)
@@ -106,7 +108,7 @@ ifneq ($(DO_PUSH),0)
   BAKE_IMAGE_FLAGS += --push
 endif
 
-BAKE_CACHE_FLAGS := --progress=$(PROGRESS) --set common.platforms=$(PLATFORMS)
+BAKE_CACHE_FLAGS := $(BAKE_FILES) --progress=$(PROGRESS) --set *.platform=$(PLATFORMS)
 BAKE_CACHE_FLAGS += $(BAKE_EXTRA_FLAGS)
 
 CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; exit 1; fi
@@ -220,7 +222,7 @@ stack.up: ## Start core stack detached (override with SERVICES="..." as needed)
 stack.down: ## Stop stack containers
 	$(DEV_COMPOSE) down
 stack.build: ## Build platform-facing images (Bake pipeline)
-	$(MAKE) images.build IMAGES="platform keycloak"
+	$(MAKE) images.build IMAGES="platform keycloak" LOAD=1
 stack.restart: ## Restart stack services (override with SERVICES="...")
 	$(DEV_COMPOSE) restart $(SERVICES)
 stack.logs: ## Tail logs from core stack (FOLLOW=0 to disable streaming)
