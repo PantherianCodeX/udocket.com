@@ -62,3 +62,17 @@ def test_pytest_runner_supports_coverage_flag(monkeypatch: pytest.MonkeyPatch) -
     ]
     expected = [*coverage_prefix, "-c", config_path, "extra_test"]
     assert captured == [expected]
+
+
+def test_build_pytest_args_defaults_to_target() -> None:
+    args = pytest_runner.build_pytest_args(env_value=None, cli_args=())
+    assert args == [pytest_runner.DEFAULT_TARGET]
+
+
+def test_coverage_threshold_env_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(pytest_runner.COVERAGE_THRESHOLD_ENV, "95")
+    assert pytest_runner.coverage_threshold() == 95
+    monkeypatch.setenv(pytest_runner.COVERAGE_THRESHOLD_ENV, "-10")
+    assert pytest_runner.coverage_threshold() == 0
+    monkeypatch.setenv(pytest_runner.COVERAGE_THRESHOLD_ENV, "not-a-number")
+    assert pytest_runner.coverage_threshold() == pytest_runner.DEFAULT_COVERAGE_THRESHOLD

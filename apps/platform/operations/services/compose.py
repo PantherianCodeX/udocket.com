@@ -36,6 +36,7 @@ from packages.udocket_common.json_utils import (
     coerce_str,
     coerce_str_list,
     normalize_json_object,
+    read_json_object,
     write_json_object,
 )
 from packages.udocket_core.logging.context import LogContext
@@ -421,6 +422,12 @@ def execute_compose_job(
 
     artifacts = result.artifacts
 
+    compose_meta_payload: dict[str, Any] = {}
+    try:
+        compose_meta_payload = coerce_json_object(read_json_object(result.meta_json))
+    except Exception:
+        compose_meta_payload = {}
+
     meta_updates: dict[str, Any] = {
         "compose_status": "completed",
         "compose_meta_json": str(result.meta_json),
@@ -429,6 +436,12 @@ def execute_compose_job(
         "compose_stage_durations": result.stage_durations,
         "summary_job_id": str(summary_job.id),
     }
+    artifact_sha_payload = coerce_json_object(compose_meta_payload.get("artifact_sha256"))
+    if artifact_sha_payload:
+        meta_updates["compose_artifact_sha256"] = artifact_sha_payload
+    version_value = coerce_str(compose_meta_payload.get("udocket_core_version"))
+    if version_value:
+        meta_updates["compose_udocket_core_version"] = version_value
     if artifacts.timeline_file:
         meta_updates["timeline_v2_file"] = str(artifacts.timeline_file)
     if artifacts.graph_file:

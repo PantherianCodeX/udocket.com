@@ -46,3 +46,34 @@ def test_uuid5_from_content_handles_bytes() -> None:
 )
 def test_normalize_id_variants(raw: ids.UUIDInput, expected: str | None) -> None:
     assert ids.normalize_id(raw) == expected
+
+
+def test_ensure_deterministic_uuids_preserves_existing() -> None:
+    items = [{"uuid": "existing", "id": "", "title": "Same"}]
+    ids.ensure_deterministic_uuids(items, namespace="outline.issues", signature_fields=("title",))
+    assert items[0]["uuid"] == "existing"
+    assert items[0]["id"] == "existing"
+
+
+def test_ensure_deterministic_uuids_assigns_when_missing() -> None:
+    items = [{"title": "Claim", "description": "Damages"}]
+    ids.ensure_deterministic_uuids(items, namespace="outline.claims", signature_fields=("title", "description"))
+    derived = ids.normalize_id(items[0]["uuid"])
+    assert derived is not None
+    assert items[0]["id"] == derived
+    # deterministic across invocations
+    items2 = [{"title": "Claim", "description": "Damages"}]
+    ids.ensure_deterministic_uuids(items2, namespace="outline.claims", signature_fields=("title", "description"))
+    assert items2[0]["uuid"] == derived
+
+
+def test_ensure_deterministic_uuids_without_id_field() -> None:
+    items = [{"name": "Jordan Counsel", "for": "Applicant"}]
+    ids.ensure_deterministic_uuids(
+        items,
+        namespace="outline.parties.counsel",
+        signature_fields=("name", "for"),
+        id_field=None,
+    )
+    assert ids.normalize_id(items[0]["uuid"]) is not None
+    assert "id" not in items[0]

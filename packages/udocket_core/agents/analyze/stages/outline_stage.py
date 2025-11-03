@@ -24,6 +24,7 @@ from packages.udocket_common.json_utils import (
     coerce_str,
     parse_json_object,
 )
+from packages.udocket_common.ids import ensure_deterministic_uuids
 from ....llm.runtime import ChatClient
 
 OUTLINE_SCHEMA: JSONObject = {
@@ -67,6 +68,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "id": {"type": "string"},
                     "title": {"type": "string"},
                     "description": {"type": "string"},
@@ -82,6 +84,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "claim": {"type": "string"},
                     "remedy_requested": {"type": ["string", "null"]},
                     "amounts": {
@@ -98,6 +101,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "ts": {"type": ["number", "null"]},
                     "speaker": {"type": ["string", "null"]},
                     "text": {"type": "string"},
@@ -114,6 +118,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "label": {"type": "string"},
                     "date": {"type": ["string", "null"]},
                     "ts": {"type": ["number", "null"]},
@@ -127,6 +132,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "date": {"type": ["string", "null"]},
                     "ts": {"type": ["number", "null"]},
                     "text": {"type": "string"},
@@ -139,6 +145,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "id": {"type": "string"},
                     "description": {"type": "string"},
                     "cited_ts": {
@@ -154,6 +161,7 @@ OUTLINE_SCHEMA: JSONObject = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "uuid": {"type": "string"},
                     "citation": {"type": "string"},
                     "context": {"type": "string"},
                 },
@@ -174,6 +182,58 @@ OUTLINE_SCHEMA: JSONObject = {
 }
 
 OUTLINE_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
+
+
+def _ensure_outline_identity(outline: JSONObject) -> None:
+    outline_obj = coerce_json_object(outline)
+    sections: tuple[tuple[str, Sequence[str]], ...] = (
+        ("issues", ("title", "description")),
+        ("claims_and_remedies", ("claim", "remedy_requested")),
+        ("facts", ("text", "speaker", "ts")),
+        ("deadlines", ("label", "date", "basis")),
+        ("orders_and_directions", ("text", "date")),
+        ("exhibits", ("id", "description")),
+        ("legal_refs", ("citation", "context")),
+    )
+    for section, signature_fields in sections:
+        entries = coerce_object_list(outline_obj.get(section))
+        ensure_deterministic_uuids(
+            entries,
+            namespace=f"outline.{section}",
+            signature_fields=signature_fields,
+        )
+        outline_obj[section] = entries
+
+    parties = coerce_json_object(outline_obj.get("parties"))
+    client_payload = coerce_json_object(parties.get("client"))
+    opposing_payload = coerce_json_object(parties.get("opposing"))
+    ensure_deterministic_uuids(
+        [client_payload],
+        namespace="outline.parties.client",
+        signature_fields=("name", "role"),
+        id_field=None,
+    )
+    ensure_deterministic_uuids(
+        [opposing_payload],
+        namespace="outline.parties.opposing",
+        signature_fields=("name", "role"),
+        id_field=None,
+    )
+    parties["client"] = client_payload
+    parties["opposing"] = opposing_payload
+
+    counsel_entries = coerce_object_list(parties.get("counsel"))
+    ensure_deterministic_uuids(
+        counsel_entries,
+        namespace="outline.parties.counsel",
+        signature_fields=("name", "for"),
+        id_field=None,
+    )
+    parties["counsel"] = counsel_entries
+    outline_obj["parties"] = parties
+
+    outline.clear()
+    outline.update(outline_obj)
 
 
 @dataclass(frozen=True)
@@ -226,6 +286,7 @@ def _outline_template(
         "exhibits": cast(list[JSONValue], []),
         "legal_refs": cast(list[JSONValue], []),
     }
+    _ensure_outline_identity(outline)
     return outline
 
 
@@ -235,6 +296,7 @@ def _coerce_outline(payload: Mapping[str, JSONValue], template: JSONObject) -> J
     for key, value in payload_obj.items():
         if key in baseline:
             baseline[key] = value
+    _ensure_outline_identity(baseline)
     return baseline
 
 
@@ -325,6 +387,8 @@ def _merge_outline_sections(target: JSONObject, update: Mapping[str, JSONValue])
             else:
                 if attr_value and not existing_payload.get(attr_key):
                     existing_payload[attr_key] = attr_value
+
+    _ensure_outline_identity(target)
 
 
 def _merge_usage(target: dict[str, int], usage: Mapping[str, object]) -> None:
@@ -419,6 +483,7 @@ def generate_outline(
 
         if aggregate_outline is None:
             raise RuntimeError("Outline stage returned no data")
+        _ensure_outline_identity(aggregate_outline)
         return OutlineStageResult(aggregate_outline, usage_totals)
     except Exception as exc:  # pragma: no cover - defensive guard
         raise RuntimeError(f"Outline stage failed: {exc}") from exc

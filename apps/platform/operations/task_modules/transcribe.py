@@ -22,6 +22,7 @@ from apps.platform.accounts.models import Organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 from packages.udocket_common.text import unique_title
 from apps.platform.operations.blob_upload import UploadCancelled, upload_with_sas
 from apps.platform.operations.channels import send_case_update, send_job_update
@@ -148,6 +149,7 @@ def transcribe_job(
         drop_empty_keys=True,
         drop_nullish_values=True,
     )
+    base_meta.setdefault("udocket_core_version", UDOCKET_CORE_VERSION)
     safe_job_meta(case_id, org_id, job_id, base_meta)
 
     runtime = JobRuntimeContext(
@@ -854,6 +856,8 @@ def transcribe_job(
         "region": result.region,
         "progress_percent": None,
         "upload_progress": None,
+        "artifact_sha256": artifact_sha256,
+        "udocket_core_version": UDOCKET_CORE_VERSION,
     }
     try:
         job_obj.refresh_from_db()
@@ -918,6 +922,8 @@ def transcribe_job(
     except Exception:
         pass
 
+    artifact_sha256 = result.sha_map
+
     meta_updates: JSONObject = merge_json_objects(
         base_meta,
         {"transcription_status": "completed"},
@@ -931,6 +937,7 @@ def transcribe_job(
             "transcription_language": result.language,
             "transcription_region": result.region,
             "transcription_duration_s": result.duration_s,
+            "artifact_sha256": artifact_sha256,
         },
     )
     if celery_task_id:
@@ -965,6 +972,8 @@ def transcribe_job(
             "transcription_completed_at": finished_ts.isoformat() if finished_ts else None,
             "celery_task_finished_at": finished_ts.isoformat() if finished_ts else None,
             "celery_task_status": "succeeded" if celery_task_id else None,
+            "artifact_sha256": artifact_sha256,
+            "udocket_core_version": UDOCKET_CORE_VERSION,
         },
     )
 

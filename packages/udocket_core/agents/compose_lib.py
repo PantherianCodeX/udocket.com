@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 from packages.udocket_common.json_utils import (
     JSONArray,
     JSONObject,
@@ -18,7 +19,7 @@ from packages.udocket_common.json_utils import (
     write_json_object,
 )
 
-from .common import append_jsonl, ensure_dir
+from .common import append_jsonl, ensure_dir, sha256_file
 from ..llm import LLMSettings, load_llm_settings
 from .compose.errors import ComposeStageError
 from .compose.guards import factuality_report
@@ -341,6 +342,24 @@ class ComposeAgent:
         artifact_writer = ArtifactWriter(config=self.config, logger=self.logger)
         artifacts = artifact_writer.write(state=state, docs_dir=docs_dir, job_id=job_id)
 
+        artifact_shas: dict[str, str] = {}
+
+        def _record_sha(name: str, path: Path | None) -> None:
+            if path is None:
+                return
+            try:
+                artifact_shas[name] = sha256_file(path)
+            except Exception:
+                self.logger.debug("compose.sha.failed", extra={"artifact": name, "path": str(path)})
+
+        _record_sha("client_markdown", artifacts.client_markdown)
+        _record_sha("lawyer_markdown", artifacts.lawyer_markdown)
+        _record_sha("bundle", artifacts.bundle_path)
+        _record_sha("qa_report", artifacts.qa_report)
+        _record_sha("staff_report", artifacts.staff_report)
+        _record_sha("client_docx", artifacts.client_docx)
+        _record_sha("lawyer_docx", artifacts.lawyer_docx)
+
         events_payload: JSONArray = [coerce_json_object(event) for event in collected_events]
         qa_lane_actions_payload: dict[str, JSONObject] = {
             lane: coerce_json_object(
@@ -386,6 +405,8 @@ class ComposeAgent:
             "qa_report": str(artifacts.qa_report) if artifacts.qa_report else None,
             "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
             "status": "ok",
+            "artifact_sha256": artifact_shas,
+            "udocket_core_version": UDOCKET_CORE_VERSION,
         }
 
         meta_json = ops_dir / f"{job_id}__compose_log.json"
@@ -417,19 +438,21 @@ class ComposeAgent:
             )
         append_jsonl(
             audit_jsonl,
-            {
-                "case_id": case_id,
-                "job_id": job_id,
-                "status": "ok",
-                "qa_status": state.qa.status,
-                "qa_iterations": state.qa_iterations,
-                "qa_provider": state.qa.provider,
-                "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
-                "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
-                "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
-                "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
-            },
-        )
+                {
+                    "case_id": case_id,
+                    "job_id": job_id,
+                    "status": "ok",
+                    "qa_status": state.qa.status,
+                    "qa_iterations": state.qa_iterations,
+                    "qa_provider": state.qa.provider,
+                    "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
+                    "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
+                    "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+                    "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
+                    "artifact_sha256": artifact_shas,
+                    "udocket_core_version": UDOCKET_CORE_VERSION,
+                },
+            )
 
         result = ComposeResult(
             status="ok",

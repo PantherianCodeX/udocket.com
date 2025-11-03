@@ -101,6 +101,7 @@ nav:
   - Communications: customer/communications.md
 - Operations Hub:
   - Runbooks: ops/runbooks.md
+  - Production Overlay Checklist: ops/prod-overlay-checklist.md
 - Decision Records:
   - Overview: adr/README.md
   - Guardian READY/QUARANTINED: adr/ADR-0001-guardian-ready-quarantine.md

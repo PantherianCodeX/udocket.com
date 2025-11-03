@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..audio import probe_audio_metadata
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
@@ -387,6 +388,7 @@ class TranscriptionResult:
     meta_json: Path
     meta_log: Path
     audit_jsonl: Path
+    sha_map: dict[str, str]
 
 
 class _OnDemandTranscriber:
@@ -749,6 +751,8 @@ class TranscriptionAgent:
             m, s = int(sec // 60), int(sec % 60)
             return f"{m:02d}:{s:02d}"
 
+        transcript_sha = _sha256sum(transcript_out)
+
         header = "\n".join(
             [
                 "DRAFT — LEGAL INFORMATION ONLY — CLIENT REVIEW REQUIRED",
@@ -772,12 +776,16 @@ class TranscriptionAgent:
 
         sdk_version_value = _sdk_version()
 
+        sha_map = {"transcript": transcript_sha}
+        if audio_sha:
+            sha_map["audio"] = audio_sha
+
         meta = _json_payload(
             case_id=case_id,
             audio_file=audio_name,
             audio_sha256=audio_sha,
             transcript_file=transcript_out.name,
-            transcript_sha256=_sha256sum(transcript_out),
+            transcript_sha256=transcript_sha,
             azure_region=cfg.azure_speech_region,
             language=lang,
             audio_duration_s=dur,
@@ -790,6 +798,8 @@ class TranscriptionAgent:
             timestamp_utc=_now_utc(),
             diarization_enabled=bool(diarization),
             status="succeeded",
+            udocket_core_version=UDOCKET_CORE_VERSION,
+            sha_map=sha_map,
         )
         if audio_meta:
             for key, value in audio_meta.items():
@@ -833,4 +843,5 @@ class TranscriptionAgent:
             meta_json=log_json_job,
             meta_log=log_txt_job,
             audit_jsonl=audit_jsonl,
+            sha_map=sha_map,
         )

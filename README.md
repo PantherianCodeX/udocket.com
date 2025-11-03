@@ -77,6 +77,10 @@ PROJECT_NAME=udocket docker compose \
 
   Bind host ports in `docker-compose.prod.yml` or layer another override file if you front the stack with Nginx/Traefik. In production, terminate TLS at the proxy; Keycloak continues to listen on 8085 inside the compose network.
 
+- Every first-party service (platform web, worker, beat, docs toolbox, Keycloak) runs with `/udocket` as the working directory and resolves storage under `/udocket/storage`. When authoring new compose overlays or Dockerfiles, keep that convention so runtime path helpers continue to work across environments.
+
+- See `docs/ops/prod-overlay-checklist.md` for the canonical Keycloak proxy layout and the post-deployment verification steps we expect on every rollout.
+
 - To inspect a production stack quickly:
 
 ```bash

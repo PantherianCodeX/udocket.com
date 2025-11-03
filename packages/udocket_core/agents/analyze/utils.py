@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, MutableMapping, Optional
 
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
+
 from ..common import (
     AnalysisArtifact,
     TranscriptParse,
@@ -757,6 +759,8 @@ def finalize_outputs(
         "entity_count": len(entities_sequence)
         if entities_sequence is not None
         else 0,
+        "udocket_core_version": UDOCKET_CORE_VERSION,
+        "sha_map": sha_map,
     }
     if provider_chain:
         meta["provider_chain"] = list(provider_chain)
@@ -786,6 +790,8 @@ def finalize_outputs(
             "case_brief_file": str(case_brief_path),
             "words": words,
             "providers": list(provider_chain or []),
+            "udocket_core_version": UDOCKET_CORE_VERSION,
+            "sha_map": sha_map,
         },
     )
 
