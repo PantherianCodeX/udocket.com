@@ -69,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: pytest" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform pytest -q
+          uv run --project apps/platform pytest -q tests
           printf '%s\n' "Finished: pytest" >> "$GITHUB_STEP_SUMMARY"
       - name: Strict manifest check
         run: |
