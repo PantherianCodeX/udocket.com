@@ -91,13 +91,13 @@ def ensure_deterministic_uuids(
     """
 
     for mapping in items:
-        existing_uuid = normalize_id(mapping.get(uuid_field))
+        existing_uuid = normalize_id(cast(UUIDInput, mapping.get(uuid_field)))
         if not existing_uuid and id_field:
-            existing_uuid = normalize_id(mapping.get(id_field))
+            existing_uuid = normalize_id(cast(UUIDInput, mapping.get(id_field)))
         if existing_uuid:
             mapping[uuid_field] = existing_uuid
             if id_field:
-                current_id = normalize_id(mapping.get(id_field))
+                current_id = normalize_id(cast(UUIDInput, mapping.get(id_field)))
                 if not current_id:
                     mapping[id_field] = existing_uuid
             continue

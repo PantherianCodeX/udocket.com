@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
+from typing import MutableMapping, cast
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 import pytest
@@ -49,31 +50,33 @@ def test_normalize_id_variants(raw: ids.UUIDInput, expected: str | None) -> None
 
 
 def test_ensure_deterministic_uuids_preserves_existing() -> None:
-    items = [{"uuid": "existing", "id": "", "title": "Same"}]
+    items: list[MutableMapping[str, object]] = [
+        cast(MutableMapping[str, object], {"uuid": "existing", "id": "", "title": "Same"})
+    ]
     ids.ensure_deterministic_uuids(items, namespace="outline.issues", signature_fields=("title",))
     assert items[0]["uuid"] == "existing"
     assert items[0]["id"] == "existing"
 
 
 def test_ensure_deterministic_uuids_assigns_when_missing() -> None:
-    items = [{"title": "Claim", "description": "Damages"}]
+    items: list[MutableMapping[str, object]] = [cast(MutableMapping[str, object], {"title": "Claim", "description": "Damages"})]
     ids.ensure_deterministic_uuids(items, namespace="outline.claims", signature_fields=("title", "description"))
-    derived = ids.normalize_id(items[0]["uuid"])
+    derived = ids.normalize_id(cast(ids.UUIDInput, items[0]["uuid"]))
     assert derived is not None
     assert items[0]["id"] == derived
     # deterministic across invocations
-    items2 = [{"title": "Claim", "description": "Damages"}]
+    items2: list[MutableMapping[str, object]] = [cast(MutableMapping[str, object], {"title": "Claim", "description": "Damages"})]
     ids.ensure_deterministic_uuids(items2, namespace="outline.claims", signature_fields=("title", "description"))
     assert items2[0]["uuid"] == derived
 
 
 def test_ensure_deterministic_uuids_without_id_field() -> None:
-    items = [{"name": "Jordan Counsel", "for": "Applicant"}]
+    items: list[MutableMapping[str, object]] = [cast(MutableMapping[str, object], {"name": "Jordan Counsel", "for": "Applicant"})]
     ids.ensure_deterministic_uuids(
         items,
         namespace="outline.parties.counsel",
         signature_fields=("name", "for"),
         id_field=None,
     )
-    assert ids.normalize_id(items[0]["uuid"]) is not None
+    assert ids.normalize_id(cast(ids.UUIDInput, items[0]["uuid"])) is not None
     assert "id" not in items[0]

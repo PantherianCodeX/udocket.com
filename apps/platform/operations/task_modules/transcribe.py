@@ -846,6 +846,7 @@ def transcribe_job(
         raise
 
     # If agent succeeded, persist results; notification errors won't flip status
+    artifact_sha256 = result.sha_map
     payload: dict[str, object] = {
         "status": "SUCCEEDED",
         "job_id": job_id,

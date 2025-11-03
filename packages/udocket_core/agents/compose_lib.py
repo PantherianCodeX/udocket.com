@@ -373,6 +373,8 @@ class ComposeAgent:
             for lane, directive in state.qa.lane_actions.items()
         }
 
+        artifact_sha_payload = coerce_json_object(artifact_shas)
+
         meta_payload = {
             "case_id": case_id,
             "job_id": job_id,
@@ -405,7 +407,7 @@ class ComposeAgent:
             "qa_report": str(artifacts.qa_report) if artifacts.qa_report else None,
             "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
             "status": "ok",
-            "artifact_sha256": artifact_shas,
+            "artifact_sha256": artifact_sha_payload,
             "udocket_core_version": UDOCKET_CORE_VERSION,
         }
 
@@ -438,21 +440,21 @@ class ComposeAgent:
             )
         append_jsonl(
             audit_jsonl,
-                {
-                    "case_id": case_id,
-                    "job_id": job_id,
-                    "status": "ok",
-                    "qa_status": state.qa.status,
-                    "qa_iterations": state.qa_iterations,
-                    "qa_provider": state.qa.provider,
-                    "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
-                    "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
-                    "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
-                    "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
-                    "artifact_sha256": artifact_shas,
-                    "udocket_core_version": UDOCKET_CORE_VERSION,
-                },
-            )
+            {
+                "case_id": case_id,
+                "job_id": job_id,
+                "status": "ok",
+                "qa_status": state.qa.status,
+                "qa_iterations": state.qa_iterations,
+                "qa_provider": state.qa.provider,
+                "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
+                "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
+                "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+                "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
+                "artifact_sha256": artifact_sha_payload,
+                "udocket_core_version": UDOCKET_CORE_VERSION,
+            },
+        )
 
         result = ComposeResult(
             status="ok",

@@ -21,7 +21,7 @@ from ..common import (
     sequence_length,
     sha256_file,
 )
-from packages.udocket_common.json_utils import write_json_object
+from packages.udocket_common.json_utils import coerce_json_object, write_json_object
 from .stages import (
     EntityStageResult,
     OutlineStageResult,
@@ -733,6 +733,8 @@ def finalize_outputs(
     facts_sequence = coerce_sequence(outline_result.outline.get("facts"))
     entities_sequence = coerce_sequence(entity_result.hints.get("entities"))
 
+    sha_map_json = coerce_json_object(sha_map)
+
     meta: Dict[str, Any] = {
         "case_id": case_id,
         "job_id": job_id,
@@ -760,7 +762,7 @@ def finalize_outputs(
         if entities_sequence is not None
         else 0,
         "udocket_core_version": UDOCKET_CORE_VERSION,
-        "sha_map": sha_map,
+        "sha_map": sha_map_json,
     }
     if provider_chain:
         meta["provider_chain"] = list(provider_chain)
@@ -791,7 +793,7 @@ def finalize_outputs(
             "words": words,
             "providers": list(provider_chain or []),
             "udocket_core_version": UDOCKET_CORE_VERSION,
-            "sha_map": sha_map,
+            "sha_map": sha_map_json,
         },
     )
 

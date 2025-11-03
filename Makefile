@@ -4,7 +4,7 @@ SHELL := /bin/bash
 
 PYTHON ?= python
 UV ?= uv
-PROJECT_NAME ?= udocket-dev
+PROJECT_NAME ?= udocket
 DC := COMPOSE_PROJECT_NAME=$(PROJECT_NAME) docker compose
 
 COMPOSE_BASE := docker-compose.yml
@@ -320,7 +320,7 @@ dev.shell: ## Open a shell inside the devcontainer service
 
 ##@ KeyCloak
 keycloak.shell: ## Open a shell inside the Keycloak container
-	$(call compose_shell,$(DEV_COMPOSE),keycloak)
+	$(call compose_shell,$(DEVCONTAINER_COMPOSE),keycloak)
 keycloak.psql.shell: ## Connect to the Keycloak PostgreSQL service using psql
 	$(DEV_COMPOSE) exec postgres-keycloak bash -lc 'psql -U keycloak -d keycloak'
 

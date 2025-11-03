@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Deque, cast
 
@@ -17,6 +17,7 @@ from ...common.chunking import (
 )
 from ...common.io import TranscriptParse
 from packages.udocket_common.json_utils import (
+    JSONArray,
     JSONObject,
     JSONValue,
     coerce_json_object,
@@ -186,35 +187,106 @@ OUTLINE_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 
 def _ensure_outline_identity(outline: JSONObject) -> None:
     outline_obj = coerce_json_object(outline)
-    sections: tuple[tuple[str, Sequence[str]], ...] = (
-        ("issues", ("title", "description")),
-        ("claims_and_remedies", ("claim", "remedy_requested")),
-        ("facts", ("text", "speaker", "ts")),
-        ("deadlines", ("label", "date", "basis")),
-        ("orders_and_directions", ("text", "date")),
-        ("exhibits", ("id", "description")),
-        ("legal_refs", ("citation", "context")),
-    )
-    for section, signature_fields in sections:
-        entries = coerce_object_list(outline_obj.get(section))
-        ensure_deterministic_uuids(
-            entries,
-            namespace=f"outline.{section}",
-            signature_fields=signature_fields,
-        )
-        outline_obj[section] = entries
+
+    def _signature_values(section: str, entry: JSONObject) -> tuple[str, ...]:
+        if section == "issues":
+            return (
+                str(entry.get("title") or ""),
+                str(entry.get("description") or ""),
+            )
+        if section == "claims_and_remedies":
+            return (
+                str(entry.get("claim") or ""),
+                str(entry.get("remedy_requested") or ""),
+            )
+        if section == "facts":
+            ts_val = entry.get("ts")
+            ts_norm = ""
+            if isinstance(ts_val, (int, float)):
+                ts_norm = f"{float(ts_val):.3f}"
+            elif isinstance(ts_val, str):
+                try:
+                    ts_norm = f"{float(ts_val):.3f}"
+                except ValueError:
+                    ts_norm = ts_val.strip()
+            return (
+                str(entry.get("text") or ""),
+                str(entry.get("speaker") or ""),
+                ts_norm,
+            )
+        if section == "deadlines":
+            return (
+                str(entry.get("label") or ""),
+                str(entry.get("date") or ""),
+                str(entry.get("basis") or ""),
+            )
+        if section == "orders_and_directions":
+            return (
+                str(entry.get("text") or ""),
+                str(entry.get("date") or ""),
+            )
+        if section == "exhibits":
+            return (
+                str(entry.get("id") or ""),
+                str(entry.get("description") or ""),
+            )
+        if section == "legal_refs":
+            return (
+                str(entry.get("citation") or ""),
+                str(entry.get("context") or ""),
+            )
+        return (str(entry),)
+
+    for section in (
+        "issues",
+        "claims_and_remedies",
+        "facts",
+        "deadlines",
+        "orders_and_directions",
+        "exhibits",
+        "legal_refs",
+    ):
+        raw_entries = coerce_object_list(outline_obj.get(section))
+        entries_json: JSONArray = []
+        entries_mut: list[MutableMapping[str, object]] = []
+        signature_keys: list[str] = []
+        for raw_entry in raw_entries:
+            entry_obj = coerce_json_object(raw_entry)
+            signature_values = _signature_values(section, entry_obj)
+            if not signature_keys:
+                signature_keys = [f"_sig_{idx}" for idx in range(len(signature_values))]
+            for sig_key, sig_value in zip(signature_keys, signature_values, strict=False):
+                entry_obj[sig_key] = sig_value.strip().lower()
+            entries_json.append(entry_obj)
+            entries_mut.append(cast(MutableMapping[str, object], entry_obj))
+        if entries_mut:
+            ensure_deterministic_uuids(
+                entries_mut,
+                namespace=f"outline.{section}",
+                signature_fields=tuple(signature_keys),
+            )
+            for entry_payload in entries_json:
+                entry_obj = cast(JSONObject, entry_payload)
+                for sig_key in signature_keys:
+                    entry_obj.pop(sig_key, None)
+                entry_obj["id"] = entry_obj.get("id") or entry_obj.get("uuid")
+        outline_obj[section] = entries_json
 
     parties = coerce_json_object(outline_obj.get("parties"))
     client_payload = coerce_json_object(parties.get("client"))
     opposing_payload = coerce_json_object(parties.get("opposing"))
+    client_payload["name"] = str(client_payload.get("name") or "").strip()
+    client_payload["role"] = str(client_payload.get("role") or "").strip()
+    opposing_payload["name"] = str(opposing_payload.get("name") or "").strip()
+    opposing_payload["role"] = str(opposing_payload.get("role") or "").strip()
     ensure_deterministic_uuids(
-        [client_payload],
+        [cast(MutableMapping[str, object], client_payload)],
         namespace="outline.parties.client",
         signature_fields=("name", "role"),
         id_field=None,
     )
     ensure_deterministic_uuids(
-        [opposing_payload],
+        [cast(MutableMapping[str, object], opposing_payload)],
         namespace="outline.parties.opposing",
         signature_fields=("name", "role"),
         id_field=None,
@@ -222,14 +294,22 @@ def _ensure_outline_identity(outline: JSONObject) -> None:
     parties["client"] = client_payload
     parties["opposing"] = opposing_payload
 
-    counsel_entries = coerce_object_list(parties.get("counsel"))
-    ensure_deterministic_uuids(
-        counsel_entries,
-        namespace="outline.parties.counsel",
-        signature_fields=("name", "for"),
-        id_field=None,
-    )
-    parties["counsel"] = counsel_entries
+    counsel_entries_json: JSONArray = []
+    counsel_mut: list[MutableMapping[str, object]] = []
+    for raw_counsel in coerce_object_list(parties.get("counsel")):
+        counsel_obj = coerce_json_object(raw_counsel)
+        counsel_obj["name"] = str(counsel_obj.get("name") or "").strip()
+        counsel_obj["for"] = str(counsel_obj.get("for") or "").strip()
+        counsel_entries_json.append(counsel_obj)
+        counsel_mut.append(cast(MutableMapping[str, object], counsel_obj))
+    if counsel_mut:
+        ensure_deterministic_uuids(
+            counsel_mut,
+            namespace="outline.parties.counsel",
+            signature_fields=("name", "for"),
+            id_field=None,
+        )
+    parties["counsel"] = counsel_entries_json
     outline_obj["parties"] = parties
 
     outline.clear()
