@@ -79,6 +79,7 @@ COPY packages/udocket_docs/package.json packages/udocket_docs/package.json
 COPY packages/udocket_docs/package-lock.json packages/udocket_docs/package-lock.json
 COPY packages/udocket_docs/README.md packages/udocket_docs/README.md
 COPY packages/udocket_docs/src packages/udocket_docs/src
+COPY packages/udocket_docs/plugins packages/udocket_docs/plugins
 
 # Install Python deps into the default uv-managed virtual environment (project omitted for now).
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
