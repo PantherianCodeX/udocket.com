@@ -92,9 +92,12 @@ class CaseArtifact(models.Model):
             elif self.case_id:
                 from apps.platform.cases.models import Case  # local import to avoid circular
 
-                resolved_org_id = Case.objects.filter(id=self.case_id).values_list(
-                    "organization_id", flat=True
-                ).first()
+                resolved_org_id = cast(
+                    uuid.UUID | None,
+                    Case.objects.filter(id=self.case_id)
+                    .values_list("organization_id", flat=True)
+                    .first(),
+                )
             if resolved_org_id is not None:
                 self.organization_id = resolved_org_id
         super().save(*args, **kwargs)

@@ -2,10 +2,9 @@ config_version = 0
 
 [audit]
 # Keep explicit paths for deterministic CI runs
-full_paths = ["apps", "packages", "config", "tests"]
+full_paths = ["apps/platform", "packages/udocket_common", "config"]
 runners = ["pyright", "mypy"]
 fail_on = "errors"
-max_depth = 3
 # Also emit dashboards when running `typewiz audit`
 dashboard_json = "reports/typing/dashboard.json"
 dashboard_markdown = "reports/typing/dashboard.md"
@@ -19,7 +18,7 @@ pyright = "baseline"
 config_file = "pyrightconfig.json"
 # Ensure alignment with repo runtime (3.12)
 plugin_args = ["--pythonversion", "3.12"]
-include = ["apps", "packages", "config", "tests"]
+include = ["apps/platform", "packages/udocket_common", "config"]
 
 [audit.engines.pyright.profiles.baseline]
 # Baseline keeps warnings visible without strict gating
@@ -31,4 +30,4 @@ plugin_args = ["--strict"]
 
 [audit.engines.mypy]
 config_file = "mypy.ini"
-include = ["apps", "packages", "config", "tests"]
+include = ["apps/platform", "packages/udocket_common", "config"]

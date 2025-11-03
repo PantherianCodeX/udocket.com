@@ -3,13 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 class ViewSet:
-    pass
+    ...
 
 class GenericViewSet(ViewSet):
-    pass
+    ...
+
+class ReadOnlyModelViewSet(GenericViewSet):
+    ...
 
 class ModelViewSet(GenericViewSet):
-    pass
+    ...
 
-__all__ = ["ViewSet", "GenericViewSet", "ModelViewSet"]
-
+__all__ = ["ViewSet", "GenericViewSet", "ReadOnlyModelViewSet", "ModelViewSet"]

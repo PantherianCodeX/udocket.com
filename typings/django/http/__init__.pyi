@@ -26,6 +26,16 @@ class HttpResponse:
     content: Any
     def __init__(self, content: Any = ..., status: int | None = ..., content_type: str | None = ..., headers: Mapping[str, str] | None = ...) -> None: ...
 
+class FileResponse(HttpResponse):
+    def __init__(
+        self,
+        file: Any,
+        as_attachment: bool = ...,
+        filename: str | None = ...,
+        content_type: str | None = ...,
+        headers: Mapping[str, str] | None = ...,
+    ) -> None: ...
+
 class JsonResponse(HttpResponse):
     pass
 
@@ -38,6 +48,7 @@ class Http404(Exception):
 __all__ = [
     "HttpRequest",
     "HttpResponse",
+    "FileResponse",
     "HttpResponseRedirect",
     "JsonResponse",
     "Http404",

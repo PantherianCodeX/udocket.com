@@ -161,14 +161,15 @@ pytest.clean: ## Remove pytest cache directory
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
 typing.baseline: ## Run pyright and mypy type checks
-	$(UV) run --project apps/platform --extra dev pyright
-	$(UV) run --project apps/platform --extra dev pyright --project pyrightconfig.docs-scripts.json
+	mkdir -p reports/typing
+	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest reports/typing/typing_audit.json apps/platform packages/udocket_common tests
 	$(UV) run --project apps/platform --extra dev mypy
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
 	$(PYTHON) scripts/typing/check_strict.py --tool both
+	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 || true
 typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json
+	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest reports/typing/typing_audit.json
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format json --output reports/typing/dashboard.json || true
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true

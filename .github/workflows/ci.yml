@@ -5,14 +5,23 @@ on:
   pull_request:
 
 jobs:
-  test:
+  lint-workflows:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: rhysd/actionlint@v1
+
+  test:
+    needs: [lint-workflows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
-          python-version: "3.12"
       - name: Sync dependencies
         run: uv sync --frozen --group dev --no-install-project --project apps/platform
       - name: Run migrations
@@ -52,16 +61,18 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
-          python-version: "3.12"
       - name: Sync dependencies
         run: uv sync --frozen --group dev --no-install-project --project apps/platform
       - name: Run typewiz audit
         run: |
           mkdir -p reports/typing
-          uv run --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json
+          uv run --project apps/platform typewiz audit --mode current --manifest reports/typing/typing_audit.json
       - name: Build dashboards
         if: always()
         run: |
@@ -90,10 +101,12 @@ jobs:
     needs: [test]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
-          python-version: "3.12"
       - name: Verify platform lockfile
         working-directory: apps/platform
         run: uv lock --check
@@ -116,13 +129,13 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           image: udocket-platform:ci
-          output-format: cyclonedx-json
+          format: cyclonedx-json
           output-file: sbom/udocket-platform.cyclonedx.json
       - name: Generate docs SBOM
         uses: anchore/sbom-action@v0
         with:
           image: udocket-docs:ci
-          output-format: cyclonedx-json
+          format: cyclonedx-json
           output-file: sbom/udocket-docs.cyclonedx.json
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4

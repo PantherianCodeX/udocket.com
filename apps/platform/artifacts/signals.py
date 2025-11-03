@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -8,7 +10,7 @@ from apps.platform.operations.guardian import enqueue_guardian_review
 
 
 @receiver(post_save, sender=CaseArtifact)
-def _queue_guardian_review(sender, instance: CaseArtifact, created: bool, **_: object) -> None:
+def queue_guardian_review(sender: Any, instance: CaseArtifact, created: bool, **_: object) -> None:
     if not created:
         return
     if not instance.path:
@@ -18,3 +20,6 @@ def _queue_guardian_review(sender, instance: CaseArtifact, created: bool, **_: o
     except Exception:
         # Signal handlers must not raise; logging handled downstream
         pass
+
+
+__all__ = ["queue_guardian_review"]

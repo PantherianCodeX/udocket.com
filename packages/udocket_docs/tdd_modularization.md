@@ -399,7 +399,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with: { python-version: '3.12' }
       - name: Install tools
         run: |
           pip install markdownlint-cli==0.39.0
@@ -458,7 +458,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with: { python-version: '3.12' }
       - name: Install tools
         run: |
           npm i -g @mermaid-js/mermaid-cli

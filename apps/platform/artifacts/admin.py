@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.db.models import QuerySet
+from django.http import HttpRequest
 from simple_history.admin import SimpleHistoryAdmin
 
 from apps.platform.admin import TenantScopedAdminMixin
@@ -20,5 +22,10 @@ class CaseArtifactAdmin(TenantScopedAdminMixin, SimpleHistoryAdmin):
         ("Metadata", {"fields": ("metadata", "created_at")}),
     )
 
-    def scope_queryset(self, request, queryset):  # type: ignore[override]
-        return scope_artifacts(queryset, request.user)
+    def scope_queryset(
+        self,
+        request: HttpRequest,
+        queryset: QuerySet[CaseArtifact],
+    ) -> QuerySet[CaseArtifact]:
+        user = getattr(request, "user", None)
+        return scope_artifacts(queryset, user)

@@ -4,5 +4,6 @@
 from .decorators import action
 from . import viewsets
 from . import serializers
+from . import mixins
 
-__all__ = ["action", "viewsets", "serializers"]
+__all__ = ["action", "viewsets", "serializers", "mixins"]
