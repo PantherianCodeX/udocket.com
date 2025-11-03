@@ -22,10 +22,11 @@ jobs:
         with:
           version: "0.5.*"
       - name: Sync dependencies
+        working-directory: apps/platform
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: sync dependencies" >> "$GITHUB_STEP_SUMMARY"
-          uv sync --frozen --group dev --no-install-project --project apps/platform
+          uv sync --frozen --group dev --no-install-project
           printf '%s\n' "Finished: sync dependencies" >> "$GITHUB_STEP_SUMMARY"
       - name: Run migrations
         env:
