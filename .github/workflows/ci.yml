@@ -124,7 +124,7 @@ jobs:
           set -euo pipefail
           printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
-          printf '%s\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "Typewiz ready folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
       - name: Upload typewiz artifacts

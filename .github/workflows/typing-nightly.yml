@@ -70,4 +70,22 @@ jobs:
             typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json --summary expanded >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
             printf '%s\n' "Typewiz audit completed." >> "$GITHUB_STEP_SUMMARY"
             printf '%s\n' "Building dashboards..." >> "$GITHUB_STEP_SUMMARY"
-            typewiz dashboard --manifest reports/typing/typin
+            typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+            typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+            printf '%s\n' "Dashboards built." >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
+            typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+            printf '%s\n' "Typewiz ready folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
+            typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          else
+            printf '%s\n' "typewiz binary not found; skipping nightly audit" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload typewiz artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typewiz-nightly-reports
+          path: |
+            reports/typing/typing_audit.json
+            reports/typing/dashboard.md
+            reports/typing/dashboard.html
