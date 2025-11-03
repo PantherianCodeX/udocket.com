@@ -58,17 +58,24 @@ jobs:
           pip install typewiz || echo "typewiz not on PyPI; ensure published or preinstalled"
       - name: Run typewiz audit
         run: |
+          set -euo pipefail
+          # ensure GITHUB_STEP_SUMMARY is defined before appending
+          : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY must be set}"
           mkdir -p reports/typing
           if command -v typewiz >/dev/null 2>&1; then
+            printf "Running Typewiz nightly" >> "$GITHUB_STEP_SUMMARY"
             typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json --summary expanded || true
+            printf "\nTypewiz audit completed.\n" >> "$GITHUB_STEP_SUMMARY"
+            printf "\nBuilding dashboards...\n" >> "$GITHUB_STEP_SUMMARY"
             typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
             typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
-            echo "Typewiz blocked folders (top 20):" >> $GITHUB_STEP_SUMMARY
-            typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> $GITHUB_STEP_SUMMARY || true
-            echo "\nTypewiz ready folders (top 20):" >> $GITHUB_STEP_SUMMARY
-            typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> $GITHUB_STEP_SUMMARY || true
+            printf "\nDashboards built.\n" >> "$GITHUB_STEP_SUMMARY"
+            printf "Typewiz blocked folders (top 20):" >> $GITHUB_STEP_SUMMARY
+            typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" || true
+            printf "\nTypewiz ready folders (top 20):" >> $GITHUB_STEP_SUMMARY
+            typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" || true
           else
-            echo "typewiz binary not found; skipping nightly audit" >> $GITHUB_STEP_SUMMARY
+            printf "typewiz binary not found; skipping nightly audit" >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload typewiz artifacts
         if: always()

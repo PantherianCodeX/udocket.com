@@ -25,30 +25,52 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y
+        run: 
+          printf "Installing uv...\n" >> "$GITHUB_STEP_SUMMARY"
+          curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y
+          printf "uv installed.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Install system dependencies
         run: |
+          printf "Installing system dependencies...\n" >> "$GITHUB_STEP_SUMMARY"
           sudo apt-get update
           sudo apt-get install -y chromium pandoc
+          printf "System dependencies installed.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Install docs dependencies
         working-directory: packages/udocket_docs
         run: |
+          printf "Installing documentation dependencies...\n" >> "$GITHUB_STEP_SUMMARY"
           uv sync --frozen --extra dev
           npm ci
+          printf "Documentation dependencies installed.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Add local node binaries to PATH
-        run: echo "$(pwd)/packages/udocket_docs/node_modules/.bin" >> $GITHUB_PATH
+        run:
+          printf "Adding local node binaries to PATH...\n" >> "$GITHUB_STEP_SUMMARY"
+          printf "$(pwd)/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
+          printf "Local node binaries added to PATH.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Build site
         working-directory: packages/udocket_docs
-        run: uv run mkdocs build --config-file mkdocs.yml --site-dir site --clean
+        run: 
+          printf "Building documentation site...\n" >> "$GITHUB_STEP_SUMMARY"
+          uv run mkdocs build --config-file mkdocs.yml --site-dir site --clean
+          printf "Documentation site built.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Render Mermaid (all)
         working-directory: packages/udocket_docs
-        run: bash tools/render_mermaid.sh --all --verbose
+        run: 
+          printf "Rendering Mermaid diagrams...\n" >> "$GITHUB_STEP_SUMMARY"
+          bash tools/render_mermaid.sh --all --verbose
+          printf "Mermaid diagrams rendered.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Build PDFs (TDD & PRD)
         working-directory: packages/udocket_docs
-        run: uv run python tools/pdf_build.py --skip-build
+        run: 
+          printf "Building PDFs...\n" >> "$GITHUB_STEP_SUMMARY"
+          uv run python tools/pdf_build.py --skip-build
+          printf "PDFs built.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Checksums & manifest
         working-directory: packages/udocket_docs
-        run: bash tools/hash_and_manifest.sh
+        run: 
+          printf "Generating hashes and manifest...\n" >> "$GITHUB_STEP_SUMMARY"
+          bash tools/hash_and_manifest.sh
+          printf "Hashes and manifest generated.\n" >> "$GITHUB_STEP_SUMMARY"
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2

@@ -83,10 +83,14 @@ jobs:
       - name: Readiness summary
         if: always()
         run: |
-          echo "Typewiz blocked folders (top 20):" >> $GITHUB_STEP_SUMMARY
-          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> $GITHUB_STEP_SUMMARY || true
-          echo "\nTypewiz ready folders (top 20):" >> $GITHUB_STEP_SUMMARY
-          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> $GITHUB_STEP_SUMMARY || true
+          set -euo pipefail
+          # ensure GITHUB_STEP_SUMMARY is defined before appending
+          : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY must be set}"
+          # Append a header and the command output (quote the summary path)
+          printf "Typewiz blocked folders (top 20):\n" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" || true
+          printf "\nTypewiz ready folders (top 20):\n" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" || true
       - name: Upload typewiz artifacts
         if: always()
         uses: actions/upload-artifact@v4
