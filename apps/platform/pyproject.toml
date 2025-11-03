@@ -43,6 +43,7 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["*" ]
+exclude = ["packages.udocket_common"]
 
 [dependency-groups]
 dev = [

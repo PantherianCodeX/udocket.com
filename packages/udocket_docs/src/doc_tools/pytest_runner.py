@@ -4,6 +4,7 @@ import argparse
 import os
 import shlex
 import sys
+from pathlib import Path
 from typing import Iterable, List
 
 import pytest
@@ -48,6 +49,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     parsed = parse_args(argv)
     env_value = os.environ.get(ENV_VAR, "")
     pytest_args = build_pytest_args(env_value, parsed.pytest_args)
+    config_path = str(Path(__file__).resolve().parents[2] / 'pytest.ini')
+    pytest_args = ['-c', config_path, *pytest_args]
     if parsed.coverage:
         coverage_flags = [f"--cov={module}" for module in COVERAGE_MODULES]
         pytest_args = [*coverage_flags, "--cov-report=term-missing", *pytest_args]
