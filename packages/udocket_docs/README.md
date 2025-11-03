@@ -7,13 +7,13 @@ This package hosts the documentation toolchain for the uDocket platform. It incl
 - WeasyPrint assets for PDF rendering that mirror the MkDocs site styling.
 - Theme overrides (CSS/JS) live in `docs/assets/`; generated artifacts are written under `packages/udocket_docs/build/` and copied into the site via the `include-build-assets` plugin.
 
-Install dependencies with [`uv`](https://github.com/astral-sh/uv):
+Install dependencies with [`uv`](https://github.com/astral-sh/uv) (the Make targets call these under the hood):
 
 ```bash
 uv sync --frozen --extra dev
 ```
 
-Build the site locally:
+Build the site locally via the Makefile (preferred so the correct config file is passed through) or run MkDocs directly:
 
 ```bash
 uv run --package mkdocs mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --watch-theme
@@ -40,9 +40,9 @@ uv run python tools/pdf_build.py
 
 ## Environment
 
-- Copy `.env.example` to `.env` (already committed for the docs container) to configure repo roots. The defaults assume the repository is mounted at `/udocket` (matching the docs toolbox container).
+- Copy `.env.example` to `.env` (the docs container already ships one). The docs settings loader reads `UDOCKET_DOCS_ENV_FILE`, then `packages/udocket_docs/.env`, and finally the repository `.env`, mirroring the platform and core packages.
 - `UDOCKET_REPO_ROOT` controls where sources are loaded from. Override it when running outside the container, e.g. `UDOCKET_REPO_ROOT=/path/to/checkout`.
-- `UDOCKET_DOCS_ROOT`, `UDOCKET_DOCS_CONFIG_ROOT`, `UDOCKET_DOCS_BUILD_ROOT`, and `UDOCKET_DOC_BUILDS_ROOT` fall back to `UDOCKET_REPO_ROOT` if unset.
+- `UDOCKET_DOCS_ROOT`, `UDOCKET_DOCS_CONFIG_ROOT`, `UDOCKET_DOCS_BUILD_ROOT`, and `UDOCKET_DOC_BUILDS_ROOT` fall back to the detected repo root when unspecified, so most local workflows work without extra configuration.
 
 ## MkDocs plugins
 

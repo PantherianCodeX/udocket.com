@@ -18,11 +18,10 @@ from packages.udocket_common.env import load_env_defaults
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("APP_ROOT", str(REPO_ROOT))
 DEFAULT_APP_ROOT = Path(os.environ.get("APP_ROOT", str(REPO_ROOT))).expanduser()
 DEFAULT_STORAGE_ROOT = DEFAULT_APP_ROOT / "storage"
 FALLBACK_STORAGE_ROOT = REPO_ROOT / "storage"
-
-from packages.udocket_common.env import load_env_defaults
 
 load_env_defaults(
     env_var="UDOCKET_ENV_FILE",

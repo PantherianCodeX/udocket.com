@@ -42,6 +42,8 @@ LOAD ?= 0
 REGISTRY ?= ghcr.io/udocket
 IMAGES ?= platform docs keycloak
 SERVICES ?= platform platform_worker platform_beat redis postgres postgres-keycloak keycloak
+SERVICE ?= platform
+CMD ?=
 DEV_SERVICE := platform-dev
 DOCS_SERVICE := docs
 PLATFORM_IMAGE := udocket-platform
@@ -121,7 +123,7 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   typewiz.audit typewiz.dashboard typewiz.readiness typewiz.clean \
   clean.all clean.mypy clean.pyright clean.pycache clean.coverage \
   images.build images.load images.push images.cache.warm \
-  stack.up stack.down stack.build stack.restart stack.logs stack.ps stack.smoke \
+  stack.up stack.down stack.build stack.restart stack.logs stack.ps stack.smoke stack.exec \
   stack.prod.logs stack.prod.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
   doctools.build doctools.up doctools.down doctools.shell \
@@ -237,6 +239,13 @@ stack.ps: ## Show container status for this project
 stack.smoke: ## Quick sanity check that core services resolve and are running
 	$(DEV_COMPOSE) config --services
 	$(DEV_COMPOSE) ps
+
+stack.exec: ## Execute a command inside a dev service (SERVICE=platform CMD="...")
+	@if [ "$(strip $(CMD))" = "" ]; then \
+	  echo "Set CMD=\"...\" to run inside the container."; \
+	  exit 1; \
+	fi
+	$(DEV_COMPOSE) exec $(SERVICE) bash -lc "$(call escape_dquotes,$(strip $(CMD)))"
 
 ##@ Platform • Production
 stack.prod.up: ## Start production stack with the production overlay

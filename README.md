@@ -10,7 +10,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    - Postgres defaults are provided; start the bundled database with `PROJECT_NAME=udocket-dev make stack.up SERVICES=postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
    - `APP_ROOT` defaults to `/udocket` inside containers; update it (and derived paths such as `STORAGE_ROOT`) when running directly on your host.
-   - Runtime configuration checks run on startup. For exceptional workflows (e.g., one-off `manage.py collectstatic` in CI), set `UDOCKET_SKIP_RUNTIME_CHECKS=1` to bypass them.
+   - Runtime configuration checks run on startup. Use `UDOCKET_SKIP_RUNTIME_CHECKS=1` only for short-lived maintenance commands (e.g., a one-off `manage.py collectstatic` in CI); the core stack should run with validation enabled.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
 4) Sync the platform dependencies (dev extras included) without installing the project itself:
 
