@@ -19,6 +19,7 @@ jobs:
         uses: astral-sh/setup-uv@v2
       - name: Install system dependencies
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y chromium
       - name: Install Node deps
@@ -28,7 +29,9 @@ jobs:
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
         run: npm ci
       - name: Add local node binaries to PATH
-        run: echo "$(pwd)/packages/udocket_docs/node_modules/.bin" >> $GITHUB_PATH
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$PWD/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Render Mermaid diagrams
         working-directory: packages/udocket_docs
         run: bash tools/render_mermaid.sh --all
@@ -43,16 +46,18 @@ jobs:
       - uses: astral-sh/setup-uv@v2
       - name: Install system dependencies
         run: |
-          printf "Installing system dependencies...\n" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          printf '%s\n' "Installing system dependencies..." >> "$GITHUB_STEP_SUMMARY"
           sudo apt-get update
           sudo apt-get install -y chromium
-          printf "System dependencies installed.\n" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "System dependencies installed." >> "$GITHUB_STEP_SUMMARY"
       - name: Install documentation Python tooling
         working-directory: packages/udocket_docs
-        run: 
-          printf "Installing documentation dependencies...\n" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing documentation dependencies..." >> "$GITHUB_STEP_SUMMARY"
           uv sync --frozen --extra dev
-          printf "Documentation dependencies installed.\n" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Documentation dependencies installed." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -62,29 +67,32 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: "1"
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
-        run:
-          printf "Installing Node dependencies...\n" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing Node dependencies..." >> "$GITHUB_STEP_SUMMARY"
           npm ci
-          printf "Node dependencies installed.\n" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Node dependencies installed." >> "$GITHUB_STEP_SUMMARY"
       - name: Add local node binaries to PATH
-        run: 
-          printf "Adding local Node binaries to PATH...\n" >> "$GITHUB_STEP_SUMMARY"
-          printf "$(pwd)/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
-          printf "Local Node binaries added to PATH.\n" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Adding local Node binaries to PATH..." >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$PWD/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
+          printf '%s\n' "Local Node binaries added to PATH." >> "$GITHUB_STEP_SUMMARY"
       - name: Install Vale CLI
         env:
           VALE_VERSION: 3.7.1
         run: |
-          printf "Installing Vale CLI version %s...\n" "$VALE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          printf 'Installing Vale CLI version %s...\n' "$VALE_VERSION" >> "$GITHUB_STEP_SUMMARY"
           curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o vale.tar.gz
           tar -xzf vale.tar.gz vale
           sudo mv vale /usr/local/bin/vale
           rm -f vale.tar.gz
-          printf "Vale CLI installed.\n" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Vale CLI installed." >> "$GITHUB_STEP_SUMMARY"
       - name: Run documentation lint suite
         working-directory: packages/udocket_docs
-        run: 
-          printf "Running documentation lint suite...\n" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Running documentation lint suite..." >> "$GITHUB_STEP_SUMMARY"
           uv run python -m docs.tools.manage_docs --lint
-          printf "Documentation lint suite completed.\n" >> "$GITHUB_STEP_SUMMARY"
-
+          printf '%s\n' "Documentation lint suite completed." >> "$GITHUB_STEP_SUMMARY"

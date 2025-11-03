@@ -22,22 +22,42 @@ jobs:
         with:
           version: "0.5.*"
       - name: Sync dependencies
-        run: uv sync --frozen --group dev --no-install-project --project apps/platform
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: sync dependencies" >> "$GITHUB_STEP_SUMMARY"
+          uv sync --frozen --group dev --no-install-project --project apps/platform
+          printf '%s\n' "Finished: sync dependencies" >> "$GITHUB_STEP_SUMMARY"
       - name: Run migrations
         env:
           DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
           DATABASE_URL: sqlite:///./udocket_ci.db
-        run: uv run --project apps/platform python manage.py migrate --noinput
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: run migrations" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform python manage.py migrate --noinput
+          printf '%s\n' "Finished: run migrations" >> "$GITHUB_STEP_SUMMARY"
       - name: Type checks (pyright baseline)
-        run: uv run --project apps/platform pyright
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform pyright
+          printf '%s\n' "Finished: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Type checks (mypy baseline)
         env:
           MYPY_CACHE_DIR: .mypy_cache
-        run: uv run --project apps/platform mypy
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform mypy
+          printf '%s\n' "Finished: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce strict pragma presence
-        run: uv run --project apps/platform python scripts/typing/ci_enforce_strict.py
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform python scripts/typing/ci_enforce_strict.py
+          printf '%s\n' "Finished: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run tests
         env:
@@ -45,13 +65,24 @@ jobs:
           DATABASE_URL: sqlite:///./udocket_ci.db
           CELERY_TASK_ALWAYS_EAGER: '1'
           PLATFORM_DEV_OPEN: '1'
-        run: uv run --project apps/platform pytest -q
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: pytest" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform pytest -q
+          printf '%s\n' "Finished: pytest" >> "$GITHUB_STEP_SUMMARY"
       - name: Strict manifest check
-        run: uv run --project apps/platform python scripts/typing/check_strict.py
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: strict manifest check" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform python scripts/typing/check_strict.py
+          printf '%s\n' "Finished: strict manifest check" >> "$GITHUB_STEP_SUMMARY"
       - name: Docs toolbox tests (coverage enforced)
         run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: docs toolbox tests (coverage)" >> "$GITHUB_STEP_SUMMARY"
           uv sync --frozen --extra dev --project packages/udocket_docs
           uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage
+          printf '%s\n' "Finished: docs toolbox tests (coverage)" >> "$GITHUB_STEP_SUMMARY"
 
   typewiz-audit:
     name: Typewiz Audit
@@ -67,27 +98,35 @@ jobs:
         with:
           version: "0.5.*"
       - name: Sync dependencies
-        run: uv sync --frozen --group dev --no-install-project --project apps/platform
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: sync dependencies (typewiz-audit)" >> "$GITHUB_STEP_SUMMARY"
+          uv sync --frozen --group dev --no-install-project --project apps/platform
+          printf '%s\n' "Finished: sync dependencies (typewiz-audit)" >> "$GITHUB_STEP_SUMMARY"
       - name: Run typewiz audit
         run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
           mkdir -p reports/typing
           uv run --project apps/platform typewiz audit --mode current --manifest reports/typing/typing_audit.json
+          printf '%s\n' "Finished: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
       - name: Build dashboards
         if: always()
         run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: build typewiz dashboards" >> "$GITHUB_STEP_SUMMARY"
           uv run --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
           uv run --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
+          printf '%s\n' "Finished: build typewiz dashboards" >> "$GITHUB_STEP_SUMMARY"
       - name: Readiness summary
         if: always()
         run: |
           set -euo pipefail
-          # ensure GITHUB_STEP_SUMMARY is defined before appending
-          : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY must be set}"
-          # Append a header and the command output (quote the summary path)
-          printf "Typewiz blocked folders (top 20):\n" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" || true
-          printf "\nTypewiz ready folders (top 20):\n" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" || true
+          printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          printf '%s\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Typewiz ready folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
       - name: Upload typewiz artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -112,22 +151,45 @@ jobs:
           version: "0.5.*"
       - name: Verify platform lockfile
         working-directory: apps/platform
-        run: uv lock --check
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: verify platform lockfile" >> "$GITHUB_STEP_SUMMARY"
+          uv lock --check
+          printf '%s\n' "Finished: verify platform lockfile" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify docs lockfile
         working-directory: packages/udocket_docs
-        run: uv lock --check
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: verify docs lockfile" >> "$GITHUB_STEP_SUMMARY"
+          uv lock --check
+          printf '%s\n' "Finished: verify docs lockfile" >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure lockfiles committed
-        run: git diff --exit-code
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: ensure lockfiles committed" >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code
+          printf '%s\n' "Finished: ensure lockfiles committed" >> "$GITHUB_STEP_SUMMARY"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
       - name: Prepare sbom directory
-        run: mkdir -p sbom
+        run: |
+          printf '%s\n' "Starting: prepare sbom directory" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p sbom
+          printf '%s\n' "Finished: prepare sbom directory" >> "$GITHUB_STEP_SUMMARY"
       - name: Build platform image
-        run: docker buildx build --file infra/docker/Dockerfile.platform --target app --tag udocket-platform:ci --load .
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: build platform image" >> "$GITHUB_STEP_SUMMARY"
+          docker buildx build --file infra/docker/Dockerfile.platform --target app --tag udocket-platform:ci --load .
+          printf '%s\n' "Finished: build platform image" >> "$GITHUB_STEP_SUMMARY"
       - name: Build docs image
-        run: docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load packages/udocket_docs
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: build docs image" >> "$GITHUB_STEP_SUMMARY"
+          docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load packages/udocket_docs
+          printf '%s\n' "Finished: build docs image" >> "$GITHUB_STEP_SUMMARY"
       - name: Generate platform SBOM
         uses: anchore/sbom-action@v0
         with:
@@ -153,4 +215,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compose smoke test
-        run: PROJECT_NAME=ci make stack.smoke
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Starting: stack smoke" >> "$GITHUB_STEP_SUMMARY"
+          PROJECT_NAME=ci make stack.smoke
+          printf '%s\n' "Finished: stack smoke" >> "$GITHUB_STEP_SUMMARY"
