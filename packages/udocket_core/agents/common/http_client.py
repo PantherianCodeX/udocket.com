@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Protocol, cast
+from typing import Iterable, Mapping, Protocol, cast
 
 import requests
 from requests.adapters import HTTPAdapter

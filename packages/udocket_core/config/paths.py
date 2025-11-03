@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from config.paths import resolve_config_dir
 from .settings import CoreSettings, core_settings

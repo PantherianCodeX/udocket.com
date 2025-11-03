@@ -17,5 +17,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     return manage_main(args)
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

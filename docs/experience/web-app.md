@@ -320,7 +320,7 @@ flowchart LR
 ```
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/experience/web-app/diagrams/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
+  <img class="diagram" src="../build/diagrams/experience/web-app/ui-interaction-topology-v1.svg" alt="Web app interaction topology">
   <figcaption style="font-size: 0.9em; color: #555;">Web app staff and portal interaction topology</figcaption>
 </figure>
 

@@ -5,8 +5,10 @@ from __future__ import annotations
 """String-related helpers shared across packages."""
 
 import re
+from typing import Iterable
 
-__all__ = ["slugify"]
+__all__ = ["slugify", "unique_title"]
+_UNIQUE_SUFFIX_RE = re.compile(r"(?:\(|-)(\d+)\)?$")
 
 
 def slugify(text: str, *, separator: str = "-", allowed: str = "a-z0-9") -> str:
@@ -23,3 +25,33 @@ def slugify(text: str, *, separator: str = "-", allowed: str = "a-z0-9") -> str:
         slug = re.sub(fr"{re.escape(separator)}+", separator, slug)
         return slug.strip(separator)
     return slug.strip()
+
+
+def unique_title(base: str, existing: Iterable[str]) -> str:
+    """Return a title unique within *existing* by appending a numeric suffix.
+
+    Titles are compared case-sensitively. Existing values ending with ``-n`` or
+    legacy ``(n)`` suffixes are honored when computing the next available index.
+    """
+
+    base_clean = base.strip() or "Untitled"
+    candidates = list(existing)
+
+    max_idx = 0
+    for title in candidates:
+        if title == base_clean:
+            max_idx = max(max_idx, 0)
+            continue
+        if not title.startswith(base_clean):
+            continue
+        match = _UNIQUE_SUFFIX_RE.search(title)
+        if not match:
+            continue
+        try:
+            idx = int(match.group(1))
+        except Exception:
+            continue
+        if idx > max_idx:
+            max_idx = idx
+
+    return f"{base_clean}-{max_idx + 1}"

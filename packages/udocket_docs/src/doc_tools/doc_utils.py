@@ -11,8 +11,7 @@ from typing import Any, Iterable, Mapping, Sequence, Tuple, cast
 
 import yaml
 
-from packages.udocket_common.text import slugify
-
+from packages.udocket_common.text import slugify as _slugify
 TITLE_CLEAN_REPLACEMENTS = [
     "Technical Design",
     "Technical Architecture",
@@ -42,6 +41,12 @@ DOCUMENT_CONTROL_ALIAS_KEYS = {
 }
 
 AUTO_GENERATED_PREFIX = "AUTO-GENERATED"
+
+
+def slugify(value: str) -> str:
+    """Return a URL-safe slug preserving ASCII characters."""
+
+    return _slugify(value)
 
 
 def begin_auto_generated_marker(label: str) -> str:

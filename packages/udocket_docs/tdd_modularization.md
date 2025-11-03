@@ -171,15 +171,15 @@ Owner doc example (automation/lp-engine.md):
 graph TD; A[Policy Bundle]-->B[Compile Context]; B-->C[OPA Discovery];
 ```
 
-![Policy Context Flow](../../build/mermaid/automation/lp-engine/diagrams/policy-context-flow.svg)
+![Policy Context Flow](../../build/diagrams/automation/lp-engine/policy-context-flow.svg)
 
 Consumer docs (reuse by reference; no copies):
 
 * Use the built SVG and link to the owner section:
-  * `../../build/mermaid/automation/lp-engine/diagrams/policy-context-flow.svg`
+  * `../../build/diagrams/automation/lp-engine/policy-context-flow.svg`
   * Source: automation/lp-engine.md §X.Y
 
-Path rule: if a source lives at `docs/<REL>.mmd`, the built SVG is at `packages/udocket_docs/build/diagrams/<REL>.svg`. Embed using `/build/diagrams/<REL>.svg` so links stay valid from any document depth.
+Path rule: if a source lives at `docs/<REL>/diagrams/<NAME>.mmd`, the built SVG is at `packages/udocket_docs/build/diagrams/<REL>/<NAME>.svg`. Embed using `/build/diagrams/<REL>/<NAME>.svg` so links stay valid from any document depth.
 
 Optional metadata (first lines in `.mmd`):
 
@@ -261,7 +261,7 @@ nav:
   - ADR: adr/
 ```
 
-**Mermaid**: works via `pymdownx.superfences`. Keep `.mmd` sources under each document’s local `diagrams/` (e.g., `overview/tdd/diagrams/`, `services/<svc>/diagrams/`). Embed using fenced code blocks with `/build/mermaid/<REL>.svg` fallbacks so both site and PDF builds pick them up.
+**Mermaid**: works via `pymdownx.superfences`. Keep `.mmd` sources under each document’s local `diagrams/` (e.g., `overview/tdd/diagrams/`, `services/<svc>/diagrams/`). Embed using fenced code blocks with `/build/diagrams/<REL>.svg` fallbacks so both site and PDF builds pick them up.
 
 **PDF** options:
 
@@ -276,7 +276,7 @@ nav:
 > %% site render
 > graph TD; A-->B;
 > ```
-> ![Artifact Lifecycle](../../build/mermaid/overview/tdd/diagrams/artifact-overview.svg)
+> ![Artifact Lifecycle](../../build/diagrams/overview/tdd/artifact-overview.svg)
 > ````
 >
 > The site shows the live Mermaid; Pandoc PDF uses the pre-rendered image (via `resource-path`).
@@ -630,7 +630,7 @@ jobs:
     * Convert prose API descriptions to clear lists/tables where possible.
 3. **Move Existing Diagrams**
     * Relocate component-specific `.mmd` files from `overview/tdd/diagrams/` (or other shared locations) into the doc’s local `diagrams/` folder.
-    * Update Mermaid embeds and PDF fallbacks to reference `../../build/mermaid/<owner>/diagrams/<name>.svg`.
+    * Update Mermaid embeds and PDF fallbacks to reference `../../build/diagrams/<owner>/<name>.svg`.
 4. **LangGraph Agents**
     * Create `langgraph-agents.md`; describe how agents orchestrate LLMs, how they coordinate with LLM Registry or Workers, etc.
 5. **Ensure Nothing is Lost**

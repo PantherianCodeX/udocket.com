@@ -55,6 +55,10 @@ def test_pytest_runner_supports_coverage_flag(monkeypatch: pytest.MonkeyPatch) -
     rc = pytest_runner.main(["--coverage", "extra_test"])
 
     assert rc == 0
-    coverage_prefix = [*(f"--cov={module}" for module in pytest_runner.COVERAGE_MODULES), "--cov-report=term-missing"]
+    coverage_prefix = [
+        *(f"--cov={module}" for module in pytest_runner.COVERAGE_MODULES),
+        "--cov-report=term-missing",
+        f"--cov-fail-under={pytest_runner.DEFAULT_COVERAGE_THRESHOLD}",
+    ]
     expected = [*coverage_prefix, "-c", config_path, "extra_test"]
     assert captured == [expected]

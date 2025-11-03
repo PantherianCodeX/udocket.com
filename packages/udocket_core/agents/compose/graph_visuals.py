@@ -8,17 +8,11 @@ import math
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, cast
 
-from PIL import Image, ImageDraw, ImageFont  # type: ignore[import]
+from PIL import Image, ImageDraw, ImageFont
 
-from packages.udocket_common.json_utils import (
-    JSONObject,
-    JSONValue,
-    coerce_json_object,
-    coerce_object_list,
-    coerce_str,
-)
+from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_object_list, coerce_str
 
 
 @dataclass(frozen=True)
@@ -106,7 +100,8 @@ def _parse_nodes(value: JSONValue) -> list[GraphNode]:
         if identifier in seen:
             continue
         label = coerce_str(entry.get("name")) or coerce_str(entry.get("label")) or identifier
-        kind = coerce_str(entry.get("type")).upper() if coerce_str(entry.get("type")) else ""
+        raw_kind = coerce_str(entry.get("type"))
+        kind = raw_kind.upper() if raw_kind else ""
         parsed.append(GraphNode(key=identifier, label=label, kind=kind))
         seen.add(identifier)
     return parsed
@@ -321,6 +316,7 @@ def _draw_nodes(
     nodes: Sequence[GraphNode],
     layout: Mapping[str, tuple[float, float]],
 ) -> None:
+    font: object
     try:
         font = ImageFont.truetype("DejaVuSans.ttf", 16)
     except OSError:
@@ -346,12 +342,14 @@ def _draw_nodes(
 def _draw_caption(draw: ImageDraw.ImageDraw, caption: str, width: int, height: int) -> None:
     if not caption:
         return
+    font: object
     try:
         font = ImageFont.truetype("DejaVuSans.ttf", 18)
     except OSError:
         font = ImageFont.load_default()
     text_width, text_height = _measure_text(font, caption)
-    draw.rectangle([(0, height - 48), (width, height)], fill=(255, 255, 255, 230))
+    rect = [(0.0, float(height - 48)), (float(width), float(height))]
+    draw.rectangle(rect, fill=(255, 255, 255, 230))
     text_y = height - 24 - text_height / 2
     draw.text(
         ((width - text_width) / 2, text_y),
@@ -388,6 +386,7 @@ def _empty_png(width: int, height: int) -> bytes:
     image = Image.new("RGB", (width, height), color=(248, 250, 252))
     draw = ImageDraw.Draw(image)
     message = "No relationship data available"
+    font: object
     try:
         font = ImageFont.truetype("DejaVuSans.ttf", 20)
     except OSError:
@@ -400,10 +399,18 @@ def _empty_png(width: int, height: int) -> bytes:
 
 
 __all__ = ["GraphVisualArtifacts", "build_graph_visual_artifacts"]
-def _measure_text(font: "ImageFont.ImageFont", text: str) -> tuple[float, float]:
-    try:
-        bbox = font.getbbox(text)
-        return float(bbox[2] - bbox[0]), float(bbox[3] - bbox[1])
-    except AttributeError:
-        width, height = font.getsize(text)  # type: ignore[attr-defined]
+
+
+def _measure_text(font: object, text: str) -> tuple[float, float]:
+    bbox_callable = getattr(font, "getbbox", None)
+    if callable(bbox_callable):
+        try:
+            left, top, right, bottom = cast(tuple[float, float, float, float], bbox_callable(text))
+            return float(right - left), float(bottom - top)
+        except Exception:
+            pass
+    size_callable = getattr(font, "getsize", None)
+    if callable(size_callable):
+        width, height = cast(tuple[int, int], size_callable(text))
         return float(width), float(height)
+    raise AttributeError("Font implementation does not expose getbbox/getsize")

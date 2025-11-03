@@ -186,11 +186,11 @@ def _iso8601_to_seconds(value: str) -> float:
         match = _ISO_DURATION_PATTERN.fullmatch(trimmed)
         if match is None:
             raise ValueError(f"Invalid duration: {value}")
-        days = float(match.group("days") or 0)
-        hours = float(match.group("hours") or 0)
-        minutes = float(match.group("minutes") or 0)
-        seconds = float(match.group("seconds") or 0)
-        return days * 86400 + hours * 3600 + minutes * 60 + seconds
+        days_val = float(match.group("days") or 0)
+        hours_val = float(match.group("hours") or 0)
+        minutes_val = float(match.group("minutes") or 0)
+        seconds_val = float(match.group("seconds") or 0)
+        return days_val * 86400 + hours_val * 3600 + minutes_val * 60 + seconds_val
     raise ValueError(f"Invalid duration: {value}")
 
 

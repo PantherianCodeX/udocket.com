@@ -864,20 +864,24 @@ class AnalyzeAgent:
             client = runtime.client
             if client is None:
                 continue
+
+            def _raise_error(message: str, *, _stage: str = stage_key, _runtime: StageRuntime = runtime) -> Exception:
+                return RuntimeError(
+                    _stage_error_message(
+                        _stage,
+                        provider=_runtime.provider,
+                        model=_runtime.model,
+                        reason=message,
+                    )
+                )
+
             ensure_llm_client_health(
                 client,
                 stage=stage_key,
                 provider=runtime.provider,
                 model=runtime.model,
                 logger=self.logger,
-                raise_error=lambda message, stage_key=stage_key, runtime=runtime: RuntimeError(
-                    _stage_error_message(
-                        stage_key,
-                        provider=runtime.provider,
-                        model=runtime.model,
-                        reason=message,
-                    )
-                ),
+                raise_error=_raise_error,
             )
 
         pipeline = AnalyzePipeline(

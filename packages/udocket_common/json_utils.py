@@ -108,7 +108,7 @@ def normalize_mapping_optional(
 
     if not isinstance(value, Mapping):
         return {}
-    mapping_value = cast(Mapping[Any, Any], value)
+    mapping_value = cast(Mapping[str, Any], value)
     if transform is None:
         normalized = normalize_mapping(mapping_value)
     else:

@@ -5,7 +5,7 @@ from __future__ import annotations
 # pyright: strict
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, cast
 
 
 def _safe_int(value: object) -> int | None:
@@ -33,7 +33,8 @@ def _safe_str(value: object) -> str | None:
 
 def _sequence_size(value: object) -> int:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return len(value)
+        sequence_value = cast(Sequence[object], value)
+        return len(sequence_value)
     return 0
 
 

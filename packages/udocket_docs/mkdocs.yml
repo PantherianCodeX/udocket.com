@@ -75,6 +75,7 @@ nav:
   - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
   - SLO Index: overview/tdd/appendices/slo_index.md
   - Diagrams: overview/tdd/appendices/diagrams.md
+  - Core Packaging Strategy: architecture/udocket-core-packaging.md
 - Experience:
   - Web App: experience/web-app.md
 - Platform Control Plane:

@@ -222,7 +222,32 @@ def load_llm_settings(
             description=description,
         )
 
-    return LLMSettings(providers=provider_map, assignments=assignment_map)
+    settings = LLMSettings(providers=provider_map, assignments=assignment_map)
+    validate_llm_settings(settings)
+    return settings
+
+
+def validate_llm_settings(settings: LLMSettings) -> None:
+    """Validate that LLM providers and assignments reference consistent data."""
+
+    for provider_name, provider in settings.providers.items():
+        if not provider.models:
+            raise LLMConfigError(f"Provider '{provider_name}' has no models configured")
+    for stage_key, assignment in settings.assignments.items():
+        if not assignment.providers:
+            raise LLMConfigError(f"Stage '{stage_key}' lists no providers")
+        if not assignment.model:
+            raise LLMConfigError(f"Stage '{stage_key}' must define a model")
+        for provider_name in assignment.providers:
+            provider_obj = settings.providers.get(provider_name)
+            if provider_obj is None:
+                raise LLMConfigError(
+                    f"Stage '{stage_key}' references unknown provider '{provider_name}'"
+                )
+            if assignment.model not in provider_obj.models:
+                raise LLMConfigError(
+                    f"Stage '{stage_key}' references unknown model '{assignment.model}' for provider '{provider_name}'"
+                )
 
 
 __all__ = [
@@ -231,5 +256,6 @@ __all__ = [
     "LLMProvider",
     "LLMStageAssignment",
     "LLMSettings",
+    "validate_llm_settings",
     "load_llm_settings",
 ]

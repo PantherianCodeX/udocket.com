@@ -55,7 +55,7 @@ Authoring guidelines:
 
 ## Rendering Mermaid diagrams
 
-Source `.mmd` files live under each owner doc’s local `diagrams/` folder. Cross‑cutting TDD diagrams live under `docs/overview/tdd/diagrams/`. To render them locally (outputs to `packages/udocket_docs/build/diagrams/` and makes them available to MkDocs via the build-assets plugin):
+Source `.mmd` files live beside their owning documents inside a local `diagrams/` directory (for example, `docs/platform/settings/diagrams/settings-activation-v1.mmd`). Cross‑cutting areas such as the TDD keep their diagrams under the same document subtree (for example, `docs/overview/tdd/diagrams/`). To render them locally (outputs to `packages/udocket_docs/build/diagrams/` and makes them available to MkDocs via the build-assets plugin):
 
 ```bash
 cd packages/udocket_docs

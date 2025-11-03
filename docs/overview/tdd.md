@@ -323,7 +323,7 @@ ______________________________________________________________________
 5. Portal invalidation notifies clients of the new deliverable and blocks any revoked link; downstream analytics and audit trails attach Guardian judgment IDs, manifests, and settings hashes (§11.2.1, App.A.2).
 
 <figure class="full-width-diagram">
-  <img class="diagram" data-scale="0.5" src="../build/diagrams/platform/guardian/diagrams/upload-guardian-approve-v1.svg" alt="Upload → Guardian → Approve happy path">
+  <img class="diagram" data-scale="0.5" src="../build/diagrams/platform/guardian/upload-guardian-approve-v1.svg" alt="Upload → Guardian → Approve happy path">
   <figcaption style="font-size: 0.9em; color: #555;">Upload → Guardian → Approve happy path</figcaption>
 </figure>
 
@@ -338,7 +338,7 @@ ______________________________________________________________________
 - Visual: see `App.A` for the full context diagram and sequence overlays.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/system-context-v1.svg" alt="System context overview">
+  <img class="diagram" src="../build/diagrams/overview/tdd/system-context-v1.svg" alt="System context overview">
   <figcaption style="font-size: 0.9em; color: #555;">System context overview</figcaption>
 </figure>
 
@@ -370,7 +370,7 @@ ______________________________________________________________________
 - Expansion posture: RM catalogs enumerate global regions (NA/EU/APAC). New jurisdictions enable by adding allowlist entries plus waiver or DPA references; App.O ledger tracks approvals. Synthetic tenant “EU-REFERENCE” exercises EU-only paths quarterly to confirm Azure EU endpoints, storage buckets, vector shards, and TSA integrations honor EU residency before production onboarding.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/automation/lp-engine/diagrams/residency-policy-enforcement-v1.svg" alt="Residency policy enforcement sequence">
+  <img class="diagram" src="../build/diagrams/automation/lp-engine/residency-policy-enforcement-v1.svg" alt="Residency policy enforcement sequence">
   <figcaption style="font-size: 0.9em; color: #555;">Residency policy enforcement sequence</figcaption>
 </figure>
 
@@ -520,15 +520,15 @@ ______________________________________________________________________
 
 <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.25rem 0;">
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg" alt="Artifact lifecycle overview">
+    <img class="diagram" src="../build/diagrams/overview/tdd/artifact-lifecycle-overview-v1.svg" alt="Artifact lifecycle overview">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Overview — SA ➜ WP ➜ CD ➜ DL.RELEASED ➜ Retention gate</figcaption>
   </figure>
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/artifact-wp-lifecycle-v1.svg" alt="Work Product lifecycle">
+    <img class="diagram" src="../build/diagrams/overview/tdd/artifact-wp-lifecycle-v1.svg" alt="Work Product lifecycle">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Work Product — Guardian gating to <code>CLEARED_FOR_USE</code></figcaption>
   </figure>
   <figure style="flex: 1 1 18rem; text-align: center; margin: 0;">
-    <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/artifact-cd-lifecycle-v1.svg" alt="Candidate Deliverable lifecycle">
+    <img class="diagram" src="../build/diagrams/overview/tdd/artifact-cd-lifecycle-v1.svg" alt="Candidate Deliverable lifecycle">
     <figcaption style="font-size: 0.9em; color: #555; margin-top: 0.5rem;">Candidate Deliverable — operator and reviewer rail to release</figcaption>
   </figure>
 </div>
@@ -1313,7 +1313,7 @@ ______________________________________________________________________
 - Diagram: see `overview/tdd/diagrams/dr-region-failover-v1.mmd` for the runbook flow.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/dr-region-failover-v1.svg" alt="Region failover runbook">
+  <img class="diagram" src="../build/diagrams/overview/tdd/dr-region-failover-v1.svg" alt="Region failover runbook">
   <figcaption style="font-size: 0.9em; color: #555;">Region failover runbook</figcaption>
 </figure>
 
@@ -1341,7 +1341,7 @@ ______________________________________________________________________
   - `CONCURRENCY` (OCC/locks): short jittered retries; escalate after N attempts; ensure OCC versions in APIs.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/error-flows-v1.svg" alt="Error handling taxonomy">
+  <img class="diagram" src="../build/diagrams/overview/tdd/error-flows-v1.svg" alt="Error handling taxonomy">
   <figcaption style="font-size: 0.9em; color: #555;">Error handling taxonomy</figcaption>
 </figure>
 
@@ -1577,7 +1577,7 @@ ______________________________________________________________________
 - Diagram: DSAR/erasure hard-purge flow lives in `overview/tdd/diagrams/dsar-erasure-v1.mmd`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/overview/tdd/diagrams/dsar-erasure-v1.svg" alt="DSAR hard-purge workflow">
+  <img class="diagram" src="../build/diagrams/overview/tdd/dsar-erasure-v1.svg" alt="DSAR hard-purge workflow">
   <figcaption style="font-size: 0.9em; color: #555;">DSAR hard-purge workflow</figcaption>
 </figure>
 

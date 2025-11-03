@@ -7,7 +7,7 @@ import argparse
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from weasyprint import CSS, HTML
 
@@ -75,7 +75,7 @@ def render_target(target: PdfTarget) -> None:
 
     target.output.parent.mkdir(parents=True, exist_ok=True)
 
-    stylesheets = [CSS(filename=str(SHARED_CSS))] if SHARED_CSS.exists() else []
+    stylesheets: list[CSS] = [CSS(filename=str(SHARED_CSS))] if SHARED_CSS.exists() else []
 
     HTML(filename=str(html_path), base_url=str(SITE_DIR)).write_pdf(
         str(target.output),
@@ -86,7 +86,7 @@ def render_target(target: PdfTarget) -> None:
     print(f"✓ Wrote {target.output.relative_to(paths.REPO_ROOT)}")
 
 
-def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--target",
@@ -100,11 +100,11 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Assume mkdocs build already ran and skip rebuilding the site",
     )
-    return parser.parse_args(argv)
+    return parser.parse_args(list(argv) if argv is not None else None)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
-    args = parse_args(argv)
+    args = parse_args(list(argv) if argv is not None else None)
 
     targets = PDF_TARGETS
     if args.target:

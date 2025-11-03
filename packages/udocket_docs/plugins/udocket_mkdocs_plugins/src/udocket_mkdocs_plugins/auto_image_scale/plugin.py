@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from xml.etree import ElementTree as ET
 
 from bs4 import BeautifulSoup  # Requires: beautifulsoup4

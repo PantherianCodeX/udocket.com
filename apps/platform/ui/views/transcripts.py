@@ -8,7 +8,7 @@ from django.db.utils import IntegrityError
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.utils import unique_title
+from packages.udocket_common.text import unique_title
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from packages.udocket_common.json_utils import read_json_object
 

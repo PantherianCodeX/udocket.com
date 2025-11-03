@@ -159,12 +159,12 @@ ______________________________________________________________________
 **References:** TDD §6 summary, Settings spec §5.4, LLM Registry spec §2, Worker Cluster spec §3, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-AGENT-ACTIVATION`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/diagrams/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
 </figure>
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/diagrams/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 

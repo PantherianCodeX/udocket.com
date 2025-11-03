@@ -4,10 +4,11 @@ import argparse
 import os
 import shlex
 import sys
-from pathlib import Path
 from typing import Iterable, List
 
 import pytest
+
+from doc_tools import paths
 
 DEFAULT_TARGET = "packages/udocket_docs/tests/doc_tools"
 ENV_VAR = "DOCS_PYTEST_ARGS"
@@ -20,6 +21,8 @@ COVERAGE_MODULES = [
     "doc_tools.sync.doc_assets",
     "doc_tools.sync.document_controls",
 ]
+DEFAULT_COVERAGE_THRESHOLD = 90
+COVERAGE_THRESHOLD_ENV = "DOCS_COV_MIN"
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
@@ -45,15 +48,32 @@ def build_pytest_args(env_value: str | None, cli_args: Iterable[str]) -> List[st
     return args
 
 
+def coverage_threshold() -> int:
+    raw = os.environ.get(COVERAGE_THRESHOLD_ENV, "").strip()
+    if not raw:
+        return DEFAULT_COVERAGE_THRESHOLD
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return DEFAULT_COVERAGE_THRESHOLD
+    return max(0, parsed)
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parsed = parse_args(argv)
     env_value = os.environ.get(ENV_VAR, "")
     pytest_args = build_pytest_args(env_value, parsed.pytest_args)
-    config_path = str(Path(__file__).resolve().parents[2] / 'pytest.ini')
-    pytest_args = ['-c', config_path, *pytest_args]
+    config_path = str(paths.DOCS_PACKAGE_ROOT / "pytest.ini")
+    pytest_args = ["-c", config_path, *pytest_args]
     if parsed.coverage:
+        threshold = coverage_threshold()
         coverage_flags = [f"--cov={module}" for module in COVERAGE_MODULES]
-        pytest_args = [*coverage_flags, "--cov-report=term-missing", *pytest_args]
+        pytest_args = [
+            *coverage_flags,
+            "--cov-report=term-missing",
+            f"--cov-fail-under={threshold}",
+            *pytest_args,
+        ]
     return pytest.main(pytest_args)
 
 

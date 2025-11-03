@@ -46,7 +46,7 @@ from apps.platform.authorization.capabilities import has_capability
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job, JobNote
-from apps.platform.jobs.utils import unique_title
+from packages.udocket_common.text import unique_title
 from apps.platform.jobs.notes import serialize_notes
 from apps.platform.jobs.serializers import (
     JobCreateSerializer,

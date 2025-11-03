@@ -19,7 +19,7 @@ def sha256_digest(path: Path) -> str:
 
 
 def build_manifest(files: Iterable[Path]) -> dict[str, object]:
-    entries = []
+    entries: list[dict[str, object]] = []
     for file in files:
         if not file.exists():
             continue

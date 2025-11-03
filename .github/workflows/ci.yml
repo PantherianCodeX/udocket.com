@@ -40,6 +40,10 @@ jobs:
         run: uv run --project apps/platform pytest -q
       - name: Strict manifest check
         run: uv run --project apps/platform python scripts/typing/check_strict.py
+      - name: Docs toolbox tests (coverage enforced)
+        run: |
+          uv sync --frozen --extra dev --project packages/udocket_docs
+          uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage
 
   typewiz-audit:
     name: Typewiz Audit
@@ -125,3 +129,12 @@ jobs:
         with:
           name: sbom-bundle
           path: sbom
+
+  stack-smoke:
+    name: Stack Smoke
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose smoke test
+        run: PROJECT_NAME=ci make stack.smoke

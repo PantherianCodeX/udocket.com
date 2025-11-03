@@ -178,7 +178,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Validator `packages/udocket_core/signer/verification.py`, cache `packages/udocket_core/signer/cache.py`, tests `tests/platform/operations/test_signer_verification.py`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/data/digital-signer/diagrams/signing-delivery-v1.svg" alt="Signing and delivery flow">
+  <img class="diagram" src="../build/diagrams/data/digital-signer/signing-delivery-v1.svg" alt="Signing and delivery flow">
   <figcaption style="font-size: 0.9em; color: #555;">Signing and delivery flow</figcaption>
 </figure>
 

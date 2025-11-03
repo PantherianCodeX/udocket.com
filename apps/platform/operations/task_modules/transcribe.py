@@ -22,7 +22,7 @@ from apps.platform.accounts.models import Organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.utils import unique_title
+from packages.udocket_common.text import unique_title
 from apps.platform.operations.blob_upload import UploadCancelled, upload_with_sas
 from apps.platform.operations.channels import send_case_update, send_job_update
 from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta

@@ -24,7 +24,7 @@ Scope: `apps/platform/jobs/` (Job model, telemetry shaping, serializers, API vie
 - Websocket payloads: when emitting events, include `job_id`, `status`, and `transcript_file|path` when available; align fields with `JobConsumer._current_job_payload`.
 
 ## Titles & Uniqueness
-- Use `jobs.utils.unique_title` to generate de‑duplicated titles with numeric suffixes (apps/platform/jobs/utils.py:1).
+- Use `packages.udocket_common.text.unique_title` to generate de‑duplicated titles with numeric suffixes.
 - For audio conversion sub‑jobs (`job_kind == "audio_conversion"`), generate titles via `_unique_conversion_title` and mark telemetry with `source_job_id` so the UI can nest rows.
 
 ## Approval Gating (Artifacts)

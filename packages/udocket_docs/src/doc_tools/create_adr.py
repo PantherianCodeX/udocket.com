@@ -6,11 +6,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import sys
-from pathlib import Path
 from typing import Sequence
 
 from doc_tools import paths
-from doc_tools.doc_utils import slugify
+from packages.udocket_common.text import slugify
 
 ADR_DIR = paths.DOCS_ROOT / "adr"
 
@@ -102,5 +101,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

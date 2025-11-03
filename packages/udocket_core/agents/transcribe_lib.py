@@ -23,7 +23,7 @@ from packages.udocket_common.json_utils import (
     read_json_object,
     write_json_object,
 )
-from ..utils.time import format_utc
+from packages.udocket_common.time import format_utc
 from .common import append_jsonl
 from .common.azure_speech import AzureSpeechClient, AzureSpeechClientConfig, AzureSpeechError
 

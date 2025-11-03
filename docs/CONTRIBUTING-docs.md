@@ -10,10 +10,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 ## Add a diagram (Mermaid) {#add-a-diagram}
 
-- Save `.mmd` under the owning doc’s local `diagrams/` folder:
-  - Cross‑cutting (TDD‑owned): `docs/overview/tdd/diagrams/`
-  - Service‑owned: `docs/<area>/<service>/diagrams/`
-  - App‑owned: `docs/experience/<app>/diagrams/`
+- Save `.mmd` beside the owning document inside a `diagrams/` directory (for example, `docs/platform/guardian/diagrams/guardian-judgment-flow-v1.mmd`).
 - In Markdown, prefer a live Mermaid block for the site and an image fallback for PDF using the build path mapping:
   
   ```mermaid
@@ -21,16 +18,16 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   graph TD; A-->B;
   ```
 
-  ![Artifact Overview](build/diagrams/overview/tdd/diagrams/artifact-lifecycle-overview-v1.svg)
+  ![Artifact Overview](build/diagrams/overview/tdd/artifact-lifecycle-overview-v1.svg)
 
-- Rendered SVGs live under `docs/build/diagrams/` (mirrored into `docs/build/diagrams/`) so MkDocs can serve them alongside the Markdown sources. Use `build/diagrams/...` in image links so paths remain correct regardless of page depth.
+- Rendered SVGs live under `docs/build/diagrams/` (mirrored into `packages/udocket_docs/build/diagrams/`) so MkDocs can serve them alongside the Markdown sources. Use `build/diagrams/<path relative to the owning document directory>` in image links so paths remain correct regardless of page depth (`docs/platform/guardian/diagrams/foo.mmd` → `build/diagrams/platform/guardian/foo.svg`).
 
 - Before generating PDFs, render diagrams: `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 
 - Embed rules:
   - Owner docs should contain the Mermaid fence and an adjacent image fallback that points at the pre-rendered SVG.
   - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/build/diagrams/<REL>.svg`); never duplicate the Mermaid source.
-  - The source path pattern is `docs/<REL>.mmd`, and the build artifact lives at `docs/build/diagrams/<REL>.svg` (mirrored to `docs/build/diagrams/<REL>.svg`).
+  - The source path pattern is `docs/<area>/<doc>/diagrams/<name>.mmd` (with optional subdirectories), and the build artifact lives at `docs/build/diagrams/<area>/<doc>/<name>.svg`.
 - Optional metadata: add `%% id: <slug>`, `%% version: v1`, or `%% owner: <owner-doc>` comments to encode diagram provenance for the index.
 - Keep the appendix up to date by running `python -m doc_tools.build.diagram_index` whenever diagrams are added, renamed, or removed.
 

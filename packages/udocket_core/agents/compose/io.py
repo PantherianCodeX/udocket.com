@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, cast
 
-from docxtpl import DocxTemplate  # type: ignore[import]
+from docxtpl import DocxTemplate
 
 from ..common import next_versioned
 from ..common.docx import write_basic_docx

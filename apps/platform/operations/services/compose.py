@@ -22,7 +22,7 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.runtime import JobRuntimeContext
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
-from apps.platform.jobs.utils import unique_title
+from packages.udocket_common.text import unique_title
 
 from .analysis import (
     case_intake_payload,

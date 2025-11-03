@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Mapping, cast
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
@@ -108,9 +108,9 @@ class ComposeRun:
             manifest_raw = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest_map: dict[str, JSONValue] = {}
             if isinstance(manifest_raw, Mapping):
-                manifest_mapping = cast(Mapping[Any, Any], manifest_raw)
-                for key, value in manifest_mapping.items():
-                    manifest_map[str(key)] = cast(JSONValue, value)
+                manifest_mapping = cast(Mapping[object, JSONValue], manifest_raw)
+                for key_obj, value in manifest_mapping.items():
+                    manifest_map[str(key_obj)] = value
             manifest = coerce_json_object(manifest_map)
         except Exception:
             self._log_event(logging.WARNING, "compose.run.manifest_read_failed", {"path": str(manifest_path)})
@@ -127,9 +127,9 @@ class ComposeRun:
             snapshot_raw = json.loads(snapshot_path.read_text(encoding="utf-8"))
             snapshot_map: dict[str, JSONValue] = {}
             if isinstance(snapshot_raw, Mapping):
-                snapshot_mapping = cast(Mapping[Any, Any], snapshot_raw)
-                for key, value in snapshot_mapping.items():
-                    snapshot_map[str(key)] = cast(JSONValue, value)
+                snapshot_mapping = cast(Mapping[object, JSONValue], snapshot_raw)
+                for key_obj, value in snapshot_mapping.items():
+                    snapshot_map[str(key_obj)] = value
             snapshot = coerce_json_object(snapshot_map)
         except Exception:
             self._log_event(logging.WARNING, "compose.run.snapshot_read_failed", {"path": str(snapshot_path)})

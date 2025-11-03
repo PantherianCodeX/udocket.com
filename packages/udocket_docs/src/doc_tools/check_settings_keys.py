@@ -16,7 +16,6 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 from doc_tools import paths
 
@@ -90,5 +89,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

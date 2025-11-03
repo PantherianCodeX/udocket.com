@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections import OrderedDict
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -151,4 +152,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())
+    raise SystemExit(main())

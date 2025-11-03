@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from packages.udocket_core.utils.time import format_utc, utc_now
+from packages.udocket_common.time import format_utc, utc_now
 
 
 def test_utc_now_returns_timezone_aware_datetime() -> None:

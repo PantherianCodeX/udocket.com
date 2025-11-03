@@ -3,12 +3,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from doc_tools import paths
 
 DOCS_SRC = paths.DOCS_ROOT
+PROJECT_ROOT = paths.REPO_ROOT
 
 # Canonical mapping from legacy service paths to the new taxonomy.
 # Keys omit the leading docs/ prefix to keep the mapping concise.
@@ -67,7 +65,7 @@ def update_references() -> None:
         if path.is_file()
         and path.suffix in extensions
         and "node_modules" not in path.parts
-        and "build/mermaid" not in str(path)
+        and "build/diagrams" not in str(path)
     ]
 
     replacements = {f"{old}": f"{new}" for old, new in PATH_MAPPING.items()}
@@ -91,5 +89,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

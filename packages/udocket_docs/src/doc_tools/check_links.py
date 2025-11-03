@@ -147,5 +147,5 @@ def main() -> int:
     print("Docs check passed: diagrams, appendices, sections, and service references are valid.")
     return 0
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

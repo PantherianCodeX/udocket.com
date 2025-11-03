@@ -9,7 +9,7 @@ import re
 import time
 from typing import Any, Callable, Mapping, Optional, cast
 
-from langgraph.graph import END, START, StateGraph  # type: ignore[import]
+from langgraph.graph import END, START, StateGraph
 
 from packages.udocket_common.json_utils import (
     JSONArray,
@@ -865,13 +865,13 @@ class ComposeOrchestrator:
                 global_notes=reason,
             )
             state.qa_lane_results[lane] = lane_result
-            lane_outcome_update: dict[str, LaneOutcome] | None = None
+            iteration_lane_outcome_update: dict[str, LaneOutcome] | None = None
             if (
                 lane_state.structure_report
                 and lane_state.compliance_report
                 and lane_state.factuality_report
             ):
-                lane_outcome_update = {lane: lane_state.to_outcome()}
+                iteration_lane_outcome_update = {lane: lane_state.to_outcome()}
             emit(
                 progress,
                 stage_name,
@@ -901,14 +901,14 @@ class ComposeOrchestrator:
                 time.perf_counter() - start_time,
                 lane_state=lane_state,
             )
-            updates: dict[str, object] = {
+            iteration_updates: dict[str, object] = {
                 lane: cast(object, lane_state),
                 "qa_lane_results": {lane: lane_result},
                 "stage_usage": cast(object, {stage_name: {}}),
             }
-            if lane_outcome_update:
-                updates["lanes"] = cast(object, lane_outcome_update)
-            return updates
+            if iteration_lane_outcome_update:
+                iteration_updates["lanes"] = cast(object, iteration_lane_outcome_update)
+            return iteration_updates
         document = lane_state.document
         if document is None:
             raise ComposeStageError(stage_name, "Draft missing", lane=lane)
@@ -1286,8 +1286,8 @@ class ComposeOrchestrator:
         base_payload["locale"] = self.config.locale
         system_prompt = lane_prompts.editor_system_prompt
         base_payload["instruction"] = lane_prompts.editor_instruction
-        user_prompt = coerce_json_object(base_payload)
-        user_prompt = json.dumps(user_prompt, ensure_ascii=False)
+        user_prompt_payload = coerce_json_object(base_payload)
+        user_prompt = json.dumps(user_prompt_payload, ensure_ascii=False)
         self._log(
             logging.INFO,
             stage_name,

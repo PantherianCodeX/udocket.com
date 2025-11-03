@@ -1,0 +1,9 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Mapping
+
+class DocxTemplate:
+    def __init__(self, template: str | Path) -> None: ...
+    def render(self, context: Mapping[str, object]) -> None: ...
+    def save(self, target: str | Path) -> None: ...

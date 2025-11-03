@@ -22,13 +22,19 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 5) Build & run the stack:
 
-   ```bash
-   PROJECT_NAME=udocket-dev make stack.up
-   ```
+```bash
+PROJECT_NAME=udocket-dev make stack.up
+```
 
    Need the raw compose invocation? Run `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up --build -d` instead.
 
 - Platform (UI + API) → http://localhost:8000
+
+- Sanity check the running services at any time:
+
+```bash
+PROJECT_NAME=udocket-dev make stack.smoke
+```
 
 ### Optional: enable BuildKit cache reuse
 
@@ -62,14 +68,21 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 - **Production** — run the base compose file plus the production overlay after preparing a production `.env` (secrets, SSL, database, etc.) and copying `storage/` to persistent storage:
 
-  ```bash
-  PROJECT_NAME=udocket docker compose \
+```bash
+PROJECT_NAME=udocket docker compose \
     -f docker-compose.yml \
     -f docker-compose.prod.yml \
     up -d
   ```
 
   Bind host ports in `docker-compose.prod.yml` or layer another override file if you front the stack with Nginx/Traefik. In production, terminate TLS at the proxy; Keycloak continues to listen on 8085 inside the compose network.
+
+- To inspect a production stack quickly:
+
+```bash
+PROJECT_NAME=udocket make stack.prod.ps
+PROJECT_NAME=udocket make stack.prod.logs
+```
 
 ### Maintenance shortcuts
 

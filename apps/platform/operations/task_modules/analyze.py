@@ -15,7 +15,7 @@ class TaskProtocol(Protocol):
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.utils import unique_title
+from packages.udocket_common.text import unique_title
 from apps.platform.operations.audit import emit as _audit_emit
 from apps.platform.operations.channels import send_case_update as _send_case_update
 from apps.platform.operations.llm import (

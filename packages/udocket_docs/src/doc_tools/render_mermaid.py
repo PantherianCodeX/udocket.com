@@ -6,12 +6,13 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Sequence
 
 from doc_tools import paths
 from doc_tools.postprocess_svg import process as postprocess_svg
 
-DEFAULT_SRC = paths.DOCS_ROOT / "diagrams"
+DEFAULT_SRC = paths.DOCS_ROOT
 DEFAULT_OUT = paths.BUILD_ROOT / "diagrams"
 DEFAULT_PUPPETEER_CONFIG = paths.CONFIG_ROOT / "puppeteer.config.json"
 DEFAULT_CONFIG = paths.CONFIG_ROOT / "mermaid.config.json"
@@ -62,20 +63,67 @@ def render_file(
         postprocess_svg(destination)
 
 
+def _is_diagram(path: Path) -> bool:
+    return "diagrams" in path.parts and path.suffix.lower() == ".mmd"
+
+
+def _dedupe_sorted(paths_iter: Iterable[Path]) -> list[Path]:
+    unique: dict[Path, None] = {}
+    for candidate in paths_iter:
+        unique[candidate] = None
+    return sorted(unique)
+
+
+def _gather_from_paths(paths_args: list[Path]) -> list[Path]:
+    resolved: list[Path] = []
+    for candidate in paths_args:
+        target = candidate.resolve()
+        if target.is_dir():
+            resolved.extend(path for path in target.rglob("*.mmd") if _is_diagram(path))
+        elif target.suffix.lower() == ".mmd":
+            resolved.append(target)
+    return _dedupe_sorted(resolved)
+
+
 def collect_sources(mode: str, repo_root: Path, src_root: Path, diff_base: str, paths_args: list[Path]) -> list[Path]:
     if mode == "paths":
-        return [p.resolve() for p in paths_args]
+        return _gather_from_paths(paths_args)
     if mode == "all":
-        return sorted(src_root.rglob("*.mmd"))
+        return _dedupe_sorted(path for path in src_root.rglob("*.mmd") if _is_diagram(path))
     if mode == "changed":
-        return [p for p in git_changed(diff_base, repo_root) if p.exists()]
+        changed = [
+            path
+            for path in git_changed(diff_base, repo_root)
+            if path.exists() and _is_diagram(path)
+        ]
+        return _dedupe_sorted(changed)
     raise ValueError(f"Unknown mode {mode}")
+
+
+def build_output_relative(source: Path, src_root: Path) -> Path:
+    try:
+        rel = source.relative_to(src_root)
+    except ValueError:
+        rel = source.name
+        return Path(rel)
+    parts = list(rel.parts)
+    if "diagrams" in parts:
+        idx = parts.index("diagrams")
+        trimmed = parts[:idx] + parts[idx + 1 :]
+        if trimmed:
+            return Path(*trimmed)
+        return Path(source.name)
+    return rel
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Render Mermaid diagrams with consistent defaults.")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--all", action="store_true", help="Render every Mermaid source under docs/diagrams")
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Render every Mermaid source found under the docs tree (diagrams directories only)",
+    )
     group.add_argument("--changed", action="store_true", help="Render only files changed relative to --diff-base")
     group.add_argument("--paths", nargs="*", default=None, help="Explicit Mermaid source file paths")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT, help="Destination directory for rendered diagrams")
@@ -86,7 +134,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Override Mermaid CLI command (e.g. 'mmdc' or 'docker run ...').",
     )
     parser.add_argument("--verbose", action="store_true", help="Print rendered files")
-    parser.add_argument("--src-root", type=Path, default=DEFAULT_SRC, help="Source directory to scan for diagrams")
+    parser.add_argument(
+        "--src-root",
+        type=Path,
+        default=DEFAULT_SRC,
+        help="Root directory to scan for Mermaid sources (defaults to the docs root)",
+    )
     parser.add_argument("sources", nargs="*", help="Alias for --paths")
     return parser.parse_args(argv)
 
@@ -97,8 +150,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     paths_args: list[Path] = []
     if args.paths is not None or args.sources:
         mode = "paths"
-        paths_args = [Path(p) for p in (args.paths or [])]
-        paths_args.extend(Path(p) for p in args.sources)
+        path_values: list[str] = list(args.paths or [])
+        source_values: list[str] = list(args.sources)
+        combined = [*path_values, *source_values]
+        paths_args = [Path(p) for p in combined]
     elif args.all:
         mode = "all"
     else:
@@ -115,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for source in sources:
         if not source.exists():
             continue
-        rel = source.relative_to(args.src_root)
+        rel = build_output_relative(source, args.src_root)
         destination = args.out_dir / rel.with_suffix(f".{args.format}")
         render_file(
             source,

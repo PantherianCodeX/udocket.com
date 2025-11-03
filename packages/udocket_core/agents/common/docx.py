@@ -9,7 +9,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from ...utils.time import format_utc
+from packages.udocket_common.time import format_utc
 
 
 _CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8"?>

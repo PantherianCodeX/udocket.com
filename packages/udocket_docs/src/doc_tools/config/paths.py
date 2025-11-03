@@ -16,7 +16,20 @@ def _expanded(value: str | None, default: Path) -> Path:
     return Path(value).expanduser()
 
 
-REPO_ROOT = _expanded(os.getenv("UDOCKET_REPO_ROOT"), _REPO_ROOT_DEFAULT)
+def _is_repo_root(candidate: Path) -> bool:
+    return (candidate / "docs").exists() and (candidate / "packages").exists()
+
+
+def _detect_repo_root(default: Path) -> Path:
+    if _is_repo_root(default):
+        return default
+    for parent in default.parents:
+        if _is_repo_root(parent):
+            return parent
+    return default
+
+
+REPO_ROOT = _expanded(os.getenv("UDOCKET_REPO_ROOT"), _detect_repo_root(_REPO_ROOT_DEFAULT))
 DOCS_PACKAGE_ROOT = _expanded(
     os.getenv("UDOCKET_DOCS_PACKAGE_ROOT"), REPO_ROOT / "packages" / "udocket_docs"
 )
@@ -28,6 +41,7 @@ SITE_OUTPUT_ROOT = DOC_BUILDS_ROOT / "sites"
 PDF_OUTPUT_ROOT = DOC_BUILDS_ROOT / "pdf"
 SITE_DEV_DIR = SITE_OUTPUT_ROOT / "dev"
 PDF_DEV_DIR = PDF_OUTPUT_ROOT / "dev"
+DIAGRAM_INDEX_PATH = DOCS_ROOT / "overview" / "tdd" / "appendices" / "diagrams.md"
 
 CONFIG_PATH = CONFIG_ROOT / "docs_config.yaml"
 _DEFAULT_SERVICE_AREAS: Sequence[str] = (
@@ -77,6 +91,7 @@ __all__ = [
     "REPO_ROOT",
     "DOCS_PACKAGE_ROOT",
     "DOCS_ROOT",
+    "DIAGRAM_INDEX_PATH",
     "CONFIG_ROOT",
     "BUILD_ROOT",
     "DOC_BUILDS_ROOT",

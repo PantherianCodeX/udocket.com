@@ -119,7 +119,7 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   typewiz.audit typewiz.dashboard typewiz.readiness typewiz.clean \
   clean.all clean.mypy clean.pyright clean.pycache clean.coverage \
   images.build images.load images.push images.cache.warm \
-  stack.up stack.down stack.build stack.restart stack.logs stack.ps \
+  stack.up stack.down stack.build stack.restart stack.logs stack.ps stack.smoke \
   stack.prod.logs stack.prod.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
   doctools.build doctools.up doctools.down doctools.shell \
@@ -158,6 +158,7 @@ pytest.clean: ## Remove pytest cache directory
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
 typing.baseline: ## Run pyright and mypy type checks
 	$(UV) run --project apps/platform --extra dev pyright
+	$(UV) run --project apps/platform --extra dev pyright --project pyrightconfig.docs-scripts.json
 	$(UV) run --project apps/platform --extra dev mypy
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
@@ -229,6 +230,10 @@ stack.logs: ## Tail logs from core stack (FOLLOW=0 to disable streaming)
 	  $(DEV_COMPOSE) logs -f $(SERVICES); \
 	fi
 stack.ps: ## Show container status for this project
+	$(DEV_COMPOSE) ps
+
+stack.smoke: ## Quick sanity check that core services resolve and are running
+	$(DEV_COMPOSE) config --services
 	$(DEV_COMPOSE) ps
 
 ##@ Platform • Production

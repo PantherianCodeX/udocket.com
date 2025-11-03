@@ -44,6 +44,8 @@
     "**/.tox",
     "**/.pytest_cache",
     "**/__pycache__",
+    "packages/udocket_docs/src/doc_tools",
+    "packages/udocket_docs/tests",
     "typings/vendor",
     "typings/external_stubs",
     "scripts"

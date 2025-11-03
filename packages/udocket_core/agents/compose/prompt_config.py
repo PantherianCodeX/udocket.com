@@ -47,16 +47,12 @@ def load_prompt_config(path: Path) -> ComposePromptConfig:
         raise RuntimeError(f"Failed to read prompt config from {path}: {exc}") from exc
     if not isinstance(loaded, MutableMapping):
         raise RuntimeError(f"Invalid prompt configuration at {path}: expected mapping root")
-    raw_data = cast(MutableMapping[Any, Any], loaded)
-    data: dict[str, Any] = {}
-    for key, value in raw_data.items():
-        data[str(key)] = value
+    raw_data = cast(MutableMapping[str, Any], loaded)
+    data: dict[str, Any] = {str(key): value for key, value in raw_data.items()}
     qa_section = data.get("qa")
     if isinstance(qa_section, MutableMapping):
-        qa_mapping = cast(MutableMapping[Any, Any], qa_section)
-        qa_map: dict[str, Any] = {}
-        for key, value in qa_mapping.items():
-            qa_map[str(key)] = value
+        qa_mapping = cast(MutableMapping[str, Any], qa_section)
+        qa_map: dict[str, Any] = {str(key): value for key, value in qa_mapping.items()}
         if "client" not in qa_map and "lawyer" not in qa_map:
             system_prompt = qa_map.get("system_prompt")
             if isinstance(system_prompt, str) and system_prompt.strip():
