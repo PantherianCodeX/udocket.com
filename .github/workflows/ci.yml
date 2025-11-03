@@ -183,7 +183,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: build platform image" >> "$GITHUB_STEP_SUMMARY"
-          docker buildx build --file infra/docker/Dockerfile.platform --target app --tag udocket-platform:ci --load .
+          docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load .
           printf '%s\n' "Finished: build platform image" >> "$GITHUB_STEP_SUMMARY"
       - name: Build docs image
         run: |
