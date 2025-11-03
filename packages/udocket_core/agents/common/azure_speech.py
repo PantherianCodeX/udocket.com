@@ -14,8 +14,8 @@ from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_json_object,
-    coerce_json_value,
     coerce_object_list,
+    json_payload,
     normalize_mapping_optional,
 )
 
@@ -164,10 +164,6 @@ _ISO_DURATION_PATTERN = re.compile(
     r"^P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?$",
     re.IGNORECASE,
 )
-
-
-def _json_payload(**items: object) -> JSONObject:
-    return {key: coerce_json_value(value) for key, value in items.items()}
 
 
 def _iso8601_to_seconds(value: str) -> float:
@@ -411,7 +407,7 @@ class AzureSpeechClient:
         location: str,
     ) -> AzureSpeechBatchResult:
         lines: list[str] = []
-        meta = _json_payload(diarization=diarization, azure_transcription_url=location)
+        meta = json_payload(diarization=diarization, azure_transcription_url=location)
         recognized_iter = coerce_object_list(payload.get("recognizedPhrases"))
         max_end = 0.0
         seg_count = 0

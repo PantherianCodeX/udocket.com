@@ -19,7 +19,7 @@ from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
-    coerce_json_value,
+    json_payload,
     merge_json_objects,
     read_json_object,
     write_json_object,
@@ -38,10 +38,6 @@ TARGET_SAMPLE_FMTS = {"s16", "s16p", "s16le"}
 
 
 logger = logging.getLogger("udocket.transcribe.agent")
-
-
-def _json_payload(**items: object) -> JSONObject:
-    return {key: coerce_json_value(value) for key, value in items.items()}
 
 
 @dataclass
@@ -181,7 +177,7 @@ def normalize_audio(
     original_meta = dict(meta)
 
     meta.update(
-        _json_payload(
+        json_payload(
             audio_codec=TARGET_AUDIO_CODEC,
             audio_sample_rate_hz=TARGET_SAMPLE_RATE_HZ,
             audio_channels=TARGET_AUDIO_CHANNELS,
@@ -259,7 +255,7 @@ def _record_batch_location(
     region: str,
     language: str,
 ) -> None:
-    partial = _json_payload(
+    partial = json_payload(
         case_id=case_id,
         azure_transcription_url=location,
         azure_region=region,
@@ -282,7 +278,7 @@ def _record_batch_location(
     try:
         append_jsonl(
             ops_dir / "ops_transcription.jsonl",
-            _json_payload(
+            json_payload(
                 ts=_now_utc(),
                 case_id=case_id,
                 event="batch_location",
@@ -592,7 +588,7 @@ class TranscriptionAgent:
             if converted:
                 append_jsonl(
                     audit_jsonl,
-                    _json_payload(
+                    json_payload(
                         ts=_now_utc(),
                         case_id=case_id,
                         event="audio_normalized",
@@ -604,7 +600,7 @@ class TranscriptionAgent:
             if _is_audio_empty(wav):
                 append_jsonl(
                     audit_jsonl,
-                    _json_payload(
+                    json_payload(
                         ts=_now_utc(),
                         case_id=case_id,
                         event="invalid_audio",
@@ -680,7 +676,7 @@ class TranscriptionAgent:
                 speech_client.ensure_health(force=True)
                 append_jsonl(
                     audit_jsonl,
-                    _json_payload(
+                    json_payload(
                         ts=_now_utc(),
                         case_id=case_id,
                         event="sdk_exception",
@@ -693,7 +689,7 @@ class TranscriptionAgent:
             except Exception as exc:
                 append_jsonl(
                     audit_jsonl,
-                    _json_payload(
+                    json_payload(
                         ts=_now_utc(),
                         case_id=case_id,
                         event="sdk_exception",
@@ -711,7 +707,7 @@ class TranscriptionAgent:
 
         if not text_raw:
             msg = last_error or "No speech recognized or SDK timeout."
-            meta_fail = _json_payload(
+            meta_fail = json_payload(
                 case_id=case_id,
                 audio_file=audio_name,
                 audio_sha256=audio_sha,
@@ -735,7 +731,7 @@ class TranscriptionAgent:
                 audit_jsonl,
                 merge_json_objects(
                     meta_fail,
-                    _json_payload(ts=_now_utc(), case_id=case_id, event="failed", exit=2),
+                json_payload(ts=_now_utc(), case_id=case_id, event="failed", exit=2),
                 ),
             )
             raise RuntimeError(msg)
@@ -780,7 +776,7 @@ class TranscriptionAgent:
         if audio_sha:
             sha_map["audio"] = audio_sha
 
-        meta = _json_payload(
+        meta = json_payload(
             case_id=case_id,
             audio_file=audio_name,
             audio_sha256=audio_sha,
@@ -818,7 +814,7 @@ class TranscriptionAgent:
             audit_jsonl,
             merge_json_objects(
                 meta,
-                _json_payload(ts=_now_utc(), case_id=case_id, event="transcribed", exit=0),
+                json_payload(ts=_now_utc(), case_id=case_id, event="transcribed", exit=0),
             ),
         )
         try:

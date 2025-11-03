@@ -23,7 +23,7 @@ from packages.udocket_common.json_utils import (
     parse_json_object,
 )
 from ....llm.runtime import ChatClient, ResponseFormat
-from packages.udocket_common.ids import normalize_id, uuid5_from_content
+from packages.udocket_common.ids import ensure_deterministic_uuids
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
 
@@ -106,18 +106,25 @@ def _ensure_chunks(context: Any) -> List[str]:
         return chunks or [""]
     return [str(context)]
 def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
-    name = str(entity.get("name") or "").strip()
-    entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
-    derived_uuid = uuid5_from_content("entity", entity_type, name.lower())
-    existing_uuid = normalize_id(entity.get("uuid"))
-    entity_uuid = existing_uuid or str(derived_uuid)
-    entity_id = normalize_id(entity.get("id")) or entity_uuid
-    entity["id"] = entity_id
-    entity["uuid"] = entity_uuid
-    entity["aliases"] = coerce_str_list(entity.get("aliases"), unique=True)
+    entity_obj = json_object_to_dict(entity)
+    name = str(entity_obj.get("name") or "").strip()
+    entity_type = str(entity_obj.get("type") or "UNKNOWN").strip() or "UNKNOWN"
+    entity_obj["name"] = name
+    entity_obj["type"] = entity_type
+    entity_obj["aliases"] = coerce_str_list(entity_obj.get("aliases"), unique=True)
+    entity_obj["_sig_name"] = name.lower()
+    entity_obj["_sig_type"] = entity_type.lower()
+    ensure_deterministic_uuids(
+        [entity_obj],
+        namespace="entity",
+        signature_fields=("_sig_type", "_sig_name"),
+    )
+    entity_obj.pop("_sig_name", None)
+    entity_obj.pop("_sig_type", None)
+    entity_obj["id"] = entity_obj.get("id") or entity_obj["uuid"]
 
     normalized_mentions: List[Dict[str, Any]] = []
-    for mention_mapping in coerce_object_list(entity.get("mentions")):
+    for mention_mapping in coerce_object_list(entity_obj.get("mentions")):
         raw_text = mention_mapping.get("text")
         if not isinstance(raw_text, str):
             raw_text = str(raw_text or "")
@@ -138,24 +145,33 @@ def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
         else:
             ts_normalized = None
         normalized_mentions.append({"ts": ts_normalized, "text": text})
-    entity["mentions"] = normalized_mentions
-    entity["type"] = entity_type
-    entity.setdefault("description", "")
-    return entity
+    entity_obj["mentions"] = normalized_mentions
+    entity_obj.setdefault("description", "")
+    return entity_obj
 
 
 def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
-    relation_type = str(relation.get("type") or "RELATED_TO").strip() or "RELATED_TO"
-    source = str(relation.get("source") or "").strip()
-    target = str(relation.get("target") or "").strip()
-    derived_uuid = uuid5_from_content("relation", relation_type, source.lower(), target.lower())
-    existing_uuid = normalize_id(relation.get("uuid"))
-    relation_uuid = existing_uuid or str(derived_uuid)
-    relation_id = normalize_id(relation.get("id")) or relation_uuid
-    relation["id"] = relation_id
-    relation["uuid"] = relation_uuid
+    relation_obj = json_object_to_dict(relation)
+    relation_type = str(relation_obj.get("type") or "RELATED_TO").strip() or "RELATED_TO"
+    source = str(relation_obj.get("source") or "").strip()
+    target = str(relation_obj.get("target") or "").strip()
+    relation_obj["type"] = relation_type
+    relation_obj["source"] = source
+    relation_obj["target"] = target
+    relation_obj["_sig_type"] = relation_type.lower()
+    relation_obj["_sig_source"] = source.lower()
+    relation_obj["_sig_target"] = target.lower()
+    ensure_deterministic_uuids(
+        [relation_obj],
+        namespace="relation",
+        signature_fields=("_sig_type", "_sig_source", "_sig_target"),
+    )
+    relation_obj.pop("_sig_type", None)
+    relation_obj.pop("_sig_source", None)
+    relation_obj.pop("_sig_target", None)
+    relation_obj["id"] = relation_obj.get("id") or relation_obj["uuid"]
     normalized_evidence: List[Dict[str, Any]] = []
-    for evidence_entry in coerce_object_list(relation.get("evidence")):
+    for evidence_entry in coerce_object_list(relation_obj.get("evidence")):
         raw_text = evidence_entry.get("text") or evidence_entry.get("excerpt")
         if not isinstance(raw_text, str):
             raw_text = str(raw_text or "")
@@ -176,9 +192,8 @@ def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
         else:
             ts_normalized = None
         normalized_evidence.append({"ts": ts_normalized, "text": text})
-    relation["evidence"] = normalized_evidence
-    relation["type"] = relation_type
-    return relation
+    relation_obj["evidence"] = normalized_evidence
+    return relation_obj
 
 
 def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> None:

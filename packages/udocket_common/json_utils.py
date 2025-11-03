@@ -39,6 +39,12 @@ def coerce_json_value(value: object) -> JSONValue:
     return str(value)
 
 
+def json_payload(**items: object) -> JSONObject:
+    """Return a JSON object with values coerced to JSON-compatible types."""
+
+    return {key: coerce_json_value(value) for key, value in items.items()}
+
+
 def coerce_json_object(value: object, *, default: JSONObject | None = None) -> JSONObject:
     """Return a JSON object (dict[str, JSONValue]) from the provided mapping."""
 
@@ -483,6 +489,7 @@ __all__ = [
     "JSONArray",
     "is_json_scalar",
     "coerce_json_value",
+    "json_payload",
     "coerce_json_object",
     "merge_json_objects",
     "ensure_json_object",

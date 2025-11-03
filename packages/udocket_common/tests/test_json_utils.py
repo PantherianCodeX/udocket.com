@@ -45,3 +45,8 @@ def test_normalize_mapping_with_transform() -> None:
 def test_normalize_mapping_optional_handles_non_mapping() -> None:
     assert ju.normalize_mapping_optional(123) == {}
     assert ju.normalize_mapping_optional({"k": "v"}) == {"k": "v"}
+
+
+def test_json_payload_coerces_values() -> None:
+    payload = ju.json_payload(number=1, nested={"x": 2}, list_value=[1, "a"], none_value=None)
+    assert payload == {"number": 1, "nested": {"x": 2}, "list_value": [1, "a"], "none_value": None}

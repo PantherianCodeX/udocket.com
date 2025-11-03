@@ -18,7 +18,7 @@ from ...common.chunking import (
 )
 from ....llm.runtime import ChatClient, ResponseFormat
 from packages.udocket_common.json_utils import parse_json_value
-from packages.udocket_common.ids import normalize_id, uuid5_from_content
+from packages.udocket_common.ids import ensure_deterministic_uuids, normalize_id
 
 logger = logging.getLogger("udocket.analyze.timeline_stage")
 
@@ -113,26 +113,25 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     elif isinstance(labels_raw, str) and labels_raw.strip():
         labels = [labels_raw.strip()]
 
-    derived_uuid = uuid5_from_content(
-        "timeline_seed",
-        "" if ts_start is None else f"{ts_start:.3f}",
-        "" if ts_end is None else f"{ts_end:.3f}",
-        speaker or "",
-        text,
-    )
-    existing_uuid = normalize_id(payload.get("uuid"))
-    event_uuid = existing_uuid or str(derived_uuid)
-    event_id = normalize_id(payload.get("id")) or event_uuid
-
-    normalized = {
-        "id": event_id,
-        "uuid": event_uuid,
+    normalized: Dict[str, Any] = {
+        "id": normalize_id(payload.get("id")),
+        "uuid": normalize_id(payload.get("uuid")),
         "ts_start": ts_start,
         "ts_end": ts_end,
         "speaker": speaker,
         "text": text,
         "labels": labels,
+        "_sig_ts_start": "" if ts_start is None else f"{ts_start:.3f}",
+        "_sig_ts_end": "" if ts_end is None else f"{ts_end:.3f}",
     }
+    ensure_deterministic_uuids(
+        [normalized],
+        namespace="timeline.seed",
+        signature_fields=("_sig_ts_start", "_sig_ts_end", "speaker", "text"),
+    )
+    normalized.pop("_sig_ts_start", None)
+    normalized.pop("_sig_ts_end", None)
+    normalized["id"] = normalized.get("id") or normalized["uuid"]
     return normalized
 
 
