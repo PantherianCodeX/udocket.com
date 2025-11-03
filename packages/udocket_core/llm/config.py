@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..config.paths import resolve_llm_assignments_path, resolve_llm_providers_path
-from ..utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_bool,

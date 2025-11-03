@@ -17,7 +17,7 @@ from ..selectors import job_telemetry_payload
 from ..transcripts import ensure_transcript_artifact
 from .utils import CaseArtifactLike, resolve_job
 from apps.platform.operations.utils import append_job_log, update_job_meta
-from packages.udocket_core.utils.json import stringify_json
+from packages.udocket_common.json_utils import stringify_json
 
 
 @require_http_methods(["GET"])

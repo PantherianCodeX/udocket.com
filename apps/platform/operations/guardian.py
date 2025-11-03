@@ -23,7 +23,7 @@ from apps.platform.operations.llm import (
 )
 from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
 from packages.udocket_core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
-from packages.udocket_core.utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.jobs.models import Job
-from packages.udocket_core.utils.json import (
+from packages.udocket_common.json_utils import (
     read_json_object,
     write_json_object,
 )

@@ -28,7 +28,7 @@ from packages.udocket_core.agents.compose_lib import (
 )
 from packages.udocket_core.agents.compose.state import QAReviewerResult, _merge_lane_outcomes
 from packages.udocket_core.agents.compose.orchestrator import ComposeOrchestrator
-from packages.udocket_core.utils.json import JSONObject
+from packages.udocket_common.json_utils import JSONObject
 from packages.udocket_core.agents.compose.errors import ComposeStageError
 from tests._typing import MonkeyPatch
 

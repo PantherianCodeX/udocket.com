@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Mapping, Optional, Tuple
 
-from ...utils.json import JSONObject, JSONValue, coerce_json_object, coerce_str
+from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from .errors import ComposeStageError
 from .llm_runtime import invoke_llm

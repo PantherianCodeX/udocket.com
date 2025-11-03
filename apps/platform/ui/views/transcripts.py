@@ -10,7 +10,7 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
-from packages.udocket_core.utils.json import read_json_object
+from packages.udocket_common.json_utils import read_json_object
 
 from .common import JobTelemetryPayload, as_dict
 from .presenters.jobs import friendly_job_title  # lazy usage inside helpers

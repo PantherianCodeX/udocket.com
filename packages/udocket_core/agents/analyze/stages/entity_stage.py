@@ -17,7 +17,7 @@ from ...common.chunking import (
     should_retry_for_length,
     split_for_retry,
 )
-from ....utils.json import (
+from packages.udocket_common.json_utils import (
     coerce_object_list,
     coerce_str_list,
     json_object_to_dict,

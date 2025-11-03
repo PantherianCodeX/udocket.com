@@ -6,7 +6,7 @@ import json
 import re
 from typing import Mapping, Optional, Sequence, cast
 
-from ...utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,

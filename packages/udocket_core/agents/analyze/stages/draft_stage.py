@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from ...common.io import TranscriptParse
 from ...common.normalization import coerce_sequence
-from ....utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_json_object,

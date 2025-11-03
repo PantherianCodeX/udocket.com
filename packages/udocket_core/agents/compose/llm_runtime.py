@@ -7,7 +7,7 @@ import random
 import time
 from typing import Any, Mapping, Tuple, cast
 
-from ...utils.json import JSONObject
+from packages.udocket_common.json_utils import JSONObject
 from ...llm import LLMSettings
 from ...llm.runtime import ChatClientError, build_chat_client, build_provider_runtime_config
 from .errors import ComposeStageError

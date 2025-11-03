@@ -30,7 +30,7 @@ from .analysis import (
     collect_requested_providers,
 )
 from .files import sha256_file
-from packages.udocket_core.utils.json import (
+from packages.udocket_common.json_utils import (
     JSONValue,
     coerce_json_object,
     coerce_str,

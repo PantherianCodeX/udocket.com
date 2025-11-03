@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..audio import probe_audio_metadata
-from ..utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
     coerce_json_value,

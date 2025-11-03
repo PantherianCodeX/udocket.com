@@ -28,7 +28,7 @@ from apps.platform.operations.llm import (
     upsert_llm_configuration,
     upsert_org_provider_credential,
 )
-from packages.udocket_core.utils.json import parse_json_value
+from packages.udocket_common.json_utils import parse_json_value
 
 
 @require_http_methods(["POST"])

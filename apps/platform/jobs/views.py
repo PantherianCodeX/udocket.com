@@ -62,7 +62,7 @@ from django.db import transaction
 from apps.platform.operations.tasks import analyze_job, compose_job
 from apps.platform.tenancy import scope_jobs
 from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
-from packages.udocket_core.utils.json import read_json_object
+from packages.udocket_common.json_utils import read_json_object
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
 from apps.platform.operations.services import case_paths, resolve_case_relative
 from apps.platform.operations.services.files import sha256_file
@@ -77,7 +77,7 @@ from apps.platform.operations.llm import (
     load_llm_settings,
 )
 from apps.platform.operations.services.analysis import collect_requested_providers
-from packages.udocket_core.utils.json import stringify_json
+from packages.udocket_common.json_utils import stringify_json
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:

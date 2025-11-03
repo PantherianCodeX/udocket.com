@@ -12,7 +12,7 @@ from typing import Mapping, Sequence
 
 from PIL import Image, ImageDraw, ImageFont  # type: ignore[import]
 
-from ...utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_json_object,

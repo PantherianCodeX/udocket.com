@@ -16,7 +16,7 @@ from ...common.chunking import (
     split_for_retry,
 )
 from ...common.io import TranscriptParse
-from ....utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_json_object,

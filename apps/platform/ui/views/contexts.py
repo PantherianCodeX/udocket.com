@@ -3,7 +3,7 @@ from __future__ import annotations
 # pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
 
-from packages.udocket_core.utils.json import stringify_pretty
+from packages.udocket_common.json_utils import stringify_pretty
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 

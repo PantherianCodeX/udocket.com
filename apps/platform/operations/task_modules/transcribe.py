@@ -31,7 +31,7 @@ from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storag
 from apps.platform.operations.utils import append_job_log, read_job_meta
 from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
 from packages.udocket_core.audio import probe_audio_metadata
-from packages.udocket_core.utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
     coerce_json_value,

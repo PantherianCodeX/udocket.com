@@ -27,7 +27,7 @@ from packages.udocket_core.llm.runtime import (
     build_provider_runtime_config,
 )
 from packages.udocket_core.agents.common.llm_health import ensure_llm_client_health
-from packages.udocket_core.utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,

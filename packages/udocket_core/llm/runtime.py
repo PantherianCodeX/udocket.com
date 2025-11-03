@@ -13,7 +13,7 @@ from ..agents.common.azure_client import (
     AzureClientConfig,
 )
 from ..agents.common.http_client import HTTPRetryConfig
-from ..utils.json import (
+from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_bool,

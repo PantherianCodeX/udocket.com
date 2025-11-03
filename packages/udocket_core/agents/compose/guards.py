@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Mapping, Optional, Sequence
 
-from ...utils.json import JSONObject, coerce_str
+from packages.udocket_common.json_utils import JSONObject, coerce_str
 
 from .state import GuardReport
 

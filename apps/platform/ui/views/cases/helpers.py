@@ -13,7 +13,7 @@ from apps.platform.tenancy import scope_jobs
 
 from ..presenters.cases import case_progress_context, collect_case_artifacts
 from ..selectors import job_telemetry_map
-from packages.udocket_core.utils.json import stringify_json
+from packages.udocket_common.json_utils import stringify_json
 
 
 TOOL_KEY_ALIASES = {
