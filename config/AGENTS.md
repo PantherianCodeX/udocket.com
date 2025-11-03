@@ -9,7 +9,7 @@ Scope: `config/` (shared pydantic settings loader) and Django settings under `ap
 
 ## Django Settings
 - Live in `apps/platform/config/settings`. Base resolves `STORAGE_ROOT` and robustly falls back to sqlite in dev (apps/platform/config/settings/base.py:1).
-- Use `ENV_READ_DOTENV=1` only when intentionally loading `.env` directly; docker compose already provides env vars.
+- Use `ENV_READ_DOTENV=1` only when intentionally loading `.env` directly; the compose stack launched via `make stack.up` already provides env vars.
 
 ## Typing expectations
 - Enforce the strong typing policy in `docs/typing_refactor_plan.md` whenever you touch settings or configuration helpers.

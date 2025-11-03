@@ -199,15 +199,18 @@ clean.all: typewiz.clean clean.mypy pytest.clean clean.pyright clean.coverage cl
 images.build: ## Build images via Buildx Bake (defaults to Bake, release-aware push)
 	@if [ "$(USE_BUILD)" = "1" ]; then \
 	  docker buildx bake $(BAKE_IMAGE_FLAGS) $(IMAGES); \
-	else \
-	  $(DEV_COMPOSE) build $(IMAGES); \
-	fi
+else \
+  $(BASE_COMPOSE) build $(IMAGES); \
+fi
 images.load: ## Build images and load into the local Docker daemon
 	$(MAKE) images.build LOAD=1
 images.push: ## Build images and push to the configured registry
 	$(MAKE) images.build PUSH=1
 images.cache.warm: ## Prime toolchain layers via Bake cache target
 	docker buildx bake $(BAKE_CACHE_FLAGS) cache-warm
+
+images.build.prod: ## Build images with production overlays only (no dev sync)
+	$(PROD_COMPOSE) build $(IMAGES)
 
 ##@ Platform
 stack.up: ## Start core stack detached (override with SERVICES="..." as needed)

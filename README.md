@@ -10,6 +10,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    - Postgres defaults are provided; start the bundled database with `PROJECT_NAME=udocket-dev make stack.up SERVICES=postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
    - `APP_ROOT` defaults to `/udocket` inside containers; update it (and derived paths such as `STORAGE_ROOT`) when running directly on your host.
+   - Runtime configuration checks run on startup. For exceptional workflows (e.g., one-off `manage.py collectstatic` in CI), set `UDOCKET_SKIP_RUNTIME_CHECKS=1` to bypass them.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
 4) Sync the platform dependencies (dev extras included) without installing the project itself:
 
@@ -22,8 +23,10 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 5) Build & run the stack:
 
    ```bash
-   PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up --build -d
+   PROJECT_NAME=udocket-dev make stack.up
    ```
+
+   Need the raw compose invocation? Run `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up --build -d` instead.
 
 - Platform (UI + API) → http://localhost:8000
 
@@ -38,7 +41,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 - Cache directories live under `.docker/buildx-cache/` (platform, platform_worker, platform_beat, keycloak, platform-dev, docs). Host and devcontainer builds share them automatically.
 - `make images.cache.warm` primes the BuildKit cache layers for the platform, docs, and keycloak images when you want warmer Bake runs without producing artifacts.
-- To read/write caches, include the dev overlay: `docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
+- To read/write caches, include the dev overlay: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
 - VS Code devcontainer users can opt in by appending `../docker-compose.cache.yml` to the `dockerComposeFile` list in `.devcontainer/devcontainer.json`.
 
 ### Compose environments
@@ -66,7 +69,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
     up -d
   ```
 
-  Bind host ports in `docker-compose.prod.yml` or layer another override file if you front the stack with Nginx/Traefik.
+  Bind host ports in `docker-compose.prod.yml` or layer another override file if you front the stack with Nginx/Traefik. In production, terminate TLS at the proxy; Keycloak continues to listen on 8085 inside the compose network.
 
 ### Maintenance shortcuts
 
@@ -77,6 +80,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 - `make context.list` lists Docker contexts; `make context.remove CONTEXT=name CONFIRM=1` removes a specific one, and `make context.clean CONFIRM=1` drops everything except `default`.
 - `make docker.reset CONFIRM=1` bundles the heavy-duty cleanup (compose reset, prunes, builder cleanup) followed by `docker du` to verify reclaimed space.
 - Need help by topic? Run `make <group>.help` for a filtered list (labels are lowercased with punctuation mapped to dots, e.g. `make tests.help`, `make docker.images.help`, `make docker.buildx.help`).
+- Build production-ready images without the dev overlay using `PROJECT_NAME=udocket make images.build.prod`.
 
 ### Common Make arguments
 
@@ -127,8 +131,10 @@ Most targets accept optional variables so you can customize behaviour without ed
 
 ## Azure Setup (batch mode)
 1) Create a Storage account and a private container (e.g., `udocket-audio`).
-2) Add env vars in `.env` as above; rebuild the Django platform worker: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build platform_worker`.
-3) Run: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up -d`. The Celery worker in `apps.platform` uploads audio and passes a SAS URL to the agent.
+2) Add env vars in `.env` as above; rebuild the Django platform worker: `PROJECT_NAME=udocket-dev make images.build IMAGES=platform_worker`.
+   - Fallback raw command: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build platform_worker`.
+3) Run `PROJECT_NAME=udocket-dev make stack.up`. The Celery worker in `apps.platform` uploads audio and passes a SAS URL to the agent.
+   - Fallback raw command: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up -d`.
 4) Create an Azure Speech resource in the same Canada region (canadacentral/canadaeast) with tier Standard (S0) and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
 
 ## Roadmap

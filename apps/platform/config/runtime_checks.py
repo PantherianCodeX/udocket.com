@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import os
+import sys
 from pathlib import Path
 
 from config.paths import ensure_storage_root
@@ -13,6 +16,32 @@ from packages.udocket_core.llm.config import LLMConfigError, load_llm_settings
 
 class RuntimeConfigurationError(RuntimeError):
     """Raised when required runtime configuration is missing or invalid."""
+
+
+log = logging.getLogger("apps.platform.runtime_checks")
+_SKIP_COMMANDS: tuple[str, ...] = ("collectstatic", "makemigrations", "migrate")
+
+
+def _current_management_command() -> str | None:
+    if not sys.argv:
+        return None
+    executable = os.path.basename(sys.argv[0])
+    if sys.argv[0].endswith("manage.py") and len(sys.argv) >= 2:
+        return sys.argv[1]
+    if executable in {"django-admin", "django-admin.py"} and len(sys.argv) >= 2:
+        return sys.argv[1]
+    return None
+
+
+def should_skip_runtime_validation() -> bool:
+    if os.environ.get("UDOCKET_SKIP_RUNTIME_CHECKS") == "1":
+        log.warning("Runtime configuration validation skipped via UDOCKET_SKIP_RUNTIME_CHECKS")
+        return True
+    command = _current_management_command()
+    if command and command in _SKIP_COMMANDS:
+        log.info("Skipping runtime configuration validation for management command '%s'", command)
+        return True
+    return False
 
 
 def _require_file(path: Path, label: str) -> None:
@@ -40,6 +69,9 @@ def _verify_storage_root() -> Path:
 def validate_runtime_configuration() -> None:
     """Fail fast when core configuration or required artifacts are missing."""
 
+    if should_skip_runtime_validation():
+        return
+
     _verify_storage_root()
 
     providers_path = resolve_llm_providers_path()
@@ -54,4 +86,3 @@ def validate_runtime_configuration() -> None:
         load_llm_settings(providers_path=providers_path, assignments_path=assignments_path)
     except LLMConfigError as exc:
         raise RuntimeConfigurationError("LLM configuration is invalid") from exc
-

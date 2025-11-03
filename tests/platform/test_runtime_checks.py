@@ -75,3 +75,20 @@ def test_validate_runtime_configuration_success(monkeypatch: pytest.MonkeyPatch,
     # Should not raise
     validate_runtime_configuration()
 
+
+def test_validate_runtime_configuration_skips_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("UDOCKET_SKIP_RUNTIME_CHECKS", "1")
+    runtime_checks.validate_runtime_configuration()
+
+
+def test_validate_runtime_configuration_skips_for_collectstatic(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir()
+
+    monkeypatch.setattr(runtime_checks, "ensure_storage_root", lambda: storage_root)
+    monkeypatch.setattr(runtime_checks, "resolve_llm_providers_path", lambda: tmp_path / "providers.json")
+    monkeypatch.setattr(runtime_checks, "resolve_llm_assignments_path", lambda: tmp_path / "assignments.json")
+    monkeypatch.setattr(runtime_checks, "resolve_analyze_defaults_path", lambda: tmp_path / "analyze_defaults.json")
+    monkeypatch.setattr(runtime_checks, "_current_management_command", lambda: "collectstatic")
+
+    runtime_checks.validate_runtime_configuration()
