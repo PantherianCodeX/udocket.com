@@ -88,9 +88,10 @@ def validate_runtime_configuration() -> None:
         raise RuntimeConfigurationError("LLM configuration is invalid") from exc
 
     log.info(
-        "Runtime configuration validated",
+        "runtime.success",
         extra={
             "component": "runtime",
+            "status": "ok",
             "storage_root": str(storage_root),
             "llm_providers_path": str(providers_path),
             "llm_assignments_path": str(assignments_path),

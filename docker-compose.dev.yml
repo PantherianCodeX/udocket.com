@@ -31,15 +31,15 @@ services:
       - sh
       - -lc
       - |
-          /opt/venv/bin/python manage.py migrate && \
-          /opt/venv/bin/python -m watchfiles \
+          python manage.py migrate && \
+          python -m watchfiles \
             --target-type=command \
             --filter=apps.platform.config.watchers.PythonAndHTMLFilter \
             --ignore-paths=/opt/venv \
             --ignore-paths=${APP_ROOT:-/udocket}/storage \
             --ignore-paths=${APP_ROOT:-/udocket}/celerybeat-schedule \
             --grace-period=0.2 \
-            "/opt/venv/bin/daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" ${APP_ROOT:-/udocket}
+            "daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" ${APP_ROOT:-/udocket}
     volumes:
       - ./storage:/udocket/storage
     ports:
