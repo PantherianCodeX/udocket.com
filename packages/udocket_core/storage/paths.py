@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from config.settings import settings
+from config.paths import resolve_storage_root
 
 
 def case_dir(case_id: str) -> Path:
-    base = Path(settings.STORAGE_ROOT) / "media" / "cases" / case_id
+    base = resolve_storage_root() / "media" / "cases" / case_id
     for sub in ("audio", "ops", "transcript"):
         (base / sub).mkdir(parents=True, exist_ok=True)
     return base

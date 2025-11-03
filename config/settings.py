@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_ROOT = Path(os.environ.get("APP_ROOT", str(REPO_ROOT))).expanduser()
 DEFAULT_STORAGE_ROOT = DEFAULT_APP_ROOT / "storage"
 FALLBACK_STORAGE_ROOT = REPO_ROOT / "storage"
@@ -549,8 +549,9 @@ class Settings(BaseSettings):
     AZURE_SPEECH_REGION: str = "canadacentral"
     LANGUAGE: str = "en-CA"
 
-    # Storage
-    STORAGE_ROOT: Path = Field(default=DEFAULT_STORAGE_ROOT)
+    # Paths
+    APP_ROOT: Path | None = None
+    STORAGE_ROOT: Path | None = None
     MAX_UPLOAD_MB: int = 500
 
     # Database
@@ -743,13 +744,22 @@ class Settings(BaseSettings):
         for key, value in file_values.items():
             data_dict.setdefault(key, value)
 
+        app_root_value = data_dict.get("APP_ROOT")
+        if isinstance(app_root_value, Path):
+            app_root = app_root_value
+        elif isinstance(app_root_value, str) and app_root_value.strip():
+            app_root = Path(app_root_value.strip()).expanduser()
+        else:
+            app_root = DEFAULT_APP_ROOT
+        data_dict["APP_ROOT"] = app_root
+
         storage_root_value = data_dict.get("STORAGE_ROOT")
         if isinstance(storage_root_value, Path):
             storage_root = storage_root_value
-        elif isinstance(storage_root_value, str) and storage_root_value:
-            storage_root = Path(storage_root_value)
+        elif isinstance(storage_root_value, str) and storage_root_value.strip():
+            storage_root = Path(storage_root_value.strip()).expanduser()
         else:
-            storage_root = DEFAULT_STORAGE_ROOT
+            storage_root = app_root / "storage"
         data_dict["STORAGE_ROOT"] = storage_root
 
         db_url_value = data_dict.get("DATABASE_URL")
@@ -812,12 +822,9 @@ class Settings(BaseSettings):
         return self
 
     def ensure_storage_root(self) -> Path:
-        root = self.STORAGE_ROOT
-        if _safe_mkdir(root) and root.exists():
-            return root
-        if _safe_mkdir(FALLBACK_STORAGE_ROOT):
-            return FALLBACK_STORAGE_ROOT
-        return root
+        from config.paths import ensure_storage_root as _ensure_root
+
+        return _ensure_root(self)
 
     @property
     def azure(self) -> AzureConfig:
@@ -838,15 +845,19 @@ class Settings(BaseSettings):
 
     @property
     def storage(self) -> StorageConfig:
-        return StorageConfig(root=self.STORAGE_ROOT, max_upload_mb=self.MAX_UPLOAD_MB)
+        from config.paths import resolve_storage_root
+
+        return StorageConfig(root=resolve_storage_root(self), max_upload_mb=self.MAX_UPLOAD_MB)
 
     @property
     def database(self) -> DatabaseConfig:
+        from config.paths import resolve_storage_root
+
         return DatabaseConfig(
             url=self.DATABASE_URL,
             allow_sqlite_dev_fallback=self.ALLOW_SQLITE_DEV_FALLBACK,
             test_url=self.TEST_DATABASE_URL,
-            storage_root=self.STORAGE_ROOT,
+            storage_root=resolve_storage_root(self),
         )
 
     @property
@@ -989,6 +1000,12 @@ def _build_settings_kwargs() -> dict[str, Any]:
         default_env = base_dir / ".env"
         if default_env.is_file():
             env_kwargs["_env_file"] = default_env
+            env_kwargs["_env_file_encoding"] = "utf-8"
+    if "_env_file" not in env_kwargs:
+        app_root = Path(os.environ.get("APP_ROOT", str(DEFAULT_APP_ROOT))).expanduser()
+        platform_env = app_root / "apps" / "platform" / ".env"
+        if platform_env.is_file():
+            env_kwargs["_env_file"] = platform_env
             env_kwargs["_env_file_encoding"] = "utf-8"
     secrets_dir = os.environ.get("UDOCKET_SECRETS_DIR") or os.environ.get("SECRETS_DIR")
     if secrets_dir:

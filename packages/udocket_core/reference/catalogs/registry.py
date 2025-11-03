@@ -2,13 +2,14 @@ from __future__ import annotations
 import json, os
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
+
+from ...config.paths import resolve_data_root
 from .base import CatalogBundle, CourtCatalog, Court
 from .plugin_protocol import validate_catalogs
 from ..utils import safe_dump  # NEW
 
-# Directory walking is data-only. Override with COURT_CATALOG_ROOT to point elsewhere.
-# __file__ is .../reference/catalogs/registry.py, so parents[1] is .../reference
-DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[1] / "data"
+# Directory walking is data-only. Override via env or settings to point elsewhere.
+DEFAULT_DATA_ROOT = resolve_data_root()
 
 def _iter_bundle_files(root: Path | None = None) -> List[Path]:
     base = Path(root) if root else DEFAULT_DATA_ROOT
@@ -51,7 +52,11 @@ def _check_cross_catalog_localcode_uniqueness(catalogs: List[CourtCatalog]) -> N
         raise ValueError("Cross-catalog LocalCode duplicates detected:\n- " + "\n- ".join(errors))
 
 def discover_catalogs(data_root: str | Path | None = None) -> List[CourtCatalog]:
-    root = Path(data_root) if data_root else Path(os.getenv("COURT_CATALOG_ROOT", DEFAULT_DATA_ROOT))
+    if data_root:
+        root = Path(data_root)
+    else:
+        legacy_override = os.getenv("COURT_CATALOG_ROOT")
+        root = Path(legacy_override).expanduser() if legacy_override else DEFAULT_DATA_ROOT
     bundles = [_load_bundle(p) for p in _iter_bundle_files(root)]
     catalogs: List[CourtCatalog] = []
     for b in bundles:

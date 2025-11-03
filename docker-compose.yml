@@ -106,6 +106,8 @@ services:
       context: .
       dockerfile: packages/udocket_docs/Dockerfile
     image: udocket-docs-toolbox:dev
+    env_file:
+      - packages/udocket_docs/.env
     working_dir: /udocket
     volumes:
       - .:/udocket:cached

@@ -4,11 +4,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from ...config.paths import resolve_data_root
 from .base import SchemeBundle, CaseNumberScheme
 
 # Keep jurisdiction data co-located under reference/data/**
-# __file__ is .../reference/identifiers/registry.py, so parents[1] is .../reference
-DEFAULT_SCHEMES_ROOT = Path(__file__).resolve().parents[1] / "data"
+DEFAULT_SCHEMES_ROOT = resolve_data_root()
 
 def _iter_scheme_files(root: Path) -> Iterable[Path]:
     for p in root.rglob("case_number_schemes.json"):

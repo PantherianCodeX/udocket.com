@@ -1,5 +1,6 @@
 {
-  "python.defaultInterpreterPath": "/usr/local/bin/python",
+  "python.defaultInterpreterPath": "./opt/venv/bin/python",
+  "python.terminal.activateEnvironment": true,
   "python.analysis.djangoEnabled": true,
   "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
   "chatgpt.commentCodeLensEnabled": false,

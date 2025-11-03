@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from ..config.paths import resolve_llm_assignments_path, resolve_llm_providers_path
 from ..utils.json import (
     JSONObject,
     JSONValue,
@@ -18,10 +19,6 @@ from ..utils.json import (
     coerce_str_list,
     load_json_object,
 )
-
-BASE_DIR = Path(__file__).resolve().parents[3]
-PROVIDERS_PATH = BASE_DIR / "config" / "llm_providers.json"
-ASSIGNMENTS_PATH = BASE_DIR / "config" / "llm_assignments.json"
 
 
 def _empty_json_mapping() -> dict[str, JSONValue]:
@@ -36,6 +33,10 @@ def _empty_str_list() -> list[str]:
 
 def _empty_str_dict() -> dict[str, str]:
     return {}
+
+
+class LLMConfigError(RuntimeError):
+    """Raised when LLM configuration files are missing or invalid."""
 
 
 @dataclass(frozen=True)
@@ -122,16 +123,32 @@ class LLMSettings:
 
 def _load_json(path: Path) -> JSONObject:
     if not path.exists():
-        return {}
-    payload = load_json_object(path, context=str(path))
+        raise LLMConfigError(f"Required LLM config file not found: {path}")
+    try:
+        payload = load_json_object(path, context=str(path))
+    except Exception as exc:  # pragma: no cover - surface precise context upstream
+        raise LLMConfigError(f"Failed to load LLM config file: {path}") from exc
     return {str(key): value for key, value in payload.items()}
 
 
 def load_llm_settings(
-    providers_path: Path = PROVIDERS_PATH,
-    assignments_path: Path = ASSIGNMENTS_PATH,
+    providers_path: Path | None = None,
+    assignments_path: Path | None = None,
 ) -> LLMSettings:
-    providers_root = coerce_json_object(_load_json(providers_path).get("providers"))
+    if providers_path is None:
+        providers_path = resolve_llm_providers_path()
+    else:
+        providers_path = Path(providers_path)
+
+    if assignments_path is None:
+        assignments_path = resolve_llm_assignments_path()
+    else:
+        assignments_path = Path(assignments_path)
+
+    providers_payload = _load_json(providers_path)
+    providers_root = coerce_json_object(providers_payload.get("providers"))
+    if not providers_root:
+        raise LLMConfigError(f"No providers defined in {providers_path}")
     provider_map: dict[str, LLMProvider] = {}
     for name, provider_payload_raw in providers_root.items():
         provider_payload = coerce_json_object(provider_payload_raw)
@@ -181,7 +198,10 @@ def load_llm_settings(
             hosted_creators=hosted_creators,
         )
 
-    assignments_root = coerce_json_object(_load_json(assignments_path).get("stages"))
+    assignments_payload = _load_json(assignments_path)
+    assignments_root = coerce_json_object(assignments_payload.get("stages"))
+    if not assignments_root:
+        raise LLMConfigError(f"No stage assignments defined in {assignments_path}")
     assignment_map: dict[str, LLMStageAssignment] = {}
     for stage_key, assignment_payload_raw in assignments_root.items():
         assignment_payload = coerce_json_object(assignment_payload_raw)
@@ -206,6 +226,7 @@ def load_llm_settings(
 
 
 __all__ = [
+    "LLMConfigError",
     "LLMProviderModel",
     "LLMProvider",
     "LLMStageAssignment",

@@ -26,7 +26,7 @@ Scope: `config/` (shared pydantic settings loader) and Django settings under `ap
 - Alternative: per‑org schemas or databases, controlled via environment. If adopted, set `search_path` per request/worker and run migrations per schema.
 
 ## Storage Layout
-- Platform uses `MEDIA_ROOT/tenants/<org>/cases/<case_id>/...` (audio/transcript/analysis/ops). Always allocate via `ensure_case_dirs`.
+- Platform uses `MEDIA_ROOT/tenants/<ORG_ID>/cases/<case_id>/...` (audio/transcript/analysis/ops). Always allocate via `ensure_case_dirs`.
 
 ## Seeded Defaults (File‑Driven)
 - Maintain file‑driven defaults for:

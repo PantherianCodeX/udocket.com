@@ -94,7 +94,7 @@ ______________________________________________________________________
 **Contract:** Every SA/WP/CD artifact must pass through Guardian; PASS/WARN/BLOCK/WAIVED semantics, latency targets, and queue idempotency stay consistent across releases. **|**
 **State:** Guardian persists manifests, policy context hashes, waiver history, span detections, and queue telemetry in Postgres and the submission bus. **|**
 **Failures & handling:** Queue saturation, classifier failures, or policy bundle drift trigger mitigations in §5 and operational drills in §8.3. **|**
-**Observability:** Grafana “Guardian SLO” dashboard (`guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, `guardian_submission_queue_depth`), synthetic job `guardian_slo.yaml`, and Ops logs under `storage/media/cases/<case>/ops/guardian/`. **|**
+**Observability:** Grafana “Guardian SLO” dashboard (`guardian_judgment_latency_seconds`, `guardian_cleared_ratio`, `guardian_submission_queue_depth`), synthetic job `guardian_slo.yaml`, and Ops logs under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/guardian/`. **|**
 **Breadcrumbs:** Code `apps/platform/operations/guardian.py`, `packages/udocket_core/guardian/`, Tests `tests/platform/guardian/test_guardian_enqueue.py`, Observability `infra/grafana/guardian_slo.json`. **|**
 **References:** §2 Responsibilities, §3 API contract, §4 State management, §5 Failure modes, §8 Operational notes, ADR-0001.
 
@@ -114,7 +114,7 @@ ______________________________________________________________________
 **Contract:** Guardian is the single authority for PASS/WARN/BLOCK/WAIVED outcomes, status transitions, quarantine workflows, and waiver requirements. **|**
 **State:** Judgment history, waiver manifests, quarantine records, and parent-child locks persist in Postgres tables (`guardian_judgment_history`, `guardian_waiver`, `guardian_relationship_lock`). **|**
 **Failures & handling:** Mis-mapped statuses or waiver drift trigger remediation via §5.1 Incident triggers and §8.3 runbooks; parent-lock conflicts raise explicit errors. **|**
-**Observability:** Metrics `guardian_cleared_ratio`, `guardian_waiver_total`, audit stream `storage/media/cases/<case>/ops/ops_guardian.jsonl`, and SSE event consumers instrument downstream reactions. **|**
+**Observability:** Metrics `guardian_cleared_ratio`, `guardian_waiver_total`, audit stream `storage/media/tenants/<ORG_ID>/cases/<case>/ops/ops_guardian.jsonl`, and SSE event consumers instrument downstream reactions. **|**
 **Breadcrumbs:** Code `packages/udocket_core/guardian/judgment.py`, Queue orchestrator `apps/platform/operations/guardian.py`, Tests `tests/platform/guardian/test_status_mapping.py`. **|**
 **References:** TDD §7.3 (Artifact lifecycle), §5 Failure modes, Appendix A (reference artifacts), status mapping appendix in `docs/overview/tdd/appendices/status-mapping.md`.
 
@@ -441,7 +441,7 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 - Row-level security policy `guardian_history_vis` enforces org isolation. Application roles read from secure projections (`guardian_judgment_history_secure`, `guardian_judgment`) while service accounts maintain base-table permissions.
 - Span evidence resides in `guardian_span_detection` with deterministic UUIDv7 identifiers tied to manifest digests and masking profiles.
 - Submission metadata (`guardian_submission_audit`) captures worker identity, payload hashes, policy digests, and queue offsets so operators can reconcile message position with persisted history.
-- Human-readable logs mirror structured entries under `storage/media/cases/<case>/ops/guardian/<job_id>__guardian.log` for audit parity.
+- Human-readable logs mirror structured entries under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/guardian/<job_id>__guardian.log` for audit parity.
 
 ### 4.2 Policy context & configuration
 
@@ -491,9 +491,9 @@ Guardian enforces parent-child integrity by locking upstream artifacts (`SELECT 
 **Failures & handling:** Missing logs or retention gaps trigger compliance incidents and §8.3.5 RB-GUARD-MANUAL follow-ups. **|**
 **Observability:** Retention jobs and checksum monitors report status to dashboards and CI scripts. **|**
 **References:** §5 Failure modes, §8.3 Runbooks & drills, Appendix B payload schema.
-**Breadcrumbs:** File layout `storage/media/cases/<case>/ops/guardian/`, retention scripts `ops/scripts/guardian/purge_old_logs.py`, compliance monitors `infra/compliance/guardian-retention.yaml`.
+**Breadcrumbs:** File layout `storage/media/tenants/<ORG_ID>/cases/<case>/ops/guardian/`, retention scripts `ops/scripts/guardian/purge_old_logs.py`, compliance monitors `infra/compliance/guardian-retention.yaml`.
 
-- Case-scoped ops directories persist JSON metadata and audit JSONL (`storage/media/cases/<case>/ops/guardian/`), following the deterministic naming convention `<job_id>__guardian_log.json`.
+- Case-scoped ops directories persist JSON metadata and audit JSONL (`storage/media/tenants/<ORG_ID>/cases/<case>/ops/guardian/`), following the deterministic naming convention `<job_id>__guardian_log.json`.
 - Retention: Guardian keeps span evidence, manifests, and audit logs ≥ 365 days to satisfy HIPAA/PHIPA obligations; manual review records persist until incident closure sign-off.
 - OPA decision logs stream to immutable storage with matching `guardian_judgment_id` references so auditors can compare inline evaluations with stored manifests.
 
@@ -661,7 +661,7 @@ ______________________________________________________________________
 **Contract:** Operational procedures, incident triggers, and manual review steps must stay in sync with §8.3. Any change to runbooks, alert thresholds, or response ownership requires updating this section and the appendices simultaneously. **|**
 **State:** Rotation calendars, deployment manifests, and incident records live in `ops/guardian/` alongside the runbooks referenced below. **|**
 **Failures & handling:** Operational responses map directly to §5 (Failure modes) and §8.3 (RB-GUARD-001/QUEUE/QUAR/MANUAL). **|**
-**Observability:** Operators rely on Grafana dashboards from §6, alertmanager routes, and audit JSONL streams in `storage/media/cases/<case>/ops/guardian/`. **|**
+**Observability:** Operators rely on Grafana dashboards from §6, alertmanager routes, and audit JSONL streams in `storage/media/tenants/<ORG_ID>/cases/<case>/ops/guardian/`. **|**
 **Breadcrumbs:** Helm charts `infra/kubernetes/guardian/helm`, Terraform modules `infra/terraform/guardian`, runbooks `ops/runbooks/guardian/*.md`, deployment scripts `ops/scripts/guardian/deploy.py`. **|**
 **References:** §5 Failure modes, §8.3 Runbooks & drills, §8.3, `infra/kubernetes/guardian/`, `ops/runbooks/guardian/`.
 

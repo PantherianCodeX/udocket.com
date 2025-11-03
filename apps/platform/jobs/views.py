@@ -5,17 +5,18 @@ import os
 import uuid
 from typing import Any, Dict, Iterable, List, Optional, Set
 
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from apps.platform.authorization.access_policies import JobAccessPolicy
-from django.conf import settings
 from rest_framework.response import Response
 from django.http import Http404
 from django.http.response import FileResponse
 from django.shortcuts import render
 import requests
+from config.paths import resolve_storage_root
 
 log = logging.getLogger("apps.platform.jobs.views")
 from pathlib import Path
@@ -355,8 +356,6 @@ class JobViewSet(viewsets.ModelViewSet):
         )
         checksum = base_artifact.checksum if base_artifact else ""
         if not checksum and os.path.exists(job.transcript_path):
-            import hashlib
-
             digest = hashlib.sha256()
             try:
                 with open(job.transcript_path, "rb") as fh:
@@ -536,7 +535,7 @@ class JobViewSet(viewsets.ModelViewSet):
             active_meta = job_meta
         if not path_obj.exists():
             raise Http404
-        storage_root = Path(settings.STORAGE_ROOT).resolve()
+        storage_root = resolve_storage_root().resolve()
         try:
             if not path_obj.resolve().is_relative_to(storage_root):
                 raise Http404
@@ -568,7 +567,7 @@ class JobViewSet(viewsets.ModelViewSet):
         telemetry = job_telemetry(job)
         meta = telemetry.meta if isinstance(telemetry.meta, dict) else {}
 
-        storage_root = Path(settings.STORAGE_ROOT).resolve()
+        storage_root = resolve_storage_root().resolve()
 
         def _resolve_path(candidate: Optional[str]) -> Optional[Path]:
             if not candidate:

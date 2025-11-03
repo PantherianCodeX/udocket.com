@@ -15,10 +15,10 @@ except ImportError:  # pragma: no cover - use typing_extensions when stdlib lack
 from django.db import transaction
 
 from packages.udocket_core.llm.config import (
+    LLMConfigError,
     LLMProvider,
     LLMProviderModel,
     LLMSettings,
-    PROVIDERS_PATH,
     load_llm_settings,
 )
 from packages.udocket_core.llm.runtime import (
@@ -38,7 +38,6 @@ from packages.udocket_core.utils.json import (
     coerce_str,
     coerce_str_list,
     normalize_json_object,
-    read_json_object,
 )
 
 _analyze_src: Iterable[str]
@@ -417,21 +416,64 @@ def ensure_default_llm_configuration(
     return serialize_llm_configuration(config)
 
 
+def _serialize_provider_model(model: LLMProviderModel) -> JSONDict:
+    payload: JSONDict = {
+        "label": model.label,
+        "cost_tier": model.cost_tier,
+        "options": dict(model.options),
+    }
+    if model.max_output_tokens is not None:
+        payload["max_output_tokens"] = model.max_output_tokens
+    if model.context_window_tokens is not None:
+        payload["context_window_tokens"] = model.context_window_tokens
+    if model.max_input_tokens is not None:
+        payload["max_input_tokens"] = model.max_input_tokens
+    if model.max_chunk_chars is not None:
+        payload["max_chunk_chars"] = model.max_chunk_chars
+    if model.chunk_overlap_tokens is not None:
+        payload["chunk_overlap_tokens"] = model.chunk_overlap_tokens
+    if model.max_prompt_chars is not None:
+        payload["max_prompt_chars"] = model.max_prompt_chars
+    if model.max_prompt_segments is not None:
+        payload["max_prompt_segments"] = model.max_prompt_segments
+    if model.default_temperature is not None:
+        payload["default_temperature"] = model.default_temperature
+    if model.deployment_env:
+        payload["deployment_env"] = model.deployment_env
+    if model.origin:
+        payload["origin"] = model.origin
+    payload["default_enabled"] = model.default_enabled
+    return payload
+
+
+def _serialize_provider(provider: LLMProvider) -> JSONDict:
+    models_payload: dict[str, JSONDict] = {
+        model_name: _serialize_provider_model(model_obj)
+        for model_name, model_obj in provider.models.items()
+    }
+    payload: JSONDict = {
+        "display_name": provider.display_name,
+        "description": provider.description,
+        "category": provider.category,
+        "hosted_creators": list(provider.hosted_creators),
+        "env_requirements": list(provider.env_requirements),
+        "api_kind": provider.api_kind,
+        "default_endpoint": provider.default_endpoint,
+        "requires_api_key": provider.requires_api_key,
+        "models": models_payload,
+    }
+    return payload
+
+
 def _provider_catalog() -> dict[str, JSONDict]:
     try:
-        payload = read_json_object(PROVIDERS_PATH)
-    except OSError:
+        settings = load_llm_settings()
+    except LLMConfigError:
         return {}
-    providers_payload = payload.get("providers")
-    if not isinstance(providers_payload, Mapping):
-        return {}
-    catalog: dict[str, JSONDict] = {}
-    for provider_name_obj, provider_cfg in providers_payload.items():
-        if isinstance(provider_cfg, Mapping):
-            catalog[provider_name_obj] = coerce_json_object(provider_cfg)
-        else:
-            catalog[provider_name_obj] = {}
-    return catalog
+    return {
+        name: _serialize_provider(provider)
+        for name, provider in settings.providers.items()
+    }
 
 
 def load_provider_catalog() -> dict[str, JSONDict]:

@@ -217,7 +217,7 @@ ______________________________________________________________________
 
 **Purpose:** Deliver scoped AI assistants for staff and clients with auditability and policy enforcement. **|**
 **Contract:** Assistants run LangGraph pipelines with retrieval restricted to authorized artifacts; sessions log manifests, Guardian verdicts, and moderation outcomes. Client assistant includes informational disclaimers. **|**
-**State:** Chat sessions stored under `storage/media/cases/<case>/ops/<session_id>__chat_{audience}.jsonl`; manifests record `{model_id, prompt_version, retrieval_sources[], token_usage, latency_ms}`. **|**
+**State:** Chat sessions stored under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/<session_id>__chat_{audience}.jsonl`; manifests record `{model_id, prompt_version, retrieval_sources[], token_usage, latency_ms}`. **|**
 **Failures & handling:** Policy violations (`CHAT_POLICY_BLOCK`, `CHAT_GUARDIAN_QUARANTINED`) disable access pending review; rate-limit exhaustion surfaces UI banners. **|**
 **Observability:** Metrics `chat_sessions_total{audience}`, `chat_token_usage_total`, `chat_rate_limit_block_total`, dashboards “Assistant Usage” and “Assistant API”. **|**
 **Breadcrumbs:** Assistant orchestrator `apps/platform/ui/assistants.py`, LangGraph pipelines `packages/udocket_core/agents/assistants/*`, tests `tests/e2e/test_chat_assistant.py`, API spec `ops/openapi/chat_assistants.yaml`. **|**

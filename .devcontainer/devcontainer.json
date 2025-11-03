@@ -12,7 +12,7 @@
   ],
   "initializeCommand": "bash -lc './scripts/devcontainer/ensure_buildx_builder.sh'",
   "shutdownAction": "stopCompose",
-  "workspaceFolder": "/app",
+  "workspaceFolder": "/udocket",
   "forwardPorts": [8000, 8010],
   "overrideCommand": true,
   "remoteUser": "root",
@@ -24,6 +24,10 @@
   "postStartCommand": "bash -lc '[ -d /opt/venv ] || ./scripts/devcontainer/post_create.sh'",
   "customizations": {
     "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.terminal.activateEnvironment": true
+      },
       "extensions": [
         "etmoffat.pip-packages",
         "github.copilot",
@@ -51,10 +55,7 @@
         "firefox-devtools.vscode-firefox-debug",
         "ms-azuretools.vscode-azurevirtualmachines",
         "Azurite.azurite"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/opt/venv/bin/python"
-      }
+      ]
     }
   }
 }

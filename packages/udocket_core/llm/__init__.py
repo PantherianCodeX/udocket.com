@@ -3,6 +3,7 @@
 """LLM configuration utilities."""
 
 from .config import (
+    LLMConfigError,
     LLMProvider,
     LLMProviderModel,
     LLMSettings,
@@ -11,6 +12,7 @@ from .config import (
 )
 
 __all__: list[str] = [
+    "LLMConfigError",
     "LLMProvider",
     "LLMProviderModel",
     "LLMStageAssignment",

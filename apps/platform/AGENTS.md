@@ -5,7 +5,7 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 ## Architecture
 - ASGI‑first Django app with Channels, Celery, DRF, and HTMX UI.
 - Multi‑tenant: organization scoping enforced by view helpers and selectors; do not bypass them.
-- Storage: per‑tenant case roots under `MEDIA_ROOT/tenants/<org>/cases/<case_id>/` created by `ensure_case_dirs` (apps/platform/operations/storage.py:20).
+- Storage: per‑tenant case roots under `MEDIA_ROOT/tenants/<ORG_ID>/cases/<case_id>/` created by `ensure_case_dirs` (apps/platform/operations/storage.py:20).
 - Agents: implemented in `packages/udocket_core/agents/` and orchestrated via Celery tasks (apps/platform/operations/tasks.py:1). UI integrates through presenters + selectors.
  - Public API endpoints (DRF):
    - Jobs: `/api/v1/jobs/<id>/status/`, `/api/v1/jobs/<id>/detail/`, download endpoints

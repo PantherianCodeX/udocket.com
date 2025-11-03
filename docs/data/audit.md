@@ -166,7 +166,7 @@ ______________________________________________________________________
 
 ### 4.1 Manifest & event storage
 
-- Manifests stored under `storage/media/cases/<case>/ops/<job_id>__<agent>_manifest.json` with SHA-256 digests.
+- Manifests stored under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/<job_id>__<agent>_manifest.json` with SHA-256 digests.
 - `audit_event` captures normalized events (case/artifact/job IDs, judgment IDs, settings hash, timestamps) and is mirrored to WORM.
 
 ### 4.2 Ledger storage

@@ -12,6 +12,8 @@ from typing import Callable, Final, Protocol, TypeAlias, cast
 
 from django.utils import timezone
 
+from config.paths import resolve_config_dir
+
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.models import GuardianSettings
 from apps.platform.operations.llm import (
@@ -40,7 +42,7 @@ from packages.udocket_core.logging.context import LogContext, build_extra
 
 MAX_CONTENT_CHARS: Final = 50000
 MAX_HISTORY_ENTRIES: Final = 10
-GUARDIAN_DEFAULTS_PATH: Final = Path(__file__).resolve().parents[3] / "config" / "guardian_defaults.json"
+GUARDIAN_DEFAULTS_PATH: Final = resolve_config_dir() / "guardian_defaults.json"
 
 
 log = logging.getLogger("udocket.guardian")

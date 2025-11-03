@@ -76,7 +76,7 @@ ______________________________________________________________________
 
 ## Reading Guide
 
-- **Scope:** Defines the Artifact Store service that governs storage/media layout under `storage/media/cases/<case_id>/`, lifecycle invariants for Source Assets/Work Products/Deliverables (TDD §5), retention/erasure workflows (TDD §14), and append-only ops ledgers used by downstream agents.
+- **Scope:** Defines the Artifact Store service that governs storage/media layout under `storage/media/tenants/<ORG_ID>/cases/<case_id>/`, lifecycle invariants for Source Assets/Work Products/Deliverables (TDD §5), retention/erasure workflows (TDD §14), and append-only ops ledgers used by downstream agents.
 - **Structure:** Sections follow the 0–10 pattern: purpose and responsibilities, API/file interfaces, state management, failure handbooks, observability, security/compliance, operations, dependencies, and references. Appendices align with ExclusiveSwap invariants and retention tables described in TDD §5.4 and Appendix J.
 - **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/data/artifact-store.md docs/overview/tdd.md docs/tdd_modularization.md` before submitting. Changes to storage layout or retention policy require synchronized updates to migration scripts and Appendix J tables.
 - **Change protocol:** Any schema/layout change (directory naming, hash strategy, retention timers) must reference this spec, TDD §5.2–§5.4, Appendix J, and corresponding migrations. Deleting artifacts or altering retention flows also requires Security + Records approval.
@@ -109,7 +109,7 @@ ______________________________________________________________________
 
 ### 2.1 Case directory layout (binding)
 
-- **Contract:** Every case stores artifacts under `storage/media/cases/<case_id>/` with subdirectories `audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`. Filenames follow `<job_id>__<artifact>[_vN].<ext>`. Layout changes require migration plans and Appendix updates. **|**
+- **Contract:** Every case stores artifacts under `storage/media/tenants/<ORG_ID>/cases/<case_id>/` with subdirectories `audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`. Filenames follow `<job_id>__<artifact>[_vN].<ext>`. Layout changes require migration plans and Appendix updates. **|**
 - **State:** Directory structure plus manifest table `artifact_file` linking database rows to filesystem paths and hashes. **|**
 - **Observability:** `artifact_store_missing_file_total` and periodic reconciler jobs flag drift. **|**
 - **Failures & handling:** Reconciler attempts rehydrate from cold storage; unresolved gaps escalate to `RB-ARTIFACT-CORRUPTION`. **|**

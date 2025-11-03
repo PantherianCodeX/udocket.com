@@ -9,6 +9,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 2) Copy `.env.example` to `.env` and fill required values.
    - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
+   - `APP_ROOT` defaults to `/udocket` inside containers; update it (and derived paths such as `STORAGE_ROOT`) when running directly on your host.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
 4) Sync the platform dependencies (dev extras included) without installing the project itself:
 

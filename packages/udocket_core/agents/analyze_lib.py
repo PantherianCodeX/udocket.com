@@ -10,6 +10,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Optional, TypedDict, cast
 
+from ..config.paths import resolve_analyze_defaults_path
 from .common import parse_transcript, TranscriptParse
 from .common.io import TranscriptSegment
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
@@ -23,9 +24,6 @@ from ..llm.runtime import (
     build_provider_runtime_config,
 )
 from .common.llm_health import ensure_llm_client_health
-
-BASE_DIR = Path(__file__).resolve().parents[3]
-ANALYZE_DEFAULTS_PATH = BASE_DIR / "config" / "analyze_defaults.json"
 
 StageOptions = dict[str, object]
 StageMap = dict[str, StageOptions]
@@ -100,7 +98,7 @@ def _normalize_providers(values: Sequence[str]) -> list[str]:
 
 @lru_cache(maxsize=1)
 def load_analyze_defaults() -> dict[str, object]:
-    payload = read_json_object(ANALYZE_DEFAULTS_PATH)
+    payload = read_json_object(resolve_analyze_defaults_path())
     return coerce_object_dict(payload)
 
 

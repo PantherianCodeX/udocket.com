@@ -89,7 +89,7 @@ ______________________________________________________________________
 
 **Purpose:** Define the canonical LangGraph-based agent pipelines, contracts, and guardrails that transform transcripts into downstream analyses and deliverables. **|**
 **Contract:** This spec owns the agent interface, graph configuration model, QA gates, and operational controls that keep agents deterministic, observable, and compliant. Implementations must adhere to the shared manifests, artifact naming conventions, and error taxonomy defined here. **|**
-**State:** Pipelines, tool catalogs, and assignments are stored in Settings (`agents.pipeline.*`, `agents.tools.*`), with manifests persisted per job under `storage/media/cases/<case>/analysis|docs|ops`. Celery job state, audit events, envelope hashes, and metrics tie back to these pipelines. **|**
+**State:** Pipelines, tool catalogs, and assignments are stored in Settings (`agents.pipeline.*`, `agents.tools.*`), with manifests persisted per job under `storage/media/tenants/<ORG_ID>/cases/<case>/analysis|docs|ops`. Celery job state, audit events, envelope hashes, and metrics tie back to these pipelines. **|**
 **Failures & handling:** Graph activation rejects invalid schemas; runtime failures follow the taxonomy in §5; Guardian enforces residency/policy gates; Shadow mode (§8.2) and QA harnesses catch regressions before promotion. **|**
 **Observability:** Metrics dashboards (“Agent Pipelines – Activation”, “LangGraph QA”, “Agent Shadow Runs”), ops JSONL streams (`ops_transcription.jsonl`, `ops_summary.jsonl`, `ops_compose.jsonl`), and manifests record pipeline versions, tool usage, and retry history. **|**
 **Breadcrumbs:** Orchestration runtime `packages/udocket_core/agents/graph_runner.py`, pipeline catalog `packages/udocket_core/agents/pipeline_catalog.py`, Celery tasks `apps/platform/operations/tasks/agents.py`, QA harness `tests/agents/test_langgraph_acceptance.py`, Settings integration `apps/platform/settings/agents_pipeline.py`. **|**
@@ -111,7 +111,7 @@ ______________________________________________________________________
 
 - Modes: `on-demand` (local streaming) and `batch` (Azure Batch Transcription via SAS URL). Diarisation is enabled for batch jobs only.
 - Inputs: local path or HTTPS SAS URL, language, region (`canadacentral` or `canadaeast`), diarisation flag (batch only). Guardian enforces residency restrictions before execution.
-- Outputs: transcript text `storage/media/cases/<case>/transcript/<job_id>__transcript.txt`, job metadata JSON (`ops/<job_id>_transcription_log.json`), human log, audit JSONL append (`ops/ops_transcription.jsonl`).
+- Outputs: transcript text `storage/media/tenants/<ORG_ID>/cases/<case>/transcript/<job_id>__transcript.txt`, job metadata JSON (`ops/<job_id>_transcription_log.json`), human log, audit JSONL append (`ops/ops_transcription.jsonl`).
 - Header metadata: case + job identifiers, source hashes, language, region, duration, diarisation mode, settings snapshot hash, provider version(s).
 - Retry semantics: streaming jobs auto-resume from buffered offsets; batch jobs poll Azure status and retry failed uploads with exponential backoff capped at 3 attempts.
 - Provider fallback: disabled by default—Settings `speech.jobs[]` may enumerate alternative providers but Guardian requires waiver before enabling; see §5.1 for failure handling.
@@ -245,7 +245,7 @@ ______________________________________________________________________
 
 **Purpose:** Describe how agents persist manifests, artifacts, and lineage to provide forensic traceability. **|**
 **Contract:** Every agent job produces manifests capturing input hashes, settings snapshot, pipeline + graph versions, tool usage, Guardian/Signer dependencies, and resulting artifact paths. **|**
-**State:** Manifests stored under `storage/media/cases/<case>/ops/<job_id>__<agent>_manifest.json`; audit JSONL streams append to `ops/ops_<agent>.jsonl`; QA logs and acceptance verdicts live alongside artifacts. **|**
+**State:** Manifests stored under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/<job_id>__<agent>_manifest.json`; audit JSONL streams append to `ops/ops_<agent>.jsonl`; QA logs and acceptance verdicts live alongside artifacts. **|**
 **Failures & handling:** Missing or corrupt manifests trigger `E_INTEGRITY_MISMATCH` and quarantine outputs; pipeline activation blocks if manifests fail schema validation. **|**
 **Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `python -m doc_tools.manage_docs --lint --check-manifests` ensures schema parity during CI. **|**
 **Breadcrumbs:** Manifest models `packages/udocket_core/agents/manifests.py`, ops logging `packages/udocket_core/agents/logging.py`, lineage tooling `packages/udocket_core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**

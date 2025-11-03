@@ -28,7 +28,7 @@ Quick index of AGENTS guides in this repo:
   - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL).
   - Diarization: supported in `batch` mode only.
   - Outputs: timestamped transcript `.txt`, per-job JSON metadata, append-only ops audit JSONL.
-- Storage layout (per-case): `storage/media/cases/<CASE_ID>/`
+- Storage layout (per-case, tenant scoped): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`
   - `audio/` original uploads as `<job_id>__<original_name>`
   - `transcript/` transcript files as `<job_id>__transcript.txt`
   - `ops/` logs, metadata, and ops audit files
@@ -59,12 +59,12 @@ Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
 - Entry: `packages/udocket_core/agents/transcribe_lib.py`
 - Inputs: local file path or HTTPS SAS URL (batch mode), language, diarization flag (batch only)
 - Outputs:
-  - Transcript: `storage/media/cases/<case>/transcript/<job_id>__transcript.txt`
+  - Transcript: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/transcript/<job_id>__transcript.txt`
     - Header includes case, source name, hash(es), language, region, duration, timestamp
     - Body contains text with interval timestamps unless diarization already provides timing
-  - Job meta (per job): `storage/media/cases/<case>/ops/<job_id>_transcription_log.json`
-  - Human log (per job): `storage/media/cases/<case>/ops/<job_id>_transcription.log`
-  - Case ops audit: `storage/media/cases/<case>/ops/ops_transcription.jsonl`
+  - Job meta (per job): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/<job_id>_transcription_log.json`
+  - Human log (per job): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/<job_id>_transcription.log`
+  - Case ops audit: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/ops_transcription.jsonl`
 - One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"${STORAGE_ROOT}/media/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
 
 ## Analysis Agents
@@ -76,7 +76,7 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Agents should accept `--input <path>` to override, and `--case`, `--case-dir`, `--outdir` similarly to the transcriber.
 
 - Output directory:
-  - Write to `storage/media/cases/<case>/analysis/` and `storage/media/cases/<case>/ops/`.
+  - Write to `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/analysis/` and `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/`.
   - Use per-job or per-run names with the same prefix style when tied to a transcription job: `<job_id>__<artifact>.<ext>`.
 
 - Analyze agent
@@ -161,7 +161,7 @@ General guidelines:
 
 ## File & Naming Conventions
 
-- Per-case directory: `storage/media/cases/<CASE_ID>/`
+- Per-case directory: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`
   - `audio/<job>__<original>` — upload payloads
   - `transcript/<job>__transcript.txt` — primary transcript
   - `analysis/` — outputs from summarization, timelines, entities/graphs (proposed standard)

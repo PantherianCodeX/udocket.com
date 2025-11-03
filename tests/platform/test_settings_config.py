@@ -10,7 +10,7 @@ import config.settings as settings_module
 from config.settings import Settings, _collect_secret_file_values
 
 ALL_ENV_KEYS = tuple(Settings.model_fields.keys())
-FALLBACK_STORAGE_ROOT = Path(settings_module.__file__).resolve().parents[2] / "storage"
+FALLBACK_STORAGE_ROOT = Path(settings_module.__file__).resolve().parents[1] / "storage"
 
 
 @pytest.fixture

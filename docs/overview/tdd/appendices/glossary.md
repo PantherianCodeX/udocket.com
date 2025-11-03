@@ -54,7 +54,7 @@ Authoritative definitions used across TDD, services, and UI. Keep terms concise 
 - Transcribe Agent: Azure Speech–backed agent that produces case transcripts and ops metadata (Canada regions only).
 - Analyze Agent: Consumes transcripts to produce summaries, outlines, timeline seeds, entity hints, and staff reports.
 - Compose Agent: Produces client/lawyer deliverables and QA artifacts via LangGraph with guard rails.
-- Case: Top‑level container for jobs, artifacts, and operations; storage under `storage/media/cases/<CASE_ID>/`.
+- Case: Top‑level container for jobs, artifacts, and operations; storage under `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`.
 - Job: A unit of work executed by agents or tools; writes ops logs and per‑run metadata; artifacts are prefixed with `<job_id>__`.
 - Manifest: JSON payload embedded in artifacts capturing provenance (regions, hashes, settings snapshot), tool versions, and inputs (§5.6).
 - Review/Approval: Moves CDs from `OPERATOR_PREP` → `APPROVAL_REQUESTED` → `QUEUED_FOR_REVIEW`, culminating in `REVIEW.APPROVED`/`REVIEW.CHANGES_REQUESTED`/`REVIEW.QUARANTINED`.

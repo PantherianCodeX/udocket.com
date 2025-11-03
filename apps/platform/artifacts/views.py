@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from django.conf import settings
 from django.db.models import Q
 from django.http import FileResponse, Http404
 from rest_framework import viewsets
 from rest_framework.decorators import action
+
+from config.paths import resolve_storage_root
 
 from apps.platform.authorization.access_policies import ArtifactAccessPolicy
 from apps.platform.artifacts.models import CaseArtifact
@@ -53,7 +54,7 @@ class ArtifactViewSet(viewsets.ReadOnlyModelViewSet):
         path_obj = Path(path_value)
         if not path_obj.exists():
             raise Http404
-        storage_root = Path(settings.STORAGE_ROOT).resolve()
+        storage_root = resolve_storage_root().resolve()
         try:
             is_relative = path_obj.resolve().is_relative_to(storage_root)
         except AttributeError:

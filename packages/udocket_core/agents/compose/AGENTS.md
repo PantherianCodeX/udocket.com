@@ -5,7 +5,7 @@ This guide documents the LangGraph-driven Compose agent that assembles client an
 ## Purpose
 - Consume approved Analyze artifacts (summary Markdown/JSON, timeline seeds, entity hints) plus intake metadata and case context.
 - Draft client-facing and lawyer-facing Markdown deliverables, steer them through guard rails, and render DOCX versions.
-- Produce deterministic, versioned files under `storage/media/cases/<CASE>/docs/` and append structured telemetry to `storage/media/cases/<CASE>/ops/`.
+- Produce deterministic, versioned files under `storage/media/tenants/<ORG_ID>/cases/<CASE>/docs/` and append structured telemetry to `storage/media/tenants/<ORG_ID>/cases/<CASE>/ops/`.
 - Keep every LLM interaction in Canadian Azure regions; fail fast if credentials or provider assignments are missing.
 - Prompt templates are versioned inside `packages/udocket_core/config/compose_prompts.yaml`. The agent loads that file by default and aborts if it is missing unless `COMPOSE_PROMPT_CONFIG` explicitly points elsewhere.
 
