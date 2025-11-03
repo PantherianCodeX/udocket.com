@@ -2,9 +2,15 @@ from __future__ import annotations
 
 # pyright: strict
 
+"""Wrapper utilities around ``requests`` session pooling for Azure clients."""
+
 import threading
 from dataclasses import dataclass
-from typing import Mapping, Protocol
+from typing import Any, Iterable, Mapping, Protocol, cast
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 class _RequestsResponseProtocol(Protocol):
@@ -13,6 +19,8 @@ class _RequestsResponseProtocol(Protocol):
     headers: Mapping[str, object] | None
 
     def json(self) -> object: ...
+
+    def iter_lines(self, decode_unicode: bool | None = None) -> Iterable[str | bytes]: ...
 
 
 class _RequestsSessionProtocol(Protocol):
@@ -23,6 +31,7 @@ class _RequestsSessionProtocol(Protocol):
         params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
         json: object | None = None,
+        stream: bool | None = None,
         timeout: int | float | tuple[float, float] | None = None,
     ) -> _RequestsResponseProtocol: ...
 
@@ -37,36 +46,20 @@ class _RequestsSessionProtocol(Protocol):
 
     def close(self) -> None: ...
 
+    def mount(self, prefix: str, adapter: object) -> None: ...
+
 
 class _RequestsModuleProtocol(Protocol):
-    class exceptions(Protocol):  # type: ignore[misc]
+    class exceptions(Protocol):
         HTTPError: type[Exception]
         RequestException: type[Exception]
 
     Session: type[_RequestsSessionProtocol]
 
 
-try:  # pragma: no cover - optional dependency guard
-    import requests as _imported_requests
-    from requests.adapters import HTTPAdapter as _HTTPAdapter
-except Exception:  # pragma: no cover - requests absent
-    _imported_requests = None
-    _HTTPAdapter = None
-
-try:  # pragma: no cover - optional dependency guard
-    from urllib3.util.retry import Retry as _Retry
-except Exception:  # pragma: no cover - urllib3 absent
-    _Retry = None
-
-
-def _require_requests_dependencies() -> tuple[_RequestsModuleProtocol, type, type]:
-    if _imported_requests is None or _HTTPAdapter is None or _Retry is None:  # pragma: no cover - defensive
-        raise RuntimeError("requests and urllib3 are required for HTTP session management")
-    return (
-        _imported_requests,  # type: ignore[return-value]
-        _HTTPAdapter,  # type: ignore[return-value]
-        _Retry,  # type: ignore[return-value]
-    )
+_REQUESTS: _RequestsModuleProtocol = cast(_RequestsModuleProtocol, requests)
+_HTTP_ADAPTER_CLS = HTTPAdapter
+_RETRY_CLS = Retry
 
 
 @dataclass(frozen=True)
@@ -100,15 +93,16 @@ class RequestsSessionManager:
     """Shared pool of configured requests.Session instances keyed by endpoint."""
 
     def __init__(self, *, config: HTTPSessionConfig | None = None) -> None:
-        requests_module, http_adapter_cls, retry_cls = _require_requests_dependencies()
-        self._requests: _RequestsModuleProtocol = requests_module
-        self._http_adapter_cls = http_adapter_cls
-        self._retry_cls = retry_cls
+        self._requests: _RequestsModuleProtocol = _REQUESTS
+        self._http_adapter_cls: type[HTTPAdapter] = _HTTP_ADAPTER_CLS
+        self._retry_cls: type[Retry] = _RETRY_CLS
         self._config = config or HTTPSessionConfig()
         self._lock = threading.Lock()
         self._sessions: dict[str, _RequestsSessionProtocol] = {}
 
     def session_for(self, endpoint: str) -> _RequestsSessionProtocol:
+        """Return a pooled session for the provided endpoint."""
+
         normalized = (endpoint or "").strip()
         key = normalized.lower() if normalized else "__default__"
         with self._lock:
@@ -120,6 +114,8 @@ class RequestsSessionManager:
             return session
 
     def reset_session(self, endpoint: str) -> None:
+        """Dispose of any cached session for the endpoint."""
+
         normalized = (endpoint or "").strip()
         key = normalized.lower() if normalized else "__default__"
         session: _RequestsSessionProtocol | None
@@ -133,6 +129,8 @@ class RequestsSessionManager:
             pass
 
     def _build_session(self) -> _RequestsSessionProtocol:
+        """Create a new configured ``requests.Session`` instance."""
+
         retry_cfg = self._config.retry
         allowed_methods = frozenset(method.upper() for method in retry_cfg.allowed_methods)
         retry = self._retry_cls(

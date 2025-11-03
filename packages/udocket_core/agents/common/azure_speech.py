@@ -8,13 +8,15 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, cast
 
 from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_json_object,
     coerce_json_value,
+    coerce_object_list,
+    normalize_mapping_optional,
 )
 
 from .http_client import (
@@ -204,35 +206,34 @@ def _to_seconds(value: Any) -> float:
 
 def _analyze_batch_error(payload: object) -> str:
     if isinstance(payload, Mapping):
-        mapping = payload  # retain original for json dump fallback
-        mp: Mapping[str, object] = payload  # typing-friendly view
+        mapping_source = cast(Mapping[object, object], payload)
+        mapping = coerce_json_object(mapping_source)
         message_parts: list[str] = []
-        code_val = mp.get("code")
-        if isinstance(code_val, (str, int, float)):
+        code_val = mapping.get("code")
+        if isinstance(code_val, (str, int, float, bool)):
             code_str = str(code_val).strip()
             if code_str:
                 message_parts.append(f"code={code_str}")
-        message_val = mp.get("message") or mp.get("description")
-        if isinstance(message_val, (str, int, float)):
+        message_val = mapping.get("message") or mapping.get("description")
+        if isinstance(message_val, (str, int, float, bool)):
             message_text = str(message_val).strip()
             if message_text:
                 message_parts.append(message_text)
         if message_parts:
             return " | ".join(message_parts)
-        details_val = mp.get("details")
-        if isinstance(details_val, Sequence) and not isinstance(details_val, (str, bytes, bytearray)):
-            details_seq: Sequence[object] = details_val
-            detail_messages = [_analyze_batch_error(item) for item in details_seq]
+        details_val = mapping.get("details")
+        if isinstance(details_val, list):
+            detail_messages = [_analyze_batch_error(item) for item in details_val]
             filtered = [msg for msg in detail_messages if msg]
             if filtered:
                 return "; ".join(filtered)
-        props_val = mp.get("properties")
+        props_val = mapping.get("properties")
         if isinstance(props_val, Mapping):
-            props_mp: Mapping[str, object] = props_val
+            props_mp = coerce_json_object(props_val)
             error_prop = props_mp.get("error")
             if error_prop is not None:
                 return _analyze_batch_error(error_prop)
-        return json.dumps(dict(mapping), ensure_ascii=False)[:500]
+        return json.dumps(mapping, ensure_ascii=False)[:500]
     return str(payload)
 
 
@@ -323,7 +324,7 @@ class AzureSpeechClient:
         location: object | None = None
         headers_obj = getattr(response, "headers", None)
         if isinstance(headers_obj, Mapping):
-            header_map: Mapping[str, object] = headers_obj
+            header_map = normalize_mapping_optional(cast(Mapping[object, object], headers_obj))
             loc_header = header_map.get("Location") or header_map.get("location")
             if isinstance(loc_header, str) and loc_header:
                 location = loc_header
@@ -380,14 +381,12 @@ class AzureSpeechClient:
             )
         payload = coerce_json_object(response.json())
         values = payload.get("values")
-        files: Sequence[object] = values if isinstance(values, Sequence) else []
-        for entry in files:
-            if not isinstance(entry, Mapping):
+        files = coerce_object_list(values)
+        for entry_map in files:
+            if entry_map.get("kind") != "Transcription":
                 continue
-            if entry.get("kind") != "Transcription":
-                continue
-            links_value = entry.get("links")
-            links = links_value if isinstance(links_value, Mapping) else {}
+            links_value = entry_map.get("links")
+            links = normalize_mapping_optional(links_value)
             content_url = links.get("contentUrl") or links.get("content")
             if isinstance(content_url, str) and content_url:
                 return content_url
@@ -413,20 +412,14 @@ class AzureSpeechClient:
     ) -> AzureSpeechBatchResult:
         lines: list[str] = []
         meta = _json_payload(diarization=diarization, azure_transcription_url=location)
-        recognized_value = payload.get("recognizedPhrases")
-        recognized: Sequence[object] = (
-            recognized_value if isinstance(recognized_value, Sequence) else []
-        )
+        recognized_iter = coerce_object_list(payload.get("recognizedPhrases"))
         max_end = 0.0
         seg_count = 0
         conf_sum = 0.0
         conf_count = 0
         speaker_ids: set[str] = set()
 
-        for phrase in recognized:
-            if not isinstance(phrase, Mapping):
-                continue
-            phrase_mp: Mapping[str, object] = phrase
+        for phrase_mp in recognized_iter:
             offset = _to_seconds(phrase_mp.get("offset") or phrase_mp.get("offsetInTicks"))
             duration = _to_seconds(phrase_mp.get("duration") or phrase_mp.get("durationInTicks"))
             max_end = max(max_end, offset + duration)
@@ -437,11 +430,11 @@ class AzureSpeechClient:
                 speaker_ids.add(str(speaker))
 
             nbest_value = phrase_mp.get("nBest")
-            nbest: Sequence[object] = nbest_value if isinstance(nbest_value, Sequence) else []
+            nbest = coerce_object_list(nbest_value)
             best_entry = nbest[0] if nbest else None
             text = ""
             if isinstance(best_entry, Mapping):
-                best_mp: Mapping[str, object] = best_entry
+                best_mp = normalize_mapping_optional(best_entry)
                 display = best_mp.get("display") or best_mp.get("lexical")
                 if isinstance(display, str):
                     text = display.strip()
@@ -468,14 +461,8 @@ class AzureSpeechClient:
         meta["segments"] = seg_count
 
         if not lines:
-            combined_value = payload.get("combinedRecognizedPhrases")
-            combined: Sequence[object] = (
-                combined_value if isinstance(combined_value, Sequence) else []
-            )
-            for item in combined:
-                if not isinstance(item, Mapping):
-                    continue
-                item_mp: Mapping[str, object] = item
+            combined = coerce_object_list(payload.get("combinedRecognizedPhrases"))
+            for item_mp in combined:
                 display_text = item_mp.get("display") or item_mp.get("lexical")
                 if isinstance(display_text, str):
                     candidate = display_text.strip()

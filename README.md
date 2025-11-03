@@ -94,6 +94,11 @@ Most targets accept optional variables so you can customize behaviour without ed
 - `TAG=v1.2.3` / `REGISTRY=ghcr.io/acme` — override image tags/registry when baking release artifacts.
 - `FOLLOW=0` — disable log streaming in `make stack.logs` and print the current buffer instead.
 
+## Shared Python packages
+- Shared, framework-agnostic helpers live under `packages/udocket_common`. Import them via `packages.udocket_common.*` (the repo root sits on `PYTHONPATH` in every container and the dev workflow).
+- Package-specific helpers continue to reside under their respective package namespaces (e.g., `packages.udocket_core.*`). Only promote utilities into `udocket_common` when they have no dependencies on Django, Celery, or provider SDKs.
+- If you later publish the packages independently, either install them side-by-side or add a top-level shim that re-exports `packages.udocket_common` — avoid hand-rolled relative imports to keep the path story predictable.
+
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
 - Local development bootstrap is controlled via `PLATFORM_BOOTSTRAP_ENABLED`. The default `.env.example` seeds an `admin/changeme` superuser, a demo organization, and permission presets; override or disable these variables for production.

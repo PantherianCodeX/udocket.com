@@ -30,3 +30,18 @@ def test_stringify_json_pretty() -> None:
     rendered = ju.stringify_pretty({"b": 2, "a": 1})
     assert "\n" in rendered
     assert "a" in rendered and "b" in rendered
+
+
+def test_normalize_mapping_identity() -> None:
+    result = ju.normalize_mapping({"A": 1, 2: "two"})
+    assert result == {"A": 1, "2": "two"}
+
+
+def test_normalize_mapping_with_transform() -> None:
+    result = ju.normalize_mapping({"A": 1, "B": 2}, transform=lambda value: value * 10)
+    assert result == {"A": 10, "B": 20}
+
+
+def test_normalize_mapping_optional_handles_non_mapping() -> None:
+    assert ju.normalize_mapping_optional(123) == {}
+    assert ju.normalize_mapping_optional({"k": "v"}) == {"k": "v"}

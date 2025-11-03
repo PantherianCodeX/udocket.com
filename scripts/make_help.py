@@ -8,6 +8,8 @@ import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
+from packages.udocket_common.text import slugify
+
 
 def decode_from_make(lines: Sequence[str], name: str) -> str:
     pattern = re.compile(rf"^{re.escape(name)}\s*:=\s*\"(.*)\"$")
@@ -16,12 +18,6 @@ def decode_from_make(lines: Sequence[str], name: str) -> str:
         if match:
             return bytes(match.group(1), "utf-8").decode("unicode_escape")
     raise SystemExit(f"Missing definition for {name}")
-
-
-def slugify(label: str) -> str:
-    slug = label.lower()
-    slug = re.sub(r"[^a-z0-9]+", ".", slug).strip(".")
-    return slug
 
 
 def collect_sections(lines: Sequence[str]) -> tuple[list[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
@@ -34,7 +30,7 @@ def collect_sections(lines: Sequence[str]) -> tuple[list[tuple[str, str]], dict[
     for raw in lines:
         if raw.startswith("##@ "):
             label = raw[4:].strip()
-            current = slugify(label)
+            current = slugify(label, separator=".")
             sections.append((current, label))
             commands.setdefault(current, [])
             continue

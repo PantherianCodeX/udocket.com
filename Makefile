@@ -120,6 +120,7 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   clean.all clean.mypy clean.pyright clean.pycache clean.coverage \
   images.build images.load images.push images.cache.warm \
   stack.up stack.down stack.build stack.restart stack.logs stack.ps \
+  stack.prod.logs stack.prod.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
   doctools.build doctools.up doctools.down doctools.shell \
   docs.build docs.lint docs.sync docs.preview \
@@ -156,8 +157,8 @@ pytest.clean: ## Remove pytest cache directory
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
 typing.baseline: ## Run pyright and mypy type checks
-	pyright
-	mypy
+	$(UV) run --project apps/platform --extra dev pyright
+	$(UV) run --project apps/platform --extra dev mypy
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
 	$(PYTHON) scripts/typing/check_strict.py --tool both
@@ -235,6 +236,14 @@ stack.prod.up: ## Start production stack with the production overlay
 	$(PROD_COMPOSE) up -d $(SERVICES)
 stack.prod.down: ## Stop production stack
 	$(PROD_COMPOSE) down
+stack.prod.logs: ## Tail logs from the production overlay stack (FOLLOW=0 to disable streaming)
+	@if [ "$(FOLLOW)" = "0" ]; then \
+	  $(PROD_COMPOSE) logs $(SERVICES); \
+	else \
+	  $(PROD_COMPOSE) logs -f $(SERVICES); \
+	fi
+stack.prod.ps: ## Show production overlay container status
+	$(PROD_COMPOSE) ps
 
 ##@ Platform • Shells
 platform.shell: ## Open a shell inside the platform container

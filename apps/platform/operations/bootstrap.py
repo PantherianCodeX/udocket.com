@@ -226,7 +226,7 @@ def _ensure_organization(config: OrganizationConfig) -> Tuple[Organization, bool
 
 
 def _ensure_membership(user: User, organization: Organization) -> Tuple[bool, bool]:
-    membership, created = OrganizationMembership.typed_objects().get_or_create(
+    _membership, created = OrganizationMembership.typed_objects().get_or_create(
         organization=organization,
         user=user,
         defaults={"role": OrganizationMembership.Role.SUPERUSER},

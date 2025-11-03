@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import json
 import logging
 from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
-from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
 from ...common.normalization import coerce_mapping_list
@@ -19,6 +18,7 @@ from ...common.chunking import (
 )
 from ....llm.runtime import ChatClient, ResponseFormat
 from packages.udocket_common.json_utils import parse_json_value
+from packages.udocket_common.ids import normalize_id, uuid5_from_content
 
 logger = logging.getLogger("udocket.analyze.timeline_stage")
 
@@ -113,19 +113,16 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     elif isinstance(labels_raw, str) and labels_raw.strip():
         labels = [labels_raw.strip()]
 
-    signature = "|".join(
-        [
-            "timeline_seed",
-            "" if ts_start is None else f"{ts_start:.3f}",
-            "" if ts_end is None else f"{ts_end:.3f}",
-            speaker or "",
-            text,
-        ]
+    derived_uuid = uuid5_from_content(
+        "timeline_seed",
+        "" if ts_start is None else f"{ts_start:.3f}",
+        "" if ts_end is None else f"{ts_end:.3f}",
+        speaker or "",
+        text,
     )
-    derived_uuid = uuid5(NAMESPACE_URL, signature)
-    existing_uuid = payload.get("uuid")
-    event_uuid = str(existing_uuid) if isinstance(existing_uuid, str) and existing_uuid.strip() else str(derived_uuid)
-    event_id = str(payload.get("id") or event_uuid or derived_uuid)
+    existing_uuid = normalize_id(payload.get("uuid"))
+    event_uuid = existing_uuid or str(derived_uuid)
+    event_id = normalize_id(payload.get("id")) or event_uuid
 
     normalized = {
         "id": event_id,

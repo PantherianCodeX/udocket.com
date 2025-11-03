@@ -4,6 +4,10 @@ The `docs/overview/tdd.md` file is large enough that it benefits from a dedicate
 
 ## Quick start
 
+The recommended workflow is to run everything through the toolbox container (`make docs.build`,
+`make docs.lint`, `make docs.test`). The steps below show the equivalent manual setup should you
+need to run tooling directly on your machine.
+
 ```bash
 cd packages/udocket_docs
 
@@ -17,9 +21,9 @@ PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm ci
 uv run python -m doc_tools.manage_docs --lint
 ```
 
-Vale 3.7.1 is baked into the docs toolbox container (`make docs.build` / `make docs.lint`, which wrap `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm docs …`).
-If you run the commands on the host, install the same Vale version so the lint
-step succeeds.
+Vale 3.7.1 is baked into the docs toolbox container—run `make docs.build` or `make docs.lint`
+to execute the pipeline inside the curated environment.
+If you run the commands on the host, install the same Vale version so the lint step succeeds.
 
 The aggregator runs:
 

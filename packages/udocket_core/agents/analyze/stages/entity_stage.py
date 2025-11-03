@@ -7,7 +7,6 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Deque, Dict, List, Optional, Sequence, Set, cast
-from uuid import NAMESPACE_URL, uuid5
 
 from ...common.io import TranscriptParse
 from ...common.normalization import coerce_mapping, coerce_mapping_list, coerce_sequence
@@ -24,6 +23,7 @@ from packages.udocket_common.json_utils import (
     parse_json_object,
 )
 from ....llm.runtime import ChatClient, ResponseFormat
+from packages.udocket_common.ids import normalize_id, uuid5_from_content
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
 
@@ -108,15 +108,10 @@ def _ensure_chunks(context: Any) -> List[str]:
 def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
     name = str(entity.get("name") or "").strip()
     entity_type = str(entity.get("type") or "UNKNOWN").strip() or "UNKNOWN"
-    signature = f"entity|{entity_type}|{name.lower()}"
-    derived_uuid = uuid5(NAMESPACE_URL, signature)
-    existing_uuid = entity.get("uuid")
-    entity_uuid = (
-        str(existing_uuid).strip()
-        if isinstance(existing_uuid, str) and existing_uuid.strip()
-        else str(derived_uuid)
-    )
-    entity_id = str(entity.get("id") or entity_uuid or derived_uuid)
+    derived_uuid = uuid5_from_content("entity", entity_type, name.lower())
+    existing_uuid = normalize_id(entity.get("uuid"))
+    entity_uuid = existing_uuid or str(derived_uuid)
+    entity_id = normalize_id(entity.get("id")) or entity_uuid
     entity["id"] = entity_id
     entity["uuid"] = entity_uuid
     entity["aliases"] = coerce_str_list(entity.get("aliases"), unique=True)
@@ -153,15 +148,10 @@ def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
     relation_type = str(relation.get("type") or "RELATED_TO").strip() or "RELATED_TO"
     source = str(relation.get("source") or "").strip()
     target = str(relation.get("target") or "").strip()
-    signature = f"relation|{relation_type}|{source.lower()}|{target.lower()}"
-    derived_uuid = uuid5(NAMESPACE_URL, signature)
-    existing_uuid = relation.get("uuid")
-    relation_uuid = (
-        str(existing_uuid).strip()
-        if isinstance(existing_uuid, str) and existing_uuid.strip()
-        else str(derived_uuid)
-    )
-    relation_id = str(relation.get("id") or relation_uuid or derived_uuid)
+    derived_uuid = uuid5_from_content("relation", relation_type, source.lower(), target.lower())
+    existing_uuid = normalize_id(relation.get("uuid"))
+    relation_uuid = existing_uuid or str(derived_uuid)
+    relation_id = normalize_id(relation.get("id")) or relation_uuid
     relation["id"] = relation_id
     relation["uuid"] = relation_uuid
     normalized_evidence: List[Dict[str, Any]] = []

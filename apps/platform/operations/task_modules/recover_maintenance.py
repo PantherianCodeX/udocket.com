@@ -22,6 +22,11 @@ class TaskProtocol(Protocol):
     request: Any
 
 
+class CeleryAsyncCallable(Protocol):
+    def apply_async(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+
 log = logging.getLogger("apps.platform.operations.tasks.recover")
 _ACTIVE_META_STATUSES = {"running", "started", "processing", "active"}
 
@@ -38,7 +43,7 @@ def _task_states(
     inspect_obj: Any,
     task_ids: Iterable[str],
 ) -> Tuple[set[str], set[str]]:
-    ids = [tid for tid in task_ids if tid]
+    ids = [str(tid) for tid in task_ids if tid]
     active: set[str] = set()
     pending: set[str] = set()
     if not ids:
@@ -53,10 +58,10 @@ def _task_states(
                 continue
             for tasks in data.values():
                 for entry in tasks:
-                    entry_id = entry.get("id") or entry.get("request", {}).get("id")
+                    entry_id_raw = entry.get("id") or entry.get("request", {}).get("id")
                     entry_state = entry.get("state") or entry.get("request", {}).get("state")
-                    if entry_id in ids and entry_state in {None, "STARTED", "RETRY"}:
-                        active.add(entry_id)
+                    if entry_id_raw in ids and entry_state in {None, "STARTED", "RETRY"}:
+                        active.add(str(entry_id_raw))
     if celery_app is not None:
         for tid in ids:
             if tid in active:
@@ -212,13 +217,17 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
     skipped = 0
     inspection_available = inspect_obj is not None
 
+    transcribe_task = cast(CeleryAsyncCallable, _transcribe_job)
+    analyze_task = cast(CeleryAsyncCallable, _analyze_job)
+    compose_task = cast(CeleryAsyncCallable, _compose_job)
+
     for job in candidates:
         case_id = str(job.case_id)
         job_id = str(job.id)
         org_id = str(job.organization_id) if job.organization_id else None
         meta = read_job_meta(case_id, org_id, job_id)
         task_ids = _candidate_task_ids(meta)
-        active, pending = _task_states(celery_app, inspect_obj, task_ids) if task_ids else (set(), set())
+        active, pending = _task_states(celery_app, inspect_obj, task_ids) if task_ids else cast(tuple[set[str], set[str]], (set(), set()))
         if active:
             continue
 
@@ -283,14 +292,17 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                     _cannot_resume(job, message="Missing audio input path")
                     finalized += 1
                     continue
-                result = _transcribe_job.apply_async(
+                mode_value = cast(str, getattr(job, "mode", ""))
+                diarization_value = bool(getattr(job, "diarization", False))
+                language_value = cast(str | None, getattr(job, "language", None))
+                result = transcribe_task.apply_async(
                     kwargs={
                         "case_id": case_id,
                         "job_id": job_id,
                         "audio_input": job.audio_input,
-                        "mode": job.mode,
-                        "diarization": job.diarization,
-                        "language": job.language,
+                        "mode": mode_value,
+                        "diarization": diarization_value,
+                        "language": language_value,
                     }
                 )
                 new_task_id = str(getattr(result, "id", "") or "")
@@ -323,7 +335,7 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
             if kind in {"analyze", "analysis", "summary"}:
                 llm_cfg = cast(str | None, meta.get("requested_llm_config_id"))
                 source_job_id = cast(str | None, meta.get("source_job_id"))
-                result = _analyze_job.apply_async(
+                result = analyze_task.apply_async(
                     kwargs={
                         "case_id": case_id,
                         "job_id": job_id,
@@ -362,7 +374,7 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                     _cannot_resume(job, message="Missing summary_job_id for compose")
                     finalized += 1
                     continue
-                result = _compose_job.apply_async(
+                result = compose_task.apply_async(
                     kwargs={
                         "case_id": case_id,
                         "job_id": job_id,

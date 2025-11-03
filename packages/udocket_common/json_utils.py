@@ -2,22 +2,32 @@ from __future__ import annotations
 
 # pyright: strict
 
+"""Utility helpers for working with JSON-compatible structures."""
+
 import json
 from pathlib import Path
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Callable, TypeAlias, cast
+from typing import Any, Callable, TypeAlias, TypeVar, cast, overload
 
 JSONPrimitive: TypeAlias = int | float | bool | str | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
 JSONObject: TypeAlias = dict[str, JSONValue]
 JSONArray: TypeAlias = list[JSONValue]
 
+KeyT = TypeVar("KeyT")
+ValueT = TypeVar("ValueT")
+ResultT = TypeVar("ResultT")
+
 
 def is_json_scalar(value: object) -> bool:
+    """Return True when the value is a JSON scalar (str/int/float/bool/None)."""
+
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
 def coerce_json_value(value: object) -> JSONValue:
+    """Coerce an arbitrary object into a JSON-compatible value."""
+
     if is_json_scalar(value):
         return cast(JSONPrimitive, value)
     if isinstance(value, Mapping):
@@ -30,6 +40,8 @@ def coerce_json_value(value: object) -> JSONValue:
 
 
 def coerce_json_object(value: object, *, default: JSONObject | None = None) -> JSONObject:
+    """Return a JSON object (dict[str, JSONValue]) from the provided mapping."""
+
     if isinstance(value, Mapping):
         mapping_value = cast(Mapping[object, object], value)
         return {str(key): coerce_json_value(item) for key, item in mapping_value.items()}
@@ -37,6 +49,8 @@ def coerce_json_object(value: object, *, default: JSONObject | None = None) -> J
 
 
 def merge_json_objects(*objects: object) -> JSONObject:
+    """Merge any JSON-mappable objects into a single dictionary."""
+
     merged: JSONObject = {}
     for candidate in objects:
         if not isinstance(candidate, Mapping):
@@ -48,7 +62,58 @@ def merge_json_objects(*objects: object) -> JSONObject:
 
 
 def json_object_to_dict(payload: JSONObject) -> dict[str, Any]:
+    """Convert a JSONObject into a plain dictionary with Any values."""
+
     return {key: cast(Any, value) for key, value in payload.items()}
+
+
+@overload
+def normalize_mapping(mapping: Mapping[KeyT, ValueT]) -> dict[str, ValueT]:
+    ...
+
+
+@overload
+def normalize_mapping(
+    mapping: Mapping[KeyT, ValueT],
+    *,
+    transform: Callable[[ValueT], ResultT],
+) -> dict[str, ResultT]:
+    ...
+
+
+def normalize_mapping(
+    mapping: Mapping[KeyT, ValueT],
+    *,
+    transform: Callable[[ValueT], ResultT] | None = None,
+) -> dict[str, ValueT] | dict[str, ResultT]:
+    """Return a new dict with stringified keys and optional value transformation."""
+
+    if transform is None:
+        base: dict[str, ValueT] = {}
+        for key, value in mapping.items():
+            base[str(key)] = value
+        return base
+    converted: dict[str, ResultT] = {}
+    for key, value in mapping.items():
+        converted[str(key)] = transform(value)
+    return converted
+
+
+def normalize_mapping_optional(
+    value: object,
+    *,
+    transform: Callable[[Any], Any] | None = None,
+) -> dict[str, Any]:
+    """Normalize mappings while gracefully handling non-mapping inputs."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    mapping_value = cast(Mapping[Any, Any], value)
+    if transform is None:
+        normalized = normalize_mapping(mapping_value)
+    else:
+        normalized = normalize_mapping(mapping_value, transform=transform)
+    return dict(normalized)
 
 
 def coerce_object_dict(
@@ -58,19 +123,14 @@ def coerce_object_dict(
     drop_empty_keys: bool = False,
     drop_none_values: bool = False,
 ) -> dict[str, object]:
-    if not isinstance(value, Mapping):
-        return {}
+    """Coerce a mapping into a dict[str, object] applying optional key/value filtering."""
 
-    mapping_value = cast(Mapping[object, object], value)
+    base = normalize_mapping_optional(value)
 
-    def _identity(text: str) -> str:
-        return text
-
-    transform: Callable[[str], str] = key_transform or _identity
-
+    transform: Callable[[str], str] = key_transform or (lambda text: text)
     result: dict[str, object] = {}
-    for raw_key, raw_value in mapping_value.items():
-        key = transform(str(raw_key))
+    for raw_key, raw_value in base.items():
+        key = transform(raw_key)
         if drop_empty_keys and not key:
             continue
         if drop_none_values and raw_value is None:
@@ -86,6 +146,8 @@ def normalize_json_object(
     drop_empty_keys: bool = False,
     drop_nullish_values: bool = False,
 ) -> JSONObject:
+    """Normalize keys/values of a JSON object while optionally dropping empty entries."""
+
     payload = coerce_json_object(value)
     result: JSONObject = {}
     for key, raw in payload.items():
@@ -104,6 +166,8 @@ def normalize_json_object(
 
 
 def ensure_json_object(value: object, *, context: str | None = None) -> JSONObject:
+    """Validate that a value is a mapping and coerce it into a JSONObject."""
+
     if not isinstance(value, Mapping):
         if context:
             raise ValueError(f"Expected mapping for {context}, received {type(value)!r}")
@@ -113,6 +177,8 @@ def ensure_json_object(value: object, *, context: str | None = None) -> JSONObje
 
 
 def coerce_json_array(value: object) -> JSONArray:
+    """Coerce an iterable into a JSON array."""
+
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         sequence_value = cast(Sequence[object], value)
         return [coerce_json_value(item) for item in sequence_value]
@@ -120,6 +186,8 @@ def coerce_json_array(value: object) -> JSONArray:
 
 
 def coerce_object_list(value: object) -> list[JSONObject]:
+    """Return a list of JSONObjects from a sequence of mappings."""
+
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         sequence_value = cast(Sequence[object], value)
         result: list[JSONObject] = []
@@ -138,6 +206,8 @@ def coerce_str_dict(
     value_drop_empty: bool = True,
     lower_keys: bool = False,
 ) -> dict[str, str]:
+    """Coerce a mapping into dict[str, str] with filtering options."""
+
     if not isinstance(value, Mapping):
         return {}
     mapping_value = cast(Mapping[object, object], value)
@@ -158,6 +228,8 @@ def coerce_str_dict(
 
 
 def coerce_str(value: object) -> str | None:
+    """Convert a value to a trimmed string or None if empty."""
+
     if value is None:
         return None
     if isinstance(value, str):
@@ -174,6 +246,8 @@ def coerce_str_list(
     drop_empty: bool = True,
     lower: bool = False,
 ) -> list[str]:
+    """Coerce an iterable into a list of normalized strings."""
+
     if isinstance(value, str):
         items: list[str] = [value]
     elif isinstance(value, Iterable):
@@ -204,6 +278,8 @@ def coerce_int(
     minimum: int | None = None,
     maximum: int | None = None,
 ) -> int | None:
+    """Coerce a value to an int, enforcing optional bounds."""
+
     candidate: int | None
     if isinstance(value, bool):
         candidate = int(value)
@@ -235,6 +311,8 @@ def coerce_float(
     minimum: float | None = None,
     maximum: float | None = None,
 ) -> float | None:
+    """Coerce a value to a float, enforcing optional bounds."""
+
     candidate: float | None
     if isinstance(value, bool):
         candidate = float(value)
@@ -257,6 +335,8 @@ def coerce_float(
 
 
 def coerce_bool(value: object, *, default: bool | None = None) -> bool | None:
+    """Coerce a value into a boolean using common string representations."""
+
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
@@ -271,6 +351,8 @@ def coerce_bool(value: object, *, default: bool | None = None) -> bool | None:
 
 
 def read_json_value(path: Path) -> JSONValue | None:
+    """Read a JSON file and return the value, or None on failure."""
+
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -285,6 +367,8 @@ def read_json_value(path: Path) -> JSONValue | None:
 
 
 def read_json_object(path: Path, *, default: JSONObject | None = None) -> JSONObject:
+    """Read a JSON file and return a dict, falling back to the provided default."""
+
     value = read_json_value(path)
     if isinstance(value, dict):
         return value
@@ -297,6 +381,8 @@ def write_json_object(
     *,
     indent: int = 2,
 ) -> None:
+    """Write a mapping to disk as JSON."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     normalized: JSONObject = {
         str(key): coerce_json_value(value) for key, value in payload.items()
@@ -305,6 +391,8 @@ def write_json_object(
 
 
 def parse_json_value(data: str) -> JSONValue | None:
+    """Parse JSON text into a JSONValue, returning None on error."""
+
     try:
         raw = json.loads(data)
     except json.JSONDecodeError:
@@ -313,6 +401,8 @@ def parse_json_value(data: str) -> JSONValue | None:
 
 
 def parse_json_value_strict(data: str, *, context: str | None = None) -> JSONValue:
+    """Parse JSON text into a JSONValue, raising ValueError on error."""
+
     try:
         raw = json.loads(data)
     except json.JSONDecodeError as exc:
@@ -322,6 +412,8 @@ def parse_json_value_strict(data: str, *, context: str | None = None) -> JSONVal
 
 
 def parse_json_object(data: str, *, context: str | None = None) -> JSONObject:
+    """Parse JSON text into a JSONObject, enforcing object shape."""
+
     value = parse_json_value_strict(data, context=context)
     if not isinstance(value, dict):
         label = context or "JSON payload"
@@ -330,6 +422,8 @@ def parse_json_object(data: str, *, context: str | None = None) -> JSONObject:
 
 
 def load_json_object(path: Path, *, context: str | None = None) -> JSONObject:
+    """Load a JSON object from disk, raising ValueError on failure."""
+
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -340,6 +434,8 @@ def load_json_object(path: Path, *, context: str | None = None) -> JSONObject:
 
 
 def load_json_value(path: Path, *, context: str | None = None) -> JSONValue:
+    """Load arbitrary JSON data from disk, raising ValueError on failure."""
+
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -355,6 +451,8 @@ def write_json_value(
     *,
     indent: int = 2,
 ) -> None:
+    """Write a JSON-compatible value to disk."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(value, (dict, list)):
         path.write_text(
@@ -366,11 +464,15 @@ def write_json_value(
 
 
 def stringify_json(value: object, *, indent: int | None = None, sort_keys: bool = False) -> str:
+    """Return a JSON string for any object after coercion."""
+
     coerced = coerce_json_value(value)
     return json.dumps(coerced, ensure_ascii=False, indent=indent, sort_keys=sort_keys)
 
 
 def stringify_pretty(value: object, *, sort_keys: bool = True) -> str:
+    """Return a pretty-printed JSON string."""
+
     return stringify_json(value, indent=2, sort_keys=sort_keys)
 
 
@@ -385,6 +487,8 @@ __all__ = [
     "merge_json_objects",
     "ensure_json_object",
     "coerce_json_array",
+    "normalize_mapping",
+    "normalize_mapping_optional",
     "coerce_object_list",
     "coerce_str_dict",
     "coerce_str",

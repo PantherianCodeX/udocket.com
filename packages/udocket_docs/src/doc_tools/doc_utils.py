@@ -11,6 +11,8 @@ from typing import Any, Iterable, Mapping, Sequence, Tuple, cast
 
 import yaml
 
+from packages.udocket_common.text import slugify
+
 TITLE_CLEAN_REPLACEMENTS = [
     "Technical Design",
     "Technical Architecture",
@@ -96,13 +98,6 @@ def write_or_check(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     return True
-
-
-def slugify(text: str) -> str:
-    """Return a URL-safe slug derived from *text*."""
-
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower())
-    return slug.strip("-")
 
 
 def read_markdown_lines(path: Path) -> list[str]:

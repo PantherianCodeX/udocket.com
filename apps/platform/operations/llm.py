@@ -460,8 +460,8 @@ def _serialize_provider(provider: LLMProvider) -> JSONDict:
         "api_kind": provider.api_kind,
         "default_endpoint": provider.default_endpoint,
         "requires_api_key": provider.requires_api_key,
-        "models": models_payload,
     }
+    payload["models"] = coerce_json_value(models_payload)
     return payload
 
 

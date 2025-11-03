@@ -30,9 +30,9 @@ class _FakeRequestsModule:
 
 @pytest.fixture(autouse=True)
 def reset_fallback_state() -> None:
-    azure_client._reset_fallback_state()
+    azure_client.reset_fallback_state()
     yield
-    azure_client._reset_fallback_state()
+    azure_client.reset_fallback_state()
 
 
 class _FakeStreamingResponse:

@@ -72,7 +72,7 @@ def validate_runtime_configuration() -> None:
     if should_skip_runtime_validation():
         return
 
-    _verify_storage_root()
+    storage_root = _verify_storage_root()
 
     providers_path = resolve_llm_providers_path()
     assignments_path = resolve_llm_assignments_path()
@@ -86,3 +86,14 @@ def validate_runtime_configuration() -> None:
         load_llm_settings(providers_path=providers_path, assignments_path=assignments_path)
     except LLMConfigError as exc:
         raise RuntimeConfigurationError("LLM configuration is invalid") from exc
+
+    log.info(
+        "Runtime configuration validated",
+        extra={
+            "component": "runtime",
+            "storage_root": str(storage_root),
+            "llm_providers_path": str(providers_path),
+            "llm_assignments_path": str(assignments_path),
+            "analyze_defaults_path": str(analyze_defaults_path),
+        },
+    )

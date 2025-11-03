@@ -22,6 +22,8 @@ class _ResponseProtocol(Protocol):
 
     def raise_for_status(self) -> None: ...
 
+    def iter_lines(self, decode_unicode: bool = False) -> Iterable[str | bytes]: ...
+
 
 class _RequestsExceptionsProtocol(Protocol):
     HTTPError: type[Exception]
@@ -59,6 +61,8 @@ from packages.udocket_common.json_utils import (
     JSONValue,
     coerce_json_value,
     ensure_json_object,
+    normalize_mapping,
+    normalize_mapping_optional,
 )
 from .http_client import HTTPRetryConfig, HTTPSessionConfig, RequestsSessionManager
 CANADIAN_REGIONS = {"canadacentral", "canadaeast"}
@@ -113,7 +117,7 @@ def _update_fallback_state(
             state.disable_max_output_tokens = True
 
 
-def _reset_fallback_state() -> None:  # pragma: no cover - test helper
+def reset_fallback_state() -> None:  # pragma: no cover - test helper
     with _FALLBACK_LOCK:
         _FALLBACK_STATE.clear()
 
@@ -145,11 +149,11 @@ def _extract_json_candidate(text: str) -> str:
 
 def _iter_mappings(payload: object) -> Iterable[Mapping[str, object]]:
     if isinstance(payload, Mapping):
-        yield payload
+        yield cast(Mapping[str, object], payload)
     elif isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
         for item in cast(Sequence[object], payload):
             if isinstance(item, Mapping):
-                yield item
+                yield cast(Mapping[str, object], item)
 
 
 def _is_json_structure(value: object) -> bool:
@@ -171,7 +175,7 @@ def _content_from_tool_calls(tool_calls: object) -> str:
         fn_value = call.get("function")
         if not isinstance(fn_value, Mapping):
             continue
-        fn_mapping = cast(Mapping[str, object], fn_value)
+        fn_mapping = normalize_mapping(cast(Mapping[object, object], fn_value))
         args_value: object | None = fn_mapping.get("arguments")
         if args_value is None:
             continue
@@ -191,7 +195,9 @@ def _content_from_annotations(annotations: object) -> str:
     if not items:
         return ""
 
-    normalized_items: list[dict[str, object]] = [dict(annotation.items()) for annotation in items]
+    normalized_items: list[dict[str, object]] = [
+        normalize_mapping(cast(Mapping[object, object], annotation)) for annotation in items
+    ]
 
     json_fragments: list[str] = []
     text_fragments: list[str] = []
@@ -233,7 +239,9 @@ def _content_from_parts(parts: object) -> str:
     if not items:
         return ""
 
-    normalized_parts: list[dict[str, object]] = [dict(part.items()) for part in items]
+    normalized_parts: list[dict[str, object]] = [
+        normalize_mapping(cast(Mapping[object, object], part)) for part in items
+    ]
 
     text_fragments: list[str] = []
     json_fragments: list[str] = []
@@ -269,30 +277,6 @@ def _content_from_parts(parts: object) -> str:
         if combined_text:
             return combined_text
 
-    return ""
-
-
-def _content_from_delta(delta_payload: object) -> str:
-    if not isinstance(delta_payload, Mapping):
-        return ""
-    mapping_payload = cast(Mapping[str, object], delta_payload)
-    delta_content = mapping_payload.get("content")
-    if isinstance(delta_content, str) and delta_content.strip():
-        return delta_content
-    if _is_json_structure(delta_content):
-        text = _content_from_parts(delta_content)
-        if text:
-            return text
-    annotations = mapping_payload.get("annotations")
-    if annotations:
-        text = _content_from_annotations(annotations)
-        if text:
-            return text
-    tool_calls = mapping_payload.get("tool_calls")
-    if tool_calls:
-        text = _content_from_tool_calls(tool_calls)
-        if text:
-            return text
     return ""
 
 
@@ -463,7 +447,7 @@ class AzureChatClient:
                 response_obj = getattr(exc, "response", None)
                 detail = cast(str, getattr(response_obj, "text", "") or "")
                 status_code = getattr(response_obj, "status_code", None)
-                detail_lower = detail.lower() if isinstance(detail, str) else ""
+                detail_lower = detail.lower()
                 if (
                     status_code == 400
                     and detail_lower
@@ -565,7 +549,11 @@ class AzureChatClient:
         headers_obj = getattr(response, "headers", None)
         response_headers: Mapping[str, str] | None
         if isinstance(headers_obj, Mapping):
-            response_headers = cast(Mapping[str, str], headers_obj)
+            normalized_headers = normalize_mapping_optional(
+                cast(Mapping[object, object], headers_obj),
+                transform=str,
+            )
+            response_headers = normalized_headers
         elif headers_obj is None:
             response_headers = None
         else:
@@ -582,9 +570,17 @@ class AzureChatClient:
         usage: JSONObject = {}
 
         for raw_line in response.iter_lines(decode_unicode=True):
-            if not raw_line:
+            line_text: str
+            if isinstance(raw_line, bytes):
+                try:
+                    line_text = raw_line.decode("utf-8")
+                except Exception:
+                    continue
+            else:
+                line_text = str(raw_line)
+            if not line_text:
                 continue
-            segment = raw_line.strip()
+            segment = line_text.strip()
             if not segment:
                 continue
             if segment.startswith("data:"):
@@ -602,7 +598,7 @@ class AzureChatClient:
                     "azure stream chunk decode failed",
                     extra={
                         "deployment": self.config.deployment,
-                        "request_id": request_id,
+                        "request_id": request_id or "-",
                         "chunk": payload_text[:200],
                     },
                 )
@@ -670,7 +666,7 @@ class AzureChatClient:
                 "azure streaming completion empty",
                 extra={
                     "deployment": self.config.deployment,
-                    "request_id": request_id,
+                    "request_id": request_id or "-",
                 },
             )
             raise RuntimeError(
@@ -731,4 +727,5 @@ __all__ = [
     "AzureClientConfig",
     "AzureChatClient",
     "_endpoint_is_canadian",
+    "reset_fallback_state",
 ]
