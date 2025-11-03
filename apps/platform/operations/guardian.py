@@ -12,7 +12,7 @@ from typing import Callable, Final, Protocol, TypeAlias, cast
 
 from django.utils import timezone
 
-from config.paths import resolve_config_dir
+from config.paths import resolve_config_dir, resolve_repo_root
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.models import GuardianSettings
@@ -100,10 +100,18 @@ def _extract_guardian_stage(stage_map: Mapping[str, object]) -> JSONDict:
 
 @lru_cache(maxsize=1)
 def _load_guardian_defaults() -> JSONDict:
-    try:
-        return read_json_object(GUARDIAN_DEFAULTS_PATH)
-    except OSError:
-        return {}
+    candidates: tuple[Path, ...] = (
+        GUARDIAN_DEFAULTS_PATH,
+        resolve_repo_root() / "config" / "guardian_defaults.json",
+    )
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            return read_json_object(path)
+        except OSError:
+            continue
+    return {}
 
 
 def _default_instructions() -> InstructionList:
