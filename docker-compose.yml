@@ -1,27 +1,9 @@
-x-develop:
-  platform-watch: &platform-watch
-    watch:
-      - action: sync
-        path: apps/platform
-        target: /udocket/apps/platform
-      - action: sync
-        path: packages
-        target: /udocket/packages
-      - action: rebuild
-        path: apps/platform/pyproject.toml
-      - action: rebuild
-        path: apps/platform/uv.lock
-      - action: rebuild
-        path: infra/docker/Dockerfile.platform
-
 services:
-  # New Django ASGI platform (UI + API + Channels)
   platform:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
     image: udocket-platform:dev
-    develop: *platform-watch
     restart: unless-stopped
     env_file: .env
     environment:
@@ -33,11 +15,9 @@ services:
       CELERY_RESULT_BACKEND: django-db
       RUN_PLATFORM_MIGRATIONS: "1"
       RUN_PLATFORM_BOOTSTRAP: "1"
+    working_dir: /udocket
     volumes:
-      - ./storage:/udocket/storage
-      - ./.env:/udocket/.env:ro
-    ports:
-      - "8000:8000"
+      - platform-storage:/udocket/storage
     depends_on:
       redis:
         condition: service_healthy
@@ -49,7 +29,6 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
     image: udocket-platform:dev
-    develop: *platform-watch
     restart: unless-stopped
     env_file: .env
     environment:
@@ -64,22 +43,20 @@ services:
     command: >-
       sh -c "python -c 'import time; time.sleep(2)' &&
       celery -A apps.platform.config.celery worker -l ${CELERY_LOG_LEVEL:-info} --events"
+    working_dir: /udocket
     volumes:
-      - ./storage:/udocket/storage
-      - ./.env:/udocket/.env:ro
+      - platform-storage:/udocket/storage
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
 
-
   platform_beat:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.platform
     image: udocket-platform:dev
-    develop: *platform-watch
     restart: unless-stopped
     env_file: .env
     environment:
@@ -91,42 +68,21 @@ services:
       CELERY_RESULT_BACKEND: django-db
       RUN_PLATFORM_MIGRATIONS: "0"
       RUN_PLATFORM_BOOTSTRAP: "0"
-    command: sh -c "python -c 'import time; time.sleep(2)' && celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
+    command: >-
+      sh -c "python -c 'import time; time.sleep(2)' &&
+      celery -A apps.platform.config.celery beat -l ${CELERY_LOG_LEVEL:-info}"
+    working_dir: /udocket
     volumes:
-      - ./storage:/udocket/storage
-      - ./.env:/udocket/.env:ro
+      - platform-storage:/udocket/storage
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
 
-  docs:
-    build:
-      context: .
-      dockerfile: packages/udocket_docs/Dockerfile
-    image: udocket-docs-toolbox:dev
-    env_file:
-      - packages/udocket_docs/.env
-    working_dir: /udocket
-    volumes:
-      - .:/udocket:cached
-    tty: true
-    command: sleep infinity
-    environment:
-      PUPPETEER_SKIP_DOWNLOAD: "1"
-      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
-    ports:
-      - "8010:8010"
-    profiles:
-      - docs
-
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -149,8 +105,6 @@ services:
       retries: 10
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
 
   postgres-keycloak:
     image: postgres:15-alpine
@@ -166,8 +120,6 @@ services:
       retries: 10
     volumes:
       - keycloak-db-data:/var/lib/postgresql/data
-    ports:
-      - "15433:5432"
 
   keycloak:
     build:
@@ -186,8 +138,6 @@ services:
       KC_HOSTNAME_PORT: 8085
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
-    ports:
-      - "8085:8085"
     depends_on:
       postgres-keycloak:
         condition: service_started
@@ -195,6 +145,8 @@ services:
         condition: service_healthy
 
 volumes:
+  platform-storage:
+    driver: local
   keycloak-db-data:
     driver: local
   postgres-data:

@@ -4,15 +4,21 @@ SHELL := /bin/bash
 
 PYTHON ?= python
 UV ?= uv
-DC := docker compose
+PROJECT_NAME ?= udocket-dev
+DC := COMPOSE_PROJECT_NAME=$(PROJECT_NAME) docker compose
 
 COMPOSE_BASE := docker-compose.yml
-COMPOSE_OVERRIDE := docker-compose.override.yml
+COMPOSE_DEV := docker-compose.dev.yml
+COMPOSE_PROD := docker-compose.prod.yml
 COMPOSE_CACHE := docker-compose.cache.yml
 COMPOSE_DEVCONTAINER := .devcontainer/docker-compose.devcontainer.yml
 
-DEVCONTAINER_COMPOSE := $(DC) -f $(COMPOSE_BASE) -f $(COMPOSE_OVERRIDE) -f $(COMPOSE_CACHE) -f $(COMPOSE_DEVCONTAINER)
-DOCS_COMPOSE := $(DC) -f $(COMPOSE_BASE) -f $(COMPOSE_CACHE)
+BASE_COMPOSE := $(DC) -f $(COMPOSE_BASE)
+DEV_COMPOSE := $(BASE_COMPOSE) -f $(COMPOSE_DEV)
+PROD_COMPOSE := $(BASE_COMPOSE) -f $(COMPOSE_PROD)
+
+DEVCONTAINER_COMPOSE := $(DEV_COMPOSE) -f $(COMPOSE_CACHE) -f $(COMPOSE_DEVCONTAINER)
+DOCS_COMPOSE := $(DEV_COMPOSE) -f $(COMPOSE_CACHE)
 
 define compose_shell
 	@container_id="$$( $(1) ps -q $(2) 2>/dev/null )"; \
@@ -194,7 +200,7 @@ images.build: ## Build images via Buildx Bake (defaults to Bake, release-aware p
 	@if [ "$(USE_BUILD)" = "1" ]; then \
 	  docker buildx bake $(BAKE_IMAGE_FLAGS) $(IMAGES); \
 	else \
-	  $(DC) build $(IMAGES); \
+	  $(DEV_COMPOSE) build $(IMAGES); \
 	fi
 images.load: ## Build images and load into the local Docker daemon
 	$(MAKE) images.build LOAD=1
@@ -205,33 +211,39 @@ images.cache.warm: ## Prime toolchain layers via Bake cache target
 
 ##@ Platform
 stack.up: ## Start core stack detached (override with SERVICES="..." as needed)
-	$(DC) up -d $(SERVICES)
+	$(DEV_COMPOSE) up -d $(SERVICES)
 stack.down: ## Stop stack containers
-	$(DC) down
+	$(DEV_COMPOSE) down
 stack.build: ## Build platform-facing images (Bake pipeline)
 	$(MAKE) images.build IMAGES="platform keycloak"
 stack.restart: ## Restart stack services (override with SERVICES="...")
-	$(DC) restart $(SERVICES)
+	$(DEV_COMPOSE) restart $(SERVICES)
 stack.logs: ## Tail logs from core stack (FOLLOW=0 to disable streaming)
 	@if [ "$(FOLLOW)" = "0" ]; then \
-	  $(DC) logs $(SERVICES); \
+	  $(DEV_COMPOSE) logs $(SERVICES); \
 	else \
-	  $(DC) logs -f $(SERVICES); \
+	  $(DEV_COMPOSE) logs -f $(SERVICES); \
 	fi
 stack.ps: ## Show container status for this project
-	$(DC) ps
+	$(DEV_COMPOSE) ps
+
+##@ Platform • Production
+stack.prod.up: ## Start production stack with the production overlay
+	$(PROD_COMPOSE) up -d $(SERVICES)
+stack.prod.down: ## Stop production stack
+	$(PROD_COMPOSE) down
 
 ##@ Platform • Shells
 platform.shell: ## Open a shell inside the platform container
-	$(call compose_shell,$(DC),platform)
+	$(call compose_shell,$(DEV_COMPOSE),platform)
 worker.shell: ## Open a shell inside the Celery worker container
-	$(call compose_shell,$(DC),platform_worker)
+	$(call compose_shell,$(DEV_COMPOSE),platform_worker)
 beat.shell: ## Open a shell inside the Celery beat container
-	$(call compose_shell,$(DC),platform_beat)
+	$(call compose_shell,$(DEV_COMPOSE),platform_beat)
 
 ##@ Platform • Databases
 psql.shell: ## Connect to the primary PostgreSQL service using psql
-	$(DC) exec postgres bash -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+	$(DEV_COMPOSE) exec postgres bash -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 ##@ Doctools • Environment
 doctools.build: ## Build the docs toolbox image (Bake-driven)
@@ -291,15 +303,15 @@ dev.shell: ## Open a shell inside the devcontainer service
 
 ##@ KeyCloak
 keycloak.shell: ## Open a shell inside the Keycloak container
-	$(call compose_shell,$(DC),keycloak)
+	$(call compose_shell,$(DEV_COMPOSE),keycloak)
 keycloak.psql.shell: ## Connect to the Keycloak PostgreSQL service using psql
-	$(DC) exec postgres-keycloak bash -lc 'psql -U keycloak -d keycloak'
+	$(DEV_COMPOSE) exec postgres-keycloak bash -lc 'psql -U keycloak -d keycloak'
 
 ##@ Redis
 redis.shell: ## Open a Redis CLI session inside the redis container
-	$(DC) exec redis redis-cli
+	$(DEV_COMPOSE) exec redis redis-cli
 redis.ping: ## Run a Redis PING health-check command
-	$(DC) exec redis redis-cli -n 1 ping
+	$(DEV_COMPOSE) exec redis redis-cli -n 1 ping
 
 ##@ Docker System
 docker.du: ## Display Docker disk usage summary
@@ -383,10 +395,10 @@ volumes.reset: ## Remove all Docker volumes
 
 ##@ Docker • Compose
 compose.ps: ## List Docker containers for this project
-	$(DC) ps
+	$(DEV_COMPOSE) ps
 compose.reset: ## Stop stack, remove images/volumes/orphans for this project
 	$(CONFIRM_CMD)
-	$(DC) down --rmi all --volumes --remove-orphans
+	$(DEV_COMPOSE) down --rmi all --volumes --remove-orphans
 compose.reset.all: ## Full reset of Docker Compose resources for this project
 	$(CONFIRM_CMD)
 	@$(MAKE) compose.reset CONFIRM=1

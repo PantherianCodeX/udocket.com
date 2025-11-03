@@ -186,7 +186,7 @@ General guidelines:
 
 ## Local Development
 
-- Start stack: `docker compose up --build`
+- Start stack: `PROJECT_NAME=udocket-dev make stack.up`
   - Django platform (primary UI/API): `http://localhost:8000`
 - Sync dependencies locally before running management commands: `uv sync --frozen --group dev --no-install-project --project apps/platform`
 - Create a case via the platform UI and upload audio from the case page.

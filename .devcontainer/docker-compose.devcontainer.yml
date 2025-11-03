@@ -23,9 +23,9 @@ services:
       - home-cache:/root/.cache
       - home-local-share:/root/.local/share
       - codex-data:/root/.codex
-      - .:/app
-      - ./storage:/app/storage
-      - ./.env:/app/.env:rw
+      - .:/udocket
+      - ./storage:/udocket/storage
+      - ./.env:/udocket/.env:rw
       - /var/run/docker.sock:/var/run/docker.sock
     security_opt:
       - seccomp=unconfined
@@ -57,7 +57,7 @@ services:
       - home-cache:/root/.cache
       - home-local-share:/root/.local/share
       - codex-data:/root/.codex
-      - ..:/workspace
+      - ..:/udocket
     environment:
       PUPPETEER_SKIP_DOWNLOAD: "1"
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium

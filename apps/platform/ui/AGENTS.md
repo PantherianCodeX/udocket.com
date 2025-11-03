@@ -177,7 +177,7 @@ Scope: everything beneath `apps/platform/ui/` (templates, views, presenters, sel
 
 
 ## Testing & Local Dev
-- Run with Docker: `docker compose up --build`. UI is at `http://localhost:8000`.
+- Run with Docker: `PROJECT_NAME=udocket-dev make stack.up`. UI is at `http://localhost:8000`.
 - Use the UI to create a case, upload audio, and watch the jobs table update. The scripts and HTMX flows in transcribe and case views are a good reference.
 - When adding a new panel or modal, validate:
   - Keyboard navigation and focus restoration

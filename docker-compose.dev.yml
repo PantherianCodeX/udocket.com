@@ -1,0 +1,111 @@
+x-develop:
+  platform-watch: &platform-watch
+    watch:
+      - action: sync
+        path: apps/platform
+        target: /udocket/apps/platform
+      - action: sync
+        path: packages
+        target: /udocket/packages
+      - action: rebuild
+        path: apps/platform/pyproject.toml
+      - action: rebuild
+        path: apps/platform/uv.lock
+      - action: rebuild
+        path: infra/docker/Dockerfile.platform
+
+services:
+  platform:
+    build:
+      network: host
+      args:
+        DEV_TOOLS: "1"
+    develop: *platform-watch
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
+      CELERY_TASK_ALWAYS_EAGER: "0"
+    command:
+      - sh
+      - -lc
+      - |
+          python manage.py migrate && \
+          python -m watchfiles \
+            --target-type=command \
+            --filter=apps.platform.config.watchers.PythonAndHTMLFilter \
+            --ignore-paths=/opt/venv \
+            --ignore-paths=${APP_ROOT:-/udocket}/storage \
+            --ignore-paths=${APP_ROOT:-/udocket}/celerybeat-schedule \
+            --grace-period=0.2 \
+            "daphne -b 0.0.0.0 -p 8000 apps.platform.config.asgi:application" ${APP_ROOT:-/udocket}
+    volumes:
+      - ./storage:/udocket/storage
+    ports:
+      - "${PLATFORM_DEV_PORT:-8000}:8000"
+
+  platform_worker:
+    build:
+      network: host
+      args:
+        DEV_TOOLS: "1"
+    develop: *platform-watch
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
+      CELERY_TASK_ALWAYS_EAGER: "0"
+    command:
+      - sh
+      - -c
+      - celery -A apps.platform.config.celery worker -l info
+    volumes:
+      - ./storage:/udocket/storage
+
+  platform_beat:
+    build:
+      network: host
+      args:
+        DEV_TOOLS: "1"
+    develop: *platform-watch
+    environment:
+      DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
+      CELERY_TASK_ALWAYS_EAGER: "0"
+    command:
+      - sh
+      - -c
+      - celery -A apps.platform.config.celery beat -l info
+    volumes:
+      - ./storage:/udocket/storage
+
+  redis:
+    ports:
+      - "${REDIS_DEV_PORT:-6379}:6379"
+
+  postgres:
+    ports:
+      - "${POSTGRES_DEV_PORT:-5432}:5432"
+
+  postgres-keycloak:
+    ports:
+      - "${KEYCLOAK_DB_DEV_PORT:-15433}:5432"
+
+  keycloak:
+    ports:
+      - "${KEYCLOAK_DEV_PORT:-8085}:8085"
+
+  docs:
+    build:
+      context: .
+      dockerfile: packages/udocket_docs/Dockerfile
+    image: udocket-docs-toolbox:dev
+    env_file:
+      - packages/udocket_docs/.env
+    working_dir: /udocket
+    volumes:
+      - .:/udocket:cached
+    tty: true
+    command: sleep infinity
+    environment:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+    ports:
+      - "${DOCS_DEV_PORT:-8010}:8010"
+    profiles:
+      - docs

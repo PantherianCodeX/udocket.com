@@ -2349,7 +2349,7 @@ ______________________________________________________________________
 | Component | Dev/Staging | Production | Upgrade policy | Notes |
 |---|---|---|---|---|
 | Kubernetes | 1.29 | 1.28 | Minor upgrades every 6 months; patch monthly | Managed AKS clusters with PodSecurity restricted profile; next prod upgrade Q1 2026; baseline CIS AKS v1.29 |
-| Docker Compose (dev) | 2.24.x | n/a | Follow Docker Desktop GA; pin via `.docker/compose-version` | Required for local parity stack (`docker compose up --build`); validated weekly via CI smoke; includes Postgres, Redis, Guardian, Signer, Settings, workers |
+| Docker Compose (dev) | 2.24.x | n/a | Follow Docker Desktop GA; pin via `.docker/compose-version` | Required for local parity stack (`make stack.up` / `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`); validated weekly via CI smoke; includes Postgres, Redis, Guardian, Signer, Settings, workers |
 | Service mesh (Istio) | 1.21.1 | 1.20.4 | N-1 support; canary namespace before prod rollout | mTLS enforced cluster-wide; cert TTL 24h; last prod bump Jul 2025; next cadence review Apr 2026 |
 | Postgres | 15.6 | 15.6 HA | Major every 18 months; logical replication for blue/green | Patroni-managed; statement pooling disabled; HA failover drills quarterly |
 | Redis | 7.2 | 7.2 | Patch quarterly; persistence `aof` for broker, none for cache | Managed Azure Cache for Redis Enterprise; last review Aug 2025; next review Feb 2026 |

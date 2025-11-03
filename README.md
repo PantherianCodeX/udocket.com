@@ -7,7 +7,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 1) Implement or customise your **pilot agent** inside the importable interface:
    `packages/udocket_core/agents/transcribe_lib.py` (see `TranscriptionAgent`).
 2) Copy `.env.example` to `.env` and fill required values.
-   - Postgres defaults are provided; start the bundled database with `docker compose up -d postgres`.
+   - Postgres defaults are provided; start the bundled database with `PROJECT_NAME=udocket-dev make stack.up SERVICES=postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
    - `APP_ROOT` defaults to `/udocket` inside containers; update it (and derived paths such as `STORAGE_ROOT`) when running directly on your host.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
@@ -22,7 +22,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 5) Build & run the stack:
 
    ```bash
-   docker compose up --build
+   PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up --build -d
    ```
 
 - Platform (UI + API) → http://localhost:8000
@@ -38,8 +38,35 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 - Cache directories live under `.docker/buildx-cache/` (platform, platform_worker, platform_beat, keycloak, platform-dev, docs). Host and devcontainer builds share them automatically.
 - `make images.cache.warm` primes the BuildKit cache layers for the platform, docs, and keycloak images when you want warmer Bake runs without producing artifacts.
-- To read/write caches, include the override: `docker compose -f docker-compose.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
+- To read/write caches, include the dev overlay: `docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build`. Skip it for legacy builds or first-run setups to avoid import warnings.
 - VS Code devcontainer users can opt in by appending `../docker-compose.cache.yml` to the `dockerComposeFile` list in `.devcontainer/devcontainer.json`.
+
+### Compose environments
+
+- **Development** — the Makefile defaults to `PROJECT_NAME=udocket-dev` and uses the dev overlay automatically. The raw command is:
+
+  ```bash
+  PROJECT_NAME=udocket-dev docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.dev.yml \
+    -f docker-compose.cache.yml \
+    up -d
+  ```
+
+  Use `make stack.up`, `make stack.down`, and `make stack.logs` to manage the dev stack. Override `PROJECT_NAME` when you want side-by-side stacks (e.g., `PROJECT_NAME=my-feature make stack.up`).
+
+- Docs tooling uses the same overlay. Copy `packages/udocket_docs/.env.example` to `packages/udocket_docs/.env` before running `make docs.build` or `make docs.preview`.
+
+- **Production** — run the base compose file plus the production overlay after preparing a production `.env` (secrets, SSL, database, etc.) and copying `storage/` to persistent storage:
+
+  ```bash
+  PROJECT_NAME=udocket docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.prod.yml \
+    up -d
+  ```
+
+  Bind host ports in `docker-compose.prod.yml` or layer another override file if you front the stack with Nginx/Traefik.
 
 ### Maintenance shortcuts
 
@@ -68,7 +95,7 @@ Most targets accept optional variables so you can customize behaviour without ed
 - Local development bootstrap is controlled via `PLATFORM_BOOTSTRAP_ENABLED`. The default `.env.example` seeds an `admin/changeme` superuser, a demo organization, and permission presets; override or disable these variables for production.
 - Default bootstrap values also live in `config/bootstrap_defaults.json`. Point `PLATFORM_BOOTSTRAP_CONFIG` at a custom file to tailor per-environment seeds without baking credentials into the image.
 - Django admin remains limited to superusers; seeded superusers can also sign in through `/login/` to access the tenant-scoped UI while staff/non-admin accounts rely solely on the UI.
-- Application migrations were flattened into new `0001_initial.py` files for the local apps; run `docker compose down --volumes` after pulling to ensure your database is recreated before starting the stack.
+- Application migrations were flattened into new `0001_initial.py` files for the local apps; run `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml down --volumes` after pulling to ensure your database is recreated before starting the stack.
 - Azure OpenAI providers now enforce Canada-only endpoints (canadacentral/canadaeast). Set the per-provider `allow_non_ca_region` flag only for temporary local testing; production deployments must stay in-region.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
 - Run tests inside the dev container directly: `pytest`. The devcontainer provides the runtime and services, so no local helper scripts are required.
@@ -100,8 +127,8 @@ Most targets accept optional variables so you can customize behaviour without ed
 
 ## Azure Setup (batch mode)
 1) Create a Storage account and a private container (e.g., `udocket-audio`).
-2) Add env vars in `.env` as above; rebuild the Django platform worker: `docker compose build platform_worker`.
-3) Run: `docker compose up -d`. The Celery worker in `apps.platform` uploads audio and passes a SAS URL to the agent.
+2) Add env vars in `.env` as above; rebuild the Django platform worker: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build platform_worker`.
+3) Run: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up -d`. The Celery worker in `apps.platform` uploads audio and passes a SAS URL to the agent.
 4) Create an Azure Speech resource in the same Canada region (canadacentral/canadaeast) with tier Standard (S0) and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
 
 ## Roadmap

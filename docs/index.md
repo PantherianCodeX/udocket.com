@@ -17,7 +17,7 @@ PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm ci
 uv run python -m doc_tools.manage_docs --lint
 ```
 
-Vale 3.7.1 is baked into the docs toolbox container (`docker compose run --rm docs …`).
+Vale 3.7.1 is baked into the docs toolbox container (`make docs.build` / `make docs.lint`, which wrap `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm docs …`).
 If you run the commands on the host, install the same Vale version so the lint
 step succeeds.
 

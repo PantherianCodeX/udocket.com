@@ -385,7 +385,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Local stack compose files `docker-compose.yml`, docs `docs/automation/lp-engine/diagrams/*`.
 
 - `scripts/dev/run_lpe_hot_reload.py` compiles bundles, pushes to sandbox OPA, and diffs digests without staging deploys.
-- `docker compose up --build lpe` mirrors production dependencies (`lpe`, `opa`, `settings`, `reference-manager`) for manual verification.
+- `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up --build lpe` mirrors production dependencies (`lpe`, `opa`, `settings`, `reference-manager`) for manual verification.
 - `scripts/opa/validate_decision_logs.py` asserts decision logs remain schema-compliant during development.
 
 ______________________________________________________________________

@@ -2,7 +2,7 @@
   "name": "uDocket Platform Dev",
   "dockerComposeFile": [
     "../docker-compose.yml",
-    "../docker-compose.override.yml",
+    "../docker-compose.dev.yml",
     "../docker-compose.cache.yml",
     "./docker-compose.devcontainer.yml"
   ],
