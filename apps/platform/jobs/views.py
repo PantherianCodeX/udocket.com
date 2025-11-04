@@ -1,27 +1,29 @@
 from __future__ import annotations
+
 import hashlib
 import logging
 import os
 import uuid
-from typing import Any, Dict, Iterable, List, Optional, Set
+from collections.abc import Iterable
+from typing import Any
 
+import requests
 from django.conf import settings
-from django.utils import timezone
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
-from apps.platform.authorization.access_policies import JobAccessPolicy
-from rest_framework.response import Response
 from django.http import Http404
 from django.http.response import FileResponse
 from django.shortcuts import render
-import requests
+from django.utils import timezone
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from apps.platform.authorization.access_policies import JobAccessPolicy
 from config.paths import resolve_storage_root
 
 log = logging.getLogger("apps.platform.jobs.views")
 from pathlib import Path
 
-ANALYSIS_KIND_TO_META_KEY: Dict[str, str] = {
+ANALYSIS_KIND_TO_META_KEY: dict[str, str] = {
     "summary_json": "summary_file",
     "summary_markdown": "summary_markdown_file",
     "summary_outline": "summary_outline_file",
@@ -42,11 +44,13 @@ ANALYSIS_KIND_TO_META_KEY: Dict[str, str] = {
     "compose_graph_visual_json": "compose_graph_visual_json",
 }
 
-from apps.platform.authorization.capabilities import has_capability
+from django.db import transaction
+
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
+from apps.platform.config.celery import app as celery_app
 from apps.platform.jobs.models import Job, JobNote
-from packages.udocket_common.text import unique_title
 from apps.platform.jobs.notes import serialize_notes
 from apps.platform.jobs.serializers import (
     JobCreateSerializer,
@@ -54,20 +58,8 @@ from apps.platform.jobs.serializers import (
     JobTelemetrySerializer,
 )
 from apps.platform.jobs.telemetry import job_telemetry
-from apps.platform.config.celery import app as celery_app
-from apps.platform.operations.tasks import transcribe_job
-from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.audit import emit as audit_emit
-from django.db import transaction
-from apps.platform.operations.tasks import analyze_job, compose_job
-from apps.platform.tenancy import scope_jobs
-from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
-from packages.udocket_common.json_utils import read_json_object
-from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
-from apps.platform.operations.services import case_paths, resolve_case_relative
-from apps.platform.operations.services.files import sha256_file
-from packages.udocket_core.audio import probe_audio_metadata
-from packages.udocket_core.agents.analyze_lib import AnalyzeConfig
+from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.llm import (
     ensure_default_llm_configuration,
     evaluate_provider_setup,
@@ -76,11 +68,22 @@ from apps.platform.operations.llm import (
     get_provider_secret_with_metadata,
     load_llm_settings,
 )
+from apps.platform.operations.services import case_paths, resolve_case_relative
 from apps.platform.operations.services.analysis import collect_requested_providers
-from packages.udocket_common.json_utils import stringify_json
+from apps.platform.operations.services.files import sha256_file
+from apps.platform.operations.storage import ensure_case_dirs
+from apps.platform.operations.storage import ops_dir as storage_ops_dir
+from apps.platform.operations.tasks import analyze_job, compose_job, transcribe_job
+from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
+from apps.platform.tenancy import scope_jobs
+from packages.udocket_common.json_utils import read_json_object, stringify_json
+from packages.udocket_common.operations import ComposeStageMap, optional_json_object
+from packages.udocket_common.text import unique_title
+from packages.udocket_core.agents.analyze_lib import AnalyzeConfig
+from packages.udocket_core.audio import probe_audio_metadata
 
 
-def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback: str) -> str:
+def _derive_audio_filename(path_obj: Path | None, meta: dict[str, Any], fallback: str) -> str:
     def _clean(value: Any) -> str:
         if not isinstance(value, str):
             return ""
@@ -123,6 +126,8 @@ def _derive_audio_filename(path_obj: Path | None, meta: Dict[str, Any], fallback
         if candidate:
             return candidate
     return fallback or "audio"
+
+
 class JobViewSet(viewsets.ModelViewSet):
     queryset = Job.objects.all()
     serializer_class = JobSerializer
@@ -144,10 +149,17 @@ class JobViewSet(viewsets.ModelViewSet):
         ser.is_valid(raise_exception=True)
         v = ser.validated_data
         if v.get("diarization") and v.get("mode") != Job.Mode.BATCH:
-            return Response({"detail": "Diarization is only supported in batch mode."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Diarization is only supported in batch mode."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         job = Job.objects.create(**v)
-        audio_input_value = job.audio_input or ""
-        force_wav_conversion = str(request.data.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
+        force_wav_conversion = str(request.data.get("force_wav") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         # Enqueue task
         transcribe_job.delay(
             case_id=str(job.case_id),
@@ -164,7 +176,11 @@ class JobViewSet(viewsets.ModelViewSet):
             request,
             case_id=str(job.case_id),
             event="job.created",
-            data={"job_id": str(job.id), "mode": job.mode, "force_wav_conversion": force_wav_conversion},
+            data={
+                "job_id": str(job.id),
+                "mode": job.mode,
+                "force_wav_conversion": force_wav_conversion,
+            },
         )
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -200,20 +216,26 @@ class JobViewSet(viewsets.ModelViewSet):
         incoming = request.data or {}
         notes_value = incoming.get("notes")
         if notes_value is None:
-            return Response({"detail": "Field 'notes' is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Field 'notes' is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not isinstance(notes_value, str):
-            return Response({"detail": "Field 'notes' must be a string."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Field 'notes' must be a string."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Normalise newlines but keep intentional spacing inside the message.
         text_value = notes_value.replace("\r\n", "\n")
         text_value = text_value.strip()
         if not text_value:
-            return Response({"detail": "Notes text must not be empty."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Notes text must not be empty."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         user = getattr(request, "user", None)
         user_obj = user if user and getattr(user, "is_authenticated", False) else None
         created_by_name = self._user_label(user_obj) if user_obj else ""
-        note = JobNote.objects.create(
+        JobNote.objects.create(
             job=job,
             text=text_value,
             created_by=user_obj,
@@ -223,7 +245,7 @@ class JobViewSet(viewsets.ModelViewSet):
         notes_qs = JobNote.objects.filter(job=job).order_by("-created_at")
         note_entries = serialize_notes(notes_qs)
         latest_entry = note_entries[0] if note_entries else None
-        notes_payload: Dict[str, Any] = {
+        notes_payload: dict[str, Any] = {
             "entries": note_entries,
             "count": len(note_entries),
         }
@@ -265,7 +287,9 @@ class JobViewSet(viewsets.ModelViewSet):
 
         ids_param = request.query_params.get("ids")
         if not ids_param:
-            return Response({"detail": "Parameter 'ids' is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Parameter 'ids' is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         job_ids: list[uuid.UUID] = []
         for raw_part in ids_param.split(","):
@@ -286,7 +310,10 @@ class JobViewSet(viewsets.ModelViewSet):
             try:
                 uuid.UUID(case_id_param)
             except ValueError:
-                return Response({"detail": "Parameter 'case_id' must be a valid UUID."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": "Parameter 'case_id' must be a valid UUID."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             qs = qs.filter(case_id=case_id_param)
 
         payloads: list[dict[str, Any]] = []
@@ -303,7 +330,9 @@ class JobViewSet(viewsets.ModelViewSet):
                     "review_comment": job.review_comment,
                     "reviewed_at": job.reviewed_at,
                     "reviewed_by": self._user_label(job.reviewed_by),
-                    "review_activity_id": str(job.review_activity_id) if job.review_activity_id else None,
+                    "review_activity_id": str(job.review_activity_id)
+                    if job.review_activity_id
+                    else None,
                 }
             )
 
@@ -350,7 +379,9 @@ class JobViewSet(viewsets.ModelViewSet):
         if not job.transcript_path:
             return
         base_artifact = (
-            CaseArtifact.objects.filter(case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT")
+            CaseArtifact.objects.filter(
+                case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT"
+            )
             .order_by("-created_at")
             .first()
         )
@@ -378,26 +409,45 @@ class JobViewSet(viewsets.ModelViewSet):
         if not self._can_review(request, job):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if job.status != Job.Status.SUCCEEDED:
-            return Response({"detail": "Job must succeed before approval."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Job must succeed before approval."}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not job.transcript_path:
-            return Response({"detail": "Transcript not available."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Transcript not available."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         comment = (request.data.get("comment") or "").strip()
         activity_id = job.review_activity_id or uuid.uuid4()
         reviewer = getattr(request, "user", None)
         job.review_status = Job.ReviewStatus.APPROVED
         job.reviewed_at = timezone.now()
-        job.reviewed_by = reviewer if reviewer and getattr(reviewer, "is_authenticated", False) else None
+        job.reviewed_by = (
+            reviewer if reviewer and getattr(reviewer, "is_authenticated", False) else None
+        )
         job.review_comment = comment
         job.review_activity_id = activity_id
-        job.save(update_fields=["review_status", "reviewed_at", "reviewed_by", "review_comment", "review_activity_id"])
+        job.save(
+            update_fields=[
+                "review_status",
+                "reviewed_at",
+                "reviewed_by",
+                "review_comment",
+                "review_activity_id",
+            ]
+        )
 
         try:
             self._ensure_approval_artifact(job, reviewer)
         except Exception:
             pass
 
-        audit_emit(request, case_id=str(job.case_id), event="job.approved", data={"job_id": str(job.id), "activity_uuid": str(activity_id)})
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="job.approved",
+            data={"job_id": str(job.id), "activity_uuid": str(activity_id)},
+        )
         response_payload = {
             "job_id": str(job.id),
             "status": job.status,
@@ -431,10 +481,20 @@ class JobViewSet(viewsets.ModelViewSet):
         reviewer = getattr(request, "user", None)
         job.review_status = Job.ReviewStatus.REJECTED
         job.reviewed_at = timezone.now()
-        job.reviewed_by = reviewer if reviewer and getattr(reviewer, "is_authenticated", False) else None
+        job.reviewed_by = (
+            reviewer if reviewer and getattr(reviewer, "is_authenticated", False) else None
+        )
         job.review_comment = comment
         job.review_activity_id = activity_id
-        job.save(update_fields=["review_status", "reviewed_at", "reviewed_by", "review_comment", "review_activity_id"])
+        job.save(
+            update_fields=[
+                "review_status",
+                "reviewed_at",
+                "reviewed_by",
+                "review_comment",
+                "review_activity_id",
+            ]
+        )
 
         CaseArtifact.objects.filter(
             case_id=str(job.case_id),
@@ -442,7 +502,12 @@ class JobViewSet(viewsets.ModelViewSet):
             type="TRANSCRIPT_APPROVED",
         ).delete()
 
-        audit_emit(request, case_id=str(job.case_id), event="job.rejected", data={"job_id": str(job.id), "activity_uuid": str(activity_id)})
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="job.rejected",
+            data={"job_id": str(job.id), "activity_uuid": str(activity_id)},
+        )
         response_payload = {
             "job_id": str(job.id),
             "status": job.status,
@@ -478,29 +543,45 @@ class JobViewSet(viewsets.ModelViewSet):
         job = self.get_object()
         if not job.transcript_path:
             raise Http404
-        audit_emit(request, case_id=str(job.case_id), event="job.download_transcript", data={"job_id": str(job.id)})
-        return FileResponse(open(job.transcript_path, "rb"), filename=f"{job.id}__transcript.txt", content_type="text/plain", as_attachment=True)
+        audit_emit(
+            request,
+            case_id=str(job.case_id),
+            event="job.download_transcript",
+            data={"job_id": str(job.id)},
+        )
+        return FileResponse(
+            open(job.transcript_path, "rb"),
+            filename=f"{job.id}__transcript.txt",
+            content_type="text/plain",
+            as_attachment=True,
+        )
 
     @action(detail=True, methods=["get"], url_path="download-audio")
     def download_audio(self, request, pk=None):
         job = self.get_object()
         converted = str(request.query_params.get("converted", "")).lower() in {"1", "true", "yes"}
-        org_id = getattr(getattr(job, "case", None), "organization_id", None) or getattr(job, "organization_id", None)
-        job_meta: Dict[str, Any] = {}
+        org_id = getattr(getattr(job, "case", None), "organization_id", None) or getattr(
+            job, "organization_id", None
+        )
+        job_meta: dict[str, Any] = {}
         if org_id is not None:
-            job_meta_path = storage_ops_dir(str(job.case_id), org_id) / f"{job.id}_transcription_log.json"
+            job_meta_path = (
+                storage_ops_dir(str(job.case_id), org_id) / f"{job.id}_transcription_log.json"
+            )
             if job_meta_path.exists():
                 job_meta = read_json_object(job_meta_path)
-        path_obj: Optional[Path] = None
-        active_meta: Dict[str, Any] = job_meta
+        path_obj: Path | None = None
+        active_meta: dict[str, Any] = job_meta
         if converted:
             meta = job_meta
-            converted_job_id = meta.get("converted_audio_job_id") or meta.get("converted_wav_job_id")
-            converted_meta: Dict[str, Any] = {}
+            converted_job_id = meta.get("converted_audio_job_id") or meta.get(
+                "converted_wav_job_id"
+            )
+            converted_meta: dict[str, Any] = {}
             # Fast-path: if this job itself produced a converted audio file, prefer it
             if path_obj is None and getattr(job, "audio_input", None):
                 try:
-                    candidate = Path(getattr(job, "audio_input"))
+                    candidate = Path(job.audio_input)
                     if candidate.exists():
                         path_obj = candidate
                 except Exception:
@@ -513,7 +594,10 @@ class JobViewSet(viewsets.ModelViewSet):
                         if candidate.exists():
                             path_obj = candidate
                     if org_id is not None:
-                        converted_meta_path = storage_ops_dir(str(job.case_id), org_id) / f"{converted_job_id}_transcription_log.json"
+                        converted_meta_path = (
+                            storage_ops_dir(str(job.case_id), org_id)
+                            / f"{converted_job_id}_transcription_log.json"
+                        )
                         if converted_meta_path.exists():
                             converted_meta = read_json_object(converted_meta_path)
                 except Job.DoesNotExist:
@@ -528,7 +612,7 @@ class JobViewSet(viewsets.ModelViewSet):
             audio_path = getattr(job, "audio_input", None)
             if not audio_path or not str(audio_path).startswith("/"):
                 # Try resolving via metadata in case source path is stored there
-                audio_path = (job_meta.get("source_audio_path") or job_meta.get("audio_path") or "")
+                audio_path = job_meta.get("source_audio_path") or job_meta.get("audio_path") or ""
                 if not audio_path or not str(audio_path).startswith("/"):
                     raise Http404
             path_obj = Path(audio_path)
@@ -562,14 +646,16 @@ class JobViewSet(viewsets.ModelViewSet):
         if target not in {"audio", "transcript"}:
             return Response({"detail": "Unsupported target."}, status=status.HTTP_400_BAD_REQUEST)
         if target == "audio" and scope not in {"current", "source", "converted"}:
-            return Response({"detail": "Unsupported audio scope."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Unsupported audio scope."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         telemetry = job_telemetry(job)
         meta = telemetry.meta if isinstance(telemetry.meta, dict) else {}
 
         storage_root = resolve_storage_root().resolve()
 
-        def _resolve_path(candidate: Optional[str]) -> Optional[Path]:
+        def _resolve_path(candidate: str | None) -> Path | None:
             if not candidate:
                 return None
             try:
@@ -586,8 +672,8 @@ class JobViewSet(viewsets.ModelViewSet):
             except Exception:
                 return None
 
-        expected_hash: Optional[str] = None
-        path_obj: Optional[Path] = None
+        expected_hash: str | None = None
+        path_obj: Path | None = None
 
         if target == "audio":
             if scope == "source":
@@ -604,7 +690,9 @@ class JobViewSet(viewsets.ModelViewSet):
                     except Job.DoesNotExist:
                         path_obj = None
             elif scope == "converted":
-                path_obj = _resolve_path(meta.get("converted_wav_path") or getattr(job, "audio_input", None))
+                path_obj = _resolve_path(
+                    meta.get("converted_wav_path") or getattr(job, "audio_input", None)
+                )
                 expected_hash = meta.get("converted_audio_sha256") or meta.get("audio_sha256")
             else:
                 path_obj = _resolve_path(getattr(job, "audio_input", None))
@@ -614,10 +702,12 @@ class JobViewSet(viewsets.ModelViewSet):
             expected_hash = meta.get("transcript_sha256")
 
         if path_obj is None or not path_obj.exists():
-            return Response({"detail": "File not found for verification."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "File not found for verification."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         observed_hash = sha256_file(path_obj)
-        size_bytes: Optional[int]
+        size_bytes: int | None
         try:
             size_bytes = path_obj.stat().st_size
         except Exception:
@@ -647,16 +737,23 @@ class JobViewSet(viewsets.ModelViewSet):
         job = self.get_object()
         audio_input = getattr(job, "audio_input", None)
         if not audio_input:
-            return Response({"detail": "Job has no audio input."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Job has no audio input."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         path = Path(str(audio_input))
         if not path.exists():
-            return Response({"detail": "Audio file is unavailable."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Audio file is unavailable."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             meta = probe_audio_metadata(path) or {}
         except Exception as exc:  # noqa: BLE001
-            return Response({"detail": f"Unable to probe audio: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"detail": f"Unable to probe audio: {exc}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         sha256_val = sha256_file(path)
         try:
@@ -664,7 +761,7 @@ class JobViewSet(viewsets.ModelViewSet):
         except Exception:  # noqa: BLE001
             size_bytes = None
 
-        updates: Dict[str, Any] = {}
+        updates: dict[str, Any] = {}
         for key, value in meta.items():
             if value is not None:
                 updates[key] = value
@@ -673,7 +770,9 @@ class JobViewSet(viewsets.ModelViewSet):
         if size_bytes is not None:
             updates["audio_size_bytes"] = size_bytes
 
-        update_job_meta(str(job.case_id), getattr(job, "organization_id", None), str(job.id), updates)
+        update_job_meta(
+            str(job.case_id), getattr(job, "organization_id", None), str(job.id), updates
+        )
 
         dirty_fields: list[str] = []
         duration_val = meta.get("audio_duration_s")
@@ -746,14 +845,21 @@ class JobViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
         job = self.get_object()
-        if job.status not in {Job.Status.PENDING, Job.Status.RUNNING, Job.Status.CANCELLING, Job.Status.UPLOADING}:
-            return Response({"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST)
+        if job.status not in {
+            Job.Status.PENDING,
+            Job.Status.RUNNING,
+            Job.Status.CANCELLING,
+            Job.Status.UPLOADING,
+        }:
+            return Response(
+                {"detail": "Job is not cancellable."}, status=status.HTTP_400_BAD_REQUEST
+            )
         case_id = str(job.case_id)
         org_id = str(job.organization_id) if getattr(job, "organization_id", None) else None
         job_id_str = str(job.id)
 
         job_meta = read_job_meta(case_id, org_id, job_id_str)
-        candidate_ids: List[str] = []
+        candidate_ids: list[str] = []
         task_meta_id = job_meta.get("celery_task_id")
         if isinstance(task_meta_id, str) and task_meta_id:
             candidate_ids.append(task_meta_id)
@@ -762,8 +868,8 @@ class JobViewSet(viewsets.ModelViewSet):
             for value in history_ids:
                 if isinstance(value, str) and value:
                     candidate_ids.append(value)
-        deduped_ids: List[str] = []
-        seen: Set[str] = set()
+        deduped_ids: list[str] = []
+        seen: set[str] = set()
         for value in candidate_ids:
             if value not in seen:
                 seen.add(value)
@@ -826,7 +932,9 @@ class JobViewSet(viewsets.ModelViewSet):
             self._cancel_azure_transcription(job)
         except Exception:
             pass
-        append_job_log(case_id, org_id, job_id_str, "Cancellation requested; awaiting worker shutdown")
+        append_job_log(
+            case_id, org_id, job_id_str, "Cancellation requested; awaiting worker shutdown"
+        )
         update_job_meta(
             case_id,
             org_id,
@@ -856,9 +964,13 @@ class JobViewSet(viewsets.ModelViewSet):
     def restart(self, request, pk=None):
         job = self.get_object()
         if job.status == Job.Status.RUNNING:
-            return Response({"detail": "Job is currently running."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Job is currently running."}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not job.audio_input:
-            return Response({"detail": "Original audio input is missing."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Original audio input is missing."}, status=status.HTTP_400_BAD_REQUEST
+            )
         with transaction.atomic():
             new_job = Job.objects.create(
                 case=job.case,
@@ -884,13 +996,18 @@ class JobViewSet(viewsets.ModelViewSet):
             event="job.restarted",
             data={"job_id": str(job.id), "replacement_job_id": str(new_job.id)},
         )
-        send_job_update(str(new_job.id), event="job.created", status=Job.Status.PENDING, case_id=str(new_job.case_id))
+        send_job_update(
+            str(new_job.id),
+            event="job.created",
+            status=Job.Status.PENDING,
+            case_id=str(new_job.case_id),
+        )
         return Response({"status": Job.Status.PENDING, "job_id": str(new_job.id)})
 
     @staticmethod
-    def _active_celery_task_ids(task_ids: Iterable[str]) -> Set[str]:
+    def _active_celery_task_ids(task_ids: Iterable[str]) -> set[str]:
         ids = [tid for tid in task_ids if tid]
-        active: Set[str] = set()
+        active: set[str] = set()
         if not ids:
             return active
         inspect_obj = None
@@ -931,8 +1048,15 @@ class JobViewSet(viewsets.ModelViewSet):
         ops = storage_ops_dir(case_id, job.case.organization_id) / f"{job.id}_transcription.log"
         if not ops.exists():
             raise Http404
-        audit_emit(request, case_id=case_id, event="job.download_logs", data={"job_id": str(job.id)})
-        return FileResponse(open(ops, "rb"), filename=f"{job.id}_transcription.log", content_type="text/plain", as_attachment=True)
+        audit_emit(
+            request, case_id=case_id, event="job.download_logs", data={"job_id": str(job.id)}
+        )
+        return FileResponse(
+            open(ops, "rb"),
+            filename=f"{job.id}_transcription.log",
+            content_type="text/plain",
+            as_attachment=True,
+        )
 
     def _cancel_azure_transcription(self, job: Job) -> None:
         if job.mode != Job.Mode.BATCH:
@@ -940,7 +1064,10 @@ class JobViewSet(viewsets.ModelViewSet):
         key = getattr(settings, "AZURE_SPEECH_KEY", None)
         if not key:
             return
-        ops_path = storage_ops_dir(str(job.case_id), job.case.organization_id) / f"{job.id}_transcription_log.json"
+        ops_path = (
+            storage_ops_dir(str(job.case_id), job.case.organization_id)
+            / f"{job.id}_transcription_log.json"
+        )
         if not ops_path.exists():
             return
         meta = read_json_object(ops_path)
@@ -971,7 +1098,9 @@ class JobViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
         except Exception as exc:  # noqa: BLE001
-            log.warning("azure batch cancel failed", extra={"job_id": str(job.id), "error": str(exc)})
+            log.warning(
+                "azure batch cancel failed", extra={"job_id": str(job.id), "error": str(exc)}
+            )
             try:
                 update_job_meta(
                     str(job.case_id),
@@ -1003,13 +1132,10 @@ class JobViewSet(viewsets.ModelViewSet):
             .first()
         )
         source_label = source_artifact.title if source_artifact else str(source_job.id)
-        existing_summary_titles = (
-            CaseArtifact.objects.filter(
-                case_id=str(source_job.case_id),
-                type="SUMMARY",
-            )
-            .values_list("title", flat=True)
-        )
+        existing_summary_titles = CaseArtifact.objects.filter(
+            case_id=str(source_job.case_id),
+            type="SUMMARY",
+        ).values_list("title", flat=True)
         summary_title = unique_title("Summary", existing_summary_titles)
 
         organization_obj = source_job.organization or getattr(source_job.case, "organization", None)
@@ -1033,7 +1159,7 @@ class JobViewSet(viewsets.ModelViewSet):
             )
 
         llm_settings = load_llm_settings()
-        config_payload: Optional[Dict[str, Any]] = None
+        config_payload: dict[str, Any] | None = None
         if llm_config_id:
             config_payload = get_llm_configuration(
                 organization_id=org_id_str,
@@ -1054,13 +1180,16 @@ class JobViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        stage_map = ComposeStageMap.from_mapping(
+            optional_json_object(config_payload.get("stage_map"))
+        )
         requested_providers = collect_requested_providers(
             analyze_config.provider_chain or [],
             config_payload.get("provider_chain") or [],
-            config_payload.get("stage_map") or {},
+            stage_map,
         )
         provider_credentials = get_org_provider_credentials(org_id_str)
-        provider_issues: List[str] = []
+        provider_issues: list[str] = []
         if not requested_providers:
             provider_issues.append("No providers defined for the active Analyze configuration.")
         else:
@@ -1081,7 +1210,11 @@ class JobViewSet(viewsets.ModelViewSet):
                 secret_metadata = secret_details.get("metadata")
                 if not isinstance(secret_metadata, dict):
                     secret_metadata = {}
-                credential_metadata = cred_entry.get("metadata") if isinstance(cred_entry.get("metadata"), dict) else {}
+                credential_metadata = (
+                    cred_entry.get("metadata")
+                    if isinstance(cred_entry.get("metadata"), dict)
+                    else {}
+                )
                 merged_metadata = {**secret_metadata, **credential_metadata}
                 has_api_key = bool(secret_details.get("api_key") or cred_entry.get("has_api_key"))
                 analysis = evaluate_provider_setup(
@@ -1120,7 +1253,7 @@ class JobViewSet(viewsets.ModelViewSet):
             )
 
         ensure_case_dirs(str(source_job.case_id), source_job.organization_id)
-        meta_seed: Dict[str, Any] = {
+        meta_seed: dict[str, Any] = {
             "job_kind": "analyze",
             "job_title": summary_title,
             "agent_type": "analyze",
@@ -1183,14 +1316,19 @@ class JobViewSet(viewsets.ModelViewSet):
             if isinstance(config_value, str) and config_value.strip():
                 llm_config_id = config_value.strip()
 
-        organization_obj = summary_job.organization or getattr(summary_job.case, "organization", None)
+        organization_obj = summary_job.organization or getattr(
+            summary_job.case, "organization", None
+        )
         if organization_obj is None:
             try:
                 organization_obj = summary_job.case.organization
             except Exception:
                 organization_obj = None
         if organization_obj is None:
-            return Response({"detail": "Organization context unavailable for compose job."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Organization context unavailable for compose job."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         with transaction.atomic():
             new_job = Job.objects.create(
@@ -1205,10 +1343,15 @@ class JobViewSet(viewsets.ModelViewSet):
             )
 
         ensure_case_dirs(str(summary_job.case_id), summary_job.organization_id)
-        meta_seed: Dict[str, Any] = {
+        meta_seed: dict[str, Any] = {
             "job_kind": "compose",
             "agent_type": "compose",
-            "job_title": unique_title("Compose", CaseArtifact.objects.filter(case_id=str(summary_job.case_id), type="COMPOSE").values_list("title", flat=True)),
+            "job_title": unique_title(
+                "Compose",
+                CaseArtifact.objects.filter(
+                    case_id=str(summary_job.case_id), type="COMPOSE"
+                ).values_list("title", flat=True),
+            ),
             "summary_job_id": str(summary_job.id),
         }
         if llm_config_id:
@@ -1251,30 +1394,41 @@ class JobViewSet(viewsets.ModelViewSet):
             },
         )
 
-        return Response({"status": "queued", "job_id": str(new_job.id)}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"status": "queued", "job_id": str(new_job.id)}, status=status.HTTP_202_ACCEPTED
+        )
 
     @action(detail=True, methods=["get"], url_path="download-analysis")
     def download_analysis(self, request, pk=None):
         job = self.get_object()
         kind = (request.query_params.get("kind") or "").strip()
         if not kind:
-            return Response({"detail": "Missing kind parameter."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Missing kind parameter."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         meta_key = ANALYSIS_KIND_TO_META_KEY.get(kind)
         if meta_key is None:
-            return Response({"detail": "Unsupported analysis kind."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Unsupported analysis kind."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         case_id = str(job.case_id)
         org_id = job.organization_id or job.case.organization_id
         meta = read_job_meta(case_id, org_id, str(job.id))
         path_hint = meta.get(meta_key)
         if not path_hint:
-            return Response({"detail": "Artifact not found for requested kind."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Artifact not found for requested kind."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         case_dir, _, _ = case_paths(case_id, org_id)
         path_obj = resolve_case_relative(str(path_hint), case_dir)
         if path_obj is None or not path_obj.exists():
-            return Response({"detail": "Artifact file is missing."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Artifact file is missing."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         audit_emit(
             request,
@@ -1289,12 +1443,16 @@ class JobViewSet(viewsets.ModelViewSet):
     def update_title(self, request, pk=None):
         job = self.get_object()
         artifact = (
-            CaseArtifact.objects.filter(case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT")
+            CaseArtifact.objects.filter(
+                case_id=str(job.case_id), job_id=str(job.id), type="TRANSCRIPT"
+            )
             .order_by("-created_at")
             .first()
         )
         if not artifact:
-            return Response({"detail": "Transcript not found for this job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Transcript not found for this job."}, status=status.HTTP_404_NOT_FOUND
+            )
         new_title = (request.data.get("title") or "").strip()
         title_error = None
         if not new_title:
@@ -1306,7 +1464,9 @@ class JobViewSet(viewsets.ModelViewSet):
             if clash.exists():
                 title_error = "A transcript with that title already exists in this case."
         if title_error:
-            telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
+            telemetry = JobTelemetrySerializer(
+                job, context={"request": request, "ui_mode": True}
+            ).data
             context = {
                 "case": job.case,
                 "job": job,
@@ -1322,8 +1482,17 @@ class JobViewSet(viewsets.ModelViewSet):
 
         artifact.title = new_title
         artifact.save(update_fields=["title"])
-        append_job_log(str(job.case_id), job.organization_id, str(job.id), f"Transcript title set to '{new_title}'")
-        headers = {"HX-Trigger": stringify_json({"job-title-updated": {"job_id": str(job.id), "title": new_title}})}
+        append_job_log(
+            str(job.case_id),
+            job.organization_id,
+            str(job.id),
+            f"Transcript title set to '{new_title}'",
+        )
+        headers = {
+            "HX-Trigger": stringify_json(
+                {"job-title-updated": {"job_id": str(job.id), "title": new_title}}
+            )
+        }
         telemetry = JobTelemetrySerializer(job, context={"request": request, "ui_mode": True}).data
         context = {
             "case": job.case,
@@ -1334,7 +1503,9 @@ class JobViewSet(viewsets.ModelViewSet):
             "metadata_items": [],
             "user_can_review": True,
         }
-        return render(request, "platform_ui/components/jobs/job_detail.html", context, headers=headers)
+        return render(
+            request, "platform_ui/components/jobs/job_detail.html", context, headers=headers
+        )
 
     @action(detail=False, methods=["post"], url_path="upload")
     def upload(self, request):
@@ -1348,10 +1519,7 @@ class JobViewSet(viewsets.ModelViewSet):
           - diarization: boolean (batch only)
           - language: e.g., "en-CA"
         """
-        from django.core.exceptions import ValidationError
-        from django.utils.datastructures import MultiValueDictKeyError
         from django.shortcuts import get_object_or_404
-        from apps.platform.cases.models import Case
 
         case_id = request.data.get("case")
         if not case_id:
@@ -1361,15 +1529,23 @@ class JobViewSet(viewsets.ModelViewSet):
         diarization = str(request.data.get("diarization", "false")).lower() in ("1", "true", "yes")
         language = request.data.get("language", "en-CA")
         if diarization and mode != Job.Mode.BATCH:
-            return Response({"detail": "Diarization is only supported in batch mode."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Diarization is only supported in batch mode."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         file_obj = request.FILES.get("audio")
         audio_url = (request.data.get("audio_url") or "").strip()
         if not file_obj and not audio_url:
-            return Response({"detail": "Provide 'audio' file or 'audio_url'"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Provide 'audio' file or 'audio_url'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         with transaction.atomic():
-            job = Job.objects.create(case=case, audio_input="", mode=mode, diarization=diarization, language=language)
+            job = Job.objects.create(
+                case=case, audio_input="", mode=mode, diarization=diarization, language=language
+            )
             # Determine audio_input
             if file_obj:
                 case_dir = ensure_case_dirs(case_id, job.organization_id)
@@ -1384,7 +1560,12 @@ class JobViewSet(viewsets.ModelViewSet):
                 job.audio_input = audio_url
             job.save(update_fields=["audio_input"])
 
-        force_wav_requested = str(request.data.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
+        force_wav_requested = str(request.data.get("force_wav") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
         # Enqueue task
         transcribe_job.delay(
@@ -1402,6 +1583,11 @@ class JobViewSet(viewsets.ModelViewSet):
             request,
             case_id=str(case_id),
             event="job.uploaded",
-            data={"job_id": str(job.id), "mode": mode, "file": bool(file_obj), "force_wav_conversion": force_wav_requested},
+            data={
+                "job_id": str(job.id),
+                "mode": mode,
+                "file": bool(file_obj),
+                "force_wav_conversion": force_wav_requested,
+            },
         )
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)

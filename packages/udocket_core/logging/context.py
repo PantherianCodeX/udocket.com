@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-# pyright: strict
+from collections.abc import Mapping
 
+# pyright: strict
 from dataclasses import dataclass, field
-from typing import Mapping
 
 LogDict = dict[str, object]
 
@@ -80,7 +80,7 @@ class LogContext:
         task_id: str | None = None,
         event: str | None = None,
         **fields: object,
-    ) -> "LogContext":
+    ) -> LogContext:
         defaults = build_extra(
             component=component,
             case_id=case_id,
@@ -93,7 +93,7 @@ class LogContext:
         )
         return cls(values=defaults)
 
-    def bind(self, **fields: object) -> "LogContext":
+    def bind(self, **fields: object) -> LogContext:
         """Return a new ``LogContext`` with merged values."""
 
         merged = extend_extra(self.values, **fields)

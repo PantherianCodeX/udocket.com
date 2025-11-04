@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 import logging
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Mapping, Protocol, Sequence, cast, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
-from ..agents.common.azure_client import (
-    AzureChatClient,
-    AzureClientConfig,
-)
-from ..agents.common.http_client import HTTPRetryConfig
 from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
@@ -25,6 +20,12 @@ from packages.udocket_common.json_utils import (
     coerce_str_dict,
     merge_json_objects,
 )
+
+from ..agents.common.azure_client import (
+    AzureChatClient,
+    AzureClientConfig,
+)
+from ..agents.common.http_client import HTTPRetryConfig
 from ..llm.config import LLMProvider, LLMProviderModel
 
 logger = logging.getLogger("udocket.llm.runtime")
@@ -167,9 +168,7 @@ class OpenAIChatClient:
         if not isinstance(choices_raw, list):
             raise ChatClientError("OpenAI response missing choices")
         choices_list = [
-            coerce_json_object(choice)
-            for choice in choices_raw
-            if isinstance(choice, Mapping)
+            coerce_json_object(choice) for choice in choices_raw if isinstance(choice, Mapping)
         ]
         if not choices_list:
             raise ChatClientError("OpenAI response missing structured choices")
@@ -183,13 +182,13 @@ class OpenAIChatClient:
             content = content_raw
         elif content_raw is None:
             content = ""
-        elif isinstance(content_raw, Sequence) and not isinstance(content_raw, (str, bytes, bytearray)):
+        elif isinstance(content_raw, Sequence) and not isinstance(
+            content_raw, (str, bytes, bytearray)
+        ):
             parts = [
                 coerce_str(part.get("text"))
                 for part in (
-                    coerce_json_object(item)
-                    for item in content_raw
-                    if isinstance(item, Mapping)
+                    coerce_json_object(item) for item in content_raw if isinstance(item, Mapping)
                 )
             ]
             content = "".join(part or "" for part in parts).strip()
@@ -200,9 +199,7 @@ class OpenAIChatClient:
         if isinstance(usage_raw, Mapping):
             usage_obj = coerce_json_object(usage_raw)
             prompt_tokens = usage_obj.get("prompt_tokens") or usage_obj.get("input_tokens")
-            completion_tokens = (
-                usage_obj.get("completion_tokens") or usage_obj.get("output_tokens")
-            )
+            completion_tokens = usage_obj.get("completion_tokens") or usage_obj.get("output_tokens")
             total_tokens = usage_obj.get("total_tokens")
             usage = {
                 "prompt_tokens": int(prompt_tokens) if isinstance(prompt_tokens, int) else None,
@@ -298,7 +295,9 @@ class AnthropicChatClient:
         data_obj = coerce_json_object(data_raw)
         content_blocks = data_obj.get("content")
         text_fragments: list[str] = []
-        if isinstance(content_blocks, Sequence) and not isinstance(content_blocks, (str, bytes, bytearray)):
+        if isinstance(content_blocks, Sequence) and not isinstance(
+            content_blocks, (str, bytes, bytearray)
+        ):
             for block in content_blocks:
                 if isinstance(block, Mapping):
                     block_obj = coerce_json_object(block)
@@ -388,7 +387,9 @@ def _first_matching_model(models_payload: object, model_name: str) -> JSONObject
     if isinstance(models_payload, Mapping):
         mapping_payload = cast(Mapping[object, object], models_payload)
         candidates.append(coerce_json_object(mapping_payload))
-    elif isinstance(models_payload, Sequence) and not isinstance(models_payload, (str, bytes, bytearray)):
+    elif isinstance(models_payload, Sequence) and not isinstance(
+        models_payload, (str, bytes, bytearray)
+    ):
         entries_iter = cast(Sequence[object], models_payload)
         for entry in entries_iter:
             if isinstance(entry, Mapping):
@@ -443,9 +444,7 @@ class _AzureChatAdapter:
             max_tokens=max_tokens,
             response_format=response_format,
         )
-        logger.debug(
-            "azure.adapter.raw_prefix prefix=%r len=%d", content[:200], len(content)
-        )
+        logger.debug("azure.adapter.raw_prefix prefix=%r len=%d", content[:200], len(content))
 
         usage: TokenUsage = {
             "prompt_tokens": coerce_int(usage_payload.get("prompt_tokens")),
@@ -569,7 +568,9 @@ def build_chat_client(
     if provider.api_kind == "anthropic":
         timeout = coerce_int(options.get("timeout")) or 120
         api_version = _string_option(options, "api_version") or "2023-06-01"
-        model_name = model.name if model else _string_option(options, "model") or "claude-3-haiku-20240307"
+        model_name = (
+            model.name if model else _string_option(options, "model") or "claude-3-haiku-20240307"
+        )
         return AnthropicChatClient(
             base_url=endpoint or "https://api.anthropic.com/v1",
             api_key=api_key,
@@ -635,10 +636,7 @@ def build_provider_runtime_config(
                 credential_options_obj = coerce_json_object(credential_options_mapping)
                 _apply_default_options(user_options, credential_options_obj)
             deployment_env_value = coerce_str(credential_model.get("deployment_env"))
-            if (
-                deployment_env_value
-                and "azure_deployment" not in user_options
-            ):
+            if deployment_env_value and "azure_deployment" not in user_options:
                 user_options["azure_deployment"] = deployment_env_value
 
     if (

@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import copy
 import json
 from collections import deque
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from typing import Deque, cast
+from typing import cast
 
-from ...common.chunking import (
-    ChunkSplitConfig,
-    should_retry_for_json,
-    should_retry_for_length,
-    split_for_retry,
-)
-from ...common.io import TranscriptParse
+from packages.udocket_common.ids import ensure_deterministic_uuids
 from packages.udocket_common.json_utils import (
     JSONArray,
     JSONObject,
@@ -25,8 +18,15 @@ from packages.udocket_common.json_utils import (
     coerce_str,
     parse_json_object,
 )
-from packages.udocket_common.ids import ensure_deterministic_uuids
+
 from ....llm.runtime import ChatClient
+from ...common.chunking import (
+    ChunkSplitConfig,
+    should_retry_for_json,
+    should_retry_for_length,
+    split_for_retry,
+)
+from ...common.io import TranscriptParse
 
 OUTLINE_SCHEMA: JSONObject = {
     "type": "object",
@@ -409,9 +409,7 @@ def _merge_outline_sections(target: JSONObject, update: Mapping[str, JSONValue])
             existing_list = []
             target[key] = existing_list
         seen = {
-            json.dumps(item, sort_keys=True)
-            for item in existing_list
-            if isinstance(item, Mapping)
+            json.dumps(item, sort_keys=True) for item in existing_list if isinstance(item, Mapping)
         }
         for item in additions:
             signature = json.dumps(item, sort_keys=True)
@@ -450,23 +448,18 @@ def _merge_outline_sections(target: JSONObject, update: Mapping[str, JSONValue])
                     existing_list = []
                     existing_payload[attr_key] = existing_list
                 seen_aliases = {
-                    json.dumps(item, sort_keys=True)
-                    if isinstance(item, Mapping)
-                    else str(item)
+                    json.dumps(item, sort_keys=True) if isinstance(item, Mapping) else str(item)
                     for item in existing_list
                 }
                 for item in attr_value:
                     signature = (
-                        json.dumps(item, sort_keys=True)
-                        if isinstance(item, Mapping)
-                        else str(item)
+                        json.dumps(item, sort_keys=True) if isinstance(item, Mapping) else str(item)
                     )
                     if signature not in seen_aliases:
                         existing_list.append(item)
                         seen_aliases.add(signature)
-            else:
-                if attr_value and not existing_payload.get(attr_key):
-                    existing_payload[attr_key] = attr_value
+            elif attr_value and not existing_payload.get(attr_key):
+                existing_payload[attr_key] = attr_value
 
     _ensure_outline_identity(target)
 
@@ -493,7 +486,7 @@ def generate_outline(
 
     try:
         template = _outline_template(parse, intake)
-        chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
+        chunk_queue: deque[str] = deque(_ensure_chunks(context_snippet))
         aggregate_outline: JSONObject | None = None
         usage_totals: dict[str, int] = {}
 
@@ -506,15 +499,16 @@ def generate_outline(
                 continue
 
             system_prompt = (
-                "You are a Canadian paralegal assistant. Extract structured outline data from the provided"
-                " transcript context. Only return JSON that matches the provided schema."
+                "You are a Canadian paralegal assistant."
+                " Extract structured outline data from the provided transcript context."
+                " Only return JSON that matches the provided schema."
             )
             user_prompt = (
                 "Case intake info (may be empty):\n"
                 f"{json.dumps(intake_payload, ensure_ascii=False, indent=2)}\n\n"
                 "Case brief summary:\n"
                 f"{json.dumps(case_brief_payload, ensure_ascii=False, indent=2)}\n\n"
-                f"Transcript excerpts (remaining chunks: {len(chunk_queue)+1}):\n{chunk_text}\n"
+                f"Transcript excerpts (remaining chunks: {len(chunk_queue) + 1}):\n{chunk_text}\n"
             )
             try:
                 content, usage = llm_client.chat(

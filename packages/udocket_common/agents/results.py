@@ -47,7 +47,7 @@ class TranscriptionResult:
     artifact_hashes: dict[str, str] | None = None
     udocket_core_version: str | None = None
 
-    def with_core_version(self, version: str) -> "TranscriptionResult":
+    def with_core_version(self, version: str) -> TranscriptionResult:
         """Return a copy that includes the provided core version."""
 
         return TranscriptionResult(
@@ -61,7 +61,7 @@ class TranscriptionResult:
             duration_s=self.duration_s,
             sha_map=dict(self.sha_map),
             status=self.status,
-            artifact_hashes=dict(self.artifact_hashes) if self.artifact_hashes else None,
+            artifact_hashes=(dict(self.artifact_hashes) if self.artifact_hashes else None),
             udocket_core_version=version,
         )
 

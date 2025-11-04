@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 # pyright: strict
-from typing import Any, Dict, Tuple
+from typing import Any
 
-STATUS_CLASS_MAP: Dict[str, str] = {
+STATUS_CLASS_MAP: dict[str, str] = {
     "Approved": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
     "Created": "border-white/20 bg-white/5 text-slate-200",
     "Converting": "border-primary-400/40 bg-primary-500/10 text-primary-200",
@@ -22,7 +22,7 @@ STATUS_CLASS_MAP: Dict[str, str] = {
     "Error": "border-rose-400/40 bg-rose-500/15 text-rose-200",
 }
 
-STATUS_PILL_STYLES: Dict[str, str] = {
+STATUS_PILL_STYLES: dict[str, str] = {
     "SUCCEEDED": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
     "READY": "border-emerald-400/40 bg-emerald-500/10 text-emerald-200",
     "FAILED": "border-rose-400/40 bg-rose-500/10 text-rose-200",
@@ -42,7 +42,7 @@ CANCELABLE_STATUSES = {"RUNNING", "PENDING", "QUEUED", "UPLOADING", "CANCELLING"
 
 RESTARTABLE_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED", "CORRUPTED", "STALLED"}
 
-STATUS_SORT_ORDER: Dict[str, int] = {
+STATUS_SORT_ORDER: dict[str, int] = {
     "UPLOADING": 10,
     "QUEUED": 20,
     "PENDING": 30,
@@ -58,9 +58,9 @@ STATUS_SORT_ORDER: Dict[str, int] = {
     "ERROR": 110,
 }
 
-DEFAULT_TABLE_FILTERS: Tuple[Dict[str, Any], ...] = ()
+DEFAULT_TABLE_FILTERS: tuple[dict[str, Any], ...] = ()
 
-CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
+CASE_JOB_TABLE_COLUMNS: tuple[dict[str, Any], ...] = (
     {"id": "title", "label": "Title", "sortable": True, "sort_key": "title", "lock_visible": True},
     {
         "id": "status",
@@ -114,11 +114,17 @@ CASE_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "center",
         "hide_on_mobile": True,
     },
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "center", "lock_visible": True},
+    {
+        "id": "actions",
+        "label": "Actions",
+        "sortable": False,
+        "align": "center",
+        "lock_visible": True,
+    },
     {"id": "expander", "label": "", "sortable": False, "align": "right", "lock_visible": True},
 )
 
-GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
+GLOBAL_JOB_TABLE_COLUMNS: tuple[dict[str, Any], ...] = (
     {"id": "title", "label": "Job", "sortable": True, "sort_key": "title", "lock_visible": True},
     {
         "id": "case",
@@ -179,12 +185,24 @@ GLOBAL_JOB_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "center",
         "hide_on_mobile": True,
     },
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "center", "lock_visible": True},
+    {
+        "id": "actions",
+        "label": "Actions",
+        "sortable": False,
+        "align": "center",
+        "lock_visible": True,
+    },
     {"id": "expander", "label": "", "sortable": False, "align": "right", "lock_visible": True},
 )
 
-ARTIFACT_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
-    {"id": "title", "label": "Artifact", "sortable": True, "sort_key": "title", "lock_visible": True},
+ARTIFACT_TABLE_COLUMNS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "title",
+        "label": "Artifact",
+        "sortable": True,
+        "sort_key": "title",
+        "lock_visible": True,
+    },
     {"id": "type", "label": "Type", "sortable": True, "sort_key": "type"},
     {"id": "case", "label": "Case", "sortable": True, "sort_key": "case"},
     {
@@ -195,6 +213,18 @@ ARTIFACT_TABLE_COLUMNS: Tuple[Dict[str, Any], ...] = (
         "align": "right",
         "default_direction": "desc",
     },
-    {"id": "source", "label": "Source", "sortable": True, "sort_key": "source", "hide_on_mobile": True},
-    {"id": "actions", "label": "Actions", "sortable": False, "align": "right", "lock_visible": True},
+    {
+        "id": "source",
+        "label": "Source",
+        "sortable": True,
+        "sort_key": "source",
+        "hide_on_mobile": True,
+    },
+    {
+        "id": "actions",
+        "label": "Actions",
+        "sortable": False,
+        "align": "right",
+        "lock_visible": True,
+    },
 )

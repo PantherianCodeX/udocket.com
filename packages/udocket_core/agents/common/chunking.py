@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from dataclasses import dataclass
 
 DEFAULT_MIN_LINES = 8

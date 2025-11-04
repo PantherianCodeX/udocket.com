@@ -3,6 +3,8 @@ from __future__ import annotations
 # pyright: strict
 from apps.platform.operations.tasks import transcribe_job
 
+from .artifacts import artifacts_index
+from .audit import guardian_overview, guardian_report
 from .auth import (
     ensure_authenticated,
     login_view,
@@ -10,20 +12,18 @@ from .auth import (
     organization_gate,
     select_organization,
 )
-from .artifacts import artifacts_index
 from .cases import (
     case_analysis_module,
     case_assign_client,
     case_assign_reviewer,
     case_detail,
     case_details_update,
-    case_llm_providers,
     case_llm_provider_delete,
+    case_llm_providers,
     case_llm_settings,
     case_tool_panel,
     case_update_title,
 )
-from .audit import guardian_overview, guardian_report
 from .cases.guardian import case_guardian_report
 from .contexts import (
     compute_case_tool_state,
@@ -52,9 +52,9 @@ from .jobs_modals import (
     case_job_transcript,
 )
 from .misc import favicon, ui_log
-from .settings import organization_settings
 from .permissions import permissions_overview
 from .presenters.cases import table_config
+from .settings import organization_settings
 
 __all__ = [
     "compute_case_tool_state",

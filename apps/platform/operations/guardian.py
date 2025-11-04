@@ -4,25 +4,22 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Final, Protocol, TypeAlias, cast
+from typing import Final, Protocol, TypeAlias, cast
 
 from django.utils import timezone
 
-from config.paths import resolve_config_dir, resolve_repo_root
-
 from apps.platform.artifacts.models import CaseArtifact
-from apps.platform.operations.models import GuardianSettings
 from apps.platform.operations.llm import (
     ensure_default_llm_configuration,
     get_llm_configuration,
     get_provider_secret_with_metadata,
 )
-from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
-from packages.udocket_core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
+from apps.platform.operations.models import GuardianSettings
+from config.paths import resolve_config_dir, resolve_repo_root
 from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
@@ -37,8 +34,9 @@ from packages.udocket_common.json_utils import (
     parse_json_value,
     read_json_object,
 )
+from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
+from packages.udocket_core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
 from packages.udocket_core.logging.context import LogContext, build_extra
-
 
 MAX_CONTENT_CHARS: Final = 50000
 MAX_HISTORY_ENTRIES: Final = 10
@@ -58,8 +56,7 @@ _ENSURE_DEFAULT_LLM_CONFIGURATION = cast(
 
 
 class _GuardianReviewTask(Protocol):
-    def delay(self, *, artifact_id: int) -> object:
-        ...
+    def delay(self, *, artifact_id: int) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -73,6 +70,7 @@ class GuardianContext:
     max_tokens: int
     temperature: float
     instructions: InstructionList
+
 
 def _normalize_chain(values: Iterable[str]) -> list[str]:
     result: list[str] = []
@@ -146,7 +144,7 @@ def _ensure_guardian_configuration(
 def ensure_guardian_settings(organization_id: str | None) -> GuardianSettings | None:
     if not organization_id:
         return None
-    settings_obj, _created = GuardianSettings.objects.get_or_create(
+    settings_obj, _created = GuardianSettings.typed_objects().get_or_create(
         organization_id=organization_id,
         defaults={"instructions": list(_default_instructions())},
     )
@@ -227,9 +225,7 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
         )
 
     if not provider_chain:
-        review_chain = _normalize_chain(
-            coerce_str_list(review_cfg.get("provider"), unique=False)
-        )
+        review_chain = _normalize_chain(coerce_str_list(review_cfg.get("provider"), unique=False))
         review_filtered = [name for name in review_chain if llm_settings.provider(name)]
         if review_chain and not review_filtered:
             log.warning(
@@ -288,9 +284,7 @@ def build_guardian_context(organization_id: str | None) -> GuardianContext | Non
 
     credentials: CredentialsMap = {}
     for provider in guardian_config.provider_chain:
-        secret = normalize_json_object(
-            get_provider_secret_with_metadata(organization_id, provider)
-        )
+        secret = normalize_json_object(get_provider_secret_with_metadata(organization_id, provider))
         if secret:
             credentials[provider] = secret
             log.debug(

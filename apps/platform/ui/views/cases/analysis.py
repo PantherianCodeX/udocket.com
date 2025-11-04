@@ -1,10 +1,6 @@
 from __future__ import annotations
 
- 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
-
-from typing import Dict
-
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
@@ -34,7 +30,7 @@ def case_analysis_module(request: HttpRequest, case_id: str, agent: str) -> Http
     )
     jobs_scoped = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_list = list(jobs_scoped)
-    telemetry_map: Dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
+    telemetry_map: dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
 
     modules = analysis_modules_context(request, case, jobs_list, telemetry_map)
     module = next((item for item in modules if item.get("key") == agent), None)

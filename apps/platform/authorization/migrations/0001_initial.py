@@ -1,9 +1,8 @@
-from django.db import migrations, models
 import django.db.models.deletion
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -25,9 +24,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "uuid",
-                    models.UUIDField(
-                        blank=True, editable=False, null=True, unique=True
-                    ),
+                    models.UUIDField(blank=True, editable=False, null=True, unique=True),
                 ),
                 ("name", models.CharField(max_length=120)),
                 ("description", models.TextField(blank=True)),
@@ -63,9 +60,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "uuid",
-                    models.UUIDField(
-                        blank=True, editable=False, null=True, unique=True
-                    ),
+                    models.UUIDField(blank=True, editable=False, null=True, unique=True),
                 ),
                 ("name", models.CharField(max_length=100)),
                 ("description", models.TextField(blank=True)),
@@ -120,9 +115,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [
-                    models.Index(
-                        fields=["capability"], name="authorizati_capabil_efc8c5_idx"
-                    )
+                    models.Index(fields=["capability"], name="authorizati_capabil_efc8c5_idx")
                 ],
                 "unique_together": {("role", "capability")},
             },
@@ -151,9 +144,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [
-                    models.Index(
-                        fields=["capability"], name="authorizati_capabil_5bb269_idx"
-                    )
+                    models.Index(fields=["capability"], name="authorizati_capabil_5bb269_idx")
                 ],
                 "unique_together": {("preset", "capability")},
             },

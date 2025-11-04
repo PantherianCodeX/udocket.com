@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import re
-from typing import ClassVar, Pattern
+from re import Pattern
+from typing import ClassVar
+
 from pydantic import BaseModel, Field, field_validator
 
 # Strict canonical shape:
@@ -22,13 +25,17 @@ class LocalCode(BaseModel):
         r"(?P<DIVISION>CIVIL|FAMILY|CRIMINAL|YOUTH|TRAFFIC|PROBATE|APPLICATIONS|APPEALS|COMMERCIAL)"
         r"(?:\.(?P<SPEC>[A-Z0-9_]+))+$"
     )
-    code: str = Field(..., description="Namespaced jurisdictional code, e.g., CA.AB.ACJ.HEARING.CRIMINAL.DOCKET")
+    code: str = Field(
+        ..., description="Namespaced jurisdictional code, e.g., CA.AB.ACJ.HEARING.CRIMINAL.DOCKET"
+    )
 
     @field_validator("code")
     @classmethod
     def _valid(cls, v: str) -> str:
         if not cls._LOCALCODE_RE.match(v):
-            raise ValueError("Invalid LocalCode format; expected 'CC.SS.COURT.DOMAIN.DIVISION.SPEC...'.")
+            raise ValueError(
+                "Invalid LocalCode format; expected 'CC.SS.COURT.DOMAIN.DIVISION.SPEC...'."
+            )
         return v
 
     def namespace(self) -> str:

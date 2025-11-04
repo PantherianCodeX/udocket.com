@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from config.paths import resolve_config_dir
-from .settings import CoreSettings, core_settings
 
+from .settings import CoreSettings, core_settings
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 

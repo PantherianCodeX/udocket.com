@@ -1,24 +1,22 @@
 from __future__ import annotations
 
+from django.conf import settings
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import PermissionDenied
-from apps.platform.authorization.access_policies import CaseAccessPolicy
-from django.conf import settings
+from rest_framework.response import Response
 
-from apps.platform.cases.models import Case
-from apps.platform.cases.serializers import CaseSerializer
-from apps.platform.cases.models import CaseMembership
-from apps.platform.authorization.capabilities import role_capabilities
-from apps.platform.operations.audit import emit as audit_emit
-from apps.platform.tenancy import scope_cases, scope_jobs
 from apps.platform.accounts.models import OrganizationMembership
 from apps.platform.accounts.utils import resolve_request_organization
+from apps.platform.authorization.access_policies import CaseAccessPolicy
+from apps.platform.authorization.capabilities import role_capabilities
+from apps.platform.cases.models import Case, CaseMembership
+from apps.platform.cases.serializers import CaseSerializer
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.serializers import JobTelemetrySerializer
 from apps.platform.jobs.telemetry import analyze_jobs
+from apps.platform.operations.audit import emit as audit_emit
+from apps.platform.tenancy import scope_cases, scope_jobs
 
 
 class CaseViewSet(viewsets.ModelViewSet):
@@ -41,7 +39,11 @@ class CaseViewSet(viewsets.ModelViewSet):
         user = getattr(request, "user", None)
         role = None
         if user and getattr(user, "is_authenticated", False):
-            m = CaseMembership.objects.filter(case=case, user=user).select_related("case__organization").first()
+            m = (
+                CaseMembership.objects.filter(case=case, user=user)
+                .select_related("case__organization")
+                .first()
+            )
             role = m.role if m else None
             org_id = m.case.organization_id if m and m.case_id else None
         else:
@@ -62,7 +64,12 @@ class CaseViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):  # type: ignore[override]
         resp = super().list(request, *args, **kwargs)
         try:
-            audit_emit(request, case_id=None, event="case.list", data={"count": len(resp.data) if hasattr(resp, 'data') else None})
+            audit_emit(
+                request,
+                case_id=None,
+                event="case.list",
+                data={"count": len(resp.data) if hasattr(resp, "data") else None},
+            )
         except Exception:
             pass
         return resp
@@ -86,7 +93,9 @@ class CaseViewSet(viewsets.ModelViewSet):
     def jobs_summary(self, request, pk=None):
         case = self.get_object()
         jobs = scope_jobs(
-            Job.objects.filter(case=case).select_related("case", "case__organization").order_by("-created_at"),
+            Job.objects.filter(case=case)
+            .select_related("case", "case__organization")
+            .order_by("-created_at"),
             getattr(request, "user", None),
         )
         summary = analyze_jobs(jobs)
@@ -98,7 +107,9 @@ class CaseViewSet(viewsets.ModelViewSet):
     def jobs_detail(self, request, pk=None):
         case = self.get_object()
         jobs = scope_jobs(
-            Job.objects.filter(case=case).select_related("case", "case__organization").order_by("-created_at"),
+            Job.objects.filter(case=case)
+            .select_related("case", "case__organization")
+            .order_by("-created_at"),
             getattr(request, "user", None),
         )
         serializer = JobTelemetrySerializer(jobs, many=True, context={"request": request})

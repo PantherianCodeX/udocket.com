@@ -5,9 +5,8 @@ from __future__ import annotations
 """Helpers for loading `.env` style configuration files."""
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
 
 _LOADED_KEYS: set[tuple[str, tuple[Path, ...]]] = set()
 

@@ -8,6 +8,7 @@
 .pytype/
 .pyre/
 **/.venv/
+opt/venv/
 **/.pytest_cache/
 **/.mypy_cache/
 **/.typewiz_cache/

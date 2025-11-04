@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
-from typing import Mapping, Sequence, Tuple, Protocol, runtime_checkable, cast
+from typing import Protocol, cast, runtime_checkable
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_object_list, coerce_str
 
@@ -62,8 +63,8 @@ PNG_COLORS: Mapping[str, tuple[int, int, int]] = {
 }
 
 
-Coord = Tuple[float, float]
-Box = Tuple[float, float, float, float]
+Coord = tuple[float, float]
+Box = tuple[float, float, float, float]
 
 
 @runtime_checkable
@@ -107,7 +108,9 @@ class _DrawContext(Protocol):
     ) -> None: ...
 
 
-def _new_image(width: int, height: int, *, color: tuple[int, int, int]) -> tuple[object, _DrawContext]:
+def _new_image(
+    width: int, height: int, *, color: tuple[int, int, int]
+) -> tuple[object, _DrawContext]:
     from PIL import Image as _Image  # imported at runtime
     from PIL import ImageDraw as _ImageDraw
 
@@ -125,13 +128,14 @@ def _new_image(width: int, height: int, *, color: tuple[int, int, int]) -> tuple
 def _save_png(image: object) -> bytes:
     buffer = BytesIO()
     # mypy/pyright: treat as dynamic; _Image has save method on instances
-    getattr(image, "save")(buffer, format="PNG")
+    image.save(buffer, format="PNG")
     return buffer.getvalue()
 
 
 def _load_font(size: int) -> object:
     try:
         from PIL import ImageFont as _ImageFont
+
         fn = getattr(_ImageFont, "truetype", None)
         if callable(fn):
             return fn("DejaVuSans.ttf", size)
@@ -139,6 +143,7 @@ def _load_font(size: int) -> object:
         pass
     try:
         from PIL import ImageFont as _ImageFont
+
         ld = getattr(_ImageFont, "load_default", None)
         if callable(ld):
             return ld()
@@ -195,9 +200,15 @@ def _parse_edges(value: JSONValue, nodes: Sequence[GraphNode]) -> list[GraphEdge
     node_map: dict[str, GraphNode] = {node.key: node for node in nodes}
     edges: list[GraphEdge] = []
     for entry in items:
-        source_key = coerce_str(entry.get("source")) or coerce_str(entry.get("from")) or coerce_str(entry.get("src"))
+        source_key = (
+            coerce_str(entry.get("source"))
+            or coerce_str(entry.get("from"))
+            or coerce_str(entry.get("src"))
+        )
         target_key = (
-            coerce_str(entry.get("target")) or coerce_str(entry.get("to")) or coerce_str(entry.get("dst"))
+            coerce_str(entry.get("target"))
+            or coerce_str(entry.get("to"))
+            or coerce_str(entry.get("dst"))
         )
         if not source_key or not target_key:
             continue
@@ -243,7 +254,9 @@ def _parse_dimension(value: JSONValue | None) -> int | None:
     return parsed
 
 
-def _layout_nodes(nodes: Sequence[GraphNode], width: int, height: int) -> dict[str, tuple[float, float]]:
+def _layout_nodes(
+    nodes: Sequence[GraphNode], width: int, height: int
+) -> dict[str, tuple[float, float]]:
     count = len(nodes)
     if count == 1:
         return {nodes[0].key: (SVG_PADDING + width / 2.0, SVG_PADDING + height / 2.0)}
@@ -281,10 +294,10 @@ def _render_svg(
         x1, y1 = source_pos
         x2, y2 = target_pos
         edge_lines.append(
-            (
-                '<line class="edge-line" x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+
+                f'<line class="edge-line" x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
                 'stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />'
-            ).format(x1=x1, y1=y1, x2=x2, y2=y2)
+
         )
     node_groups: list[str] = []
     for node in nodes:
@@ -295,12 +308,12 @@ def _render_svg(
         color = NODE_COLORS.get(node.kind, "#6366f1")
         safe_label = escape(node.label)
         node_groups.append(
-            (
-                '<g class="node" transform="translate({x:.2f},{y:.2f})">'
-                '<circle r="{r}" fill="{color}" opacity="0.92" />'
-                '<text text-anchor="middle" dominant-baseline="middle" fill="#ffffff">{label}</text>'
+
+                f'<g class="node" transform="translate({x:.2f},{y:.2f})">'
+                f'<circle r="{NODE_RADIUS}" fill="{color}" opacity="0.92" />'
+                f'<text text-anchor="middle" dominant-baseline="middle" fill="#ffffff">{safe_label}</text>'
                 "</g>"
-            ).format(x=x, y=y, r=NODE_RADIUS, color=color, label=safe_label)
+
         )
     notes_markup = ""
     if notes:
@@ -331,7 +344,7 @@ def _wrap_html(svg_markup: str, alt_text: str, notes: str | None) -> str:
         "  </style>\n"
         "</head>\n"
         "<body>\n"
-        "  <figure class=\"graph-figure\">\n"
+        '  <figure class="graph-figure">\n'
         f"    {svg_markup}\n"
         f"    <figcaption>{figcaption}</figcaption>\n"
         f"    {notes_section}\n"
@@ -464,7 +477,12 @@ def _empty_png(width: int, height: int) -> bytes:
     message = "No relationship data available"
     font: object = _load_font(20)
     text_width, text_height = _measure_text(font, message)
-    draw.text(((width - text_width) / 2, (height - text_height) / 2), message, font=font, fill=(100, 116, 139))
+    draw.text(
+        ((width - text_width) / 2, (height - text_height) / 2),
+        message,
+        font=font,
+        fill=(100, 116, 139),
+    )
     return _save_png(image)
 
 

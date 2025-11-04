@@ -1,16 +1,16 @@
 from __future__ import annotations
 
- 
+from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Collection, cast
+from typing import Any, cast
 
 from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
 
-from apps.platform.authorization.capabilities import has_capability
 from apps.platform.artifacts.models import CaseArtifact, CaseArtifactQuerySet
+from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job, JobNote
 from apps.platform.jobs.notes import serialize_notes
@@ -38,7 +38,7 @@ def _user_can_add_notes(user: Any, case: Case) -> bool:
         return False
 
 
-def latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
+def latest_successful_transcription_job(jobs: list[Job]) -> Job | None:
     ordered = sorted(
         jobs,
         key=lambda j: (j.finished_at or j.started_at or j.created_at or datetime.min),
@@ -50,12 +50,12 @@ def latest_successful_transcription_job(jobs: List[Job]) -> Optional[Job]:
     return None
 
 
-def artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
-    metadata = cast(Dict[str, Any], artifact.metadata or {})
+def artifact_payload(artifact: CaseArtifact) -> dict[str, Any]:
+    metadata = cast(dict[str, Any], artifact.metadata or {})
     path_obj = Path(artifact.path) if artifact.path else None
     filename = path_obj.name if path_obj else str(artifact.path or "")
     source_val = metadata.get("source_transcript") or metadata.get("source")
-    source: Optional[str]
+    source: str | None
     if source_val:
         source = str(source_val)
     else:
@@ -85,13 +85,13 @@ def artifact_payload(artifact: CaseArtifact) -> Dict[str, Any]:
 def analysis_modules_context(
     request: HttpRequest,
     case: Case,
-    jobs: List[Job],
-    telemetry_map: Dict[str, Dict[str, Any]],
-    transcript_artifacts: Optional[Dict[str, CaseArtifact]] = None,
+    jobs: list[Job],
+    telemetry_map: dict[str, dict[str, Any]],
+    transcript_artifacts: dict[str, CaseArtifact] | None = None,
     *,
-    target_keys: Optional[Collection[str]] = None,
-) -> List[Dict[str, Any]]:
-    normalized_targets: Optional[set[str]] = None
+    target_keys: Collection[str] | None = None,
+) -> list[dict[str, Any]]:
+    normalized_targets: set[str] | None = None
     if target_keys is not None:
         normalized_targets = {str(key).strip().lower() for key in target_keys if str(key).strip()}
         if not normalized_targets:
@@ -109,7 +109,7 @@ def analysis_modules_context(
     if need_compose:
         artifact_types.update({"COMPOSE", "SUMMARY", "TIMELINE", "GRAPH", "ENTITIES"})
 
-    artifact_payloads: List[Dict[str, Any]] = []
+    artifact_payloads: list[dict[str, Any]] = []
     if artifact_types:
         artifacts_manager = cast(CaseArtifactQuerySet, CaseArtifact.objects)
         artifacts_qs = (
@@ -122,13 +122,13 @@ def analysis_modules_context(
         )
         artifact_payloads = [artifact_payload(artifact) for artifact in artifacts_qs]
 
-    summary_artifacts: List[Dict[str, Any]] = []
-    timeline_artifacts: List[Dict[str, Any]] = []
-    graph_artifacts: List[Dict[str, Any]] = []
-    entity_artifacts: List[Dict[str, Any]] = []
-    compose_candidates: Dict[str, Dict[str, Any]] = {}
+    summary_artifacts: list[dict[str, Any]] = []
+    timeline_artifacts: list[dict[str, Any]] = []
+    graph_artifacts: list[dict[str, Any]] = []
+    entity_artifacts: list[dict[str, Any]] = []
+    compose_candidates: dict[str, dict[str, Any]] = {}
 
-    def _append_compose_candidate(payload: Dict[str, Any]) -> None:
+    def _append_compose_candidate(payload: dict[str, Any]) -> None:
         job_key = payload.get("job_id") or str(payload.get("id") or "").replace(" ", "")
         if not job_key:
             return
@@ -144,7 +144,9 @@ def analysis_modules_context(
         )
         candidate["artifacts"].append(payload)
         created_at = payload.get("created_at")
-        if created_at and (candidate.get("created_at") is None or created_at > candidate["created_at"]):
+        if created_at and (
+            candidate.get("created_at") is None or created_at > candidate["created_at"]
+        ):
             candidate["created_at"] = created_at
         if payload.get("title"):
             candidate["title"] = payload["title"]
@@ -173,7 +175,7 @@ def analysis_modules_context(
     timeline_artifacts = enrich_timeline_artifacts(timeline_artifacts)
 
     latest_transcription = latest_successful_transcription_job(jobs)
-    target_job: Optional[Dict[str, Any]] = None
+    target_job: dict[str, Any] | None = None
     if latest_transcription:
         target_job = {
             "id": str(latest_transcription.id),
@@ -188,8 +190,8 @@ def analysis_modules_context(
 
     team_alerts = build_case_team_alerts(case, jobs)
 
-    def _notes_context(job_identifier: Optional[str]) -> Dict[str, Any]:
-        context: Dict[str, Any] = {
+    def _notes_context(job_identifier: str | None) -> dict[str, Any]:
+        context: dict[str, Any] = {
             "job_id": None,
             "entries": [],
             "updated_at": None,
@@ -207,8 +209,7 @@ def analysis_modules_context(
         notes_entries = serialize_notes(notes_qs)
         notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
         notes_updated_by = (
-            notes_entries[0].get("created_by_label")
-            or notes_entries[0].get("created_by")
+            notes_entries[0].get("created_by_label") or notes_entries[0].get("created_by")
             if notes_entries
             else None
         )
@@ -229,11 +230,11 @@ def analysis_modules_context(
         key: str,
         label: str,
         description: str,
-        artifacts: List[Dict[str, Any]],
+        artifacts: list[dict[str, Any]],
         empty_message: str,
         action_label: str,
         success_label: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         latest = artifacts[0] if artifacts else None
         history = artifacts[1:5]
         if not target_job:
@@ -264,11 +265,11 @@ def analysis_modules_context(
             user_can_add=notes_context.get("user_can_add", False),
         )
         latest_details = as_dict(latest.get("details")) if latest else {}
-        downloads: List[Dict[str, Any]] = []
+        downloads: list[dict[str, Any]] = []
         job_identifier = latest.get("job_id") if latest else None
         if job_identifier:
 
-            def _add_download(kind: str, label: str, meta: Optional[str] = None) -> None:
+            def _add_download(kind: str, label: str, meta: str | None = None) -> None:
                 downloads.append(
                     {
                         "label": label,
@@ -282,7 +283,8 @@ def analysis_modules_context(
                 downloads.append(
                     {
                         "label": "Summary JSON",
-                        "href": latest.get("download_url") or f"/api/v1/jobs/{job_identifier}/download-analysis/?kind=summary_json",
+                        "href": latest.get("download_url")
+                        or f"/api/v1/jobs/{job_identifier}/download-analysis/?kind=summary_json",
                         "download": True,
                     }
                 )
@@ -342,10 +344,10 @@ def analysis_modules_context(
         reverse=True,
     )
 
-    def _format_compose_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
-        items: List[Dict[str, Any]] = entry.get("artifacts", [])
+    def _format_compose_entry(entry: dict[str, Any]) -> dict[str, Any]:
+        items: list[dict[str, Any]] = entry.get("artifacts", [])
 
-        def _deliverable_meta(artifact: Dict[str, Any]) -> Dict[str, Any]:
+        def _deliverable_meta(artifact: dict[str, Any]) -> dict[str, Any]:
             filename = artifact.get("filename", "")
             lower = filename.lower()
             label = artifact.get("title") or filename or "Deliverable"
@@ -402,14 +404,18 @@ def analysis_modules_context(
         primary_artifact = items[0] if items else entry
         if primary_deliverable is not None:
             primary_artifact = next(
-                (item for item in items if item.get("filename") == primary_deliverable.get("filename")),
+                (
+                    item
+                    for item in items
+                    if item.get("filename") == primary_deliverable.get("filename")
+                ),
                 primary_artifact,
             )
 
         for deliverable in deliverables:
             deliverable.pop("priority", None)
 
-        details_map: Dict[str, Any] = {
+        details_map: dict[str, Any] = {
             "deliverables": deliverables,
             "source_summary": entry.get("source"),
         }
@@ -419,12 +425,16 @@ def analysis_modules_context(
                 details_map[kind] = deliverable
 
         return {
-            "id": primary_artifact.get("id") if isinstance(primary_artifact, dict) else entry.get("id"),
+            "id": primary_artifact.get("id")
+            if isinstance(primary_artifact, dict)
+            else entry.get("id"),
             "job_id": entry.get("job_id"),
             "title": entry.get("title") or "Compose Deliverables",
             "created_at": entry.get("created_at"),
             "source": entry.get("source"),
-            "filename": primary_deliverable.get("filename") if primary_deliverable else primary_artifact.get("filename"),
+            "filename": primary_deliverable.get("filename")
+            if primary_deliverable
+            else primary_artifact.get("filename"),
             "download_url": (
                 primary_deliverable.get("download_url")
                 if primary_deliverable and primary_deliverable.get("download_url")
@@ -434,9 +444,9 @@ def analysis_modules_context(
             "deliverables": deliverables,
         }
 
-    modules: List[Dict[str, Any]] = []
+    modules: list[dict[str, Any]] = []
 
-    analyze_module: Dict[str, Any] = {}
+    analyze_module: dict[str, Any] = {}
     if need_analyze:
         analyze_module = build_module(
             key="analyze",
@@ -454,7 +464,9 @@ def analysis_modules_context(
 
     compose_latest_entry = _format_compose_entry(compose_entries[0]) if compose_entries else None
     compose_history_entries = [_format_compose_entry(entry) for entry in compose_entries[1:5]]
-    compose_notes_context = _notes_context(compose_latest_entry.get("job_id") if compose_latest_entry else None)
+    compose_notes_context = _notes_context(
+        compose_latest_entry.get("job_id") if compose_latest_entry else None
+    )
     compose_notes_panel = render_notes_panel_html(
         job_id=compose_notes_context.get("job_id"),
         entries=compose_notes_context.get("entries"),
@@ -462,7 +474,7 @@ def analysis_modules_context(
         updated_by=compose_notes_context.get("updated_by"),
         user_can_add=compose_notes_context.get("user_can_add", False),
     )
-    compose_downloads: List[Dict[str, Any]] = [
+    compose_downloads: list[dict[str, Any]] = [
         {
             "label": item["label"],
             "href": item["download_url"],
@@ -474,8 +486,8 @@ def analysis_modules_context(
 
     timeline_latest = timeline_artifacts[0] if timeline_artifacts else None
     timeline_history = timeline_artifacts[1:5] if timeline_artifacts else []
-    graph_latest: Optional[Dict[str, Any]]
-    graph_history: List[Dict[str, Any]]
+    graph_latest: dict[str, Any] | None
+    graph_history: list[dict[str, Any]]
     if graph_artifacts:
         graph_latest = graph_artifacts[0]
         graph_history = graph_artifacts[1:5]
@@ -497,7 +509,9 @@ def analysis_modules_context(
     if graph_latest and graph_latest.get("download_url"):
         compose_downloads.append(
             {
-                "label": "Graph JSON" if (graph_latest.get("artifact_type", "").upper() == "GRAPH") else "Entities JSON",
+                "label": "Graph JSON"
+                if (graph_latest.get("artifact_type", "").upper() == "GRAPH")
+                else "Entities JSON",
                 "href": graph_latest["download_url"],
                 "download": True,
             }
@@ -537,7 +551,7 @@ def analysis_modules_context(
         "has_graph": bool(graph_artifacts or entity_artifacts),
     }
 
-    compose_module: Dict[str, Any] = {
+    compose_module: dict[str, Any] = {
         "key": "compose",
         "label": "Compose",
         "description": "Generate client and lawyer deliverables from approved summaries and transcripts.",

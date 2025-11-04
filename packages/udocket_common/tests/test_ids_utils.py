@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-# pyright: strict
+from collections.abc import MutableMapping
 
-from typing import MutableMapping, cast
+# pyright: strict
+from typing import cast
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 import pytest
@@ -46,7 +47,10 @@ def test_uuid5_from_content_accepts_uuid_objects() -> None:
         ("  spaced  ", "spaced"),
         (b"bytes", "bytes"),
         (bytearray(b"array "), "array"),
-        (UUID("12345678-1234-5678-1234-567812345678"), "12345678-1234-5678-1234-567812345678"),
+        (
+            UUID("12345678-1234-5678-1234-567812345678"),
+            "12345678-1234-5678-1234-567812345678",
+        ),
         (None, None),
         ("   ", None),
     ],
@@ -65,19 +69,29 @@ def test_ensure_deterministic_uuids_preserves_existing() -> None:
 
 
 def test_ensure_deterministic_uuids_assigns_when_missing() -> None:
-    items: list[MutableMapping[str, object]] = [cast(MutableMapping[str, object], {"title": "Claim", "description": "Damages"})]
-    ids.ensure_deterministic_uuids(items, namespace="outline.claims", signature_fields=("title", "description"))
+    items: list[MutableMapping[str, object]] = [
+        cast(MutableMapping[str, object], {"title": "Claim", "description": "Damages"})
+    ]
+    ids.ensure_deterministic_uuids(
+        items, namespace="outline.claims", signature_fields=("title", "description")
+    )
     derived = ids.normalize_id(cast(ids.UUIDInput, items[0]["uuid"]))
     assert derived is not None
     assert items[0]["id"] == derived
     # deterministic across invocations
-    items2: list[MutableMapping[str, object]] = [cast(MutableMapping[str, object], {"title": "Claim", "description": "Damages"})]
-    ids.ensure_deterministic_uuids(items2, namespace="outline.claims", signature_fields=("title", "description"))
+    items2: list[MutableMapping[str, object]] = [
+        cast(MutableMapping[str, object], {"title": "Claim", "description": "Damages"})
+    ]
+    ids.ensure_deterministic_uuids(
+        items2, namespace="outline.claims", signature_fields=("title", "description")
+    )
     assert items2[0]["uuid"] == derived
 
 
 def test_ensure_deterministic_uuids_without_id_field() -> None:
-    items: list[MutableMapping[str, object]] = [cast(MutableMapping[str, object], {"name": "Jordan Counsel", "for": "Applicant"})]
+    items: list[MutableMapping[str, object]] = [
+        cast(MutableMapping[str, object], {"name": "Jordan Counsel", "for": "Applicant"})
+    ]
     ids.ensure_deterministic_uuids(
         items,
         namespace="outline.parties.counsel",

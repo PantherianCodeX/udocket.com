@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from packages.udocket_common.json_utils import JSONObject
 
 

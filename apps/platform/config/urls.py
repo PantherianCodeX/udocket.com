@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path
+
 from apps.platform.authorization import api as authz_api
 
 urlpatterns = [

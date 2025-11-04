@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+
 import environ
 
+from apps.platform.config.runtime_checks import validate_runtime_configuration
 from config.paths import ensure_storage_root, resolve_repo_root
 from config.settings import settings
-from apps.platform.config.runtime_checks import validate_runtime_configuration
 
 BASE_DIR = resolve_repo_root()
 env = environ.Env()
@@ -200,9 +201,7 @@ LOGGING = {
     "formatters": {
         "context": {
             "()": "packages.udocket_core.logging.context_formatter.ContextualFormatter",
-            "fmt": (
-                "%(asctime)s %(levelname)s %(name)s: %(message)s%(context_suffix)s"
-            ),
+            "fmt": ("%(asctime)s %(levelname)s %(name)s: %(message)s%(context_suffix)s"),
             "defaults": {
                 "event": "-",
                 "component": "-",

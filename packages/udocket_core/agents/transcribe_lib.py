@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import hashlib
 import logging
 import os
@@ -12,12 +11,10 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from ..audio import probe_audio_metadata
-from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 from packages.udocket_common.agents import RegionLiteral, TranscriptionResult
 from packages.udocket_common.json_utils import (
     JSONObject,
@@ -28,6 +25,9 @@ from packages.udocket_common.json_utils import (
     write_json_object,
 )
 from packages.udocket_common.time import format_utc
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
+
+from ..audio import probe_audio_metadata
 from .common import append_jsonl
 from .common.azure_speech import AzureSpeechClient, AzureSpeechClientConfig, AzureSpeechError
 
@@ -126,7 +126,9 @@ def normalize_audio(
     diarization: bool = False,
     force: bool = False,
 ) -> AudioNormalizationResult:
-    reasons, meta = _analyze_audio_conversion(input_path, metadata=metadata, diarization=diarization)
+    reasons, meta = _analyze_audio_conversion(
+        input_path, metadata=metadata, diarization=diarization
+    )
     if force and "forced" not in reasons:
         reasons.append("forced")
     should_convert = bool(reasons) or force
@@ -162,7 +164,7 @@ def normalize_audio(
         TARGET_SAMPLE_FMT,
         str(out),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
         errp = out_dir / "ops" / f"{case_id}_ffmpeg_error.log"
         errp.parent.mkdir(parents=True, exist_ok=True)
@@ -202,7 +204,7 @@ def normalize_audio(
     )
 
 
-def _get_duration_seconds(p: Path) -> Optional[float]:
+def _get_duration_seconds(p: Path) -> float | None:
     if not shutil.which("ffprobe"):
         return None
     try:
@@ -247,7 +249,7 @@ def _insert_timestamps(text: str, interval: int) -> str:
     parts: list[str] = []
     t = 0
     for i in range(0, len(words), chunk):
-        parts.append(f"[~{t//60:02d}:{t%60:02d}] " + " ".join(words[i : i + chunk]))
+        parts.append(f"[~{t // 60:02d}:{t % 60:02d}] " + " ".join(words[i : i + chunk]))
         t += interval
     return "\n".join(parts)
 
@@ -274,7 +276,11 @@ def _record_batch_location(
         try:
             current = read_json_object(path)
             existing_location = current.get("azure_transcription_url")
-            if isinstance(existing_location, str) and existing_location and existing_location != location:
+            if (
+                isinstance(existing_location, str)
+                and existing_location
+                and existing_location != location
+            ):
                 current["previous_azure_transcription_url"] = existing_location
             current.update(partial)
             write_json_object(path, current)
@@ -400,14 +406,20 @@ class TranscriptionConfig(BaseModel):
         return "canadaeast"
 
     @classmethod
-    def from_env(cls) -> "TranscriptionConfig":
+    def from_env(cls) -> TranscriptionConfig:
         key = os.getenv("AZURE_SPEECH_KEY") or os.getenv("SPEECH_KEY")
         if not key or not key.strip():
             raise RuntimeError("Missing AZURE_SPEECH_KEY (or SPEECH_KEY)")
-        region_raw = (os.getenv("AZURE_SPEECH_REGION") or os.getenv("SPEECH_REGION") or "canadacentral").strip().lower()
+        region_raw = (
+            (os.getenv("AZURE_SPEECH_REGION") or os.getenv("SPEECH_REGION") or "canadacentral")
+            .strip()
+            .lower()
+        )
         if region_raw not in CANADA_REGIONS:
             raise RuntimeError("Region must be canadacentral or canadaeast")
-        region_literal: RegionLiteral = "canadacentral" if region_raw == "canadacentral" else "canadaeast"
+        region_literal: RegionLiteral = (
+            "canadacentral" if region_raw == "canadacentral" else "canadaeast"
+        )
         return cls(
             azure_speech_key=key,
             azure_speech_region=region_literal,
@@ -422,11 +434,22 @@ class TranscriptionConfig(BaseModel):
 
 
 class _OnDemandTranscriber:
-    def __init__(self, audio: Path, lang: str, key: str, region: str, case_dir: Path, case_id: str, debug: bool) -> None:
+    def __init__(
+        self,
+        audio: Path,
+        lang: str,
+        key: str,
+        region: str,
+        case_dir: Path,
+        case_id: str,
+        debug: bool,
+    ) -> None:
         try:
             import azure.cognitiveservices.speech as speechsdk
         except Exception as e:  # pragma: no cover - import-time
-            raise RuntimeError("Azure Speech SDK not installed (pip install azure-cognitiveservices-speech)") from e
+            raise RuntimeError(
+                "Azure Speech SDK not installed (pip install azure-cognitiveservices-speech)"
+            ) from e
 
         speech_config = speechsdk.SpeechConfig(subscription=key, region=region)
         speech_config.speech_recognition_language = lang
@@ -454,8 +477,8 @@ class _OnDemandTranscriber:
         )
         self.chunks: list[str] = []
         self.done = threading.Event()
-        self.cancelled_reason: Optional[str] = None
-        self.cancelled_details: Optional[str] = None
+        self.cancelled_reason: str | None = None
+        self.cancelled_details: str | None = None
 
         self.recognizer.recognizing.connect(self._on_recognizing)
         self.recognizer.recognized.connect(self._on_recognized)
@@ -469,7 +492,11 @@ class _OnDemandTranscriber:
         result = getattr(evt, "result", None)
         reason = getattr(result, "reason", None)
         text = getattr(result, "text", "")
-        if reason == self._speechsdk.ResultReason.RecognizedSpeech and isinstance(text, str) and text.strip():
+        if (
+            reason == self._speechsdk.ResultReason.RecognizedSpeech
+            and isinstance(text, str)
+            and text.strip()
+        ):
             self.chunks.append(text)
 
     def _on_cancelled(self, evt: object) -> None:
@@ -483,7 +510,7 @@ class _OnDemandTranscriber:
     def _on_stopped(self, evt: object) -> None:
         self.done.set()
 
-    def run(self, timeout: int) -> Optional[str]:
+    def run(self, timeout: int) -> str | None:
         self.recognizer.start_continuous_recognition()
         try:
             finished = self.done.wait(timeout)
@@ -506,7 +533,7 @@ class TranscriptionAgent:
     ALLOWED_REGIONS: set[RegionLiteral] = set(CANADA_REGIONS)
     AUDIO_EXTS = {".m4a", ".wav", ".mp3", ".flac", ".ogg", ".aac"}
 
-    def __init__(self, config: Optional[TranscriptionConfig] = None) -> None:
+    def __init__(self, config: TranscriptionConfig | None = None) -> None:
         self.config = config or TranscriptionConfig.from_env()
         if self.config.azure_speech_region not in self.ALLOWED_REGIONS:
             raise RuntimeError("Region must be canadacentral or canadaeast")
@@ -531,8 +558,8 @@ class TranscriptionAgent:
         input: str | Path,
         case_id: str,
         case_dir: Path,
-        job_id: Optional[str] = None,
-        language: Optional[str] = None,
+        job_id: str | None = None,
+        language: str | None = None,
         mode: ModeLiteral = "on-demand",
         diarization: bool = False,
         diagnostics: bool = False,
@@ -550,7 +577,7 @@ class TranscriptionAgent:
 
         # Determine input source and job id
         is_url = False
-        audio_in: Optional[Path] = None
+        audio_in: Path | None = None
         audio_name: str
         if isinstance(input, Path):
             audio_in = input.expanduser().resolve()
@@ -559,7 +586,7 @@ class TranscriptionAgent:
             s = str(input)
             if s.startswith("http://") or s.startswith("https://"):
                 is_url = True
-                from urllib.parse import urlparse, unquote
+                from urllib.parse import unquote, urlparse
 
                 try:
                     audio_name = unquote(urlparse(s).path.split("/")[-1]) or "audio"
@@ -582,8 +609,14 @@ class TranscriptionAgent:
 
         # Start logs
         for pth, line in (
-            (log_txt, f"{_now_utc()} START | file={audio_name} mode={mode} diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n"),
-            (log_txt_job, f"{_now_utc()} START | file={audio_name} mode={mode} diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n"),
+            (
+                log_txt,
+                f"{_now_utc()} START | file={audio_name} mode={mode} diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n",
+            ),
+            (
+                log_txt_job,
+                f"{_now_utc()} START | file={audio_name} mode={mode} diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n",
+            ),
         ):
             try:
                 pth.write_text(line, encoding="utf-8")
@@ -592,7 +625,7 @@ class TranscriptionAgent:
 
         # Validate / prepare audio
         audio_sha = None
-        wav: Optional[Path] = None
+        wav: Path | None = None
         converted = False
         audio_meta: JSONObject = {}
         conversion_reasons: list[str] = []
@@ -659,20 +692,22 @@ class TranscriptionAgent:
                         dur = None
             if dur and dur / 60.0 > cfg.max_minutes:
                 raise RuntimeError(
-                    f"Audio too long ({int(dur)//60:02d}:{int(dur)%60:02d}) > MAX_MINUTES={cfg.max_minutes}"
+                    f"Audio too long ({int(dur) // 60:02d}:{int(dur) % 60:02d}) > MAX_MINUTES={cfg.max_minutes}"
                 )
 
         # Transcribe
         attempts = 0
-        text_raw: Optional[str] = None
-        last_error: Optional[str] = None
+        text_raw: str | None = None
+        last_error: str | None = None
         rest_meta: JSONObject = {}
         for attempt in range(cfg.retry_max):
             attempts = attempt + 1
             try:
                 if mode == "batch":
                     if not is_url:
-                        raise RuntimeError("Batch mode requires HTTPS URL input (use worker upload)")
+                        raise RuntimeError(
+                            "Batch mode requires HTTPS URL input (use worker upload)"
+                        )
                     batch_result = speech_client.run_batch_transcription(
                         audio_url=str(input),
                         locale=lang,
@@ -765,7 +800,7 @@ class TranscriptionAgent:
                 audit_jsonl,
                 merge_json_objects(
                     meta_fail,
-                json_payload(ts=_now_utc(), case_id=case_id, event="failed", exit=2),
+                    json_payload(ts=_now_utc(), case_id=case_id, event="failed", exit=2),
                 ),
             )
             raise RuntimeError(msg)
@@ -775,7 +810,7 @@ class TranscriptionAgent:
         text_ts = _insert_timestamps(text_raw, interval)
         transcript_out = _next_versioned(transcript_out)
 
-        def _human_dur(sec: Optional[float]) -> str:
+        def _human_dur(sec: float | None) -> str:
             if not sec:
                 return "unknown"
             m, s = int(sec // 60), int(sec % 60)

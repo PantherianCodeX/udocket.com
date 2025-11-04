@@ -6,18 +6,17 @@ from typing import Any
 from django.db.models import Q, QuerySet
 from django.http import FileResponse, Http404, HttpRequest
 from rest_framework import viewsets
-from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.decorators import action
+from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from config.paths import resolve_storage_root
-
-from apps.platform.authorization.access_policies import ArtifactAccessPolicy
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.artifacts.serializers import CaseArtifactSerializer
+from apps.platform.authorization.access_policies import ArtifactAccessPolicy
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.tenancy import scope_artifacts
+from config.paths import resolve_storage_root
 
 
 def _as_django_request(request: Request | HttpRequest) -> HttpRequest | None:
@@ -34,7 +33,9 @@ class ArtifactViewSet(RetrieveModelMixin, ListModelMixin, viewsets.GenericViewSe
 
     def get_queryset(self) -> QuerySet[CaseArtifact]:
         qs = CaseArtifact.objects.select_related("case_fk", "case_fk__organization")
-        case_id = self.request.query_params.get("case") if hasattr(self.request, "query_params") else None
+        case_id = (
+            self.request.query_params.get("case") if hasattr(self.request, "query_params") else None
+        )
         if case_id:
             qs = qs.filter(Q(case_id=case_id) | Q(case_fk__id=case_id))
         user = getattr(self.request, "user", None)

@@ -5,14 +5,13 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -25,11 +24,10 @@ if __package__ in {None, ""}:
 else:
     from .common import PROJECT_ROOT, load_manifest, save_manifest, upsert_helper_record
 
-import importlib.metadata as metadata
 import sys
 import sysconfig
 import tempfile
-
+from importlib import metadata
 
 TYPINGS_ROOT = PROJECT_ROOT / "typings"
 STUB_VENDOR_DIR = TYPINGS_ROOT / "vendor"
@@ -100,10 +98,7 @@ def _stub_directories(dist_name: str) -> tuple[str, ...]:
 def _discover_installed_stub_dists() -> set[str]:
     discovered: set[str] = set()
     for dist in metadata.distributions():
-        if any(
-            path.parts and path.parts[0].endswith("-stubs")
-            for path in (dist.files or [])
-        ):
+        if any(path.parts and path.parts[0].endswith("-stubs") for path in (dist.files or [])):
             discovered.add(dist.metadata["Name"])
     return discovered
 
@@ -133,7 +128,9 @@ def _top_level_modules(dist: metadata.Distribution) -> tuple[str, ...]:
     return tuple(ordered)
 
 
-def _run_stubgen(modules: tuple[str, ...], destination_root: Path, search_path: Path) -> tuple[str, ...]:
+def _run_stubgen(
+    modules: tuple[str, ...], destination_root: Path, search_path: Path
+) -> tuple[str, ...]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         stubgen_exe = Path(sys.executable).with_name("stubgen")
@@ -267,22 +264,22 @@ def vendor_stubs(
             continue
 
         version = dist.version
-        vendored.append(
-            VendoredStub(dist_name=dist_name, version=version, stub_dirs=stub_dirs)
-        )
+        vendored.append(VendoredStub(dist_name=dist_name, version=version, stub_dirs=stub_dirs))
     return vendored
 
 
 def write_metadata(entries: list[VendoredStub]) -> None:
     payload = {
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "generatedAt": datetime.now(UTC).isoformat(),
         "entries": [entry.to_dict() for entry in entries],
     }
     METADATA_FILE.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Vendor installed typing stubs into the repository")
+    parser = argparse.ArgumentParser(
+        description="Vendor installed typing stubs into the repository"
+    )
     parser.add_argument(
         "--dist",
         action="append",
@@ -329,7 +326,7 @@ def main() -> int:
         name="vendor_stubs",
         version="0.1.0",
         status="ok",
-        last_run=datetime.now(timezone.utc),
+        last_run=datetime.now(UTC),
     )
     save_manifest(manifest)
     return 0

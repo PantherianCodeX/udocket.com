@@ -6,10 +6,10 @@ from guardian.shortcuts import assign_perm
 
 from apps.platform.cases.models import CaseMembership
 
-
 ROLE_PERMS = {
     "OWNER": [
-        "view_case", "change_case",
+        "view_case",
+        "change_case",
     ],
     "CONTRIBUTOR": [
         "view_case",
@@ -27,7 +27,9 @@ ROLE_PERMS = {
 
 
 @receiver(post_save, sender=CaseMembership)
-def grant_case_perms(sender, instance: CaseMembership, created: bool, **kwargs):  # pragma: no cover - side-effect
+def grant_case_perms(
+    sender, instance: CaseMembership, created: bool, **kwargs
+):  # pragma: no cover - side-effect
     if not created:
         return
     perms = ROLE_PERMS.get(instance.role, [])
@@ -36,4 +38,3 @@ def grant_case_perms(sender, instance: CaseMembership, created: bool, **kwargs):
             assign_perm(p, instance.user, instance.case)
         except Exception:
             pass
-

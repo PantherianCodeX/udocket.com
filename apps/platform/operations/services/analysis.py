@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 
 from apps.platform.cases.models import Case
-from apps.platform.operations.storage import ensure_case_paths, ops_dir as storage_ops_dir
+from apps.platform.operations.storage import ensure_case_paths
+from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
     coerce_object_list,
     coerce_str_list,
     read_json_value,
+)
+from packages.udocket_common.operations import (
+    CaseIntakeBuilder,
+    ComposeStageMap,
 )
 
 
@@ -123,9 +127,10 @@ def latest_transcript(case_id: str, organization_id: str | None = None) -> Path 
     return files[0] if files else None
 
 
-def case_intake_payload(case: Case | None) -> dict[str, Any]:
+def case_intake_payload(case: Case | None) -> JSONObject:
     if case is None:
         return {}
+    builder = CaseIntakeBuilder()
     fields = [
         "client_position",
         "court_level",
@@ -137,38 +142,30 @@ def case_intake_payload(case: Case | None) -> dict[str, Any]:
         "client_name",
         "opposing_party",
     ]
-    payload: dict[str, Any] = {}
     for field in fields:
         value = getattr(case, field, None)
-        if value in (None, ""):
-            continue
-        if isinstance(value, datetime):
-            payload[field] = value.isoformat()
-        elif isinstance(value, date):
-            payload[field] = value.isoformat()
-        else:
-            payload[field] = value
+        builder.assign(field, value)
     case_id_value = getattr(case, "id", None)
     if case_id_value is not None:
-        payload.setdefault("case_id", str(case_id_value))
+        builder.ensure("case_id", str(case_id_value))
     title_value = getattr(case, "title", None)
     if isinstance(title_value, str) and title_value:
-        payload.setdefault("case_title", title_value)
+        builder.ensure("case_title", title_value)
     organization = getattr(case, "organization", None)
     organization_id_value = getattr(case, "organization_id", None)
     if organization_id_value is not None:
-        payload.setdefault("organization_id", str(organization_id_value))
+        builder.ensure("organization_id", str(organization_id_value))
     if organization is not None:
         name = getattr(organization, "name", None)
         if isinstance(name, str) and name:
-            payload.setdefault("organization_name", name)
-    return payload
+            builder.ensure("organization_name", name)
+    return builder.build().to_json()
 
 
 def collect_requested_providers(
     config_chain: Sequence[str],
     provider_chain: Sequence[str] | None,
-    stage_map: Mapping[str, Mapping[str, Any]] | None = None,
+    stage_map: ComposeStageMap | None = None,
 ) -> list[str]:
     sequence: list[str] = []
 
@@ -178,11 +175,8 @@ def collect_requested_providers(
             sequence.append(lowered)
 
     if stage_map:
-        for payload in stage_map.values():
-            for provider in coerce_str_list(payload.get("providers"), unique=False):
-                _add(provider)
-            for provider in coerce_str_list(payload.get("provider"), unique=False):
-                _add(provider)
+        for provider in stage_map.providers():
+            _add(provider)
 
     if provider_chain:
         for provider in provider_chain:

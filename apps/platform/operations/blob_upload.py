@@ -43,14 +43,14 @@ def upload_with_sas(
     cancel_check: Callable[[], bool] | None = None,
     progress_cb: Callable[[float], None] | None = None,
 ) -> str:
+    from azure.core.exceptions import HttpResponseError
     from azure.storage.blob import (
+        BlobBlock,
+        BlobSasPermissions,
         BlobServiceClient,
         ContentSettings,
         generate_blob_sas,
-        BlobSasPermissions,
-        BlobBlock,
     )
-    from azure.core.exceptions import HttpResponseError
 
     container = getattr(settings, "AZURE_BLOB_CONTAINER", None)
     if not container:
@@ -73,7 +73,9 @@ def upload_with_sas(
         svc = BlobServiceClient.from_connection_string(conn_str)
     else:
         if not account or not key:
-            raise RuntimeError("Missing Azure Blob credentials (AZURE_BLOB_ACCOUNT/AZURE_BLOB_KEY or connection string)")
+            raise RuntimeError(
+                "Missing Azure Blob credentials (AZURE_BLOB_ACCOUNT/AZURE_BLOB_KEY or connection string)"
+            )
         account_url = f"https://{account}.blob.core.windows.net"
         svc = BlobServiceClient(account_url=account_url, credential=key)
     log.info("blob: preparing upload", extra={"container": container, "blob": blob_name})
@@ -139,7 +141,8 @@ def upload_with_sas(
     except HttpResponseError as e:  # pragma: no cover - passthrough
         raise RuntimeError(
             "Azure Blob upload failed: AuthorizationFailure or insufficient permissions. "
-            "Verify AZURE_BLOB_* credentials and container access. Original: " + (e.message if hasattr(e, "message") else str(e))
+            "Verify AZURE_BLOB_* credentials and container access. Original: "
+            + (e.message if hasattr(e, "message") else str(e))
         )
     log.info("blob: uploaded", extra={"container": container, "blob": blob_name})
 
@@ -162,7 +165,9 @@ def upload_with_sas(
         account_name = account
 
     if not account_name or not key:
-        raise RuntimeError("Missing account key for SAS signing (set AZURE_BLOB_KEY or include AccountKey in connection string)")
+        raise RuntimeError(
+            "Missing account key for SAS signing (set AZURE_BLOB_KEY or include AccountKey in connection string)"
+        )
 
     sas = generate_blob_sas(
         account_name=account_name,
@@ -175,5 +180,5 @@ def upload_with_sas(
     base = blob_endpoint or f"https://{account_name}.{endpoint_suffix}"
     safe_blob = quote(blob_name, safe="/:")
     url = f"{base}/{container}/{safe_blob}?{sas}"
-    log.info("blob: sas generated", extra={"url_prefix": url.split("?",1)[0]})
+    log.info("blob: sas generated", extra={"url_prefix": url.split("?", 1)[0]})
     return url

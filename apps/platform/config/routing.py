@@ -1,6 +1,6 @@
 from django.urls import path
-from apps.platform.operations import consumers
 
+from apps.platform.operations import consumers
 
 websocket_urlpatterns = [
     path("ws/jobs/stream/", consumers.JobStreamConsumer.as_asgi()),

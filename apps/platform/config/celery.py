@@ -5,7 +5,6 @@ from typing import Any
 
 from celery import Celery
 
-
 os.environ.setdefault(
     "DJANGO_SETTINGS_MODULE",
     os.getenv("DJANGO_SETTINGS_MODULE", "apps.platform.config.settings.dev"),
@@ -25,11 +24,9 @@ app.conf.worker_hijack_root_logger = False
 # Periodic tasks
 try:
     import os
-    from datetime import timedelta
 
     recovery_interval_s = int(os.getenv("JOB_RECOVERY_BEAT_SECONDS", "60").strip())
-    if recovery_interval_s < 10:
-        recovery_interval_s = 10
+    recovery_interval_s = max(recovery_interval_s, 10)
     app.conf.beat_schedule = getattr(app.conf, "beat_schedule", {}) | {
         "recover-stale-jobs": {
             # Use the maintenance module path so the worker registers the task correctly.

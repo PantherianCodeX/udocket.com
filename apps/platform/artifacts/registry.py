@@ -7,8 +7,8 @@ CaseArtifact payloads so new fields automatically flow through
 permission tooling.
 """
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Dict, Iterable, Iterator, Tuple
 
 
 @dataclass(frozen=True)
@@ -16,11 +16,11 @@ class ArtifactField:
     """Declarative metadata describing an artifact field."""
 
     name: str
-    default_actions: Tuple[str, ...] = tuple()
+    default_actions: tuple[str, ...] = tuple()
     description: str | None = None
 
 
-ARTIFACT_FIELD_REGISTRY: Dict[str, Dict[str, ArtifactField]] = {
+ARTIFACT_FIELD_REGISTRY: dict[str, dict[str, ArtifactField]] = {
     "CASE": {
         "id": ArtifactField(
             name="id",
@@ -91,7 +91,7 @@ ARTIFACT_FIELD_REGISTRY: Dict[str, Dict[str, ArtifactField]] = {
 }
 
 
-def iter_artifact_fields() -> Iterator[Tuple[str, ArtifactField]]:
+def iter_artifact_fields() -> Iterator[tuple[str, ArtifactField]]:
     """Iterate over every artifact type/field pair."""
 
     for artifact_type, fields in ARTIFACT_FIELD_REGISTRY.items():
@@ -109,11 +109,7 @@ def artifact_field(artifact_type: str, field_name: str) -> ArtifactField | None:
 def artifact_field_keys() -> set[tuple[str, str]]:
     """Convenience set of (type, field) keys."""
 
-    return {
-        (atype, field.name)
-        for atype, field in iter_artifact_fields()
-        if atype != "CASE"
-    }
+    return {(atype, field.name) for atype, field in iter_artifact_fields() if atype != "CASE"}
 
 
 def artifact_types() -> Iterable[str]:

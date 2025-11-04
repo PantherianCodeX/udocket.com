@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-from ..config.paths import resolve_llm_assignments_path, resolve_llm_providers_path
 from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
@@ -19,6 +16,8 @@ from packages.udocket_common.json_utils import (
     coerce_str_list,
     load_json_object,
 )
+
+from ..config.paths import resolve_llm_assignments_path, resolve_llm_providers_path
 
 
 def _empty_json_mapping() -> dict[str, JSONValue]:
@@ -44,16 +43,16 @@ class LLMProviderModel:
     name: str
     label: str
     cost_tier: str
-    max_output_tokens: Optional[int] = None
-    context_window_tokens: Optional[int] = None
-    max_input_tokens: Optional[int] = None
-    max_chunk_chars: Optional[int] = None
-    chunk_overlap_tokens: Optional[int] = None
-    max_prompt_chars: Optional[int] = None
-    max_prompt_segments: Optional[int] = None
-    default_temperature: Optional[float] = None
-    deployment_env: Optional[str] = None
-    origin: Optional[str] = None
+    max_output_tokens: int | None = None
+    context_window_tokens: int | None = None
+    max_input_tokens: int | None = None
+    max_chunk_chars: int | None = None
+    chunk_overlap_tokens: int | None = None
+    max_prompt_chars: int | None = None
+    max_prompt_segments: int | None = None
+    default_temperature: float | None = None
+    deployment_env: str | None = None
+    origin: str | None = None
     default_enabled: bool = True
     options: dict[str, JSONValue] = field(default_factory=_empty_json_mapping)
 
@@ -91,10 +90,10 @@ class LLMSettings:
     providers: dict[str, LLMProvider]
     assignments: dict[str, LLMStageAssignment]
 
-    def provider(self, name: str) -> Optional[LLMProvider]:
+    def provider(self, name: str) -> LLMProvider | None:
         return self.providers.get(name)
 
-    def stage(self, stage_key: str) -> Optional[LLMStageAssignment]:
+    def stage(self, stage_key: str) -> LLMStageAssignment | None:
         return self.assignments.get(stage_key)
 
     def all_stage_keys(self) -> list[str]:

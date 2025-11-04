@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Iterable, cast
+from collections.abc import Callable, Iterable
 from types import MethodType
+from typing import TYPE_CHECKING, Any, cast
 
 from django import forms
 from django.contrib import admin
@@ -80,10 +81,21 @@ class UserAdmin(UserAdminBase):
     list_filter = ("is_active",)
     add_form = UserCreationWizardForm
     add_fieldsets = (
-        (None, {
-            "classes": ("wide",),
-            "fields": ("username", "password1", "password2", "display_name", "email", "organization", "membership_role"),
-        }),
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "password1",
+                    "password2",
+                    "display_name",
+                    "email",
+                    "organization",
+                    "membership_role",
+                ),
+            },
+        ),
     )
     fieldsets = (
         (None, {"fields": ("username", "password")}),
@@ -185,14 +197,34 @@ class UserAdmin(UserAdminBase):
 
 @admin.register(Organization)
 class OrganizationAdmin(OrganizationAdminBase):
-    list_display = ("id", "kc_organization_id", "name", "city", "province", "contact_email", "created_at")
+    list_display = (
+        "id",
+        "kc_organization_id",
+        "name",
+        "city",
+        "province",
+        "contact_email",
+        "created_at",
+    )
     search_fields = ("id", "kc_organization_id", "name", "display_name", "contact_email")
     ordering = ("name",)
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         ("Identifiers", {"fields": ("id", "kc_organization_id", "name", "display_name")}),
         (_("Contact"), {"fields": ("contact_name", "contact_email", "contact_phone")}),
-        (_("Address"), {"fields": ("address_line1", "address_line2", "city", "province", "postal_code", "country")}),
+        (
+            _("Address"),
+            {
+                "fields": (
+                    "address_line1",
+                    "address_line2",
+                    "city",
+                    "province",
+                    "postal_code",
+                    "country",
+                )
+            },
+        ),
         (_("Notes"), {"fields": ("notes",)}),
         (_("Timestamps"), {"fields": ("created_at", "updated_at")}),
     )
@@ -266,6 +298,7 @@ class OrganizationMembershipAdmin(OrganizationMembershipAdminBase):
 
         return request_scoped_form
 
+
 UrlList = list[URLResolver | URLPattern]
 _UrlGetter = Callable[[], Iterable[URLResolver | URLPattern]]
 _EachContextCallable = Callable[[HttpRequest], dict[str, Any]]
@@ -281,9 +314,7 @@ def select_admin_organization(request: HttpRequest) -> HttpResponseRedirect:
     if user_instance is None or not user_instance.is_authenticated:
         return redirect("admin:login")
     next_url = (
-        request.POST.get("next")
-        or request.META.get("HTTP_REFERER")
-        or reverse("admin:index")
+        request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("admin:index")
     )
     choice = request.POST.get("organization")
     if choice == "__all__" and _is_user_superuser(user_instance):
@@ -310,7 +341,7 @@ def tenant_admin_urls(self: admin.AdminSite) -> UrlList:
     return custom + urls
 
 
-setattr(admin.site, "get_urls", MethodType(tenant_admin_urls, admin.site))
+admin.site.get_urls = MethodType(tenant_admin_urls, admin.site)
 
 
 _original_each_context: _EachContextCallable = admin.site.each_context
@@ -331,4 +362,4 @@ def tenant_each_context(self: admin.AdminSite, request: HttpRequest) -> dict[str
     return ctx
 
 
-setattr(admin.site, "each_context", MethodType(tenant_each_context, admin.site))
+admin.site.each_context = MethodType(tenant_each_context, admin.site)

@@ -5,7 +5,7 @@ from django.http import HttpRequest, HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path
 
-from apps.platform.accounts.models import Organization, OrganizationMembership
+from apps.platform.accounts.models import Organization
 from apps.platform.accounts.utils import (
     get_active_admin_org_id,
     user_accessible_organizations,
@@ -76,9 +76,7 @@ class PermissionPresetAdminForm(forms.ModelForm):
     def save(self, commit=True):  # type: ignore[override]
         preset = super().save(commit=commit)
         extras_raw = self.cleaned_data.get("extra_capabilities", "") or ""
-        extra_caps = {
-            cap.strip() for cap in extras_raw.split(",") if cap.strip()
-        }
+        extra_caps = {cap.strip() for cap in extras_raw.split(",") if cap.strip()}
         self._selected_capabilities = set(self.cleaned_data.get("capabilities", [])) | extra_caps
         if commit:
             self.sync_capabilities(preset)
@@ -135,26 +133,37 @@ class RoleAdmin(admin.ModelAdmin):
     def get_urls(self):
         urls = super().get_urls()
         extra = [
-            path("capabilities/", self.admin_site.admin_view(self.capabilities_summary), name="authorization_capabilities_summary"),
+            path(
+                "capabilities/",
+                self.admin_site.admin_view(self.capabilities_summary),
+                name="authorization_capabilities_summary",
+            ),
         ]
         return extra + urls
 
     def capabilities_summary(self, request: HttpRequest) -> HttpResponse:
-        from apps.platform.authorization.capabilities import role_capabilities, DEFAULT_CAPS
+        from apps.platform.authorization.capabilities import DEFAULT_CAPS, role_capabilities
+
         roles = Role.objects.select_related("organization").all().order_by("name")
         role_rows = []
         for name, caps in DEFAULT_CAPS.items():
             role_rows.append({"name": name.title(), "system": True, "caps": sorted(caps)})
         for r in roles:
             caps = role_capabilities(r.name, organization_id=r.organization_id)
-            role_rows.append({
-                "uuid": r.uuid,
-                "name": r.name,
-                "system": r.system,
-                "organization": r.organization.name if r.organization else None,
-                "caps": sorted(caps),
-            })
-        ctx = {**self.admin_site.each_context(request), "title": "Effective Capabilities", "role_rows": role_rows}
+            role_rows.append(
+                {
+                    "uuid": r.uuid,
+                    "name": r.name,
+                    "system": r.system,
+                    "organization": r.organization.name if r.organization else None,
+                    "caps": sorted(caps),
+                }
+            )
+        ctx = {
+            **self.admin_site.each_context(request),
+            "title": "Effective Capabilities",
+            "role_rows": role_rows,
+        }
         return TemplateResponse(request, "admin/authorization/capabilities_summary.html", ctx)
 
     def get_queryset(self, request):  # type: ignore[override]

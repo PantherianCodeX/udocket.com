@@ -3,14 +3,13 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -51,8 +50,8 @@ class ParamEdit:
     annotation: str
 
 
-def collect_edits(tree: ast.Module) -> Dict[str, List[ParamEdit]]:
-    edits: Dict[str, List[ParamEdit]] = defaultdict(list)
+def collect_edits(tree: ast.Module) -> dict[str, list[ParamEdit]]:
+    edits: dict[str, list[ParamEdit]] = defaultdict(list)
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             parameters = list(node.args.args) + list(node.args.kwonlyargs)
@@ -81,7 +80,7 @@ def apply_edits(text: str, edits: Sequence[ParamEdit]) -> str:
     if not edits:
         return text
     lines = text.splitlines()
-    per_line: Dict[int, List[ParamEdit]] = defaultdict(list)
+    per_line: dict[int, list[ParamEdit]] = defaultdict(list)
     for edit in edits:
         per_line[edit.line].append(edit)
     for line_index, line_edits in per_line.items():
@@ -115,7 +114,12 @@ def ensure_import(text: str, needed: Sequence[str]) -> str:
             return new_text
 
     docstring_end = 0
-    if module.body and isinstance(module.body[0], ast.Expr) and isinstance(module.body[0].value, ast.Constant) and isinstance(module.body[0].value.value, str):
+    if (
+        module.body
+        and isinstance(module.body[0], ast.Expr)
+        and isinstance(module.body[0].value, ast.Constant)
+        and isinstance(module.body[0].value.value, str)
+    ):
         docstring_end = module.body[0].end_lineno or module.body[0].lineno
 
     last_import_end = docstring_end
@@ -136,7 +140,9 @@ def process_file(path: Path, *, apply: bool) -> bool:
     if not edits:
         return False
     if not apply:
-        print(f"{path}: parameters needing annotations -> {', '.join(sorted({edit.name for edit in edits}))}")
+        print(
+            f"{path}: parameters needing annotations -> {', '.join(sorted({edit.name for edit in edits}))}"
+        )
         return True
     updated = apply_edits(text, edits)
     needed_types = sorted({edit.annotation for edit in edits})
@@ -147,9 +153,15 @@ def process_file(path: Path, *, apply: bool) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Annotate common pytest fixtures with helper types.")
-    parser.add_argument("targets", nargs="+", type=Path, help="Test files or directories to process.")
-    parser.add_argument("--apply", action="store_true", help="Apply changes instead of reporting only.")
+    parser = argparse.ArgumentParser(
+        description="Annotate common pytest fixtures with helper types."
+    )
+    parser.add_argument(
+        "targets", nargs="+", type=Path, help="Test files or directories to process."
+    )
+    parser.add_argument(
+        "--apply", action="store_true", help="Apply changes instead of reporting only."
+    )
     args = parser.parse_args()
 
     targets = [target if target.is_absolute() else PROJECT_ROOT / target for target in args.targets]
@@ -169,7 +181,7 @@ def main() -> int:
             name=HELPER_NAME,
             version=HELPER_VERSION,
             status="ok" if touched else "noop",
-            last_run=datetime.now(timezone.utc),
+            last_run=datetime.now(UTC),
         )
         save_manifest(manifest)
 

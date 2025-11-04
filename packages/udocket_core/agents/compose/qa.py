@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 import logging
-from typing import Mapping, Optional, Tuple
+from collections.abc import Mapping
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
+from ...llm import LLMSettings
 from .errors import ComposeStageError
 from .llm_runtime import invoke_llm
-from .state import ComposeState, LaneActionDirective, LaneQAResult
-from ...llm import LLMSettings
 from .settings import ComposeConfig
+from .state import ComposeState, LaneActionDirective, LaneQAResult
 
 MAX_QA_PARSE_ATTEMPTS = 2
 
@@ -27,14 +26,14 @@ def run_lane_qa_review(
     provider_credentials: Mapping[str, JSONObject],
     logger: logging.Logger,
     system_prompt: str,
-) -> Tuple[LaneQAResult, dict[str, int], str, str]:
+) -> tuple[LaneQAResult, dict[str, int], str, str]:
     """Execute QA for a single lane with resilient JSON parsing."""
 
     if state.context is None:
         raise ComposeStageError(f"compose.{lane}.qa_reviewer", "Compose context missing", lane=lane)
 
     payload = _lane_qa_payload(state, lane, document)
-    last_error: Optional[str] = None
+    last_error: str | None = None
     stage_name = f"compose.{lane}.qa_reviewer"
 
     for attempt in range(1, MAX_QA_PARSE_ATTEMPTS + 1):
@@ -75,7 +74,9 @@ def run_lane_qa_review(
 
         return result, dict(usage), provider, model
 
-    raise ComposeStageError(stage_name, last_error or "QA reviewer failed to return valid JSON", lane=lane)
+    raise ComposeStageError(
+        stage_name, last_error or "QA reviewer failed to return valid JSON", lane=lane
+    )
 
 
 def _lane_qa_payload(state: ComposeState, lane: str, document: str) -> JSONObject:

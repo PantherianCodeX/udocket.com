@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,4 +21,3 @@ class AnalysisResult:
 
 
 __all__ = ["AnalysisArtifact", "AnalysisResult"]
-

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 # pyright: strict
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any
 
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .utils import status_class
-
 
 SEVERITY_ORDER = {
     "CRITICAL": 0,
@@ -34,11 +34,11 @@ def _parse_review_dt(value: Any) -> datetime | None:
     return dt
 
 
-def collect_guardian_reviews(artifacts: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    reviews: List[Dict[str, Any]] = []
+def collect_guardian_reviews(artifacts: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    reviews: list[dict[str, Any]] = []
     for artifact in artifacts:
         metadata = artifact.get("metadata") or {}
-        history: Iterable[Dict[str, Any]] = metadata.get("guardian_history") or []
+        history: Iterable[dict[str, Any]] = metadata.get("guardian_history") or []
         artifact_id = artifact.get("id")
         artifact_title = artifact.get("title") or artifact.get("filename") or metadata.get("source")
         artifact_type = artifact.get("type")
@@ -58,7 +58,7 @@ def collect_guardian_reviews(artifacts: Sequence[Dict[str, Any]]) -> List[Dict[s
     return reviews
 
 
-def guardian_stats_from_reviews(reviews: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def guardian_stats_from_reviews(reviews: Sequence[dict[str, Any]]) -> dict[str, Any]:
     total = len(reviews)
     status_counts = Counter()
     violation_total = 0
@@ -81,13 +81,14 @@ def guardian_stats_from_reviews(reviews: Sequence[Dict[str, Any]]) -> Dict[str, 
         latest_status = latest_review.get("status")
         latest_reviewed_at_dt = latest_review.get("_reviewed_at_dt")
 
-    stats: Dict[str, Any] = {
+    stats: dict[str, Any] = {
         "total_reviews": total,
         "approved": status_counts.get("approved", 0),
         "rejected": status_counts.get("rejected", 0),
         "skipped": status_counts.get("skipped", 0),
         "error": status_counts.get("error", 0),
-        "other": total - sum(status_counts.get(key, 0) for key in ("approved", "rejected", "skipped", "error")),
+        "other": total
+        - sum(status_counts.get(key, 0) for key in ("approved", "rejected", "skipped", "error")),
         "violation_count": violation_total,
         "severity_counts": dict(severity_counts),
         "latest_review": latest_review,
@@ -127,8 +128,8 @@ def guardian_stats_from_reviews(reviews: Sequence[Dict[str, Any]]) -> Dict[str, 
     return stats
 
 
-def guardian_violation_entries(reviews: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    entries: List[Dict[str, Any]] = []
+def guardian_violation_entries(reviews: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
     for review in reviews:
         violations = review.get("violations") or []
         if not isinstance(violations, (list, tuple)):
@@ -153,7 +154,7 @@ def guardian_violation_entries(reviews: Sequence[Dict[str, Any]]) -> List[Dict[s
                 }
             )
 
-    def sort_key(item: Dict[str, Any]):
+    def sort_key(item: dict[str, Any]):
         severity_rank = SEVERITY_ORDER.get(item.get("severity") or "", 99)
         reviewed_at_dt = item.get("reviewed_at_dt") or datetime.min
         return (severity_rank, reviewed_at_dt)
@@ -165,10 +166,10 @@ def guardian_violation_entries(reviews: Sequence[Dict[str, Any]]) -> List[Dict[s
 def guardian_report_payload(
     *,
     case: Any,
-    stats: Dict[str, Any],
-    reviews: Sequence[Dict[str, Any]],
-    violations: Sequence[Dict[str, Any]],
-) -> Dict[str, Any]:
+    stats: dict[str, Any],
+    reviews: Sequence[dict[str, Any]],
+    violations: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
     generated_at = timezone.now()
     return {
         "case_id": str(getattr(case, "id", "")),

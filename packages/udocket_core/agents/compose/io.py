@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, cast
+from typing import Any, cast
 
 from docxtpl import DocxTemplate
 
@@ -86,7 +86,7 @@ class ArtifactWriter:
         output_prefix: Path,
         template_key: str,
         docx_context: Mapping[str, str],
-    ) -> Optional[Path]:
+    ) -> Path | None:
         output_path = next_versioned(output_prefix.with_suffix(".docx"))
         template_path = self._config.doc_template_path
         if template_path and template_path.exists():
@@ -187,7 +187,9 @@ def docx_placeholder_context(**sections: str) -> dict[str, str]:
     return base
 
 
-def render_docx_from_template(template_path: Path, context: Mapping[str, str], output_path: Path) -> bool:
+def render_docx_from_template(
+    template_path: Path, context: Mapping[str, str], output_path: Path
+) -> bool:
     try:
         template = DocxTemplate(str(template_path))
     except Exception:
@@ -195,7 +197,7 @@ def render_docx_from_template(template_path: Path, context: Mapping[str, str], o
     try:
         context_map: dict[str, Any] = dict(context)
         template.render(context_map)
-        save_method = cast(Callable[[str], None], getattr(template, "save"))
+        save_method = cast(Callable[[str], None], template.save)
         save_method(str(output_path))
         return True
     except Exception:

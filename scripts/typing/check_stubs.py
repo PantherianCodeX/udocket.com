@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
+from datetime import UTC
 from pathlib import Path
-from typing import Iterable, List
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -24,7 +24,7 @@ HELPER_NAME = "check_stubs"
 HELPER_VERSION = "0.1.0"
 
 
-def read_pyright_stub_paths(config_path: Path) -> List[Path]:
+def read_pyright_stub_paths(config_path: Path) -> list[Path]:
     data = json.loads(config_path.read_text(encoding="utf-8"))
     stub_path = data.get("stubPath")
     paths: list[Path] = []
@@ -79,9 +79,21 @@ def ensure_module_stubs(stub_root: Path, modules: Iterable[str], *, fix: bool) -
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate Pyright stub overlays.")
-    parser.add_argument("--config", default="pyrightconfig.json", type=Path, help="Path to pyright configuration file.")
-    parser.add_argument("--module", dest="modules", action="append", help="Runtime module to ensure has a stub skeleton.")
-    parser.add_argument("--fix", action="store_true", help="Create missing directories or stubs automatically.")
+    parser.add_argument(
+        "--config",
+        default="pyrightconfig.json",
+        type=Path,
+        help="Path to pyright configuration file.",
+    )
+    parser.add_argument(
+        "--module",
+        dest="modules",
+        action="append",
+        help="Runtime module to ensure has a stub skeleton.",
+    )
+    parser.add_argument(
+        "--fix", action="store_true", help="Create missing directories or stubs automatically."
+    )
     args = parser.parse_args()
 
     config_path = PROJECT_ROOT / args.config
@@ -106,7 +118,7 @@ def main() -> int:
             return 1
 
     if args.fix:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         manifest = load_manifest()
         upsert_helper_record(
@@ -114,7 +126,7 @@ def main() -> int:
             name=HELPER_NAME,
             version=HELPER_VERSION,
             status="ok" if not problems else "error",
-            last_run=datetime.now(timezone.utc),
+            last_run=datetime.now(UTC),
         )
         save_manifest(manifest)
 

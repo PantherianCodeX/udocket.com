@@ -1,35 +1,30 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import importlib
 import importlib.util
 import logging
 import os
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass, field
-from typing import Callable, MutableMapping, Protocol, cast
+from typing import Protocol, cast
 
 State = MutableMapping[str, object]
 NodeCallable = Callable[[State], State | None]
 
 
 class _CompiledGraphProtocol(Protocol):
-    def invoke(self, state: State) -> State:
-        ...
+    def invoke(self, state: State) -> State: ...
 
 
 class _StateGraphProtocol(Protocol):
-    def add_node(self, name: str, fn: NodeCallable) -> None:
-        ...
+    def add_node(self, name: str, fn: NodeCallable) -> None: ...
 
-    def set_entry_point(self, name: str) -> None:
-        ...
+    def set_entry_point(self, name: str) -> None: ...
 
-    def add_edge(self, source: str, target: object) -> None:
-        ...
+    def add_edge(self, source: str, target: object) -> None: ...
 
-    def compile(self) -> _CompiledGraphProtocol:
-        ...
+    def compile(self) -> _CompiledGraphProtocol: ...
 
 
 StateGraphFactory = Callable[[type[MutableMapping[str, object]]], _StateGraphProtocol]
@@ -49,39 +44,28 @@ else:  # pragma: no cover - optional dependency missing
 
 LANGGRAPH_END: object | None = _runtime_end
 STATE_GRAPH_FACTORY: StateGraphFactory | None = (
-    cast(StateGraphFactory, _runtime_state_graph)
-    if _runtime_state_graph is not None
-    else None
+    cast(StateGraphFactory, _runtime_state_graph) if _runtime_state_graph is not None else None
 )
 
 
 class AnalyzeNodeImpl(Protocol):
-    def input_discovery(self, state: State) -> State | None:
-        ...
+    def input_discovery(self, state: State) -> State | None: ...
 
-    def parse_transcript(self, state: State) -> State | None:
-        ...
+    def parse_transcript(self, state: State) -> State | None: ...
 
-    def context_builder(self, state: State) -> State | None:
-        ...
+    def context_builder(self, state: State) -> State | None: ...
 
-    def extract_outline(self, state: State) -> State | None:
-        ...
+    def extract_outline(self, state: State) -> State | None: ...
 
-    def build_timeline_seeds(self, state: State) -> State | None:
-        ...
+    def build_timeline_seeds(self, state: State) -> State | None: ...
 
-    def build_entity_hints(self, state: State) -> State | None:
-        ...
+    def build_entity_hints(self, state: State) -> State | None: ...
 
-    def draft_markdown(self, state: State) -> State | None:
-        ...
+    def draft_markdown(self, state: State) -> State | None: ...
 
-    def qa_and_finalize(self, state: State) -> State | None:
-        ...
+    def qa_and_finalize(self, state: State) -> State | None: ...
 
-    def write_ops_and_artifacts(self, state: State) -> State | None:
-        ...
+    def write_ops_and_artifacts(self, state: State) -> State | None: ...
 
 
 @dataclass(frozen=True)
@@ -152,7 +136,9 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
     """Ensure langgraph/langchain loggers emit DEBUG output to the console."""
 
     global _langgraph_debug_initialized
-    already_initialized = globals().get("_LANGGRAPH_DEBUG_INITIALIZED", _langgraph_debug_initialized)
+    already_initialized = globals().get(
+        "_LANGGRAPH_DEBUG_INITIALIZED", _langgraph_debug_initialized
+    )
     if already_initialized:
         return
 

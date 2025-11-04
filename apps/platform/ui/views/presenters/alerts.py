@@ -1,22 +1,23 @@
 from __future__ import annotations
 
- 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Dict, List, Sequence
+from typing import Any
 
 from django.utils import timezone
 
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
+
 from .status_flags import job_activity_timestamp, job_is_stalled
 
-ALERT_SEVERITY_CLASSES: Dict[str, str] = {
+ALERT_SEVERITY_CLASSES: dict[str, str] = {
     "critical": "border-rose-500/60 bg-rose-500/10 text-rose-100",
     "warning": "border-amber-400/60 bg-amber-400/10 text-amber-100",
     "info": "border-sky-400/60 bg-sky-400/10 text-sky-100",
 }
 
-ALERT_SEVERITY_ORDER: Dict[str, int] = {"critical": 0, "warning": 1, "info": 2}
+ALERT_SEVERITY_ORDER: dict[str, int] = {"critical": 0, "warning": 1, "info": 2}
 
 
 def _distance_label(days: int) -> str:
@@ -58,21 +59,17 @@ def _format_datetime(dt: datetime) -> str:
     return localized.strftime("%b %d, %Y %I:%M %p")
 
 
-def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, Any]]:
+def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> list[dict[str, Any]]:
     now = timezone.now()
     today = timezone.localdate()
-    alerts: List[Dict[str, Any]] = []
+    alerts: list[dict[str, Any]] = []
     stalled_status = getattr(Job.Status, "STALLED", "STALLED")
 
-    def _alert_sort_key(entry: Dict[str, Any]) -> tuple[int, float]:
+    def _alert_sort_key(entry: dict[str, Any]) -> tuple[int, float]:
         severity_key = str(entry.get("severity") or "").lower()
         severity_rank = ALERT_SEVERITY_ORDER.get(severity_key, 99)
         sort_ts_value = entry.get("sort_ts")
-        sort_ts = (
-            float(sort_ts_value)
-            if isinstance(sort_ts_value, (int, float))
-            else float("inf")
-        )
+        sort_ts = float(sort_ts_value) if isinstance(sort_ts_value, (int, float)) else float("inf")
         return severity_rank, sort_ts
 
     def _is_transcription_job(job: Job) -> bool:
@@ -101,7 +98,9 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
                 "summary": case.filing_deadline.strftime("%b %d, %Y"),
                 "detail": _distance_label(days_until),
                 "severity": severity,
-                "severity_class": ALERT_SEVERITY_CLASSES.get(severity, ALERT_SEVERITY_CLASSES["info"]),
+                "severity_class": ALERT_SEVERITY_CLASSES.get(
+                    severity, ALERT_SEVERITY_CLASSES["info"]
+                ),
                 "tooltip": f"Filing deadline on {case.filing_deadline:%B %d, %Y} ({_distance_label(days_until)})",
                 "due": case.filing_deadline.isoformat(),
                 "due_kind": "date",
@@ -122,7 +121,9 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
                 "summary": _format_datetime(court_ts),
                 "detail": tooltip_distance,
                 "severity": severity,
-                "severity_class": ALERT_SEVERITY_CLASSES.get(severity, ALERT_SEVERITY_CLASSES["info"]),
+                "severity_class": ALERT_SEVERITY_CLASSES.get(
+                    severity, ALERT_SEVERITY_CLASSES["info"]
+                ),
                 "tooltip": f"Court appearance on {_format_datetime(court_ts)} ({tooltip_distance})",
                 "due": court_ts.isoformat(),
                 "due_kind": "datetime",
@@ -130,7 +131,11 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
             }
         )
 
-    failed_jobs = [job for job in jobs if job.status in {Job.Status.FAILED, Job.Status.CANCELLED, Job.Status.CORRUPTED}]
+    failed_jobs = [
+        job
+        for job in jobs
+        if job.status in {Job.Status.FAILED, Job.Status.CANCELLED, Job.Status.CORRUPTED}
+    ]
     if failed_jobs:
         count = len(failed_jobs)
         alerts.append(
@@ -149,7 +154,8 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
     pending_reviews = [
         job
         for job in jobs
-        if job.status == Job.Status.SUCCEEDED and job.review_status == Job.ReviewStatus.PENDING
+        if job.status == Job.Status.SUCCEEDED
+        and job.review_status == Job.ReviewStatus.PENDING
         and _is_transcription_job(job)
     ]
     if pending_reviews:
@@ -180,8 +186,8 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
         }
     ]
     if active_jobs:
-        stale_jobs: List[Job] = []
-        recent_jobs: List[Job] = []
+        stale_jobs: list[Job] = []
+        recent_jobs: list[Job] = []
         for job in active_jobs:
             if job_is_stalled(job, reference=now):
                 stale_jobs.append(job)
@@ -203,7 +209,7 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> List[Dict[str, An
             )
         if stale_jobs:
             stale_count = len(stale_jobs)
-            activity_times: List[datetime] = []
+            activity_times: list[datetime] = []
             for candidate in (job_activity_timestamp(job) for job in stale_jobs):
                 if candidate is None:
                     continue

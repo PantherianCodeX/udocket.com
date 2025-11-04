@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, cast
+from typing import Any, Protocol, cast
 from weakref import WeakKeyDictionary
 
 from django.conf import settings
@@ -11,7 +12,6 @@ from apps.platform.authorization.capabilities import has_capability
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.telemetry import JobTelemetry, job_telemetry
 from packages.udocket_common.json_utils import stringify_pretty
-
 
 AGENT_LABELS = {
     "transcription": "Transcribe",
@@ -34,21 +34,21 @@ class JobLike(Protocol):
     mode: str
     language: str
     diarization: bool
-    duration_s: Optional[float]
+    duration_s: float | None
     created_at: Any
     started_at: Any
     finished_at: Any
-    error_message: Optional[str]
-    transcript_path: Optional[str]
+    error_message: str | None
+    transcript_path: str | None
 
 
 class JobTelemetrySerializer(serializers.Serializer):
     """Enriched job diagnostics payload mirroring worker metadata."""
 
     # DRF injects `context` at runtime; annotate for type-checkers
-    context: Dict[str, Any]
+    context: dict[str, Any]
 
-    def to_representation(self, instance: JobLike) -> Dict[str, Any]:
+    def to_representation(self, instance: JobLike) -> dict[str, Any]:
         request = self.context.get("request") if hasattr(self, "context") else None
         ui_mode = bool(self.context.get("ui_mode"))
         user = getattr(request, "user", None)
@@ -63,7 +63,9 @@ class JobTelemetrySerializer(serializers.Serializer):
                 allow_audio = has_capability(user, case_id, "artifact.download")
                 allow_transcript = has_capability(user, case_id, "artifact.view")
                 # Only enforce transcript path capability outside of UI mode
-                if allow_transcript and not has_capability(user, case_id, "artifact.field.path.view"):
+                if allow_transcript and not has_capability(
+                    user, case_id, "artifact.field.path.view"
+                ):
                     # permit metadata but not raw path
                     allow_transcript_path = False
                 else:
@@ -79,13 +81,17 @@ class JobTelemetrySerializer(serializers.Serializer):
                 allow_transcript_path = False
 
         telem: JobTelemetry = job_telemetry(cast(Job, instance))
-        audio_payload: Dict[str, Any] = telem.audio_payload(include_paths=allow_audio)
-        transcript_payload: Dict[str, Any] = telem.transcript_payload(include_paths=allow_transcript_path)
-        agent_payload: Dict[str, Any] = telem.agent_payload()
-        meta_payload: Dict[str, Any] = dict(telem.meta)
+        audio_payload: dict[str, Any] = telem.audio_payload(include_paths=allow_audio)
+        transcript_payload: dict[str, Any] = telem.transcript_payload(
+            include_paths=allow_transcript_path
+        )
+        agent_payload: dict[str, Any] = telem.agent_payload()
+        meta_payload: dict[str, Any] = dict(telem.meta)
         # Enrich with availability flags for UI gating (e.g., converted WAV download)
         converted_available = False
-        converted_job_id = meta_payload.get("converted_audio_job_id") or meta_payload.get("converted_wav_job_id")
+        converted_job_id = meta_payload.get("converted_audio_job_id") or meta_payload.get(
+            "converted_wav_job_id"
+        )
         if converted_job_id:
             try:
                 converted_job = Job.objects.only("audio_input", "case_id").get(pk=converted_job_id)
@@ -119,7 +125,10 @@ class JobTelemetrySerializer(serializers.Serializer):
         )
         if not agent_type:
             mode = getattr(instance, "mode", "") or ""
-            if mode in (getattr(Job.Mode, "ON_DEMAND", "on-demand"), getattr(Job.Mode, "BATCH", "batch")):
+            if mode in (
+                getattr(Job.Mode, "ON_DEMAND", "on-demand"),
+                getattr(Job.Mode, "BATCH", "batch"),
+            ):
                 agent_type = "Transcription"
             elif mode:
                 agent_type = mode.replace("_", " ").replace("-", " ").title()
@@ -156,7 +165,7 @@ class JobTelemetrySerializer(serializers.Serializer):
             # expose minimal error when user lacks artifact rights
             error_message = "Restricted"
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "id": str(instance.id),
             "case_id": str(instance.case_id),
             "status": instance.status,
@@ -197,19 +206,28 @@ class JobTelemetrySerializer(serializers.Serializer):
             data["reviewed_by"] = None
 
         if allow_transcript:
-            transcript_entry: Dict[str, Any] = {
+            transcript_entry: dict[str, Any] = {
                 "type": transcript_payload.get("artifact_type", "TRANSCRIPT"),
                 "path": transcript_payload.get("path") if allow_transcript_path else None,
                 "download_url": None,
                 "title": None,
             }
             # Only expose a download link when a transcript exists and job succeeded
-            has_transcript = bool(getattr(instance, "transcript_path", None)) or bool(transcript_payload.get("path"))
-            if allow_audio and request is not None and has_transcript and str(instance.status).upper() == "SUCCEEDED":
+            has_transcript = bool(getattr(instance, "transcript_path", None)) or bool(
+                transcript_payload.get("path")
+            )
+            if (
+                allow_audio
+                and request is not None
+                and has_transcript
+                and str(instance.status).upper() == "SUCCEEDED"
+            ):
                 try:
                     from rest_framework.reverse import reverse
 
-                    download_href = reverse("job-download", kwargs={"pk": str(instance.id)}, request=request)
+                    download_href = reverse(
+                        "job-download", kwargs={"pk": str(instance.id)}, request=request
+                    )
                     transcript_entry["download_url"] = download_href
                 except Exception:
                     transcript_entry["download_url"] = None
@@ -243,7 +261,7 @@ class JobCreateSerializer(serializers.ModelSerializer):
 
 class JobSerializer(serializers.ModelSerializer):
     # DRF injects this at runtime
-    context: Dict[str, Any]
+    context: dict[str, Any]
     case_id: CharField = CharField(read_only=True)
     audio_input: SerializerMethodField = SerializerMethodField()
     transcript_path: SerializerMethodField = SerializerMethodField()
@@ -313,7 +331,7 @@ class JobSerializer(serializers.ModelSerializer):
         _, allow_transcript = self._permission_flags(obj)
         return (obj.transcript_path or None) if allow_transcript else None
 
-    def to_representation(self, instance: Job) -> Dict[str, Any]:
+    def to_representation(self, instance: Job) -> dict[str, Any]:
         data = super().to_representation(instance)
         allow_audio, allow_transcript = self._permission_flags(instance)
         if not allow_audio:

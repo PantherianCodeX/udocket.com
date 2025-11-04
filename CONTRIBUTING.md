@@ -44,11 +44,30 @@ This project treats contributor experience and code quality as first-class requi
 
 ## Tests & coverage
 
-- Unit tests run via `pytest`:
+- Core quality commands (all wrap uv and respect the shared env):
 
   ```bash
-  make pytest.all
-  make pytest.cov
+  make all.test          # common → core → platform → docs
+  make all.lint          # ruff lint + format checks for code packages
+  make all.type          # mypy + pyright across packages
+  make all.fix           # apply ruff format + autofixes (when needed)
+  make all.export-reqs   # regenerate requirements/*.txt (pre-commit runs this)
+  ```
+
+- Per-project commands (examples):
+
+  ```bash
+  make platform.test      # pytest (platform)
+  make common.test        # pytest (packages/udocket_common)
+  make core.test          # pytest (packages/udocket_core)
+  make docs.test          # pytest (docs toolbox in container)
+
+  make platform.lint      # ruff check + format --check
+  make platform.type      # mypy + pyright
+
+  make common.lint.ruff   # ruff only
+  make common.format      # ruff format code layout
+  make core.type.mypy     # targeted checks
   ```
 
 - Target ≥90 % coverage per module. Critical shared packages (e.g., `packages.udocket_common`) must meet or exceed this target before changes are merged.

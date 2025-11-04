@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, Iterable, Mapping, Protocol, Sequence, Tuple, cast
+from typing import Any, Protocol, cast
 
 from celery import shared_task
 from django.utils import timezone
 
 from apps.platform.jobs.models import Job
 from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta
-from apps.platform.operations.utils import read_job_meta
 from apps.platform.operations.task_modules.analyze import analyze_job as _analyze_job
 from apps.platform.operations.task_modules.compose import compose_job as _compose_job
 from apps.platform.operations.task_modules.transcribe import transcribe_job as _transcribe_job
+from apps.platform.operations.utils import read_job_meta
+from packages.udocket_common.json_utils import coerce_json_value
 
 
 class TaskProtocol(Protocol):
@@ -23,8 +24,7 @@ class TaskProtocol(Protocol):
 
 
 class CeleryAsyncCallable(Protocol):
-    def apply_async(self, *args: Any, **kwargs: Any) -> Any:
-        ...
+    def apply_async(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 log = logging.getLogger("apps.platform.operations.tasks.recover")
@@ -42,7 +42,7 @@ def _task_states(
     celery_app: Any | None,
     inspect_obj: Any,
     task_ids: Iterable[str],
-) -> Tuple[set[str], set[str]]:
+) -> tuple[set[str], set[str]]:
     ids = [str(tid) for tid in task_ids if tid]
     active: set[str] = set()
     pending: set[str] = set()
@@ -108,14 +108,18 @@ def _finalize_cancel(job: Job, *, reason: str | None = None) -> None:
         task_name="recover_stale_jobs",
         task_id="",
     )
-    finished = runtime.cancel(reason=reason or "Cancelled", log_message="Recovery: finalized cancellation")
+    finished = runtime.cancel(
+        reason=reason or "Cancelled", log_message="Recovery: finalized cancellation"
+    )
     safe_job_meta(
         case_id,
         org_id,
         str(job.id),
         {
             "celery_task_status": "cancelled",
-            "celery_task_finished_at": finished.isoformat() if finished else timezone.now().isoformat(),
+            "celery_task_finished_at": finished.isoformat()
+            if finished
+            else timezone.now().isoformat(),
             "recovery_status": "cancelled",
             "recovered_at": finished.isoformat() if finished else timezone.now().isoformat(),
         },
@@ -182,14 +186,18 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
     cutoff = timezone.now() - timedelta(minutes=stale_minutes)
 
     # Gather potentially stale jobs
-    qs = Job.typed_objects().select_related("case").filter(
-        status__in=(
-            Job.Status.RUNNING,
-            Job.Status.UPLOADING,
-            Job.Status.CONVERTING,
-            Job.Status.CANCELLING,
-        ),
-        finished_at__isnull=True,
+    qs = (
+        Job.typed_objects()
+        .select_related("case")
+        .filter(
+            status__in=(
+                Job.Status.RUNNING,
+                Job.Status.UPLOADING,
+                Job.Status.CONVERTING,
+                Job.Status.CANCELLING,
+            ),
+            finished_at__isnull=True,
+        )
     )
     candidates: list[Job] = []
     for job in qs.iterator():
@@ -227,13 +235,19 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
         org_id = str(job.organization_id) if job.organization_id else None
         meta = read_job_meta(case_id, org_id, job_id)
         task_ids = _candidate_task_ids(meta)
-        active, pending = _task_states(celery_app, inspect_obj, task_ids) if task_ids else cast(tuple[set[str], set[str]], (set(), set()))
+        active, pending = (
+            _task_states(celery_app, inspect_obj, task_ids)
+            if task_ids
+            else cast(tuple[set[str], set[str]], (set(), set()))
+        )
         if active:
             continue
 
         now = timezone.now()
         recovered_at_ts = _parse_timestamp(meta.get("recovered_at"))
-        recent_recovery = recovered_at_ts is not None and (now - recovered_at_ts) < timedelta(minutes=stale_minutes)
+        recent_recovery = recovered_at_ts is not None and (now - recovered_at_ts) < timedelta(
+            minutes=stale_minutes
+        )
         task_status = str(meta.get("celery_task_status") or "").strip().lower()
 
         if (
@@ -275,7 +289,9 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
 
         # Attempt to resume based on job kind
         job_kind = (job.job_kind or str(meta.get("job_kind") or "")).strip().lower()
-        agent_type = (getattr(job, "agent_type", "") or str(meta.get("agent_type") or "")).strip().lower()
+        agent_type = (
+            (getattr(job, "agent_type", "") or str(meta.get("agent_type") or "")).strip().lower()
+        )
         kind = job_kind or agent_type
 
         try:
@@ -322,12 +338,17 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                     "recovery_error": None,
                 }
                 if history:
-                    meta_updates["celery_task_history"] = history
+                    meta_updates["celery_task_history"] = coerce_json_value(history)
                 runtime.transition(
                     status=Job.Status.PENDING,
                     log_message="Recovery: re-queued transcription job",
                     meta_updates=meta_updates,
-                    job_updates={"started_at": None, "finished_at": None, "error_message": None, "upload_progress": None},
+                    job_updates={
+                        "started_at": None,
+                        "finished_at": None,
+                        "error_message": None,
+                        "upload_progress": None,
+                    },
                 )
                 resumed += 1
                 continue
@@ -357,12 +378,17 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                     "recovery_error": None,
                 }
                 if history:
-                    meta_updates["celery_task_history"] = history
+                    meta_updates["celery_task_history"] = coerce_json_value(history)
                 runtime.transition(
                     status=Job.Status.PENDING,
                     log_message="Recovery: re-queued analyze job",
                     meta_updates=meta_updates,
-                    job_updates={"started_at": None, "finished_at": None, "error_message": None, "upload_progress": None},
+                    job_updates={
+                        "started_at": None,
+                        "finished_at": None,
+                        "error_message": None,
+                        "upload_progress": None,
+                    },
                 )
                 resumed += 1
                 continue
@@ -397,12 +423,17 @@ def recover_stale_jobs(self: TaskProtocol) -> dict[str, object]:
                     "recovery_error": None,
                 }
                 if history:
-                    meta_updates["celery_task_history"] = history
+                    meta_updates["celery_task_history"] = coerce_json_value(history)
                 runtime.transition(
                     status=Job.Status.PENDING,
                     log_message="Recovery: re-queued compose job",
                     meta_updates=meta_updates,
-                    job_updates={"started_at": None, "finished_at": None, "error_message": None, "upload_progress": None},
+                    job_updates={
+                        "started_at": None,
+                        "finished_at": None,
+                        "error_message": None,
+                        "upload_progress": None,
+                    },
                 )
                 resumed += 1
                 continue

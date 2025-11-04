@@ -1,19 +1,16 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-import logging
-
+import jwt
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
-from django.conf import settings
-
-import jwt
-from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework import exceptions
+from rest_framework.authentication import BaseAuthentication, get_authorization_header
 
 from apps.platform.accounts.utils import apply_claim_mappings
-
 
 log = logging.getLogger("apps.platform.accounts.auth")
 
@@ -34,7 +31,9 @@ class KeycloakOIDCBackend(OIDCAuthenticationBackend):
         if sub:
             qs = User.objects.filter(kc_sub=sub) | User.objects.filter(username=sub)
         elif email:
-            qs = User.objects.filter(email__iexact=email) | User.objects.filter(username__iexact=email)
+            qs = User.objects.filter(email__iexact=email) | User.objects.filter(
+                username__iexact=email
+            )
         elif preferred:
             qs = User.objects.filter(username__iexact=preferred)
         return qs.distinct()
@@ -60,7 +59,7 @@ class KeycloakOIDCBackend(OIDCAuthenticationBackend):
         if "sub" not in claims:
             log.warning("OIDC claims missing subject")
             return False
-        scopes = (self.get_settings("OIDC_RP_SCOPES", "openid email profile") or "")
+        scopes = self.get_settings("OIDC_RP_SCOPES", "openid email profile") or ""
         if "email" in scopes.split() and not claims.get("email"):
             log.warning("OIDC claims missing email; proceeding with subject %s", claims.get("sub"))
         return True
@@ -73,10 +72,13 @@ class KeycloakOIDCBackend(OIDCAuthenticationBackend):
         # Map Keycloak standard claims
         sub = claims.get("sub")
         email = claims.get("email")
-        name = claims.get("name") or f"{claims.get('given_name','')} {claims.get('family_name','')}".strip()
+        name = (
+            claims.get("name")
+            or f"{claims.get('given_name', '')} {claims.get('family_name', '')}".strip()
+        )
         updates: list[str] = []
         if hasattr(user, "kc_sub") and getattr(user, "kc_sub", None) != sub:
-            setattr(user, "kc_sub", sub)
+            user.kc_sub = sub
             updates.append("kc_sub")
         if email:
             if getattr(user, "email", None) != email:
@@ -87,7 +89,9 @@ class KeycloakOIDCBackend(OIDCAuthenticationBackend):
             updates.append("display_name")
         if updates:
             user.save(update_fields=list(dict.fromkeys(updates)))
-        apply_claim_mappings(user, claims, sync_cases=getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False))
+        apply_claim_mappings(
+            user, claims, sync_cases=getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False)
+        )
         return user
 
 
@@ -131,10 +135,17 @@ class KeycloakJWTAuthentication(BaseAuthentication):
                 algorithms=["RS256"],
                 audience=audience,
                 issuer=issuer,
-                options={"verify_aud": bool(audience), "verify_signature": True, "verify_iss": bool(issuer)},
+                options={
+                    "verify_aud": bool(audience),
+                    "verify_signature": True,
+                    "verify_iss": bool(issuer),
+                },
             )
         except Exception as exc:
-            log.warning("JWT authentication failed", extra={"reason": str(exc), "issuer": issuer, "audience": audience})
+            log.warning(
+                "JWT authentication failed",
+                extra={"reason": str(exc), "issuer": issuer, "audience": audience},
+            )
             raise exceptions.AuthenticationFailed(f"Invalid token: {exc}")
 
         sub = claims.get("sub")
@@ -143,13 +154,18 @@ class KeycloakJWTAuthentication(BaseAuthentication):
 
         email = claims.get("email")
         username = email or sub
-        user, created = User.objects.get_or_create(kc_sub=sub, defaults={"username": username, "email": email or ""})
+        user, created = User.objects.get_or_create(
+            kc_sub=sub, defaults={"username": username, "email": email or ""}
+        )
         # Minimal updates
         changed = False
         if email and user.email != email:
             user.email = email
             changed = True
-        name = claims.get("name") or f"{claims.get('given_name','')} {claims.get('family_name','')}".strip()
+        name = (
+            claims.get("name")
+            or f"{claims.get('given_name', '')} {claims.get('family_name', '')}".strip()
+        )
         if name and getattr(user, "display_name", None) != name and hasattr(user, "display_name"):
             user.display_name = name
             changed = True
@@ -162,7 +178,9 @@ class KeycloakJWTAuthentication(BaseAuthentication):
             except Exception:
                 pass
 
-        apply_claim_mappings(user, claims, sync_cases=getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False))
+        apply_claim_mappings(
+            user, claims, sync_cases=getattr(settings, "OIDC_SYNC_MEMBERSHIPS", False)
+        )
         log.info(
             "JWT authentication succeeded",
             extra={

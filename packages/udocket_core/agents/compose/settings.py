@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Optional
 
 from .llm_profiles import (
     DEFAULT_LAWYER_TEMPERATURE,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_TEMPERATURE,
 )
-
 
 logger = logging.getLogger("udocket.compose.config")
 
@@ -22,20 +20,20 @@ DEFAULT_PROVIDER_CHAIN: list[str] = ["azure"]
 DEFAULT_PROMPT_CONFIG_ENV = "COMPOSE_PROMPT_CONFIG"
 
 
-def _truthy(value: Optional[str], default: bool) -> bool:
+def _truthy(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _safe_float(value: Optional[str], fallback: float) -> float:
+def _safe_float(value: str | None, fallback: float) -> float:
     try:
         return float(value) if value else fallback
     except (TypeError, ValueError):
         return fallback
 
 
-def _safe_int(value: Optional[str], fallback: int) -> int:
+def _safe_int(value: str | None, fallback: int) -> int:
     try:
         return int(value) if value else fallback
     except (TypeError, ValueError):
@@ -80,10 +78,10 @@ class ComposeConfig:
     min_timestamp_references: int = 3
     qa_enforced: bool = True
     debug: bool = False
-    doc_template_path: Optional[Path] = None
+    doc_template_path: Path | None = None
     enable_editor: bool = True
-    client_editor_model: Optional[str] = None
-    lawyer_editor_model: Optional[str] = None
+    client_editor_model: str | None = None
+    lawyer_editor_model: str | None = None
     qa_iteration_limit: int = 3
     locale: str = "en-CA"
     prompt_config_path: Path = field(default_factory=_default_prompt_config_path)
@@ -92,7 +90,7 @@ class ComposeConfig:
     enable_async: bool = False
 
     @classmethod
-    def from_env(cls) -> "ComposeConfig":
+    def from_env(cls) -> ComposeConfig:
         providers_env = os.getenv("COMPOSE_PROVIDER_CHAIN", "")
         providers = (
             normalize_provider_chain(providers_env.split(","))

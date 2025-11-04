@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "docs" / "typing" / "automation_manifest.json"
@@ -47,11 +47,7 @@ def _ensure_pragma(module_path: Path, dry_run: bool) -> bool:
 
     insert_index = 0
     for idx, line in enumerate(contents[:5]):
-        if line.startswith("from __future__ import"):
-            insert_index = idx + 1
-        elif line.startswith("#!/"):
-            insert_index = idx + 1
-        elif line.strip() == "":
+        if line.startswith("from __future__ import") or line.startswith("#!/") or line.strip() == "":
             insert_index = idx + 1
         else:
             break
@@ -64,7 +60,11 @@ def _ensure_pragma(module_path: Path, dry_run: bool) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dry-run", action="store_true", help="Print files missing the pragma without modifying them")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print files missing the pragma without modifying them",
+    )
     args = parser.parse_args()
 
     strict_entries = _collect_strict_paths()
@@ -76,11 +76,10 @@ def main() -> None:
     if args.dry_run:
         for module in updated:
             print(module)
+    elif updated:
+        print("Updated", len(updated), "files")
     else:
-        if updated:
-            print("Updated", len(updated), "files")
-        else:
-            print("All strict files already include the pragma")
+        print("All strict files already include the pragma")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-# pyright: strict
-
-import yaml
+from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Any, MutableMapping, cast
+from typing import Any, cast
 
+# pyright: strict
+import yaml
 from pydantic import BaseModel, Field, ValidationError
 
 

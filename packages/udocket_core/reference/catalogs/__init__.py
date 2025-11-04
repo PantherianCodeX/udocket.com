@@ -1,16 +1,14 @@
-from .registry import discover_catalogs
-
 from .base import (
     CatalogBundle,
-    CourtCatalog,
-    CourtCatalog,
     Court,
+    CourtCatalog,
     CourtLevel,
-    Location,
     FilingCode,
     HearingCode,
+    Location,
     OrderCode,
 )
+from .registry import discover_catalogs
 
 __all__ = [
     "CatalogBundle",

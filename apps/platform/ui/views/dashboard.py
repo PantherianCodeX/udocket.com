@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import uuid
-
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Literal, Mapping, Sequence, TypedDict
+from typing import Literal, TypedDict
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -16,6 +15,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+
 from apps.platform.accounts.utils import (
     resolve_request_organization,
     set_active_admin_org_id,
@@ -203,7 +203,9 @@ def _build_case_rows(cases: Sequence[Case]) -> list[CaseTableRow]:
     rows: list[CaseTableRow] = []
     for case in cases:
         job_total_raw = getattr(case, "job_total", 0)
-        job_total = int(job_total_raw) if isinstance(job_total_raw, int) else int(job_total_raw or 0)
+        job_total = (
+            int(job_total_raw) if isinstance(job_total_raw, int) else int(job_total_raw or 0)
+        )
         rows.append(
             {
                 "id": case.id,
@@ -219,17 +221,23 @@ def _build_case_rows(cases: Sequence[Case]) -> list[CaseTableRow]:
 
 
 def _job_status_summary_from_counts(counts: Mapping[str, int]) -> JobStatusSummary:
-    running = sum(counts.get(status, 0) for status in (
-        Job.Status.RUNNING,
-        Job.Status.CONVERTING,
-        Job.Status.UPLOADING,
-    ))
+    running = sum(
+        counts.get(status, 0)
+        for status in (
+            Job.Status.RUNNING,
+            Job.Status.CONVERTING,
+            Job.Status.UPLOADING,
+        )
+    )
     pending = counts.get(Job.Status.PENDING, 0)
-    failed = sum(counts.get(status, 0) for status in (
-        Job.Status.FAILED,
-        Job.Status.CORRUPTED,
-        Job.Status.CANCELLED,
-    ))
+    failed = sum(
+        counts.get(status, 0)
+        for status in (
+            Job.Status.FAILED,
+            Job.Status.CORRUPTED,
+            Job.Status.CANCELLED,
+        )
+    )
     succeeded = counts.get(Job.Status.SUCCEEDED, 0)
     total = running + pending + failed + succeeded
     return {

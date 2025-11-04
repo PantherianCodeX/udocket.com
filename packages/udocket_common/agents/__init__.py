@@ -4,8 +4,8 @@ from __future__ import annotations
 
 """Shared agent-facing dataclasses and protocols."""
 
-from .results import RegionLiteral, TranscriptionResult
 from .base import AnalysisArtifact, AnalysisResult
+from .results import RegionLiteral, TranscriptionResult
 
 __all__ = [
     "TranscriptionResult",

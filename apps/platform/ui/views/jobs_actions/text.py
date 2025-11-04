@@ -1,12 +1,12 @@
 from __future__ import annotations
 
- 
 import re
 import shutil
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Union
+from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -29,8 +29,15 @@ from ..contexts import user_can_review_case
 from ..selectors import job_telemetry_payload
 from ..transcripts import ensure_transcript_artifact
 
-
-FIXTURE_ROOT = Path(settings.BASE_DIR) / "tests" / "udocket_core" / "fixtures" / "transcripts" / "CASE-DEMO" / "transcript"
+FIXTURE_ROOT = (
+    Path(settings.BASE_DIR)
+    / "tests"
+    / "udocket_core"
+    / "fixtures"
+    / "transcripts"
+    / "CASE-DEMO"
+    / "transcript"
+)
 DEFAULT_LANGUAGE = "en-CA"
 MAX_UPLOAD_BYTES = 512 * 1024  # 512 KiB for dev fixtures
 
@@ -42,7 +49,9 @@ class UploadResult:
 
 
 @require_http_methods(["GET", "POST"])
-def summary_upload_transcript_text(request: HttpRequest, case_id: str) -> Union[HttpResponse, JsonResponse]:
+def summary_upload_transcript_text(
+    request: HttpRequest, case_id: str
+) -> HttpResponse | JsonResponse:
     """Render modal or handle transcript text injection for analyzer testing."""
 
     auth_response = ensure_authenticated(request)
@@ -94,10 +103,10 @@ def _get_case_for_request(request: HttpRequest, case_id: str, organization: Orga
     return case
 
 
-def _collect_fixture_transcripts() -> Iterable[Dict[str, Any]]:
+def _collect_fixture_transcripts() -> Iterable[dict[str, Any]]:
     if not FIXTURE_ROOT.exists():
         return []
-    fixtures: list[Dict[str, Any]] = []
+    fixtures: list[dict[str, Any]] = []
     for path in sorted(FIXTURE_ROOT.glob("*.txt")):
         try:
             size = path.stat().st_size
@@ -114,7 +123,7 @@ def _collect_fixture_transcripts() -> Iterable[Dict[str, Any]]:
 
 
 def _handle_text_upload(request: HttpRequest, case: Case) -> UploadResult:
-    payload: Dict[str, Any] = {}
+    payload: dict[str, Any] = {}
     if request.content_type and "application/json" in request.content_type:
         if request.body:
             parsed = parse_json_value(request.body.decode("utf-8"))
@@ -139,7 +148,9 @@ def _handle_text_upload(request: HttpRequest, case: Case) -> UploadResult:
 
     if fixture_name:
         source_path = _resolve_fixture_path(fixture_name)
-        return _register_transcript_file(case, source_path, source_label=_derive_label(source_path.name))
+        return _register_transcript_file(
+            case, source_path, source_label=_derive_label(source_path.name)
+        )
 
     assert upload_file is not None  # guarded above
     if upload_file.size and upload_file.size > MAX_UPLOAD_BYTES:
@@ -211,7 +222,7 @@ def _finalize_job_record(
     job_id: uuid.UUID,
     transcript_path: Path,
     original_name: str,
-    preferred_label: Optional[str] = None,
+    preferred_label: str | None = None,
 ) -> UploadResult:
     label = preferred_label or _derive_label(original_name)
     if not label:
@@ -310,7 +321,7 @@ def _derive_label(filename: str) -> str:
     return stem or "Transcript"
 
 
-def _extract_fixture_name(payload: Dict[str, Any]) -> Optional[str]:
+def _extract_fixture_name(payload: dict[str, Any]) -> str | None:
     raw = payload.get("fixture_name")
     if isinstance(raw, str) and raw.strip():
         return raw.strip()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import os
 from datetime import datetime, timedelta
 from typing import Final

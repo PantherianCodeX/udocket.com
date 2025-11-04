@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, cast
-from django.db.models import Model
+from typing import cast
 
 from django.conf import settings
 from django.core.management import call_command
 from django.db import transaction
+from django.db.models import Model
 
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.accounts.utils import sync_user_access_flags
@@ -20,14 +20,14 @@ from packages.udocket_common.json_utils import load_json_value
 logger = logging.getLogger(__name__)
 
 
-def _clean_env(value: Optional[str]) -> Optional[str]:
+def _clean_env(value: str | None) -> str | None:
     if value is None:
         return None
     stripped = value.strip()
     return stripped or None
 
 
-def _parse_bool(value: Optional[str], *, default: bool) -> bool:
+def _parse_bool(value: str | None, *, default: bool) -> bool:
     if value is None:
         return default
     normalized = value.strip().lower()
@@ -47,34 +47,34 @@ class SuperuserConfig:
 @dataclass(frozen=True)
 class OrganizationConfig:
     name: str
-    display_name: Optional[str]
-    contact_email: Optional[str]
+    display_name: str | None
+    contact_email: str | None
     attach_superuser: bool
 
 
 @dataclass(frozen=True)
 class BootstrapDefaults:
     enabled: bool
-    superuser_username: Optional[str]
-    superuser_email: Optional[str]
-    superuser_password: Optional[str]
-    superuser_reset_password: Optional[bool]
-    organization_name: Optional[str]
-    organization_display_name: Optional[str]
-    organization_contact_email: Optional[str]
-    organization_attach_superuser: Optional[bool]
+    superuser_username: str | None
+    superuser_email: str | None
+    superuser_password: str | None
+    superuser_reset_password: bool | None
+    organization_name: str | None
+    organization_display_name: str | None
+    organization_contact_email: str | None
+    organization_attach_superuser: bool | None
     import_presets: bool
 
 
 @dataclass(frozen=True)
 class BootstrapConfig:
     enabled: bool
-    superuser: Optional[SuperuserConfig]
-    organization: Optional[OrganizationConfig]
+    superuser: SuperuserConfig | None
+    organization: OrganizationConfig | None
     import_presets: bool
 
     @classmethod
-    def from_env(cls) -> "BootstrapConfig":
+    def from_env(cls) -> BootstrapConfig:
         defaults = _load_bootstrap_defaults()
 
         enabled = _parse_bool(
@@ -82,16 +82,24 @@ class BootstrapConfig:
             default=defaults.enabled,
         )
 
-        superuser_username = _clean_env(os.environ.get("DJANGO_SUPERUSER_USERNAME")) or defaults.superuser_username
-        superuser_password = _clean_env(os.environ.get("DJANGO_SUPERUSER_PASSWORD")) or defaults.superuser_password
+        superuser_username = (
+            _clean_env(os.environ.get("DJANGO_SUPERUSER_USERNAME")) or defaults.superuser_username
+        )
+        superuser_password = (
+            _clean_env(os.environ.get("DJANGO_SUPERUSER_PASSWORD")) or defaults.superuser_password
+        )
         superuser_email = (
-            _clean_env(os.environ.get("DJANGO_SUPERUSER_EMAIL")) or defaults.superuser_email or "admin@example.com"
+            _clean_env(os.environ.get("DJANGO_SUPERUSER_EMAIL"))
+            or defaults.superuser_email
+            or "admin@example.com"
         )
         reset_password = _parse_bool(
             os.environ.get("PLATFORM_BOOTSTRAP_SUPERUSER_RESET_PASSWORD"),
-            default=defaults.superuser_reset_password if defaults.superuser_reset_password is not None else True,
+            default=defaults.superuser_reset_password
+            if defaults.superuser_reset_password is not None
+            else True,
         )
-        superuser_config: Optional[SuperuserConfig] = None
+        superuser_config: SuperuserConfig | None = None
         if superuser_username and superuser_password:
             superuser_config = SuperuserConfig(
                 username=superuser_username,
@@ -100,16 +108,25 @@ class BootstrapConfig:
                 reset_password=reset_password,
             )
 
-        org_name = _clean_env(os.environ.get("PLATFORM_BOOTSTRAP_ORG_NAME")) or defaults.organization_name or "Demo Organization"
+        org_name = (
+            _clean_env(os.environ.get("PLATFORM_BOOTSTRAP_ORG_NAME"))
+            or defaults.organization_name
+            or "Demo Organization"
+        )
         org_display = (
             _clean_env(os.environ.get("PLATFORM_BOOTSTRAP_ORG_DISPLAY_NAME"))
             or defaults.organization_display_name
             or org_name
         )
-        org_email = _clean_env(os.environ.get("PLATFORM_BOOTSTRAP_ORG_CONTACT_EMAIL")) or defaults.organization_contact_email
+        org_email = (
+            _clean_env(os.environ.get("PLATFORM_BOOTSTRAP_ORG_CONTACT_EMAIL"))
+            or defaults.organization_contact_email
+        )
         attach_superuser = _parse_bool(
             os.environ.get("PLATFORM_BOOTSTRAP_ATTACH_SUPERUSER"),
-            default=defaults.organization_attach_superuser if defaults.organization_attach_superuser is not None else True,
+            default=defaults.organization_attach_superuser
+            if defaults.organization_attach_superuser is not None
+            else True,
         )
         organization_config = OrganizationConfig(
             name=org_name,
@@ -161,15 +178,19 @@ def bootstrap_stack(config: BootstrapConfig) -> BootstrapSummary:
     membership_created = False
     membership_updated = False
 
-    user_instance: Optional[User] = None
-    organization_instance: Optional[Organization] = None
+    user_instance: User | None = None
+    organization_instance: Organization | None = None
 
     with transaction.atomic():
         if config.superuser is not None:
-            user_instance, superuser_created, superuser_updated = _ensure_superuser(config.superuser)
+            user_instance, superuser_created, superuser_updated = _ensure_superuser(
+                config.superuser
+            )
 
         if config.organization is not None:
-            organization_instance, organization_created, organization_updated = _ensure_organization(config.organization)
+            organization_instance, organization_created, organization_updated = (
+                _ensure_organization(config.organization)
+            )
 
         if (
             config.organization is not None
@@ -177,7 +198,9 @@ def bootstrap_stack(config: BootstrapConfig) -> BootstrapSummary:
             and user_instance is not None
             and organization_instance is not None
         ):
-            membership_created, membership_updated = _ensure_membership(user_instance, organization_instance)
+            membership_created, membership_updated = _ensure_membership(
+                user_instance, organization_instance
+            )
             sync_user_access_flags(user_instance)
 
     presets_imported = False
@@ -196,7 +219,7 @@ def bootstrap_stack(config: BootstrapConfig) -> BootstrapSummary:
     )
 
 
-def _ensure_superuser(config: SuperuserConfig) -> Tuple[User, bool, bool]:
+def _ensure_superuser(config: SuperuserConfig) -> tuple[User, bool, bool]:
     user, created = User.typed_objects().get_or_create(
         username=config.username,
         defaults={
@@ -213,7 +236,7 @@ def _ensure_superuser(config: SuperuserConfig) -> Tuple[User, bool, bool]:
     return user, created, False
 
 
-def _ensure_organization(config: OrganizationConfig) -> Tuple[Organization, bool, bool]:
+def _ensure_organization(config: OrganizationConfig) -> tuple[Organization, bool, bool]:
     organization, created = Organization.typed_objects().get_or_create(
         name=config.name,
         defaults={
@@ -225,7 +248,7 @@ def _ensure_organization(config: OrganizationConfig) -> Tuple[Organization, bool
     return organization, created, False
 
 
-def _ensure_membership(user: User, organization: Organization) -> Tuple[bool, bool]:
+def _ensure_membership(user: User, organization: Organization) -> tuple[bool, bool]:
     _membership, created = OrganizationMembership.typed_objects().get_or_create(
         organization=organization,
         user=user,
@@ -273,30 +296,50 @@ def _parse_defaults_payload(payload: object) -> BootstrapDefaults:
     payload_map = cast(dict[str, object], payload)
 
     superuser_raw = payload_map.get("superuser")
-    superuser_section: dict[str, object] | None = cast(dict[str, object], superuser_raw) if isinstance(superuser_raw, dict) else None
+    superuser_section: dict[str, object] | None = (
+        cast(dict[str, object], superuser_raw) if isinstance(superuser_raw, dict) else None
+    )
     org_raw = payload_map.get("organization")
-    organization_section: dict[str, object] | None = cast(dict[str, object], org_raw) if isinstance(org_raw, dict) else None
+    organization_section: dict[str, object] | None = (
+        cast(dict[str, object], org_raw) if isinstance(org_raw, dict) else None
+    )
 
-    def _optional_bool(value: object) -> Optional[bool]:
+    def _optional_bool(value: object) -> bool | None:
         if isinstance(value, bool):
             return value
         return None
 
-    def _optional_str(value: object) -> Optional[str]:
+    def _optional_str(value: object) -> str | None:
         return str(value) if isinstance(value, str) and value.strip() else None
 
     enabled = bool(payload_map.get("enabled", False))
     import_presets = bool(payload_map.get("import_presets", True))
 
-    superuser_username = _optional_str(superuser_section.get("username")) if superuser_section else None
+    superuser_username = (
+        _optional_str(superuser_section.get("username")) if superuser_section else None
+    )
     superuser_email = _optional_str(superuser_section.get("email")) if superuser_section else None
-    superuser_password = _optional_str(superuser_section.get("password")) if superuser_section else None
-    superuser_reset_password = _optional_bool(superuser_section.get("reset_password")) if superuser_section else None
+    superuser_password = (
+        _optional_str(superuser_section.get("password")) if superuser_section else None
+    )
+    superuser_reset_password = (
+        _optional_bool(superuser_section.get("reset_password")) if superuser_section else None
+    )
 
-    organization_name = _optional_str(organization_section.get("name")) if organization_section else None
-    organization_display_name = _optional_str(organization_section.get("display_name")) if organization_section else None
-    organization_contact_email = _optional_str(organization_section.get("contact_email")) if organization_section else None
-    organization_attach_superuser = _optional_bool(organization_section.get("attach_superuser")) if organization_section else None
+    organization_name = (
+        _optional_str(organization_section.get("name")) if organization_section else None
+    )
+    organization_display_name = (
+        _optional_str(organization_section.get("display_name")) if organization_section else None
+    )
+    organization_contact_email = (
+        _optional_str(organization_section.get("contact_email")) if organization_section else None
+    )
+    organization_attach_superuser = (
+        _optional_bool(organization_section.get("attach_superuser"))
+        if organization_section
+        else None
+    )
 
     return BootstrapDefaults(
         enabled=enabled,

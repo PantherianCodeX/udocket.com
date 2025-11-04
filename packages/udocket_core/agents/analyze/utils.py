@@ -1,27 +1,29 @@
 from __future__ import annotations
+
 import logging
 import re
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, MutableMapping, Optional
+from typing import TYPE_CHECKING, Any
 
+from packages.udocket_common.json_utils import coerce_json_object, write_json_object
 from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 
 from ..common import (
     AnalysisArtifact,
     TranscriptParse,
+    append_jsonl,
     coerce_mapping,
     coerce_mapping_list,
     coerce_sequence,
-    append_jsonl,
     ensure_dir,
     next_versioned,
     parse_transcript,
     sequence_length,
     sha256_file,
 )
-from packages.udocket_common.json_utils import coerce_json_object, write_json_object
 from .stages import (
     EntityStageResult,
     OutlineStageResult,
@@ -63,9 +65,9 @@ class FinalizedOutputs:
     meta_path: Path
     audit_path: Path
     words: int
-    sha_map: Dict[str, str]
-    artifacts: Dict[str, AnalysisArtifact]
-    provider_chain: List[str]
+    sha_map: dict[str, str]
+    artifacts: dict[str, AnalysisArtifact]
+    provider_chain: list[str]
 
 
 class AnalyzePipeline:
@@ -77,18 +79,16 @@ class AnalyzePipeline:
         case_id: str,
         job_id: str,
         case_dir: Path,
-        intake: Optional[Dict[str, Any]],
-        transcript_hint: Optional[Dict[str, Any]],
+        intake: dict[str, Any] | None,
+        transcript_hint: dict[str, Any] | None,
         config: Any,
-        resolve_transcript: Callable[[Optional[Path], Path], Path],
-        build_context: Callable[[TranscriptParse, Dict[str, Any]], str],
-        provider_chain: Optional[List[str]],
-        stage_runtimes: Dict[str, "StageRuntime"],
+        resolve_transcript: Callable[[Path | None, Path], Path],
+        build_context: Callable[[TranscriptParse, dict[str, Any]], str],
+        provider_chain: list[str] | None,
+        stage_runtimes: dict[str, StageRuntime],
         default_temperature: float,
-        logger: Optional[logging.Logger] = None,
-        progress_callback: Optional[
-            Callable[[str, str, Dict[str, Any]], None]
-        ] = None,
+        logger: logging.Logger | None = None,
+        progress_callback: Callable[[str, str, dict[str, Any]], None] | None = None,
     ) -> None:
         self.case_id = case_id
         self.job_id = job_id
@@ -96,12 +96,8 @@ class AnalyzePipeline:
         self.intake = intake or {}
         self.transcript_hint = transcript_hint
         self.config = config
-        self._resolve_transcript: Callable[[Optional[Path], Path], Path] = (
-            resolve_transcript
-        )
-        self._build_context: Callable[[TranscriptParse, Dict[str, Any]], str] = (
-            build_context
-        )
+        self._resolve_transcript: Callable[[Path | None, Path], Path] = resolve_transcript
+        self._build_context: Callable[[TranscriptParse, dict[str, Any]], str] = build_context
         self.stage_runtimes = stage_runtimes
         self.default_temperature = default_temperature
         self.provider_chain = list(provider_chain or [])
@@ -112,12 +108,9 @@ class AnalyzePipeline:
         )
         self.prompt_chars_override = getattr(config, "prompt_chars_override", None)
         self.prompt_segments_override = getattr(config, "prompt_segments_override", None)
-        self._log_level = (
-            logging.INFO if getattr(config, "debug", False) else logging.DEBUG
-        )
-        self._log_enabled = (
-            getattr(config, "debug", False)
-            or self.logger.isEnabledFor(logging.DEBUG)
+        self._log_level = logging.INFO if getattr(config, "debug", False) else logging.DEBUG
+        self._log_enabled = getattr(config, "debug", False) or self.logger.isEnabledFor(
+            logging.DEBUG
         )
         if not self.provider_chain:
             self.provider_chain = ["azure"]
@@ -128,7 +121,7 @@ class AnalyzePipeline:
     # Internal logging helpers ----------------------------------------
 
     def _notify_stage(self, stage: str, event: str, **meta: Any) -> None:
-        cleaned: Dict[str, Any] = {}
+        cleaned: dict[str, Any] = {}
         for key, value in meta.items():
             if value is None:
                 continue
@@ -148,7 +141,7 @@ class AnalyzePipeline:
                         extra={"stage": stage, "event": event},
                     )
 
-    def _log_stage(self, stage: str, event: str, details: Dict[str, Any]) -> None:
+    def _log_stage(self, stage: str, event: str, details: dict[str, Any]) -> None:
         if not self._log_enabled:
             return
         suffix = " ".join(f"{key}={value}" for key, value in details.items())
@@ -192,7 +185,7 @@ class AnalyzePipeline:
         self._notify_stage("context_builder", "start")
         parse: TranscriptParse = state["parse"]
         context_lines = self._collect_context_lines(parse)
-        context_chunks: Dict[str, List[str]] = {}
+        context_chunks: dict[str, list[str]] = {}
         largest_snippet = ""
         for stage_key in self.stage_runtimes:
             chunks = self._build_context_chunks_for_stage(stage_key, context_lines)
@@ -209,7 +202,7 @@ class AnalyzePipeline:
         speakers = sorted({seg.speaker for seg in parse.segments if seg.speaker})
         timestamps = [seg.ts for seg in parse.segments if seg.ts is not None]
         duration = max(timestamps) if timestamps else None
-        brief: Dict[str, Any] = {
+        brief: dict[str, Any] = {
             "case_id": self.case_id,
             "job_id": self.job_id,
             "header_lines": parse.header_lines,
@@ -223,9 +216,7 @@ class AnalyzePipeline:
         }
         state["context_lines"] = context_lines
         state["context_chunks"] = context_chunks
-        state["context_chunk_counts"] = {
-            key: len(value) for key, value in context_chunks.items()
-        }
+        state["context_chunk_counts"] = {key: len(value) for key, value in context_chunks.items()}
         state["context_snippet"] = context_snippet
         state["case_brief"] = brief
         state.setdefault("provider_chain", self.provider_chain)
@@ -240,13 +231,15 @@ class AnalyzePipeline:
 
     def extract_outline(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet = self._context_input_for_stage(
-            "analyze.extract_outline", state
-        )
-        case_brief: Dict[str, Any] = state["case_brief"]
+        context_snippet = self._context_input_for_stage("analyze.extract_outline", state)
+        case_brief: dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("analyze.extract_outline")
         llm_client = runtime.client if runtime else None
-        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        max_tokens = (
+            runtime.max_output_tokens
+            if runtime and runtime.max_output_tokens
+            else self.config.max_output_tokens
+        )
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "extract_outline",
@@ -273,7 +266,7 @@ class AnalyzePipeline:
             raise
         state["outline_result"] = outline_result
         self._record_usage(state, "outline", outline_result.usage)
-        outline_map: Dict[str, Any] = outline_result.outline
+        outline_map: dict[str, Any] = outline_result.outline
         issue_count = sequence_length(outline_map.get("issues"))
         fact_count = sequence_length(outline_map.get("facts"))
         self._notify_stage(
@@ -288,14 +281,16 @@ class AnalyzePipeline:
 
     def build_timeline_seeds(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet = self._context_input_for_stage(
-            "analyze.build_timeline_seeds", state
-        )
+        context_snippet = self._context_input_for_stage("analyze.build_timeline_seeds", state)
         outline_result: OutlineStageResult = state["outline_result"]
-        case_brief: Dict[str, Any] = state["case_brief"]
+        case_brief: dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("analyze.build_timeline_seeds")
         llm_client = runtime.client if runtime else None
-        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        max_tokens = (
+            runtime.max_output_tokens
+            if runtime and runtime.max_output_tokens
+            else self.config.max_output_tokens
+        )
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "build_timeline_seeds",
@@ -304,7 +299,7 @@ class AnalyzePipeline:
             client_available=bool(llm_client),
         )
         try:
-            outline_issues: List[Dict[str, Any]] = coerce_mapping_list(
+            outline_issues: list[dict[str, Any]] = coerce_mapping_list(
                 outline_result.outline.get("issues")
             )
             timeline_result = generate_timeline(
@@ -337,14 +332,16 @@ class AnalyzePipeline:
 
     def build_entity_hints(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet = self._context_input_for_stage(
-            "analyze.build_entity_hints", state
-        )
+        context_snippet = self._context_input_for_stage("analyze.build_entity_hints", state)
         outline_result: OutlineStageResult = state["outline_result"]
-        case_brief: Dict[str, Any] = state["case_brief"]
+        case_brief: dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("analyze.build_entity_hints")
         llm_client = runtime.client if runtime else None
-        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        max_tokens = (
+            runtime.max_output_tokens
+            if runtime and runtime.max_output_tokens
+            else self.config.max_output_tokens
+        )
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "build_entity_hints",
@@ -353,9 +350,7 @@ class AnalyzePipeline:
             client_available=bool(llm_client),
         )
         try:
-            outline_parties: Dict[str, Any] = coerce_mapping(
-                outline_result.outline.get("parties")
-            )
+            outline_parties: dict[str, Any] = coerce_mapping(outline_result.outline.get("parties"))
             entity_result = generate_entities(
                 parse=parse,
                 outline_parties=outline_parties,
@@ -374,7 +369,7 @@ class AnalyzePipeline:
             raise
         state["entity_result"] = entity_result
         self._record_usage(state, "entities", entity_result.usage)
-        entity_map: Dict[str, Any] = entity_result.hints
+        entity_map: dict[str, Any] = entity_result.hints
         entities_count = sequence_length(entity_map.get("entities"))
         relations_count = sequence_length(entity_map.get("relations"))
         self._notify_stage(
@@ -389,16 +384,18 @@ class AnalyzePipeline:
 
     def draft_markdown(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         parse: TranscriptParse = state["parse"]
-        context_snippet = self._context_input_for_stage(
-            "analyze.draft_markdown", state
-        )
+        context_snippet = self._context_input_for_stage("analyze.draft_markdown", state)
         outline_result: OutlineStageResult = state["outline_result"]
         timeline_result: TimelineStageResult = state["timeline_result"]
         entity_result: EntityStageResult = state["entity_result"]
-        case_brief: Dict[str, Any] = state["case_brief"]
+        case_brief: dict[str, Any] = state["case_brief"]
         runtime = self.stage_runtimes.get("analyze.draft_markdown")
         llm_client = runtime.client if runtime else None
-        max_tokens = runtime.max_output_tokens if runtime and runtime.max_output_tokens else self.config.max_output_tokens
+        max_tokens = (
+            runtime.max_output_tokens
+            if runtime and runtime.max_output_tokens
+            else self.config.max_output_tokens
+        )
         temperature = runtime.temperature if runtime else self.default_temperature
         self._notify_stage(
             "draft_markdown",
@@ -465,8 +462,8 @@ class AnalyzePipeline:
         entity_result: EntityStageResult = state["entity_result"]
         summary_result: SummaryStageResult = state["summary_result"]
         transcript_path: Path = state["transcript_path"]
-        token_usage: Dict[str, Dict[str, int]] = state.get("token_usage", {})
-        case_brief: Dict[str, Any] = state.get("case_brief", {})
+        token_usage: dict[str, dict[str, int]] = state.get("token_usage", {})
+        case_brief: dict[str, Any] = state.get("case_brief", {})
         finalized = finalize_outputs(
             case_id=self.case_id,
             job_id=self.job_id,
@@ -498,10 +495,8 @@ class AnalyzePipeline:
 
     # Internal helpers -------------------------------------------------
 
-    def _context_input_for_stage(
-        self, stage_key: str, state: MutableMapping[str, Any]
-    ) -> Any:
-        context_chunks: Dict[str, List[str]] = state.get("context_chunks", {})
+    def _context_input_for_stage(self, stage_key: str, state: MutableMapping[str, Any]) -> Any:
+        context_chunks: dict[str, list[str]] = state.get("context_chunks", {})
         chunks = context_chunks.get(stage_key)
         if not chunks:
             return state.get("context_snippet", "")
@@ -511,8 +506,8 @@ class AnalyzePipeline:
             return chunks[0]
         return chunks
 
-    def _collect_context_lines(self, parse: TranscriptParse) -> List[str]:
-        lines: List[str] = []
+    def _collect_context_lines(self, parse: TranscriptParse) -> list[str]:
+        lines: list[str] = []
         case_number = self.intake.get("court_case_number")
         if case_number:
             lines.append(f"Case number: {case_number}")
@@ -535,9 +530,7 @@ class AnalyzePipeline:
             lines.append(prefix + text)
         return lines
 
-    def _build_context_chunks_for_stage(
-        self, stage_key: str, lines: List[str]
-    ) -> List[str]:
+    def _build_context_chunks_for_stage(self, stage_key: str, lines: list[str]) -> list[str]:
         if not lines:
             return [""]
         segment_limit = self._segment_limit()
@@ -547,8 +540,8 @@ class AnalyzePipeline:
         char_limit = self._char_limit_for_stage(stage_key)
         if not char_limit or char_limit <= 0:
             return ["\n".join(usable_lines)]
-        chunks: List[str] = []
-        current: List[str] = []
+        chunks: list[str] = []
+        current: list[str] = []
         current_chars = 0
         for line in usable_lines:
             line_len = len(line) + 1
@@ -563,7 +556,7 @@ class AnalyzePipeline:
         return chunks or ["\n".join(usable_lines)]
 
     @staticmethod
-    def _positive_int(value: object | None) -> Optional[int]:
+    def _positive_int(value: object | None) -> int | None:
         if value is None:
             return None
         candidate: int
@@ -591,14 +584,14 @@ class AnalyzePipeline:
                 return None
         return candidate if candidate > 0 else None
 
-    def _segment_limit(self) -> Optional[int]:
+    def _segment_limit(self) -> int | None:
         override = self._positive_int(self.prompt_segments_override)
         if override is not None:
             return override
         config_limit = self._positive_int(getattr(self.config, "max_prompt_segments", None))
         return config_limit
 
-    def _char_limit_for_stage(self, stage_key: str) -> Optional[int]:
+    def _char_limit_for_stage(self, stage_key: str) -> int | None:
         runtime = self.stage_runtimes.get(stage_key)
         manual_limit = self._positive_int(self.prompt_chars_override)
         config_limit = self._positive_int(getattr(self.config, "max_prompt_chars", None))
@@ -629,10 +622,12 @@ class AnalyzePipeline:
 
         return min(candidates) if candidates else None
 
-    def _record_usage(self, state: MutableMapping[str, Any], stage: str, usage: Dict[str, int]) -> None:
+    def _record_usage(
+        self, state: MutableMapping[str, Any], stage: str, usage: dict[str, int]
+    ) -> None:
         if not usage:
             return
-        token_usage: Dict[str, Dict[str, int]] = state.setdefault("token_usage", {})
+        token_usage: dict[str, dict[str, int]] = state.setdefault("token_usage", {})
         token_usage[stage] = usage
 
     def _ensure_header(self, markdown: str, parse: TranscriptParse) -> str:
@@ -674,12 +669,12 @@ def finalize_outputs(
     timeline_result: TimelineStageResult,
     entity_result: EntityStageResult,
     summary_result: SummaryStageResult,
-    intake_payload: Dict[str, Any],
+    intake_payload: dict[str, Any],
     config: Any,
-    token_usage: Dict[str, Dict[str, int]],
-    case_brief: Dict[str, Any],
-    provider_chain: Optional[list[str]],
-    transcript_hint: Optional[Dict[str, Any]] = None,
+    token_usage: dict[str, dict[str, int]],
+    case_brief: dict[str, Any],
+    provider_chain: list[str] | None,
+    transcript_hint: dict[str, Any] | None = None,
 ) -> FinalizedOutputs:
     analysis_dir = case_dir / "analysis"
     ops_dir = case_dir / "ops"
@@ -724,18 +719,14 @@ def finalize_outputs(
 
     words = len(summary_result.markdown.split())
 
-    timestamp_utc = (
-        datetime.now(timezone.utc)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
+    timestamp_utc = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     facts_sequence = coerce_sequence(outline_result.outline.get("facts"))
     entities_sequence = coerce_sequence(entity_result.hints.get("entities"))
 
     sha_map_json = coerce_json_object(sha_map)
 
-    meta: Dict[str, Any] = {
+    meta: dict[str, Any] = {
         "case_id": case_id,
         "job_id": job_id,
         "source_transcript": str(transcript_path),
@@ -758,9 +749,7 @@ def finalize_outputs(
         "diarized": parse_diarized,
         "facts": len(facts_sequence) if facts_sequence is not None else 0,
         "timeline_events": len(timeline_result.events),
-        "entity_count": len(entities_sequence)
-        if entities_sequence is not None
-        else 0,
+        "entity_count": len(entities_sequence) if entities_sequence is not None else 0,
         "udocket_core_version": UDOCKET_CORE_VERSION,
         "sha_map": sha_map_json,
     }
@@ -799,7 +788,9 @@ def finalize_outputs(
 
     artifacts = {
         "summary": AnalysisArtifact("summary", summary_json_path, summary_json_sha, {}),
-        "summary_markdown": AnalysisArtifact("summary_markdown", summary_markdown_path, summary_markdown_sha, {}),
+        "summary_markdown": AnalysisArtifact(
+            "summary_markdown", summary_markdown_path, summary_markdown_sha, {}
+        ),
         "outline": AnalysisArtifact("outline", outline_path, outline_sha, {}),
         "timeline": AnalysisArtifact("timeline", timeline_path, timeline_sha, {}),
         "entities": AnalysisArtifact("entities", entity_path, entity_sha, {}),

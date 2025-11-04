@@ -4,7 +4,7 @@ from __future__ import annotations
 
 """UTC time helpers shared across packages."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal, overload
 
 Timespec = Literal[
@@ -20,17 +20,19 @@ Timespec = Literal[
 def utc_now() -> datetime:
     """Return the current UTC datetime as a timezone-aware value."""
 
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @overload
-def format_utc(dt: None = ..., *, timespec: Timespec | None = "seconds", z_suffix: bool = True) -> str:
-    ...
+def format_utc(
+    dt: None = ..., *, timespec: Timespec | None = "seconds", z_suffix: bool = True
+) -> str: ...
 
 
 @overload
-def format_utc(dt: datetime, *, timespec: Timespec | None = "seconds", z_suffix: bool = True) -> str:
-    ...
+def format_utc(
+    dt: datetime, *, timespec: Timespec | None = "seconds", z_suffix: bool = True
+) -> str: ...
 
 
 def format_utc(
@@ -49,9 +51,9 @@ def format_utc(
 
     moment = dt if dt is not None else utc_now()
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
+        moment = moment.replace(tzinfo=UTC)
     else:
-        moment = moment.astimezone(timezone.utc)
+        moment = moment.astimezone(UTC)
     iso = moment.isoformat(timespec=timespec) if timespec else moment.isoformat()
     if z_suffix:
         return iso.replace("+00:00", "Z")

@@ -1,46 +1,45 @@
-from .version import __version__
-# Keep the models surface small, stable, and accurate.
-from .catalogs.registry import discover_catalogs
-
 from .catalogs.base import (
     CatalogBundle,
-    CourtCatalog,
     Court,
+    CourtCatalog,
     CourtLevel,
-    Location,
     FilingCode,
     HearingCode,
+    Location,
     OrderCode,
 )
 
-# Taxonomy (public, top-level)
-from .taxonomy.categories import (
-    CountryCode,
-    CourtLevel,
-    Division,
-    HearingCategory,
-    FilingCategory,
-    OrderCategory,
-)
-from .taxonomy.namespace import LocalCode
+# Keep the models surface small, stable, and accurate.
+from .catalogs.registry import discover_catalogs
 
 # Identifiers
 from .identifiers.base import (
     CaseNumber,
     CaseNumberScheme,
-    RegexRule,
-    Transform,
     ConstraintDecl,
     DerivationDecl,
+    RegexRule,
+    Transform,
 )
-
-from .identifiers.registry import schemes_by_court, all_schemes
 from .identifiers.engine import (
     CaseNumberEngine,
     load_case_number_schemes,
     match_case_number,
     validate_case_number,
 )
+from .identifiers.registry import all_schemes, schemes_by_court
+
+# Taxonomy (public, top-level)
+from .taxonomy.categories import (
+    CountryCode,
+    CourtLevel,
+    Division,
+    FilingCategory,
+    HearingCategory,
+    OrderCategory,
+)
+from .taxonomy.namespace import LocalCode
+from .version import __version__
 
 __all__ = [
     # reference models
@@ -74,4 +73,3 @@ __all__ = [
     "match_case_number",
     "validate_case_number",
 ]
-

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 # pyright: strict
-
 from dataclasses import dataclass
-from typing import Mapping, Optional, Tuple
-
 
 DEFAULT_TEMPERATURE = 0.6
 DEFAULT_LAWYER_TEMPERATURE = 0.4
 DEFAULT_MAX_OUTPUT_TOKENS = 120000
 
-CLIENT_HEADINGS: Tuple[str, ...] = (
+CLIENT_HEADINGS: tuple[str, ...] = (
     "## Case Overview",
     "## Key People and Roles",
     "## Timeline of Events",
@@ -18,7 +17,7 @@ CLIENT_HEADINGS: Tuple[str, ...] = (
     "## Next Steps / Preparation Notes",
 )
 
-LAWYER_HEADINGS: Tuple[str, ...] = (
+LAWYER_HEADINGS: tuple[str, ...] = (
     "## Case Summary",
     "## Parties and Roles",
     "## Factual Background",
@@ -33,7 +32,7 @@ CLIENT_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
     "## Key People and Roles": 3,
     "## Timeline of Events": 5,
     "## Main Issues": 3,
-    "## Next Steps / Preparation Notes": 4, #35
+    "## Next Steps / Preparation Notes": 4,  # 35
 }
 LAWYER_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
     "## Case Summary": 4,
@@ -41,7 +40,7 @@ LAWYER_MIN_WORDS_BY_SECTION: Mapping[str, int] = {
     "## Factual Background": 12,
     "## Issues Presented": 4,
     "## Evidence / Supporting Facts": 5,
-    "## Procedural Status / Next Known Steps": 4, #35
+    "## Procedural Status / Next Known Steps": 4,  # 35
 }
 
 CLIENT_MAX_WORDS_BY_SECTION: Mapping[str, int] = {
@@ -63,7 +62,7 @@ LAWYER_MAX_WORDS_BY_SECTION: Mapping[str, int] = {
 
 CLIENT_MIN_SECTION_WORDS = 20
 LAWYER_MIN_SECTION_WORDS = 25
-CLIENT_MAX_AVG_SENTENCE_WORDS = 1800.0 #18.0
+CLIENT_MAX_AVG_SENTENCE_WORDS = 1800.0  # 18.0
 CLIENT_MIN_TIMESTAMP_REFERENCES = 0
 LAWYER_MIN_TIMESTAMP_REFERENCES = 0
 
@@ -78,12 +77,13 @@ STAGE_MODEL_DEFAULTS: Mapping[str, str] = {
     "compose.lawyer.editor": "gpt-5-mini",
 }
 
+
 @dataclass(frozen=True)
 class LaneConfig:
     lane: str
-    headings: Tuple[str, ...]
+    headings: tuple[str, ...]
     min_words: int
-    readability_limit: Optional[float]
+    readability_limit: float | None
     min_timestamp_references: int
     temperature: float
     revision_temperature: float

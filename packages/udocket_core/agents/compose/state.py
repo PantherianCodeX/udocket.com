@@ -1,25 +1,24 @@
 from __future__ import annotations
 
-# pyright: strict
+from collections.abc import Mapping, Sequence
 
+# pyright: strict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping, Optional, Sequence
-
-from typing_extensions import Annotated
+from typing import Annotated
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from ..common.factories import (
-    int_usage_factory,
     float_usage_factory,
+    int_usage_factory,
     json_object_factory,
     json_object_list_factory,
     stage_usage_factory,
     str_list_factory,
 )
 from .errors import ComposeStageError
-from .llm_profiles import LaneConfig, LANE_CONFIGS
+from .llm_profiles import LANE_CONFIGS, LaneConfig
 
 
 def _merge_usage(target: dict[str, dict[str, int]], stage: str, usage: Mapping[str, int]) -> None:
@@ -29,8 +28,8 @@ def _merge_usage(target: dict[str, dict[str, int]], stage: str, usage: Mapping[s
 
 
 def _merge_stage_usage(
-    existing: Optional[dict[str, dict[str, int]]],
-    update: Optional[dict[str, dict[str, int]]],
+    existing: dict[str, dict[str, int]] | None,
+    update: dict[str, dict[str, int]] | None,
 ) -> dict[str, dict[str, int]]:
     if not existing and not update:
         return {}
@@ -45,8 +44,8 @@ def _merge_stage_usage(
 
 
 def _merge_stage_durations(
-    existing: Optional[dict[str, float]],
-    update: Optional[dict[str, float]],
+    existing: dict[str, float] | None,
+    update: dict[str, float] | None,
 ) -> dict[str, float]:
     merged: dict[str, float] = {}
     if existing:
@@ -57,22 +56,22 @@ def _merge_stage_durations(
     return merged
 
 
-def _lane_attempt_list_factory() -> list["LaneAttempt"]:
+def _lane_attempt_list_factory() -> list[LaneAttempt]:
     return []
 
 
-def _lane_action_map_factory() -> dict[str, "LaneActionDirective"]:
+def _lane_action_map_factory() -> dict[str, LaneActionDirective]:
     return {}
 
 
-def _lane_outcome_map_factory() -> dict[str, "LaneOutcome"]:
+def _lane_outcome_map_factory() -> dict[str, LaneOutcome]:
     return {}
 
 
 def _merge_lane_outcomes(
-    existing: Optional[dict[str, "LaneOutcome"]],
-    update: Optional[dict[str, Optional["LaneOutcome"]]],
-) -> dict[str, "LaneOutcome"]:
+    existing: dict[str, LaneOutcome] | None,
+    update: dict[str, LaneOutcome | None] | None,
+) -> dict[str, LaneOutcome]:
     merged: dict[str, LaneOutcome] = {}
     if existing:
         merged = {lane: outcome for lane, outcome in existing.items()}
@@ -85,13 +84,14 @@ def _merge_lane_outcomes(
     return merged
 
 
-def _lane_qa_result_map_factory() -> dict[str, "LaneQAResult"]:
+def _lane_qa_result_map_factory() -> dict[str, LaneQAResult]:
     return {}
 
+
 def _merge_lane_qa_results(
-    existing: Optional[dict[str, "LaneQAResult"]],
-    update: Optional[dict[str, Optional["LaneQAResult"]]],
-) -> dict[str, "LaneQAResult"]:
+    existing: dict[str, LaneQAResult] | None,
+    update: dict[str, LaneQAResult | None] | None,
+) -> dict[str, LaneQAResult]:
     merged: dict[str, LaneQAResult] = {}
     if existing:
         merged = {lane: result for lane, result in existing.items()}
@@ -105,9 +105,9 @@ def _merge_lane_qa_results(
 
 
 def _latest_lane_state(
-    existing: Optional["LaneRuntimeState"],
-    update: Optional["LaneRuntimeState"],
-) -> "LaneRuntimeState":
+    existing: LaneRuntimeState | None,
+    update: LaneRuntimeState | None,
+) -> LaneRuntimeState:
     if update is not None:
         return update
     if existing is not None:
@@ -149,8 +149,8 @@ class GuardReport:
 @dataclass(slots=True)
 class LaneActionDirective:
     action: str
-    revision_brief: Optional[str] = None
-    reason: Optional[str] = None
+    revision_brief: str | None = None
+    reason: str | None = None
     original_action: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -189,12 +189,12 @@ class LaneRuntimeState:
     max_attempts: int
     attempts: int = 0
     current_source: str = "draft"
-    revision_brief: Optional[str] = None
-    last_document_hash: Optional[str] = None
-    document: Optional[str] = None
-    structure_report: Optional[GuardReport] = None
-    compliance_report: Optional[GuardReport] = None
-    factuality_report: Optional[GuardReport] = None
+    revision_brief: str | None = None
+    last_document_hash: str | None = None
+    document: str | None = None
+    structure_report: GuardReport | None = None
+    compliance_report: GuardReport | None = None
+    factuality_report: GuardReport | None = None
     history: list[LaneAttempt] = field(default_factory=_lane_attempt_list_factory)
     stage_usage: dict[str, dict[str, int]] = field(default_factory=stage_usage_factory)
     token_usage: dict[str, int] = field(default_factory=int_usage_factory)
@@ -213,7 +213,7 @@ class LaneRuntimeState:
             return
         self.stage_durations[stage] = self.stage_durations.get(stage, 0.0) + float(duration)
 
-    def to_outcome(self) -> "LaneOutcome":
+    def to_outcome(self) -> LaneOutcome:
         if (
             self.document is None
             or self.structure_report is None
@@ -262,21 +262,21 @@ class LaneQAResult:
 
 @dataclass(slots=True)
 class ComposeArtifacts:
-    client_markdown: Optional[Path] = None
-    lawyer_markdown: Optional[Path] = None
-    client_docx: Optional[Path] = None
-    lawyer_docx: Optional[Path] = None
-    bundle_path: Optional[Path] = None
-    qa_report: Optional[Path] = None
-    staff_report: Optional[Path] = None
-    timeline_file: Optional[Path] = None
-    graph_file: Optional[Path] = None
-    entities_file: Optional[Path] = None
-    timeline_summary: Optional[Path] = None
-    entity_brief: Optional[Path] = None
-    graph_visual_json: Optional[Path] = None
-    graph_html: Optional[Path] = None
-    graph_image: Optional[Path] = None
+    client_markdown: Path | None = None
+    lawyer_markdown: Path | None = None
+    client_docx: Path | None = None
+    lawyer_docx: Path | None = None
+    bundle_path: Path | None = None
+    qa_report: Path | None = None
+    staff_report: Path | None = None
+    timeline_file: Path | None = None
+    graph_file: Path | None = None
+    entities_file: Path | None = None
+    timeline_summary: Path | None = None
+    entity_brief: Path | None = None
+    graph_visual_json: Path | None = None
+    graph_html: Path | None = None
+    graph_image: Path | None = None
 
 
 @dataclass(slots=True)
@@ -295,13 +295,21 @@ class ComposeState:
     inputs: ComposeInputs
     client: Annotated[LaneRuntimeState, _latest_lane_state]
     lawyer: Annotated[LaneRuntimeState, _latest_lane_state]
-    context: Optional[ComposeContext] = None
-    lanes: Annotated[dict[str, LaneOutcome], _merge_lane_outcomes] = field(default_factory=_lane_outcome_map_factory)
-    qa: Optional[QAReviewerResult] = None
-    qa_lane_results: Annotated[dict[str, LaneQAResult], _merge_lane_qa_results] = field(default_factory=_lane_qa_result_map_factory)
-    stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(default_factory=stage_usage_factory)
+    context: ComposeContext | None = None
+    lanes: Annotated[dict[str, LaneOutcome], _merge_lane_outcomes] = field(
+        default_factory=_lane_outcome_map_factory
+    )
+    qa: QAReviewerResult | None = None
+    qa_lane_results: Annotated[dict[str, LaneQAResult], _merge_lane_qa_results] = field(
+        default_factory=_lane_qa_result_map_factory
+    )
+    stage_usage: Annotated[dict[str, dict[str, int]], _merge_stage_usage] = field(
+        default_factory=stage_usage_factory
+    )
     qa_iterations: int = 0
-    stage_durations: Annotated[dict[str, float], _merge_stage_durations] = field(default_factory=float_usage_factory)
+    stage_durations: Annotated[dict[str, float], _merge_stage_durations] = field(
+        default_factory=float_usage_factory
+    )
 
 
 def clone_guard_report(report: GuardReport) -> GuardReport:
@@ -360,7 +368,9 @@ def lane_outcome_to_json(outcome: LaneOutcome) -> JSONObject:
         "token_usage": dict(outcome.token_usage),
         "providers": list(outcome.providers),
         "models": list(outcome.models),
-        "stage_durations": {stage: float(value) for stage, value in outcome.stage_durations.items()},
+        "stage_durations": {
+            stage: float(value) for stage, value in outcome.stage_durations.items()
+        },
     }
 
 
@@ -374,16 +384,24 @@ def lane_runtime_state_to_json(runtime: LaneRuntimeState) -> JSONObject:
         "revision_brief": runtime.revision_brief,
         "last_document_hash": runtime.last_document_hash,
         "document": runtime.document,
-        "structure_report": guard_report_to_json(runtime.structure_report) if runtime.structure_report else None,
-        "compliance_report": guard_report_to_json(runtime.compliance_report) if runtime.compliance_report else None,
-        "factuality_report": guard_report_to_json(runtime.factuality_report) if runtime.factuality_report else None,
+        "structure_report": guard_report_to_json(runtime.structure_report)
+        if runtime.structure_report
+        else None,
+        "compliance_report": guard_report_to_json(runtime.compliance_report)
+        if runtime.compliance_report
+        else None,
+        "factuality_report": guard_report_to_json(runtime.factuality_report)
+        if runtime.factuality_report
+        else None,
         "history": [lane_attempt_to_json(attempt) for attempt in runtime.history],
         "stage_usage": {stage: dict(values) for stage, values in runtime.stage_usage.items()},
         "token_usage": dict(runtime.token_usage),
         "providers": list(runtime.providers),
         "models": list(runtime.models),
         "editor_attempted": runtime.editor_attempted,
-        "stage_durations": {stage: float(value) for stage, value in runtime.stage_durations.items()},
+        "stage_durations": {
+            stage: float(value) for stage, value in runtime.stage_durations.items()
+        },
     }
 
 
@@ -416,7 +434,9 @@ def qa_result_to_json(result: QAReviewerResult) -> JSONObject:
         "staff_report": result.staff_report,
         "provider": result.provider,
         "global_notes": result.global_notes,
-        "lane_actions": {lane: lane_action_to_json(action) for lane, action in result.lane_actions.items()},
+        "lane_actions": {
+            lane: lane_action_to_json(action) for lane, action in result.lane_actions.items()
+        },
     }
 
 
@@ -431,7 +451,7 @@ def compose_inputs_to_json(inputs: ComposeInputs) -> JSONObject:
     }
 
 
-def compose_context_to_json(context: Optional[ComposeContext]) -> Optional[JSONObject]:
+def compose_context_to_json(context: ComposeContext | None) -> JSONObject | None:
     if context is None:
         return None
     return {
@@ -577,9 +597,12 @@ def _lane_outcome_from_json(value: JSONValue) -> LaneOutcome:
     models = _json_str_list(value.get("models"))
     return LaneOutcome(
         document=coerce_str(value.get("document")) or "",
-        structure_report=structure_report or GuardReport(ok=False, errors=[], warnings=[], checks={}),
-        compliance_report=compliance_report or GuardReport(ok=False, errors=[], warnings=[], checks={}),
-        factuality_report=factuality_report or GuardReport(ok=False, errors=[], warnings=[], checks={}),
+        structure_report=structure_report
+        or GuardReport(ok=False, errors=[], warnings=[], checks={}),
+        compliance_report=compliance_report
+        or GuardReport(ok=False, errors=[], warnings=[], checks={}),
+        factuality_report=factuality_report
+        or GuardReport(ok=False, errors=[], warnings=[], checks={}),
         attempts=_int_from_json(value.get("attempts")),
         history=history,
         stage_usage=stage_usage,
@@ -686,7 +709,7 @@ def _lane_qa_result_from_json(value: JSONValue) -> LaneQAResult:
     )
 
 
-def compose_context_from_json(value: Optional[JSONValue]) -> Optional[ComposeContext]:
+def compose_context_from_json(value: JSONValue | None) -> ComposeContext | None:
     if not isinstance(value, Mapping):
         return None
     return ComposeContext(
@@ -697,7 +720,9 @@ def compose_context_from_json(value: Optional[JSONValue]) -> Optional[ComposeCon
         deadlines=_json_object_list(value.get("deadlines")),
         orders=_json_object_list(value.get("orders")),
         exhibits=_json_object_list(value.get("exhibits")),
-        procedural=coerce_json_object(value.get("procedural")) if isinstance(value.get("procedural"), Mapping) else {},
+        procedural=coerce_json_object(value.get("procedural"))
+        if isinstance(value.get("procedural"), Mapping)
+        else {},
         claimable_atoms=_json_str_list(value.get("claimable_atoms")),
     )
 
@@ -708,11 +733,19 @@ def compose_inputs_from_json(value: JSONValue) -> ComposeInputs:
     timeline_seeds = _json_object_list(value.get("timeline_seeds"))
     return ComposeInputs(
         summary_markdown=coerce_str(value.get("summary_markdown")) or "",
-        summary_data=coerce_json_object(value.get("summary_data")) if isinstance(value.get("summary_data"), Mapping) else {},
+        summary_data=coerce_json_object(value.get("summary_data"))
+        if isinstance(value.get("summary_data"), Mapping)
+        else {},
         timeline_seeds=timeline_seeds,
-        entity_hints=coerce_json_object(value.get("entity_hints")) if isinstance(value.get("entity_hints"), Mapping) else {},
-        intake=coerce_json_object(value.get("intake")) if isinstance(value.get("intake"), Mapping) else {},
-        case_metadata=coerce_json_object(value.get("case_metadata")) if isinstance(value.get("case_metadata"), Mapping) else {},
+        entity_hints=coerce_json_object(value.get("entity_hints"))
+        if isinstance(value.get("entity_hints"), Mapping)
+        else {},
+        intake=coerce_json_object(value.get("intake"))
+        if isinstance(value.get("intake"), Mapping)
+        else {},
+        case_metadata=coerce_json_object(value.get("case_metadata"))
+        if isinstance(value.get("case_metadata"), Mapping)
+        else {},
     )
 
 
@@ -769,7 +802,9 @@ def serialize_compose_state(state: ComposeState) -> JSONObject:
         "context": compose_context_to_json(state.context),
         "lanes": {lane: lane_outcome_to_json(outcome) for lane, outcome in state.lanes.items()},
         "qa": qa_result_to_json(state.qa) if state.qa else None,
-        "qa_lane_results": {lane: lane_qa_result_to_json(result) for lane, result in state.qa_lane_results.items()},
+        "qa_lane_results": {
+            lane: lane_qa_result_to_json(result) for lane, result in state.qa_lane_results.items()
+        },
         "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
         "qa_iterations": state.qa_iterations,
         "stage_durations": {stage: float(value) for stage, value in state.stage_durations.items()},

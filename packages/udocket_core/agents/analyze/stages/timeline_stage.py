@@ -1,24 +1,26 @@
 from __future__ import annotations
 
-# pyright: strict
-
-from collections import deque
-from dataclasses import dataclass
 import json
 import logging
-from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
-from ...common.io import TranscriptParse
-from ...common.normalization import coerce_mapping_list
+# pyright: strict
+from collections import deque
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, cast
+
+from packages.udocket_common.ids import ensure_deterministic_uuids, normalize_id
+from packages.udocket_common.json_utils import parse_json_value
+
+from ....llm.runtime import ChatClient, ResponseFormat
 from ...common.chunking import (
     ChunkSplitConfig,
     should_retry_for_json,
     should_retry_for_length,
     split_for_retry,
 )
-from ....llm.runtime import ChatClient, ResponseFormat
-from packages.udocket_common.json_utils import parse_json_value
-from packages.udocket_common.ids import ensure_deterministic_uuids, normalize_id
+from ...common.io import TranscriptParse
+from ...common.normalization import coerce_mapping_list
 
 logger = logging.getLogger("udocket.analyze.timeline_stage")
 
@@ -51,16 +53,16 @@ TIMELINE_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 
 @dataclass
 class TimelineStageResult:
-    events: List[Dict[str, Any]]
-    usage: Dict[str, int]
+    events: list[dict[str, Any]]
+    usage: dict[str, int]
 
 
-def _ensure_chunks(context: Any) -> List[str]:
+def _ensure_chunks(context: Any) -> list[str]:
     if isinstance(context, str):
         return [context]
     if isinstance(context, Sequence) and not isinstance(context, (str, bytes, bytearray)):
         sequence = cast(Sequence[object], context)
-        result: List[str] = []
+        result: list[str] = []
         for item in sequence:
             text = item if isinstance(item, str) else str(item)
             if text:
@@ -69,14 +71,14 @@ def _ensure_chunks(context: Any) -> List[str]:
     return [str(context)]
 
 
-def _merge_usage(target: Dict[str, int], usage: Dict[str, Any]) -> None:
+def _merge_usage(target: dict[str, int], usage: dict[str, Any]) -> None:
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = usage.get(key)
         if isinstance(value, int):
             target[key] = target.get(key, 0) + value
 
 
-def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _normalize_event(payload: dict[str, Any]) -> dict[str, Any] | None:
     text = str(payload.get("text") or payload.get("summary") or "").strip()
     if not text:
         return None
@@ -85,7 +87,7 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     ts_end_raw = payload.get("ts_end")
     speaker_raw = payload.get("speaker")
 
-    def _coerce_ts(value: Any) -> Optional[float]:
+    def _coerce_ts(value: Any) -> float | None:
         if value is None:
             return None
         try:
@@ -104,7 +106,7 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             speaker = candidate
 
     labels_raw = payload.get("labels")
-    labels: List[str] = []
+    labels: list[str] = []
     if isinstance(labels_raw, (list, tuple)):
         for raw_label in cast(Sequence[object], labels_raw):
             label_text = str(raw_label).strip()
@@ -113,7 +115,7 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     elif isinstance(labels_raw, str) and labels_raw.strip():
         labels = [labels_raw.strip()]
 
-    normalized: Dict[str, Any] = {
+    normalized: dict[str, Any] = {
         "id": normalize_id(payload.get("id")),
         "uuid": normalize_id(payload.get("uuid")),
         "ts_start": ts_start,
@@ -138,10 +140,10 @@ def _normalize_event(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def generate_timeline(
     *,
     parse: TranscriptParse,
-    outline_issues: List[Dict[str, Any]],
+    outline_issues: list[dict[str, Any]],
     context_snippet: Any,
-    case_brief: Dict[str, Any],
-    llm_client: Optional[ChatClient],
+    case_brief: dict[str, Any],
+    llm_client: ChatClient | None,
     temperature: float,
     max_tokens: int,
 ) -> TimelineStageResult:
@@ -149,23 +151,31 @@ def generate_timeline(
         raise RuntimeError("LLM client is required for timeline stage")
 
     try:
-        chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
-        aggregated: List[Dict[str, Any]] = []
-        usage_totals: Dict[str, int] = {}
-        signatures: Set[Tuple[str | None, Optional[float], Optional[float], Optional[str], str]] = set()
+        chunk_queue: deque[str] = deque(_ensure_chunks(context_snippet))
+        aggregated: list[dict[str, Any]] = []
+        usage_totals: dict[str, int] = {}
+        signatures: set[tuple[str | None, float | None, float | None, str | None, str]] = (
+            set()
+        )
         while chunk_queue:
             chunk_text = chunk_queue.popleft()
             if not chunk_text or not chunk_text.strip():
                 continue
             system_prompt = (
-                "You are a legal timeline analyst. Produce normalized events with start/end offsets (seconds),"
-                " optional speakers, and descriptive labels."
+                "You are a legal timeline analyst."
+                " Produce normalized events with start/end offsets (seconds), optional speakers,"
+                " and descriptive labels."
             )
+            remaining_chunks = len(chunk_queue) + 1
+            outline_json = json.dumps(outline_issues, ensure_ascii=False)
+            case_brief_json = json.dumps(case_brief, ensure_ascii=False)
             user_prompt = (
-                "Use these transcript excerpts to generate events. Ensure every object includes labels array.\n"
-                f"Outline issues (for context): {json.dumps(outline_issues, ensure_ascii=False)}\n\n"
-                f"Case brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n\n"
-                f"Transcript excerpts (remaining chunks: {len(chunk_queue)+1}):\n" + chunk_text
+                "Use these transcript excerpts to generate events. Ensure every object includes "
+                "labels array.\n"
+                f"Outline issues (for context): {outline_json}\n\n"
+                f"Case brief summary: {case_brief_json}\n\n"
+                f"Transcript excerpts (remaining chunks: {remaining_chunks}):\n"
+                f"{chunk_text}"
             )
             try:
                 response_format = cast(

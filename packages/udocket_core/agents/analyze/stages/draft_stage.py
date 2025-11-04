@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from ...common.io import TranscriptParse
-from ...common.normalization import coerce_sequence
 from packages.udocket_common.json_utils import (
     JSONObject,
     JSONValue,
@@ -17,7 +14,10 @@ from packages.udocket_common.json_utils import (
     coerce_str_list,
     parse_json_object,
 )
+
 from ....llm.runtime import ChatClient
+from ...common.io import TranscriptParse
+from ...common.normalization import coerce_sequence
 
 
 @dataclass(frozen=True)
@@ -117,10 +117,7 @@ def generate_summary_payload(
         snippet_text = _normalize_snippet(context_snippet)
         intake_payload = coerce_json_object(intake)
         outline_payload = coerce_json_object(outline)
-        timeline_payload: list[JSONValue] = [
-            coerce_json_object(mapping)
-            for mapping in timeline
-        ]
+        timeline_payload: list[JSONValue] = [coerce_json_object(mapping) for mapping in timeline]
         entities_payload = coerce_json_object(entities)
         case_brief_payload = coerce_json_object(case_brief)
 
@@ -139,9 +136,11 @@ def generate_summary_payload(
                 {
                     "role": "system",
                     "content": (
-                        "You are a compliance-focused summarization assistant supporting Canadian legal teams."
+                        "You are a compliance-focused summarization assistant supporting Canadian "
+                        "legal teams."
                         " Produce a structured JSON object matching the provided schema exactly."
-                        " Never include legal advice, definitive interpretations, or form-selection guidance."
+                        " Never include legal advice, definitive interpretations, or "
+                        "form-selection guidance."
                         " Flag any potentially risky content in the risks_gaps_questions section."
                         " Respond with JSON only and no surrounding prose."
                     ),
@@ -243,7 +242,9 @@ def _render_markdown(data: JSONObject) -> str:
     exec_summary_value = data.get("executive_summary")
     exec_summary = coerce_json_object(exec_summary_value)
     bullets = coerce_str_list(exec_summary.get("bullets"))
-    bullet_body = "\n".join(f"- {item}" for item in bullets) if bullets else "Pending executive summary."
+    bullet_body = (
+        "\n".join(f"- {item}" for item in bullets) if bullets else "Pending executive summary."
+    )
     _append_section("Executive summary", bullet_body)
 
     narrative = data.get("detailed_narrative")
@@ -257,7 +258,10 @@ def _render_markdown(data: JSONObject) -> str:
         if citations:
             block += "\n" + "\n".join(f"  - {cite}" for cite in citations)
         narrative_lines.append(block)
-    _append_section("Detailed narrative", "\n\n".join(narrative_lines) if narrative_lines else "Pending narrative.")
+    _append_section(
+        "Detailed narrative",
+        "\n\n".join(narrative_lines) if narrative_lines else "Pending narrative.",
+    )
 
     claims = data.get("claims_and_remedies")
     claim_items: list[JSONObject] = coerce_object_list(claims)
@@ -266,7 +270,10 @@ def _render_markdown(data: JSONObject) -> str:
         claim = coerce_str(item.get("claim")) or "Claim"
         remedy = coerce_str(item.get("remedy_requested")) or "Pending"
         claim_lines.append(f"- **{claim}:** {remedy}")
-    _append_section("Claims and remedies sought", "\n".join(claim_lines) if claim_lines else "Pending claims and remedies.")
+    _append_section(
+        "Claims and remedies sought",
+        "\n".join(claim_lines) if claim_lines else "Pending claims and remedies.",
+    )
 
     posture_value = data.get("procedural_posture")
     posture = coerce_json_object(posture_value)
@@ -287,7 +294,10 @@ def _render_markdown(data: JSONObject) -> str:
         level = (coerce_str(item.get("risk_level")) or "unknown").upper()
         notes = coerce_str(item.get("notes")) or "Pending notes."
         risk_lines.append(f"- **{issue} ({level})** — {notes}")
-    _append_section("Risks, gaps, and questions", "\n".join(risk_lines) if risk_lines else "Pending risk assessment.")
+    _append_section(
+        "Risks, gaps, and questions",
+        "\n".join(risk_lines) if risk_lines else "Pending risk assessment.",
+    )
 
     checklist_items: list[JSONObject] = coerce_object_list(data.get("next_step_checklist"))
     checklist_lines: list[str] = []
@@ -296,7 +306,10 @@ def _render_markdown(data: JSONObject) -> str:
         owner = coerce_str(item.get("owner")) or "Owner"
         due = coerce_str(item.get("due")) or "Pending"
         checklist_lines.append(f"- {action} (Owner: {owner}, Due: {due})")
-    _append_section("Next-step checklist", "\n".join(checklist_lines) if checklist_lines else "Pending next steps.")
+    _append_section(
+        "Next-step checklist",
+        "\n".join(checklist_lines) if checklist_lines else "Pending next steps.",
+    )
 
     quotes_items: list[JSONObject] = coerce_object_list(data.get("supporting_quotes"))
     quote_lines: list[str] = []
@@ -305,7 +318,9 @@ def _render_markdown(data: JSONObject) -> str:
         speaker = coerce_str(item.get("speaker")) or "Unknown"
         text = coerce_str(item.get("text")) or ""
         quote_lines.append(f"- [{timestamp}] {speaker}: {text}")
-    _append_section("Supporting quotes", "\n".join(quote_lines) if quote_lines else "Pending supporting quotes.")
+    _append_section(
+        "Supporting quotes", "\n".join(quote_lines) if quote_lines else "Pending supporting quotes."
+    )
 
     return "".join(lines).strip()
 

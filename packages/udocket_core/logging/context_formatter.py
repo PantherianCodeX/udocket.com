@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
-from typing import Mapping
+from collections.abc import Mapping
 
 
 class ContextualFormatter(logging.Formatter):

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from pathlib import Path
 
 from packages.udocket_common.agents import TranscriptionResult

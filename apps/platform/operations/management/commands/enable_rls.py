@@ -7,7 +7,6 @@ from typing import Any
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 
-
 TABLES_TO_ENABLE = (
     "cases_case",
     "cases_casemembership",
@@ -64,4 +63,6 @@ class Command(BaseCommand):
                     if cur.fetchone():
                         continue
                     cur.execute(create_sql)
-        self.stdout.write(self.style.SUCCESS("RLS enabled/updated for cases, memberships, jobs, and artifacts."))
+        self.stdout.write(
+            self.style.SUCCESS("RLS enabled/updated for cases, memberships, jobs, and artifacts.")
+        )

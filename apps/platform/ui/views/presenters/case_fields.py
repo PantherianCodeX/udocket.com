@@ -1,14 +1,13 @@
 from __future__ import annotations
 
- 
-from typing import Any, Dict, List
+from typing import Any
 
 from django.utils import timezone
 
 from apps.platform.cases.models import Case
 
 
-def case_field_specs() -> List[Dict[str, Any]]:
+def case_field_specs() -> list[dict[str, Any]]:
     return [
         {"name": "title", "label": "Title", "type": "text"},
         {"name": "client_name", "label": "Client", "type": "text"},
@@ -39,7 +38,7 @@ def case_field_specs() -> List[Dict[str, Any]]:
     ]
 
 
-def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]:
+def _format_case_field_value(case: Case, spec: dict[str, Any]) -> dict[str, Any]:
     name = spec["name"]
     raw_value = getattr(case, name, None)
     field_type = spec.get("type", "text")
@@ -91,7 +90,7 @@ def _format_case_field_value(case: Case, spec: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
-def prepare_case_fields(case: Case) -> List[Dict[str, Any]]:
+def prepare_case_fields(case: Case) -> list[dict[str, Any]]:
     return [_format_case_field_value(case, spec) for spec in case_field_specs()]
 
 

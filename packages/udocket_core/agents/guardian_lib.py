@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Optional
 
 from packages.udocket_common.json_utils import (
     JSONObject,
@@ -16,6 +14,7 @@ from packages.udocket_common.json_utils import (
     coerce_str,
     parse_json_object,
 )
+
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.config import LLMProvider
 from ..llm.runtime import (
@@ -24,8 +23,8 @@ from ..llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
-from .common.llm_health import ensure_llm_client_health
 from ..logging.context import LogContext
+from .common.llm_health import ensure_llm_client_health
 
 logger = logging.getLogger("udocket.guardian")
 
@@ -42,7 +41,7 @@ def _normalize_providers(values: Iterable[str]) -> list[str]:
     return output
 
 
-def _select_model_name(provider: LLMProvider, preferred: Optional[str]) -> Optional[str]:
+def _select_model_name(provider: LLMProvider, preferred: str | None) -> str | None:
     if preferred:
         normalized = preferred.strip()
         if normalized and normalized in provider.models:
@@ -63,7 +62,7 @@ def _select_model_name(provider: LLMProvider, preferred: Optional[str]) -> Optio
 @dataclass(frozen=True)
 class GuardianConfig:
     provider_chain: list[str] = field(default_factory=lambda: ["azure"])
-    model: Optional[str] = None
+    model: str | None = None
     temperature: float = 0.0
     max_tokens: int = 2048
     retry_attempts: int = 1
@@ -72,17 +71,17 @@ class GuardianConfig:
 @dataclass(frozen=True)
 class GuardianVerdict:
     approved: bool
-    provider: Optional[str]
-    model: Optional[str]
-    notes: Optional[str]
+    provider: str | None
+    model: str | None
+    notes: str | None
     violations: list[JSONObject]
     usage: dict[str, int]
     raw: JSONObject
-    remediation: Optional[str]
+    remediation: str | None
 
 
 class GuardianRejection(RuntimeError):
-    def __init__(self, verdict: GuardianVerdict, message: Optional[str] = None) -> None:
+    def __init__(self, verdict: GuardianVerdict, message: str | None = None) -> None:
         detail = message or "Guardian rejected generated output"
         super().__init__(detail)
         self.verdict = verdict
@@ -102,9 +101,9 @@ class GuardianAgent:
 
     def __init__(
         self,
-        config: Optional[GuardianConfig] = None,
+        config: GuardianConfig | None = None,
         *,
-        settings: Optional[LLMSettings] = None,
+        settings: LLMSettings | None = None,
     ) -> None:
         self.config = config or GuardianConfig()
         self.settings = settings or load_llm_settings()
@@ -118,20 +117,17 @@ class GuardianAgent:
         job_id: str,
         artifact_kind: str,
         payload: Mapping[str, JSONValue],
-        providers: Optional[Iterable[str]] = None,
-        model: Optional[str] = None,
-        options: Optional[Mapping[str, JSONValue]] = None,
-        provider_credentials: Optional[Mapping[str, Mapping[str, JSONValue]]]
-        = None,
-        context: Optional[Mapping[str, JSONValue]] = None,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
+        providers: Iterable[str] | None = None,
+        model: str | None = None,
+        options: Mapping[str, JSONValue] | None = None,
+        provider_credentials: Mapping[str, Mapping[str, JSONValue]] | None = None,
+        context: Mapping[str, JSONValue] | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> GuardianVerdict:
         provider_credentials = provider_credentials or {}
         provider_order = _normalize_providers(
-            providers
-            if providers is not None
-            else self.config.provider_chain
+            providers if providers is not None else self.config.provider_chain
         )
         if not provider_order:
             provider_order = list(self.config.provider_chain or ["azure"])
@@ -142,9 +138,7 @@ class GuardianAgent:
                 merged_options[key] = coerce_json_value(value)
         selected_model = model or self.config.model
         configured_max_tokens = max_tokens or self.config.max_tokens
-        configured_temperature = (
-            self.config.temperature if temperature is None else temperature
-        )
+        configured_temperature = self.config.temperature if temperature is None else temperature
 
         stage_assignment = self.settings.stage("guardian.review")
         if stage_assignment:
@@ -155,7 +149,7 @@ class GuardianAgent:
             for key, value in stage_assignment.options.items():
                 merged_options[key] = value
 
-        last_verdict: Optional[GuardianVerdict] = None
+        last_verdict: GuardianVerdict | None = None
         attempts = max(1, int(self.config.retry_attempts))
 
         call_context = self._log_context.bind(
@@ -208,7 +202,7 @@ class GuardianAgent:
 
             credential_payload = provider_credentials.get(provider)
             runtime = None
-            client: Optional[ChatClient] = None
+            client: ChatClient | None = None
             try:
                 runtime_options = dict(merged_options) if merged_options else None
                 credential_dict = (
@@ -302,7 +296,10 @@ class GuardianAgent:
                     content, usage = client.chat(
                         messages=[
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": json.dumps(review_payload, ensure_ascii=False)},
+                            {
+                                "role": "user",
+                                "content": json.dumps(review_payload, ensure_ascii=False),
+                            },
                         ],
                         temperature=configured_temperature,
                         max_tokens=max(256, configured_max_tokens),
@@ -356,9 +353,9 @@ class GuardianAgent:
     def _parse_verdict(
         self,
         *,
-        raw_response: Optional[str],
-        provider: Optional[str],
-        model: Optional[str],
+        raw_response: str | None,
+        provider: str | None,
+        model: str | None,
         usage: dict[str, int],
     ) -> GuardianVerdict:
         if not raw_response:
@@ -377,7 +374,7 @@ class GuardianAgent:
 
         approved = bool(payload.get("approved"))
         notes = coerce_str(payload.get("notes"))
-        remediation: Optional[str] = None
+        remediation: str | None = None
         raw_remediation = payload.get("remediation") or payload.get("remediation_instructions")
         if raw_remediation:
             remediation = str(raw_remediation)

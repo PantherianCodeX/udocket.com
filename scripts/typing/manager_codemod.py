@@ -3,14 +3,13 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable, List
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -33,7 +32,7 @@ TARGET_METHODS = {"typed_objects", "scoped"}
 class ClassUpdate:
     path: Path
     class_name: str
-    missing_methods: List[str]
+    missing_methods: list[str]
 
 
 def iter_python_files(targets: Iterable[Path]) -> Iterable[Path]:
@@ -95,7 +94,7 @@ def insert_methods(lines: list[str], class_update: ClassUpdate, node: ast.ClassD
                 f"{indent}@classmethod\n",
                 f"{indent}def {method}(cls):\n",
                 f"{indent}    from django.db import models\n",
-                f"{indent}    return cast(\"models.Manager[{class_update.class_name}]\", cls.objects)\n",
+                f'{indent}    return cast("models.Manager[{class_update.class_name}]", cls.objects)\n',
             ]
         )
     snippet = snippet_lines
@@ -118,11 +117,7 @@ def apply_updates(path: Path, class_updates: list[ClassUpdate]) -> None:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     tree = ast.parse(text)
-    class_nodes = {
-        node.name: node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef)
-    }
+    class_nodes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     for update in sorted(
         class_updates,
         key=lambda item: class_nodes[item.class_name].lineno,  # type: ignore[index]
@@ -169,7 +164,7 @@ def main() -> int:
             name=HELPER_NAME,
             version=HELPER_VERSION,
             status="ok",
-            last_run=datetime.now(timezone.utc),
+            last_run=datetime.now(UTC),
         )
         save_manifest(manifest)
     else:

@@ -155,6 +155,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+opt/venv/
 
 # Azurite emulator metadata
 __azurite_db_*.json

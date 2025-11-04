@@ -2,29 +2,32 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import uuid
-from typing import Optional, cast
+from datetime import datetime
+from typing import cast
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from packages.udocket_common.django.typing import TypedManager, get_typed_manager
+
 
 class Organization(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["Organization"]:
-        return cast(models.Manager["Organization"], cls.objects)
+    def typed_objects(cls) -> TypedManager[Organization]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["Organization"]:
+    def scoped(cls) -> TypedManager[Organization]:
         return cls.typed_objects()
+
     id: models.UUIDField[uuid.UUID, uuid.UUID] = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
     )
     name: models.CharField[str, str] = models.CharField(max_length=200)
-    kc_organization_id: models.CharField[Optional[str], Optional[str]] = models.CharField(
+    kc_organization_id: models.CharField[str | None, str | None] = models.CharField(
         max_length=128,
         unique=True,
         null=True,
@@ -52,6 +55,7 @@ class Organization(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
+
 class User(AbstractUser):
     """Custom user storing Keycloak subject ID and local profile info.
 
@@ -59,20 +63,20 @@ class User(AbstractUser):
     """
 
     @classmethod
-    def typed_objects(cls) -> models.Manager["User"]:
-        return cast(models.Manager["User"], cls.objects)
+    def typed_objects(cls) -> TypedManager[User]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["User"]:
+    def scoped(cls) -> TypedManager[User]:
         return cls.typed_objects()
 
-    kc_sub: models.CharField[Optional[str], Optional[str]] = models.CharField(
+    kc_sub: models.CharField[str | None, str | None] = models.CharField(
         max_length=64,
         unique=True,
         null=True,
         blank=True,
     )
-    display_name: models.CharField[Optional[str], Optional[str]] = models.CharField(
+    display_name: models.CharField[str | None, str | None] = models.CharField(
         max_length=200,
         null=True,
         blank=True,
@@ -90,12 +94,13 @@ class User(AbstractUser):
 
 class OrganizationMembership(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["OrganizationMembership"]:
-        return cast(models.Manager["OrganizationMembership"], cls.objects)
+    def typed_objects(cls) -> TypedManager[OrganizationMembership]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["OrganizationMembership"]:
+    def scoped(cls) -> TypedManager[OrganizationMembership]:
         return cls.typed_objects()
+
     class Role(models.TextChoices):
         ADMIN = "ADMIN", "Admin"
         MANAGER = "MANAGER", "Manager"

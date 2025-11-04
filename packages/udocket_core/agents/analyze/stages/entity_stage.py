@@ -1,29 +1,30 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 import logging
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, List, Optional, Sequence, Set, cast
+from typing import Any, cast
 
-from ...common.io import TranscriptParse
-from ...common.normalization import coerce_mapping, coerce_mapping_list, coerce_sequence
-from ...common.chunking import (
-    ChunkSplitConfig,
-    should_retry_for_json,
-    should_retry_for_length,
-    split_for_retry,
-)
+from packages.udocket_common.ids import ensure_deterministic_uuids
 from packages.udocket_common.json_utils import (
     coerce_object_list,
     coerce_str_list,
     json_object_to_dict,
     parse_json_object,
 )
+
 from ....llm.runtime import ChatClient, ResponseFormat
-from packages.udocket_common.ids import ensure_deterministic_uuids
+from ...common.chunking import (
+    ChunkSplitConfig,
+    should_retry_for_json,
+    should_retry_for_length,
+    split_for_retry,
+)
+from ...common.io import TranscriptParse
+from ...common.normalization import coerce_mapping, coerce_mapping_list, coerce_sequence
 
 logger = logging.getLogger("udocket.analyze.entity_stage")
 
@@ -89,23 +90,25 @@ ENTITY_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 
 @dataclass
 class EntityStageResult:
-    hints: Dict[str, Any]
-    usage: Dict[str, int]
+    hints: dict[str, Any]
+    usage: dict[str, int]
 
 
-def _ensure_chunks(context: Any) -> List[str]:
+def _ensure_chunks(context: Any) -> list[str]:
     if isinstance(context, str):
         return [context]
     if isinstance(context, Sequence) and not isinstance(context, (str, bytes, bytearray)):
         sequence = cast(Sequence[object], context)
-        chunks: List[str] = []
+        chunks: list[str] = []
         for item in sequence:
             text = item if isinstance(item, str) else str(item)
             if text:
                 chunks.append(text)
         return chunks or [""]
     return [str(context)]
-def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
+
+
+def _assign_entity_defaults(entity: dict[str, Any]) -> dict[str, Any]:
     entity_obj = json_object_to_dict(entity)
     name = str(entity_obj.get("name") or "").strip()
     entity_type = str(entity_obj.get("type") or "UNKNOWN").strip() or "UNKNOWN"
@@ -123,7 +126,7 @@ def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
     entity_obj.pop("_sig_type", None)
     entity_obj["id"] = entity_obj.get("id") or entity_obj["uuid"]
 
-    normalized_mentions: List[Dict[str, Any]] = []
+    normalized_mentions: list[dict[str, Any]] = []
     for mention_mapping in coerce_object_list(entity_obj.get("mentions")):
         raw_text = mention_mapping.get("text")
         if not isinstance(raw_text, str):
@@ -150,7 +153,7 @@ def _assign_entity_defaults(entity: Dict[str, Any]) -> Dict[str, Any]:
     return entity_obj
 
 
-def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
+def _assign_relation_defaults(relation: dict[str, Any]) -> dict[str, Any]:
     relation_obj = json_object_to_dict(relation)
     relation_type = str(relation_obj.get("type") or "RELATED_TO").strip() or "RELATED_TO"
     source = str(relation_obj.get("source") or "").strip()
@@ -170,7 +173,7 @@ def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
     relation_obj.pop("_sig_source", None)
     relation_obj.pop("_sig_target", None)
     relation_obj["id"] = relation_obj.get("id") or relation_obj["uuid"]
-    normalized_evidence: List[Dict[str, Any]] = []
+    normalized_evidence: list[dict[str, Any]] = []
     for evidence_entry in coerce_object_list(relation_obj.get("evidence")):
         raw_text = evidence_entry.get("text") or evidence_entry.get("excerpt")
         if not isinstance(raw_text, str):
@@ -196,14 +199,14 @@ def _assign_relation_defaults(relation: Dict[str, Any]) -> Dict[str, Any]:
     return relation_obj
 
 
-def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> None:
-    entities: List[Dict[str, Any]] = [
+def _merge_entity_payload(target: dict[str, Any], update: dict[str, Any]) -> None:
+    entities: list[dict[str, Any]] = [
         _assign_entity_defaults(json_object_to_dict(candidate))
         for candidate in coerce_object_list(target.get("entities"))
     ]
     target["entities"] = entities
 
-    index: Dict[str, Dict[str, Any]] = {entity["id"]: entity for entity in entities}
+    index: dict[str, dict[str, Any]] = {entity["id"]: entity for entity in entities}
 
     for entity_payload in coerce_object_list(update.get("entities")):
         normalized_entity = _assign_entity_defaults(json_object_to_dict(entity_payload))
@@ -220,12 +223,12 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
                 existing["type"] = normalized_entity["type"]
 
         aliases_value = existing.setdefault("aliases", [])
-        alias_list: List[str] = []
+        alias_list: list[str] = []
         for existing_alias in coerce_sequence(aliases_value) or []:
             if isinstance(existing_alias, str):
                 alias_list.append(existing_alias)
         existing["aliases"] = alias_list
-        alias_seen: Set[str] = set(alias_list)
+        alias_seen: set[str] = set(alias_list)
         normalized_aliases = coerce_sequence(normalized_entity.get("aliases")) or []
         for raw_alias in normalized_aliases:
             if not isinstance(raw_alias, str):
@@ -237,17 +240,14 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
             alias_seen.add(alias)
 
         mentions_value = existing.setdefault("mentions", [])
-        mentions_list: List[Dict[str, Any]] = []
+        mentions_list: list[dict[str, Any]] = []
         for existing_mention in coerce_sequence(mentions_value) or []:
             mention_dict = coerce_mapping(existing_mention)
             if not mention_dict:
                 continue
             mentions_list.append(mention_dict)
         existing["mentions"] = mentions_list
-        mention_seen: Set[str] = {
-            json.dumps(mention, sort_keys=True)
-            for mention in mentions_list
-        }
+        mention_seen: set[str] = {json.dumps(mention, sort_keys=True) for mention in mentions_list}
         for mention in coerce_mapping_list(normalized_entity.get("mentions")):
             if not mention:
                 continue
@@ -257,13 +257,13 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
             mentions_list.append(mention)
             mention_seen.add(signature)
 
-    relations: List[Dict[str, Any]] = [
+    relations: list[dict[str, Any]] = [
         _assign_relation_defaults(json_object_to_dict(candidate))
         for candidate in coerce_object_list(target.get("relations"))
     ]
     target["relations"] = relations
 
-    relation_seen: Set[str] = {json.dumps(relation, sort_keys=True) for relation in relations}
+    relation_seen: set[str] = {json.dumps(relation, sort_keys=True) for relation in relations}
     for relation_payload in coerce_object_list(update.get("relations")):
         normalized_relation = _assign_relation_defaults(json_object_to_dict(relation_payload))
         signature = json.dumps(normalized_relation, sort_keys=True)
@@ -273,21 +273,20 @@ def _merge_entity_payload(target: Dict[str, Any], update: Dict[str, Any]) -> Non
         relation_seen.add(signature)
 
 
-def _merge_usage(target: Dict[str, int], usage: Dict[str, Any]) -> None:
+def _merge_usage(target: dict[str, int], usage: dict[str, Any]) -> None:
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = usage.get(key)
         if isinstance(value, int):
             target[key] = target.get(key, 0) + value
 
 
-
 def generate_entities(
     *,
     parse: TranscriptParse,
-    outline_parties: Dict[str, Any],
+    outline_parties: dict[str, Any],
     context_snippet: Any,
-    case_brief: Dict[str, Any],
-    llm_client: Optional[ChatClient],
+    case_brief: dict[str, Any],
+    llm_client: ChatClient | None,
     temperature: float,
     max_tokens: int,
 ) -> EntityStageResult:
@@ -295,22 +294,24 @@ def generate_entities(
         raise RuntimeError("LLM client is required for entity stage")
 
     try:
-        chunk_queue: Deque[str] = deque(_ensure_chunks(context_snippet))
-        aggregate: Optional[Dict[str, Any]] = None
-        usage_totals: Dict[str, int] = {}
+        chunk_queue: deque[str] = deque(_ensure_chunks(context_snippet))
+        aggregate: dict[str, Any] | None = None
+        usage_totals: dict[str, int] = {}
         while chunk_queue:
             chunk_text = chunk_queue.popleft()
             if not chunk_text or not chunk_text.strip():
                 continue
             system_prompt = (
-                "You are an entity and relationship analyst for Canadian legal transcripts."
-                " Extract people, organizations, locations, dockets, and relationships with evidence."
+                "You are an entity and relationship analyst for Canadian legal "
+                "transcripts."
+                " Extract people, organizations, locations, dockets, and relationships with "
+                "evidence."
             )
             user_prompt = (
                 "Use the outline and transcript snippets. Provide aliases where obvious."
                 f"\nOutline parties: {json.dumps(outline_parties, ensure_ascii=False)}\n"
                 f"\nCase brief summary: {json.dumps(case_brief, ensure_ascii=False)}\n"
-                f"\nTranscript excerpts (remaining chunks: {len(chunk_queue)+1}):\n{chunk_text}\n"
+                f"\nTranscript excerpts (remaining chunks: {len(chunk_queue) + 1}):\n{chunk_text}\n"
             )
             try:
                 response_format = cast(

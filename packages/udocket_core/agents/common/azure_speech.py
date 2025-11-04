@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 import logging
 import re
 import threading
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, cast
+from typing import Any, cast
 
 from packages.udocket_common.json_utils import (
     JSONObject,
@@ -110,9 +110,7 @@ def ensure_azure_speech_health(
                 "body": preview,
             },
         )
-        raise raise_error(
-            f"Azure Speech credential test failed (status={response.status_code})."
-        )
+        raise raise_error(f"Azure Speech credential test failed (status={response.status_code}).")
 
     with _CACHE_LOCK:
         _CACHE[cache_key] = now
@@ -314,7 +312,8 @@ class AzureSpeechClient:
             raise AzureSpeechError(f"Failed to create transcription job: {exc}") from exc
         if response.status_code >= 400:
             raise AzureSpeechError(
-                f"Azure Speech create failed (status={response.status_code}): {(response.text or '')[:500]}"
+                "Azure Speech create failed (status="
+                f"{response.status_code}): {(response.text or '')[:500]}"
             )
         # Prefer header Location; fall back to JSON "self"
         location: object | None = None
@@ -347,7 +346,8 @@ class AzureSpeechClient:
                 raise AzureSpeechError(f"Polling transcription job failed: {exc}") from exc
             if response.status_code >= 400:
                 raise AzureSpeechError(
-                    f"Azure Speech poll failed (status={response.status_code}): {(response.text or '')[:500]}"
+                    "Azure Speech poll failed (status="
+                    f"{response.status_code}): {(response.text or '')[:500]}"
                 )
             payload = coerce_json_object(response.json())
             status = payload.get("status")

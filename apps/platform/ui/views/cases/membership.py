@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 # pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
-
-from typing import Iterable, List, Set
-
 from apps.platform.accounts.models import OrganizationMembership, User
 from apps.platform.cases.models import Case, CaseMembership
 
@@ -16,9 +15,9 @@ def reconcile_case_memberships(
     client_user_id: str,
     owner_id: str,
     contributor_ids: Iterable[str],
-) -> List[str]:
-    update_fields: List[str] = []
-    contributor_set: Set[str] = {value for value in contributor_ids if value}
+) -> list[str]:
+    update_fields: list[str] = []
+    contributor_set: set[str] = {value for value in contributor_ids if value}
 
     if reviewer_id:
         reviewer = User.objects.filter(pk=reviewer_id).first()
@@ -35,10 +34,9 @@ def reconcile_case_memberships(
             )
             case.reviewer = reviewer
             update_fields.append("reviewer")
-    else:
-        if case.reviewer_id is not None:
-            case.reviewer = None
-            update_fields.append("reviewer")
+    elif case.reviewer_id is not None:
+        case.reviewer = None
+        update_fields.append("reviewer")
 
     if client_user_id:
         client_user = User.objects.filter(pk=client_user_id).first()
@@ -55,10 +53,9 @@ def reconcile_case_memberships(
             )
             case.client_user = client_user
             update_fields.append("client_user")
-    else:
-        if case.client_user_id is not None:
-            case.client_user = None
-            update_fields.append("client_user")
+    elif case.client_user_id is not None:
+        case.client_user = None
+        update_fields.append("client_user")
 
     current_owner_memberships = case.memberships.filter(role=CaseMembership.Role.OWNER)
     current_owner_ids = {str(m.user_id) for m in current_owner_memberships if m.user_id}

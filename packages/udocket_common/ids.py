@@ -4,10 +4,9 @@ from __future__ import annotations
 
 """Helpers for generating deterministic identifiers."""
 
-from collections.abc import Iterable, MutableMapping, Sequence
-from typing import Iterator, Union, cast
-from uuid import UUID, NAMESPACE_URL, uuid5
-
+from collections.abc import Iterable, Iterator, MutableMapping, Sequence
+from typing import Union, cast
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 UUIDInput = Union[str, int, float, bytes, bytearray, UUID, None]
 
@@ -83,11 +82,11 @@ def ensure_deterministic_uuids(
     id_field: str | None = "id",
     uuid_field: str = "uuid",
 ) -> None:
-    """Mutate each mapping so it carries a stable UUID derived from the provided signature fields.
+    """Mutate each mapping so it carries a stable UUID derived from the signature fields.
 
-    Existing UUID/ID values are preserved when present. Otherwise the function generates a UUID5 using
-    the supplied namespace and field content (lowercased and trimmed) and assigns it to both the ``uuid_field``
-    and ``id_field`` (when the latter exists but is empty).
+    Existing UUID/ID values are preserved when present. Otherwise a UUID5 is generated using the
+    supplied namespace and normalized field content and assigned to ``uuid_field`` and, when set,
+    ``id_field``.
     """
 
     for mapping in items:
@@ -103,8 +102,7 @@ def ensure_deterministic_uuids(
             continue
 
         signature = tuple(
-            str(mapping.get(field, "") or "").strip().lower()
-            for field in signature_fields
+            str(mapping.get(field, "") or "").strip().lower() for field in signature_fields
         )
         derived = uuid5_from_content(namespace, *signature)
         uuid_value = str(derived)

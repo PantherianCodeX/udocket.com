@@ -1,9 +1,16 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Set, Mapping
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+
+from collections.abc import Mapping
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..taxonomy.categories import (
-    CountryCode, CourtLevel, Division, HearingCategory, FilingCategory, OrderCategory
+    CountryCode,
+    CourtLevel,
+    Division,
+    FilingCategory,
+    HearingCategory,
+    OrderCategory,
 )
 from ..taxonomy.namespace import LocalCode
 
@@ -11,24 +18,27 @@ from ..taxonomy.namespace import LocalCode
 # Core reference models
 # -------------------------
 
+
 class Location(BaseModel):
     model_config = ConfigDict(extra="forbid")
     slug: str = Field(..., pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
     display_name: str
-    city: Optional[str] = None
+    city: str | None = None
     is_base_point: bool = False
-    admin_base_slug: Optional[str] = Field(
+    admin_base_slug: str | None = Field(
         None, description="If circuit, the base registry handling filings."
     )
-    divisions_served: Set[Division] = Field(default_factory=set)
-    notes: Optional[str] = None
+    divisions_served: set[Division] = Field(default_factory=set)
+    notes: str | None = None
+
 
 class HearingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
     category: HearingCategory
-    divisions: Set[Division] = Field(default_factory=set)
+    divisions: set[Division] = Field(default_factory=set)
+
 
 class FilingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -36,34 +46,37 @@ class FilingCode(BaseModel):
     label: str
     category: FilingCategory
 
+
 class OrderCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: LocalCode
     label: str
     category: OrderCategory
 
+
 class Court(BaseModel):
     """
     A single court (e.g., CA-AB-ACJ). Contains locations (base & circuits) and
     jurisdiction-scoped local codes for hearings/filings/orders that map to global categories.
     """
+
     model_config = ConfigDict(extra="forbid")
 
     key: str = Field(..., pattern=r"^[A-Z]{2}[-][A-Z0-9_-]{2,}$")  # e.g., CA-AB-ACJ
     country: CountryCode
-    subnational: Optional[str] = None  # e.g., "AB", "NY"
+    subnational: str | None = None  # e.g., "AB", "NY"
     level: CourtLevel
     formal_name: str
     short_name: str
-    divisions: Set[Division] = Field(default_factory=set)
-    locations: List[Location] = Field(default_factory=list)
-    hearing_codes: List[HearingCode] = Field(default_factory=list)
-    filing_codes:  List[FilingCode]  = Field(default_factory=list)
-    order_codes:   List[OrderCode]   = Field(default_factory=list)
+    divisions: set[Division] = Field(default_factory=set)
+    locations: list[Location] = Field(default_factory=list)
+    hearing_codes: list[HearingCode] = Field(default_factory=list)
+    filing_codes: list[FilingCode] = Field(default_factory=list)
+    order_codes: list[OrderCode] = Field(default_factory=list)
 
     @field_validator("locations")
     @classmethod
-    def _no_duplicate_slugs(cls, v: List[Location]) -> List[Location]:
+    def _no_duplicate_slugs(cls, v: list[Location]) -> list[Location]:
         seen = set()
         for loc in v:
             if loc.slug in seen:
@@ -72,7 +85,7 @@ class Court(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _integrity(self) -> "Court":
+    def _integrity(self) -> Court:
         # 1) At least one base point
         if not any(l.is_base_point for l in self.locations):
             raise ValueError(f"Court {self.key}: must define at least one base point location")
@@ -104,7 +117,7 @@ class Court(BaseModel):
 
         # 4) LocalCode uniqueness within the court
         def _accumulate_codes(seq, name):
-            seen_codes: Set[str] = set()
+            seen_codes: set[str] = set()
             for item in seq:
                 code = item.code.code
                 if code in seen_codes:
@@ -125,24 +138,25 @@ class Court(BaseModel):
 
         return self
 
+
 class CourtCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     country: CountryCode
-    subnational: Optional[str] = None
-    courts: Dict[str, Court] = Field(default_factory=dict)
-    note: Optional[str] = None
+    subnational: str | None = None
+    courts: dict[str, Court] = Field(default_factory=dict)
+    note: str | None = None
 
     @field_validator("courts")
     @classmethod
-    def _keys_match(cls, v: Dict[str, Court], info) -> Dict[str, Court]:
+    def _keys_match(cls, v: dict[str, Court], info) -> dict[str, Court]:
         for key, court in v.items():
             if key != court.key:
                 raise ValueError(f"Court dict key '{key}' must equal Court.key '{court.key}'.")
         return v
 
     @model_validator(mode="after")
-    def _prefix_enforced(self) -> "CourtCatalog":
+    def _prefix_enforced(self) -> CourtCatalog:
         """
         Ensure Court.key prefix matches country/subnational: f"{country}-{subnational}-"
         When subnational is None, we only enforce the country prefix.
@@ -157,27 +171,32 @@ class CourtCatalog(BaseModel):
                     raise ValueError(f"Court {court.key}: key must start with '{region_prefix}'")
         return self
 
+
 # -------------------------
 # JSON bundle (data-only) wrapper + DB hints
 # -------------------------
 
+
 class DBTableHint(BaseModel):
     table: str
-    pk: List[str]
-    fk: Mapping[str, List[str]] | None = None
-    unique: List[List[str]] | None = None
-    indexes: List[List[str]] | None = None
+    pk: list[str]
+    fk: Mapping[str, list[str]] | None = None
+    unique: list[list[str]] | None = None
+    indexes: list[list[str]] | None = None
+
 
 class CatalogDBInfo(BaseModel):
     type: str = Field(..., pattern=r"^(postgresql)$")
     tables: Mapping[str, DBTableHint]  # e.g., 'jurisdictions', 'courts', etc.
 
+
 class CatalogMeta(BaseModel):
     model_config = ConfigDict(extra="allow")
-    source_urls: List[str] = Field(default_factory=list)
+    source_urls: list[str] = Field(default_factory=list)
     version: str | None = None
     last_updated: str | None = None
     notes: str | None = Field(default=None, description="Notes about scope, limits, etc.")
+
 
 class CatalogBundle(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -188,5 +207,5 @@ class CatalogBundle(BaseModel):
         description="JSON schema identifier; serialized/deserialized as 'schema'.",
     )
     db: CatalogDBInfo
-    data: List[CourtCatalog]
+    data: list[CourtCatalog]
     meta: CatalogMeta = Field(default_factory=CatalogMeta)

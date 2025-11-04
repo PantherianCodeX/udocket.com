@@ -1,4 +1,5 @@
 from .base import *  # noqa
+from .base import env as base_env
 
 DEBUG = False
 
@@ -12,8 +13,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [env.url("REDIS_URL", default="redis://localhost:6379/0")],
+            "hosts": [base_env.url("REDIS_URL", default="redis://localhost:6379/0")],
         },
     }
 }
-

@@ -3,7 +3,7 @@ from __future__ import annotations
 # pyright: strict
 import base64
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -27,7 +27,7 @@ def ui_log(request: HttpRequest) -> HttpResponse:
     try:
         body = request.body.decode("utf-8") if request.body else "{}"
         parsed = parse_json_value(body)
-        payload: Dict[str, Any]
+        payload: dict[str, Any]
         if isinstance(parsed, dict):
             payload = {str(key): value for key, value in parsed.items()}
         else:

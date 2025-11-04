@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import json
 import re
-from typing import Mapping, Optional, Sequence, cast
+from collections.abc import Mapping, Sequence
+from typing import cast
 
 from packages.udocket_common.json_utils import (
     JSONObject,
@@ -83,7 +83,7 @@ def _extract_exhibits(summary_data: Mapping[str, JSONValue]) -> list[JSONObject]
     return _collect_alias_items(summary_data, "exhibits", "evidence", "documents")
 
 
-def _trim_atom(text: str) -> Optional[str]:
+def _trim_atom(text: str) -> str | None:
     normalized = text.strip()
     if not normalized or len(normalized) < 8:
         return None

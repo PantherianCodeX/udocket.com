@@ -1,8 +1,8 @@
 from __future__ import annotations
 
- 
 import uuid
-from typing import Iterable, Optional, cast
+from collections.abc import Iterable
+from typing import cast
 
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse
@@ -14,16 +14,17 @@ from apps.platform.accounts.utils import resolve_request_organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from packages.udocket_common.text import unique_title
-from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from apps.platform.operations.storage import ensure_case_dirs
+from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta
 from packages.udocket_common.json_utils import read_json_object
+from packages.udocket_common.text import unique_title
 
 from ..auth import ensure_authenticated
-from ..common import JobRow
-from ..contexts import compute_case_tool_state, user_can_review_case
 from ..cases.helpers import render_case_panel_with_refresh
+from ..common import JobRow
 from ..constants import CASE_JOB_TABLE_COLUMNS
+from ..contexts import compute_case_tool_state, user_can_review_case
 from ..presenters.job_actions import build_job_action_entries
 from ..presenters.jobs import build_job_rows
 from ..selectors import job_telemetry_payload
@@ -61,7 +62,12 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     case_dir = ensure_case_dirs(case_id, case.organization_id)
     audio_dir = case_dir / "audio"
 
-    force_wav_conversion = str(request.POST.get("force_wav") or "").lower() in {"1", "true", "yes", "on"}
+    force_wav_conversion = str(request.POST.get("force_wav") or "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     if upload:
         dest = audio_dir / f"{job_id}__{upload.name}"
@@ -77,7 +83,7 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     else:
         return HttpResponse("Upload a file or provide a SAS URL.", status=400)
 
-    case_org = cast(Optional[Organization], getattr(case, "organization", None))
+    case_org = cast(Organization | None, getattr(case, "organization", None))
 
     job = Job.objects.create(
         id=job_id,
@@ -90,7 +96,9 @@ def create_job(request: HttpRequest, case_id: str) -> HttpResponse:
     )
 
     existing_titles: set[str] = set(
-        CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT").values_list("title", flat=True)
+        CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT").values_list(
+            "title", flat=True
+        )
     )
     ops_dir = storage_ops_dir(str(case.id), case.organization_id)
     try:

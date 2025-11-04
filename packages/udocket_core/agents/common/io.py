@@ -1,10 +1,11 @@
 # pyright: strict
 
 from __future__ import annotations
+
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, stringify_json
 
@@ -116,7 +117,9 @@ def parse_transcript(path: Path) -> TranscriptParse:
         else:
             segments.append(TranscriptSegment(ts=None, speaker=None, text=raw.strip()))
     body_text = "\n".join(seg.text for seg in segments if seg.text)
-    return TranscriptParse(header_lines=header, segments=segments, body_text=body_text, diarized=diarized)
+    return TranscriptParse(
+        header_lines=header, segments=segments, body_text=body_text, diarized=diarized
+    )
 
 
 __all__ = [

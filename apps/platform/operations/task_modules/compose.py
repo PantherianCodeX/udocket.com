@@ -9,12 +9,14 @@ from celery import shared_task
 class TaskProtocol(Protocol):
     request: Any
 
+
 from apps.platform.jobs.models import Job
 from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.channels import send_case_update, send_job_update
 from apps.platform.operations.runtime import JobRuntimeContext
 from apps.platform.operations.services import execute_compose_job
 from packages.udocket_core.agents import ComposeConfig
+
 
 @shared_task(bind=True)
 def compose_job(
@@ -31,7 +33,9 @@ def compose_job(
     summary_job_id = str(summary_job_id)
 
     job = Job.typed_objects().select_related("case", "case__organization").get(pk=job_id)
-    summary_job = Job.typed_objects().select_related("case", "case__organization").get(pk=summary_job_id)
+    summary_job = (
+        Job.typed_objects().select_related("case", "case__organization").get(pk=summary_job_id)
+    )
     job_case = getattr(job, "case", None)
     summary_case = getattr(summary_job, "case", None)
     job_case_id = getattr(job_case, "id", None)

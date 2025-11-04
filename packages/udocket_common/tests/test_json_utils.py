@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +52,12 @@ def test_normalize_mapping_optional_handles_non_mapping() -> None:
 
 def test_json_payload_coerces_values() -> None:
     payload = ju.json_payload(number=1, nested={"x": 2}, list_value=[1, "a"], none_value=None)
-    assert payload == {"number": 1, "nested": {"x": 2}, "list_value": [1, "a"], "none_value": None}
+    assert payload == {
+        "number": 1,
+        "nested": {"x": 2},
+        "list_value": [1, "a"],
+        "none_value": None,
+    }
 
 
 def test_coerce_json_value_handles_custom_object() -> None:

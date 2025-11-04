@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
-
 from collections.abc import Sequence
 from typing import Any, Protocol, cast
 
@@ -13,16 +11,19 @@ from celery import shared_task
 class TaskProtocol(Protocol):
     request: Any
 
+
 from django.utils import timezone
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.guardian import (
-    build_guardian_context as _default_guardian_context_factory,
+    GuardianContext,
     snapshot_artifact_for_guardian,
     store_guardian_review,
-    GuardianContext,
+)
+from apps.platform.operations.guardian import (
+    build_guardian_context as _default_guardian_context_factory,
 )
 from apps.platform.operations.runtime import (
     JobRuntimeContext,
@@ -30,11 +31,12 @@ from apps.platform.operations.runtime import (
     safe_job_meta,
 )
 from apps.platform.operations.utils import read_job_meta
-from packages.udocket_core.agents.guardian_lib import GuardianVerdict
 from packages.udocket_common.json_utils import JSONObject, normalize_json_object
+from packages.udocket_core.agents.guardian_lib import GuardianVerdict
 from packages.udocket_core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.tasks.guardian")
+
 
 @shared_task(bind=True)
 def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[str, object]:
@@ -157,7 +159,11 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
                     "guardian_reason": "guardian_not_configured",
                 },
             )
-        return {"status": "skipped", "artifact_id": artifact.id, "reason": "guardian_not_configured"}
+        return {
+            "status": "skipped",
+            "artifact_id": artifact.id,
+            "reason": "guardian_not_configured",
+        }
 
     artifact_payload = snapshot_artifact_for_guardian(artifact)
     if "content" not in artifact_payload and "parsed" not in artifact_payload:
@@ -208,7 +214,9 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             if not applies_to:
                 applicable_instructions.append(instruction_payload)
                 continue
-            if isinstance(applies_to, Sequence) and not isinstance(applies_to, (str, bytes, bytearray)):
+            if isinstance(applies_to, Sequence) and not isinstance(
+                applies_to, (str, bytes, bytearray)
+            ):
                 values = [
                     str(candidate).upper()
                     for candidate in cast(Sequence[object], applies_to)
@@ -295,7 +303,9 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
         )
         store_guardian_review(artifact, review_record)
         if job_id:
-            safe_job_log(case_id, org_id_str, job_id, f"Guardian review error: {exc}", level="ERROR")
+            safe_job_log(
+                case_id, org_id_str, job_id, f"Guardian review error: {exc}", level="ERROR"
+            )
         if runtime:
             runtime.transition(
                 event="guardian.review.failed",
@@ -340,7 +350,9 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
                 "temperature": getattr(context, "temperature", None),
             },
             "extra": {
-                "retry_attempts": getattr(getattr(getattr(context, "agent", None), "config", None), "retry_attempts", None),
+                "retry_attempts": getattr(
+                    getattr(getattr(context, "agent", None), "config", None), "retry_attempts", None
+                ),
                 "instructions_used": len(applicable_instructions),
             },
         },
@@ -357,7 +369,9 @@ def guardian_review_artifact(self: TaskProtocol, *, artifact_id: int) -> dict[st
             case_id,
             org_id_str,
             job_id,
-            "Guardian review completed" if verdict.approved else "Guardian review flagged violations",
+            "Guardian review completed"
+            if verdict.approved
+            else "Guardian review flagged violations",
         )
 
     if runtime:

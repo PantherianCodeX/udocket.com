@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import uuid
-from typing import Any, TYPE_CHECKING, Optional, cast
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
 from django.db import models
+
+from packages.udocket_common.django.typing import TypedManager, get_typed_manager
 
 if TYPE_CHECKING:
     from apps.platform.accounts.models import Organization
@@ -13,11 +16,11 @@ if TYPE_CHECKING:
 
 class Role(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["Role"]:
-        return cast(models.Manager["Role"], cls.objects)
+    def typed_objects(cls) -> TypedManager[Role]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["Role"]:
+    def scoped(cls) -> TypedManager[Role]:
         return cls.typed_objects()
 
     """Global role catalog for configurable RBAC.
@@ -25,7 +28,7 @@ class Role(models.Model):
     These roles can be mapped to external IAM roles or CaseMemberships.
     """
 
-    uuid: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
+    uuid: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
         editable=False,
         unique=True,
         null=True,
@@ -35,7 +38,7 @@ class Role(models.Model):
     description: models.TextField[str, str] = models.TextField(blank=True)
     system: models.BooleanField[bool, bool] = models.BooleanField(default=False)
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    organization: models.ForeignKey["Organization", Optional["Organization"]] = models.ForeignKey(
+    organization: models.ForeignKey[Organization, Organization | None] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,
         related_name="authorization_roles",
@@ -44,10 +47,12 @@ class Role(models.Model):
     )
     # Attach preset bundles to roles
     # Defined below but string-referenced to avoid ordering issues
-    presets: models.ManyToManyField["PermissionPreset", "PermissionPreset"] = models.ManyToManyField(
-        "authorization.PermissionPreset",
-        blank=True,
-        related_name="roles",
+    presets: models.ManyToManyField[PermissionPreset, PermissionPreset] = (
+        models.ManyToManyField(
+            "authorization.PermissionPreset",
+            blank=True,
+            related_name="roles",
+        )
     )
 
     class Meta:
@@ -69,12 +74,13 @@ class Role(models.Model):
 
 class RoleCapability(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["RoleCapability"]:
-        return cast(models.Manager["RoleCapability"], cls.objects)
+    def typed_objects(cls) -> TypedManager[RoleCapability]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["RoleCapability"]:
+    def scoped(cls) -> TypedManager[RoleCapability]:
         return cls.typed_objects()
+
     """Assigns capabilities (string keys) to roles.
 
     Capabilities are strings constrained by application code, e.g.:
@@ -102,13 +108,14 @@ class RoleCapability(models.Model):
 
 class PermissionPreset(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["PermissionPreset"]:
-        return cast(models.Manager["PermissionPreset"], cls.objects)
+    def typed_objects(cls) -> TypedManager[PermissionPreset]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["PermissionPreset"]:
+    def scoped(cls) -> TypedManager[PermissionPreset]:
         return cls.typed_objects()
-    uuid: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
+
+    uuid: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
         editable=False,
         unique=True,
         null=True,
@@ -118,7 +125,7 @@ class PermissionPreset(models.Model):
     description: models.TextField[str, str] = models.TextField(blank=True)
     system: models.BooleanField[bool, bool] = models.BooleanField(default=False)
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    organization: models.ForeignKey["Organization", Optional["Organization"]] = models.ForeignKey(
+    organization: models.ForeignKey[Organization, Organization | None] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.CASCADE,
         related_name="authorization_presets",
@@ -141,12 +148,13 @@ class PermissionPreset(models.Model):
 
 class PresetCapability(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["PresetCapability"]:
-        return cast(models.Manager["PresetCapability"], cls.objects)
+    def typed_objects(cls) -> TypedManager[PresetCapability]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["PresetCapability"]:
+    def scoped(cls) -> TypedManager[PresetCapability]:
         return cls.typed_objects()
+
     preset: models.ForeignKey[PermissionPreset, PermissionPreset] = models.ForeignKey(
         PermissionPreset,
         on_delete=models.CASCADE,

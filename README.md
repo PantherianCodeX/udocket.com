@@ -12,13 +12,33 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    - `APP_ROOT` defaults to `/udocket` inside containers; update it (and derived paths such as `STORAGE_ROOT`) when running directly on your host.
    - Runtime configuration checks run on startup. Use `UDOCKET_SKIP_RUNTIME_CHECKS=1` only for short-lived maintenance commands (e.g., a one-off `manage.py collectstatic` in CI); the core stack should run with validation enabled.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
-4) Sync the platform dependencies (dev extras included) without installing the project itself:
+4) Local parity: use a single repo-level env at `opt/venv` (matches containers). Remove any stale `.venv` folders in subprojects if present (`apps/platform/.venv`, `packages/udocket_common/.venv`). Then sync the project dependencies (dev extras included) into the shared env without installing the projects themselves:
 
    ```bash
+   export UV_PROJECT_ENVIRONMENT="$PWD/opt/venv"
    uv sync --frozen --group dev --no-install-project --project apps/platform
+   uv sync --frozen --group dev --no-install-project --project packages/udocket_common
+   uv sync --frozen --group dev --no-install-project --project packages/udocket_core
    ```
 
-   The container’s `PATH` already includes `/opt/venv/bin`, so activation isn’t required. If you prefer an activated prompt locally, run `. /opt/venv/bin/activate`.
+   The container’s `PATH` already includes `/opt/venv/bin`, so activation isn’t required. Locally, prefer `uv run` to ensure the correct env is used. If you prefer an activated prompt, run `. opt/venv/bin/activate` after the sync above.
+
+   Everyday quality gates wrap uv automatically:
+
+   ```bash
+   # Tests
+   make all.test          # common → core → platform → docs
+
+   # Lint + formatting + typing
+   make all.lint
+   make all.type
+
+   # Apply formatting/autofixes when needed
+   make all.fix
+
+   # Export pip-compatible manifests (pre-commit runs this automatically)
+   make all.export-reqs
+   ```
 
 5) Build & run the stack:
 

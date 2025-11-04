@@ -5,8 +5,9 @@ from __future__ import annotations
 """Wrapper utilities around ``requests`` session pooling for Azure clients."""
 
 import threading
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Protocol, cast
+from typing import Protocol, cast
 
 import requests
 from requests.adapters import HTTPAdapter

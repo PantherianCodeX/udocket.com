@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-FILE_MAPPING: Dict[str, str] = {
+FILE_MAPPING: dict[str, str] = {
     "apps/platform/ui/templates/platform_ui/partials/analysis_module.html": "apps/platform/ui/templates/platform_ui/components/cases/analysis_module.html",
     "apps/platform/ui/templates/platform_ui/partials/case_progress.html": "apps/platform/ui/templates/platform_ui/components/cases/case_progress.html",
     "apps/platform/ui/templates/platform_ui/partials/case_title.html": "apps/platform/ui/templates/platform_ui/components/cases/case_title.html",
@@ -24,7 +23,7 @@ FILE_MAPPING: Dict[str, str] = {
     "apps/platform/ui/templates/platform_ui/partials/transcript_modal.html": "apps/platform/ui/templates/platform_ui/components/modals/transcript_modal.html",
 }
 
-STRING_MAPPING: Dict[str, str] = {
+STRING_MAPPING: dict[str, str] = {
     "platform_ui/partials/analysis_module.html": "platform_ui/components/cases/analysis_module.html",
     "platform_ui/partials/case_progress.html": "platform_ui/components/cases/case_progress.html",
     "platform_ui/partials/case_title.html": "platform_ui/components/cases/case_title.html",

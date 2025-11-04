@@ -5,13 +5,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
 
 from django.utils import timezone
 
-from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.jobs.models import Job
+from apps.platform.operations.storage import ops_dir as storage_ops_dir
+from packages.udocket_common.jobs.meta import JobRecordPatch, merge_job_meta
 from packages.udocket_common.json_utils import (
+    JSONObject,
     read_json_object,
     write_json_object,
 )
@@ -29,83 +30,47 @@ def update_job_meta(
     if not updates:
         return
     ops_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
-    current_raw = read_json_object(ops_path)
-    current = {key: cast(Any, value) for key, value in current_raw.items()}
-    changed = False
-    for key, value in updates.items():
-        if value is None:
-            continue
-        if current.get(key) != value:
-            current[key] = value
-            changed = True
+    current = read_json_object(ops_path)
+    merged_meta, changed = merge_job_meta(current, updates)
     if changed:
         try:
-            write_json_object(ops_path, current)
+            write_json_object(ops_path, merged_meta)
         except Exception:
             pass
 
-    # Persist select metadata fields onto the Job record for efficient querying.
-    resolved_meta: dict[str, object] = (
-        current if changed else {**current, **dict(updates)}
-    )
-    job_updates: dict[str, Any] = {}
+    patch = JobRecordPatch.from_meta(merged_meta)
+    job_updates = patch.as_model_kwargs(include_source_job=False)
 
-    agent_type = resolved_meta.get("agent_type")
-    if isinstance(agent_type, str) and agent_type.strip():
-        job_updates["agent_type"] = agent_type.strip()[:64]
-
-    agent_label = resolved_meta.get("agent_label")
-    if isinstance(agent_label, str) and agent_label.strip():
-        job_updates["agent_label"] = agent_label.strip()[:128]
-
-    job_kind = resolved_meta.get("job_kind")
-    if isinstance(job_kind, str) and job_kind.strip():
-        job_updates["job_kind"] = job_kind.strip()[:64]
-
-    job_title = (
-        resolved_meta.get("job_title")
-        or resolved_meta.get("title")
-        or resolved_meta.get("display_title")
-    )
-    if isinstance(job_title, str) and job_title.strip():
-        job_updates["display_title"] = job_title.strip()[:255]
-
-    source_job_value = resolved_meta.get("source_job_id") or resolved_meta.get(
-        "converted_audio_job_id"
-    )
-    if source_job_value:
+    source_job_id = patch.source_job_id
+    if source_job_id is not None:
+        # Guard against dangling references; only set when the source exists.
         try:
-            source_uuid = uuid.UUID(str(source_job_value))
-        except (TypeError, ValueError):
-            source_uuid = None
-        if source_uuid:
-            # Guard against dangling references; only set when the source exists
-            try:
-                if Job.objects.filter(pk=source_uuid).exists():
-                    job_updates["source_job_id"] = source_uuid
-            except Exception:
-                pass
+            if Job.objects.filter(pk=source_job_id).exists():
+                job_updates["source_job_id"] = source_job_id
+        except Exception:
+            pass
 
-    if job_updates:
-        try:
-            job_uuid = uuid.UUID(str(job_id))
-        except (TypeError, ValueError):
-            job_uuid = None
-        if job_uuid:
-            try:
-                Job.objects.filter(pk=job_uuid).update(**job_updates)
-            except Exception:
-                pass
+    if not job_updates:
+        return
+
+    try:
+        job_uuid = uuid.UUID(str(job_id))
+    except (TypeError, ValueError):
+        return
+
+    try:
+        Job.objects.filter(pk=job_uuid).update(**job_updates)
+    except Exception:
+        pass
 
 
 def read_job_meta(
     case_id: str,
     organization_id: str | uuid.UUID | None,
     job_id: str,
-) -> dict[str, Any]:
+) -> JSONObject:
     meta_path = storage_ops_dir(case_id, organization_id) / META_FILE_TEMPLATE.format(job_id=job_id)
-    raw = read_json_object(meta_path)
-    return {key: cast(Any, value) for key, value in raw.items()}
+    return read_json_object(meta_path)
 
 
 def append_job_log(

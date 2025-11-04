@@ -2,12 +2,12 @@ from __future__ import annotations
 
 # pyright: strict
 from collections import Counter
-from typing import Any, Dict, List
+from typing import Any
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
@@ -20,8 +20,8 @@ from .constants import ARTIFACT_TABLE_COLUMNS
 from .presenters.analysis_modules import artifact_payload
 
 
-def _artifact_rows(artifacts: List[CaseArtifact]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _artifact_rows(artifacts: list[CaseArtifact]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for artifact in artifacts:
         payload = artifact_payload(artifact)
         case_obj = artifact.case_fk
@@ -70,7 +70,8 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
 
     user = getattr(request, "user", None)
     queryset = (
-        CaseArtifact.scoped().for_user(user)
+        CaseArtifact.scoped()
+        .for_user(user)
         .filter(organization=organization)
         .select_related("case_fk")
         .order_by("-created_at")
@@ -88,8 +89,15 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
             | Q(job_id__icontains=search_value)
         )
 
-    raw_limit_choices = getattr(settings, "PLATFORM_UI_ARTIFACT_LIMIT_CHOICES", (10, 25, 50, 100, 200))
-    limit_choices = sorted({int(value) for value in raw_limit_choices if int(value) > 0}) or [25, 50, 100, 200]
+    raw_limit_choices = getattr(
+        settings, "PLATFORM_UI_ARTIFACT_LIMIT_CHOICES", (10, 25, 50, 100, 200)
+    )
+    limit_choices = sorted({int(value) for value in raw_limit_choices if int(value) > 0}) or [
+        25,
+        50,
+        100,
+        200,
+    ]
     default_limit = getattr(settings, "PLATFORM_UI_ARTIFACT_DEFAULT_LIMIT", limit_choices[0])
     page_size_param = f"{prefix}_page_size"
     try:
@@ -109,8 +117,7 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         page_number = int(request.GET.get(page_param, "1"))
     except (TypeError, ValueError):
         page_number = 1
-    if page_number < 1:
-        page_number = 1
+    page_number = max(page_number, 1)
 
     paginator = Paginator(queryset, page_size)
     page_obj = paginator.get_page(page_number)
@@ -127,7 +134,9 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
         "has_previous": page_obj.has_previous(),
         "has_next": page_obj.has_next(),
         "previous_page": page_obj.previous_page_number() if page_obj.has_previous() else 1,
-        "next_page": page_obj.next_page_number() if page_obj.has_next() else paginator.num_pages or 1,
+        "next_page": page_obj.next_page_number()
+        if page_obj.has_next()
+        else paginator.num_pages or 1,
         "display_count": len(rows),
         "first_page": 1,
         "last_page": paginator.num_pages or 1,

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -23,7 +23,7 @@ def format_helper_table(helpers: Sequence[Mapping[str, Any]]) -> str:
         return "_No helper runs recorded._"
     headers = "| Helper | Version | Status | Last Run |\n| --- | --- | --- | --- |"
     rows = [
-        f"| {item.get('name')} | {item.get('version', '-') } | {item.get('status', '-')} | {item.get('lastRun', '-') } |"
+        f"| {item.get('name')} | {item.get('version', '-')} | {item.get('status', '-')} | {item.get('lastRun', '-')} |"
         for item in helpers
     ]
     return "\n".join([headers, *rows])
@@ -32,7 +32,9 @@ def format_helper_table(helpers: Sequence[Mapping[str, Any]]) -> str:
 def format_strict_list(strict_modules: Sequence[Mapping[str, Any]]) -> str:
     if not strict_modules:
         return "_No modules recorded._"
-    lines = [f"- `{item.get('path')}` (verified {item.get('verifiedAt')})" for item in strict_modules]
+    lines = [
+        f"- `{item.get('path')}` (verified {item.get('verifiedAt')})" for item in strict_modules
+    ]
     return "\n".join(lines)
 
 
@@ -72,8 +74,12 @@ def sync_status(manifest: Mapping[str, Any]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate automation status documentation from manifest.")
-    parser.add_argument("manifest", nargs="?", default="docs/typing/automation_manifest.json", type=Path)
+    parser = argparse.ArgumentParser(
+        description="Generate automation status documentation from manifest."
+    )
+    parser.add_argument(
+        "manifest", nargs="?", default="docs/typing/automation_manifest.json", type=Path
+    )
     args = parser.parse_args()
 
     manifest_path = args.manifest if args.manifest.is_absolute() else PROJECT_ROOT / args.manifest

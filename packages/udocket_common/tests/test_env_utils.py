@@ -35,7 +35,9 @@ def test_parse_env_file_skips_invalid_lines(tmp_path: Path) -> None:
     assert parsed == {"KEY": "value"}
 
 
-def test_load_env_defaults_prefers_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_env_defaults_prefers_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     override = tmp_path / "override.env"
     override.write_text("TEST_ENV_ALPHA=override\n", encoding="utf-8")
     fallback = tmp_path / "fallback.env"
@@ -57,7 +59,9 @@ def test_load_env_defaults_applies_first_available(tmp_path: Path) -> None:
     assert os.environ["TEST_ENV_BETA"] == "beta"
 
 
-def test_load_env_defaults_ignores_missing_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_env_defaults_ignores_missing_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     missing = tmp_path / "missing.env"
     monkeypatch.delenv("TEST_ENV_EPSILON", raising=False)
 
@@ -66,7 +70,9 @@ def test_load_env_defaults_ignores_missing_files(tmp_path: Path, monkeypatch: py
     assert "TEST_ENV_EPSILON" not in os.environ
 
 
-def test_load_env_defaults_does_not_override_existing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_env_defaults_does_not_override_existing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env_file = tmp_path / "defaults.env"
     env_file.write_text("TEST_ENV_GAMMA=fallback\n", encoding="utf-8")
     monkeypatch.setenv("TEST_ENV_GAMMA", "existing")

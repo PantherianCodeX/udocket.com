@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import asyncio
 import logging
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any
 
-from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 from packages.udocket_common.json_utils import (
     JSONArray,
     JSONObject,
@@ -18,9 +17,10 @@ from packages.udocket_common.json_utils import (
     load_json_value,
     write_json_object,
 )
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 
-from .common import append_jsonl, ensure_dir, sha256_file
 from ..llm import LLMSettings, load_llm_settings
+from .common import append_jsonl, ensure_dir, sha256_file
 from .compose.errors import ComposeStageError
 from .compose.guards import factuality_report
 from .compose.io import ArtifactWriter
@@ -42,7 +42,6 @@ from .compose.state import (
     LaneRuntimeState,
     lane_history_payload,
 )
-
 
 logger = logging.getLogger("udocket.compose.agent")
 
@@ -68,8 +67,9 @@ def _factuality_report(
         min_timestamp_references=min_timestamp_references,
     )
 
+
 class ComposeAgent:
-    def __init__(self, config: Optional[ComposeConfig] = None) -> None:
+    def __init__(self, config: ComposeConfig | None = None) -> None:
         self.config = config or ComposeConfig.from_env()
         self.settings: LLMSettings = load_llm_settings()
         self.logger = logger
@@ -94,7 +94,11 @@ class ComposeAgent:
     def _log_context_from_state(self, state: ComposeState) -> ComposeLogContext:
         metadata = state.inputs.case_metadata if state.inputs else {}
         case_id = coerce_str(metadata.get("case_id")) or "unknown"
-        job_id = coerce_str(metadata.get("compose_job_id")) or coerce_str(metadata.get("job_id")) or "unknown"
+        job_id = (
+            coerce_str(metadata.get("compose_job_id"))
+            or coerce_str(metadata.get("job_id"))
+            or "unknown"
+        )
         case_title = coerce_str(metadata.get("case_title")) or None
         job_display_title = coerce_str(metadata.get("job_display_title")) or None
         organization_name = coerce_str(metadata.get("organization_name")) or None
@@ -133,10 +137,10 @@ class ComposeAgent:
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         orchestrator = self._new_orchestrator(log_context=self._log_context_from_state(state))
-        qa_step = getattr(orchestrator, "_qa_reviewer_step")
+        qa_step = orchestrator._qa_reviewer_step
         return qa_step(
             state=state,
             provider_credentials=provider_credentials,
@@ -150,10 +154,10 @@ class ComposeAgent:
         lane: str,
         directive: LaneActionDirective,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         orchestrator = self._new_orchestrator(log_context=self._log_context_from_state(state))
-        editor_step = getattr(orchestrator, "_run_lane_editor")
+        editor_step = orchestrator._run_lane_editor
         return editor_step(
             state=state,
             lane=lane,
@@ -168,14 +172,14 @@ class ComposeAgent:
         case_id: str,
         case_dir: Path,
         job_id: str,
-        summary_json_path: Optional[Path],
-        summary_markdown_path: Optional[Path],
-        timeline_seed_path: Optional[Path] = None,
-        entity_hint_path: Optional[Path] = None,
-        intake: Optional[Mapping[str, Any]] = None,
-        case_metadata: Optional[Mapping[str, Any]] = None,
-        provider_credentials: Optional[Mapping[str, Mapping[str, Any]]] = None,
-        progress_callback: Optional[Callable[[str, str, JSONObject], None]] = None,
+        summary_json_path: Path | None,
+        summary_markdown_path: Path | None,
+        timeline_seed_path: Path | None = None,
+        entity_hint_path: Path | None = None,
+        intake: Mapping[str, Any] | None = None,
+        case_metadata: Mapping[str, Any] | None = None,
+        provider_credentials: Mapping[str, Mapping[str, Any]] | None = None,
+        progress_callback: Callable[[str, str, JSONObject], None] | None = None,
         resume: bool = False,
     ) -> ComposeResult:
         case_dir = Path(case_dir)
@@ -290,6 +294,7 @@ class ComposeAgent:
 
         orchestrator = self._new_orchestrator(compose_run=run_tracker, log_context=log_context)
         if self.config.enable_async:
+
             async def _invoke_async() -> ComposeState:
                 return await orchestrator.run_async(
                     state=state,
@@ -397,11 +402,17 @@ class ComposeAgent:
             "qa_iterations": state.qa_iterations,
             "provider_chain": list(self.config.provider_chain),
             "stage_usage": {stage: dict(values) for stage, values in state.stage_usage.items()},
-            "stage_durations": {stage: float(value) for stage, value in state.stage_durations.items()},
+            "stage_durations": {
+                stage: float(value) for stage, value in state.stage_durations.items()
+            },
             "events": events_payload,
             "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
-            "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
-            "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+            "client_markdown": str(artifacts.client_markdown)
+            if artifacts.client_markdown
+            else None,
+            "lawyer_markdown": str(artifacts.lawyer_markdown)
+            if artifacts.lawyer_markdown
+            else None,
             "client_docx": str(artifacts.client_docx) if artifacts.client_docx else None,
             "lawyer_docx": str(artifacts.lawyer_docx) if artifacts.lawyer_docx else None,
             "qa_report": str(artifacts.qa_report) if artifacts.qa_report else None,
@@ -418,7 +429,7 @@ class ComposeAgent:
         for event_record in collected_events:
             qa_block = event_record.get("qa")
             guards_block = event_record.get("guards")
-            status_summary: Optional[str] = None
+            status_summary: str | None = None
             if isinstance(qa_block, Mapping):
                 status_summary = coerce_str(qa_block.get("status"))
             if status_summary is None and isinstance(guards_block, Mapping):
@@ -448,8 +459,12 @@ class ComposeAgent:
                 "qa_iterations": state.qa_iterations,
                 "qa_provider": state.qa.provider,
                 "bundle_path": str(artifacts.bundle_path) if artifacts.bundle_path else None,
-                "client_markdown": str(artifacts.client_markdown) if artifacts.client_markdown else None,
-                "lawyer_markdown": str(artifacts.lawyer_markdown) if artifacts.lawyer_markdown else None,
+                "client_markdown": str(artifacts.client_markdown)
+                if artifacts.client_markdown
+                else None,
+                "lawyer_markdown": str(artifacts.lawyer_markdown)
+                if artifacts.lawyer_markdown
+                else None,
                 "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
                 "artifact_sha256": artifact_sha_payload,
                 "udocket_core_version": UDOCKET_CORE_VERSION,
@@ -614,7 +629,7 @@ class ComposeAgent:
             )
 
 
-def _load_sequence(path: Optional[Path]) -> list[JSONObject]:
+def _load_sequence(path: Path | None) -> list[JSONObject]:
     if path is None or not path.exists():
         return []
     try:
@@ -629,7 +644,7 @@ def _load_sequence(path: Optional[Path]) -> list[JSONObject]:
     return []
 
 
-def _read_text(path: Optional[Path]) -> str:
+def _read_text(path: Path | None) -> str:
     if path is None:
         return ""
     try:
@@ -638,7 +653,7 @@ def _read_text(path: Optional[Path]) -> str:
         return ""
 
 
-def _read_json(path: Optional[Path]) -> JSONObject:
+def _read_json(path: Path | None) -> JSONObject:
     if path is None or not path.exists():
         return {}
     try:

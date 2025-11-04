@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import shutil
 import subprocess
 from collections.abc import Mapping

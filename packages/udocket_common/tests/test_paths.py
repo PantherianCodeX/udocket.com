@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from pathlib import Path
 
 from packages.udocket_common.paths import CasePaths, build_case_paths

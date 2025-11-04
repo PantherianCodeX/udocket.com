@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import uuid
-from typing import Any, TYPE_CHECKING, Optional, cast
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, cast
 
 from django.db import models
 from simple_history.models import HistoricalRecords
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class CaseArtifactQuerySet(models.QuerySet["CaseArtifact"]):
-    def for_user(self, user: Any) -> "CaseArtifactQuerySet":
+    def for_user(self, user: Any) -> CaseArtifactQuerySet:
         from apps.platform import tenancy
 
         return tenancy.scope_artifacts(self, user)
@@ -38,33 +38,38 @@ class CaseArtifact(models.Model):
         if not isinstance(manager, CaseArtifactManager):  # pragma: no cover - defensive
             raise TypeError("CaseArtifact.objects is not a CaseArtifactManager")
         return manager
+
     """Generic artifact record; full schema to follow in Step 4."""
 
     id: models.BigAutoField[int, int] = models.BigAutoField(primary_key=True)
     case_id: models.CharField[str, str] = models.CharField(max_length=36)
     # Optional FK for normalization; kept nullable for backcompat while migrating
-    case_fk: models.ForeignKey["Case", Optional["Case"]] = models.ForeignKey(
+    case_fk: models.ForeignKey[Case, Case | None] = models.ForeignKey(
         "cases.Case",
         on_delete=models.PROTECT,
         related_name="artifacts",
         null=True,
         blank=True,
     )
-    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
+    organization: models.ForeignKey[Organization, Organization] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.PROTECT,
         related_name="artifacts",
         editable=False,
     )
-    job_id: models.CharField[Optional[str], Optional[str]] = models.CharField(max_length=36, null=True, blank=True)
+    job_id: models.CharField[str | None, str | None] = models.CharField(
+        max_length=36, null=True, blank=True
+    )
     type: models.CharField[str, str] = models.CharField(max_length=32)
     title: models.CharField[str, str] = models.CharField(max_length=200, blank=True)
     path: models.TextField[str, str] = models.TextField()
     checksum: models.CharField[str, str] = models.CharField(max_length=64, blank=True)
     schema_version: models.CharField[str, str] = models.CharField(max_length=16, blank=True)
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    metadata: models.JSONField[dict[str, Any], dict[str, Any]] = models.JSONField(default=dict, blank=True)
-    history: HistoricalRecords["CaseArtifact"] = HistoricalRecords()
+    metadata: models.JSONField[dict[str, Any], dict[str, Any]] = models.JSONField(
+        default=dict, blank=True
+    )
+    history: HistoricalRecords[CaseArtifact] = HistoricalRecords()
 
     @classmethod
     def scoped(cls) -> CaseArtifactManager:
@@ -88,7 +93,9 @@ class CaseArtifact(models.Model):
             if case_fk_id_value is not None:
                 case_fk = getattr(self, "case_fk", None)
                 if case_fk is not None:
-                    resolved_org_id = cast(uuid.UUID | None, getattr(case_fk, "organization_id", None))
+                    resolved_org_id = cast(
+                        uuid.UUID | None, getattr(case_fk, "organization_id", None)
+                    )
             elif self.case_id:
                 from apps.platform.cases.models import Case  # local import to avoid circular
 

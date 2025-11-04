@@ -5,7 +5,7 @@ from __future__ import annotations
 """String-related helpers shared across packages."""
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 __all__ = ["slugify", "unique_title"]
 _UNIQUE_SUFFIX_RE = re.compile(r"(?:\(|-)(\d+)\)?$")
@@ -19,10 +19,10 @@ def slugify(text: str, *, separator: str = "-", allowed: str = "a-z0-9") -> str:
     separator to generate dotted slugs (e.g., make command groups).
     """
 
-    pattern = fr"[^{allowed}]+"
+    pattern = rf"[^{allowed}]+"
     slug = re.sub(pattern, separator, text.lower())
     if separator:
-        slug = re.sub(fr"{re.escape(separator)}+", separator, slug)
+        slug = re.sub(rf"{re.escape(separator)}+", separator, slug)
         return slug.strip(separator)
     return slug.strip()
 
@@ -51,7 +51,6 @@ def unique_title(base: str, existing: Iterable[str]) -> str:
             idx = int(match.group(1))
         except Exception:
             continue
-        if idx > max_idx:
-            max_idx = idx
+        max_idx = max(max_idx, idx)
 
     return f"{base_clean}-{max_idx + 1}"

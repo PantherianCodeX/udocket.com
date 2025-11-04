@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
 import threading
 import time
-from typing import Any, Optional, Protocol, cast
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Protocol, cast
 from urllib.parse import urlsplit
 
 
@@ -64,7 +64,9 @@ from packages.udocket_common.json_utils import (
     normalize_mapping,
     normalize_mapping_optional,
 )
+
 from .http_client import HTTPRetryConfig, HTTPSessionConfig, RequestsSessionManager
+
 CANADIAN_REGIONS = {"canadacentral", "canadaeast"}
 
 
@@ -158,8 +160,7 @@ def _iter_mappings(payload: object) -> Iterable[Mapping[str, object]]:
 
 def _is_json_structure(value: object) -> bool:
     return isinstance(value, Mapping) or (
-        isinstance(value, Sequence)
-        and not isinstance(value, (str, bytes, bytearray))
+        isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
     )
 
 
@@ -387,8 +388,8 @@ class AzureChatClient:
         *,
         messages: list[dict[str, str]],
         temperature: float = 1.0,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[Mapping[str, JSONValue]] = None,
+        max_tokens: int | None = None,
+        response_format: Mapping[str, JSONValue] | None = None,
     ) -> tuple[str, JSONObject]:
         requests_client = _require_requests()
         session = self._session_manager.session_for(self.config.endpoint)
@@ -509,7 +510,9 @@ class AzureChatClient:
                 connection_error_type = getattr(requests_client.exceptions, "ConnectionError", None)
                 timeout_error_type = getattr(requests_client.exceptions, "Timeout", None)
                 is_connection_error = (
-                    isinstance(exc, connection_error_type) if connection_error_type is not None else False
+                    isinstance(exc, connection_error_type)
+                    if connection_error_type is not None
+                    else False
                 )
                 is_timeout_error = (
                     isinstance(exc, timeout_error_type) if timeout_error_type is not None else False
@@ -524,13 +527,20 @@ class AzureChatClient:
                     if not summary_text.endswith((".", "!", "?")):
                         summary_text += "."
                     guidance_parts.append(summary_text)
-                if is_connection_error and "closed connection without response" in error_summary.lower():
+                if (
+                    is_connection_error
+                    and "closed connection without response" in error_summary.lower()
+                ):
                     guidance_parts.append("Azure closed the connection without sending a response.")
                 elif is_connection_error:
                     guidance_parts.append("Azure reported a connection failure.")
                 if is_timeout_error:
-                    guidance_parts.append("The request timed out waiting for a response from Azure.")
-                message = f"Azure OpenAI transport error: request failed after retries{retry_fragment}."
+                    guidance_parts.append(
+                        "The request timed out waiting for a response from Azure."
+                    )
+                message = (
+                    f"Azure OpenAI transport error: request failed after retries{retry_fragment}."
+                )
                 if guidance_parts:
                     message = message.rstrip(".") + ". " + " ".join(guidance_parts)
 
@@ -564,7 +574,9 @@ class AzureChatClient:
 
         request_id: str | None = None
         if response_headers is not None:
-            request_id = response_headers.get("x-ms-request-id") or response_headers.get("x-request-id")
+            request_id = response_headers.get("x-ms-request-id") or response_headers.get(
+                "x-request-id"
+            )
 
         content_parts: list[str] = []
         usage: JSONObject = {}

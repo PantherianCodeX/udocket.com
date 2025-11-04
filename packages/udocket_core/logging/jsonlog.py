@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-# pyright: strict
-
-from datetime import datetime, timezone
 import sys
 
-from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_json_value, stringify_json
+# pyright: strict
+from datetime import UTC, datetime
+
+from packages.udocket_common.json_utils import (
+    JSONObject,
+    JSONValue,
+    coerce_json_value,
+    stringify_json,
+)
 
 
 def log(event: str, **kwargs: JSONValue) -> None:
     """Emit a structured JSON log line to stdout."""
 
     payload: JSONObject = {
-        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "event": event,
     }
     for key, value in kwargs.items():

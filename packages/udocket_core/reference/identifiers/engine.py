@@ -1,25 +1,28 @@
 from __future__ import annotations
+
 import re
-from typing import Dict, List, Optional, Tuple, Sequence
+from collections.abc import Sequence
 
 from .base import (
     CaseNumber,
     CaseNumberScheme,
-    RegexRule,
-    Transform,
     ConstraintDecl,
     DerivationDecl,
+    RegexRule,
+    Transform,
 )
 from .registry import all_schemes, schemes_by_court
+
 
 class CaseNumberEngine:
     """
     Small helper to work with a fixed set of schemes (useful in services).
     """
-    def __init__(self, schemes: Optional[List[CaseNumberScheme]] = None) -> None:
+
+    def __init__(self, schemes: list[CaseNumberScheme] | None = None) -> None:
         self._schemes = schemes or list(all_schemes())
 
-    def match(self, value: str, court_key_hint: Optional[str] = None) -> Optional[CaseNumber]:
+    def match(self, value: str, court_key_hint: str | None = None) -> CaseNumber | None:
         if court_key_hint:
             for s in schemes_by_court().get(court_key_hint, []):
                 try:
@@ -39,7 +42,7 @@ class CaseNumberEngine:
                 continue
         return None
 
-    def validate(self, value: str, court_key_hint: Optional[str] = None) -> CaseNumber:
+    def validate(self, value: str, court_key_hint: str | None = None) -> CaseNumber:
         if court_key_hint:
             for s in schemes_by_court().get(court_key_hint, []):
                 res = _try_scheme(value, s)
@@ -59,12 +62,16 @@ def _compile_flags(flags: Sequence[str]) -> int:
             f |= re.MULTILINE
     return f
 
+
 def _apply_transform(s: str, t: Transform) -> str:
-    if t.op == "UPPER": return s.upper()
-    if t.op == "LOWER": return s.lower()
-    if t.op == "TRIM": return s.strip()
+    if t.op == "UPPER":
+        return s.upper()
+    if t.op == "LOWER":
+        return s.lower()
+    if t.op == "TRIM":
+        return s.strip()
     if t.op == "REMOVE_CHARS":
-        chars = (t.arg or "")
+        chars = t.arg or ""
         return s.translate({ord(c): None for c in chars})
     if t.op == "KEEP_ALNUM":
         return "".join(ch for ch in s if ch.isalnum())
@@ -78,14 +85,18 @@ def _apply_transform(s: str, t: Transform) -> str:
         return pat.sub(repl, s)
     return s
 
-def _normalize(value: str, rule: RegexRule) -> Tuple[str, re.Pattern]:
+
+def _normalize(value: str, rule: RegexRule) -> tuple[str, re.Pattern]:
     s = value
     for tr in rule.transforms or []:
         s = _apply_transform(s, tr)
     pat = re.compile(rule.pattern, _compile_flags(rule.flags))
     return s, pat
 
-def _enforce_constraints(court_key: str, parts: Dict[str, str], constraints: List[ConstraintDecl]) -> None:
+
+def _enforce_constraints(
+    court_key: str, parts: dict[str, str], constraints: list[ConstraintDecl]
+) -> None:
     for c in constraints or []:
         v = parts.get(c.group, "")
         if c.kind == "year_range":
@@ -106,8 +117,10 @@ def _enforce_constraints(court_key: str, parts: Dict[str, str], constraints: Lis
             # Other constraints (regex/length/year_range) still apply.
             pass
 
+
 def _year_2_to_4(two: str, floor: int = 1980) -> str:
-    if not two.isdigit(): return two
+    if not two.isdigit():
+        return two
     yy = int(two)
     century = (floor // 100) * 100
     year = century + yy
@@ -115,11 +128,13 @@ def _year_2_to_4(two: str, floor: int = 1980) -> str:
         year += 100
     return f"{year:04d}"
 
-def _apply_derivations(parts: Dict[str, str], derivs: List[DerivationDecl]) -> Dict[str, str]:
+
+def _apply_derivations(parts: dict[str, str], derivs: list[DerivationDecl]) -> dict[str, str]:
     out = dict(parts)
     for d in derivs or []:
         if d.kind == "YEAR_2_TO_4":
-            src = d.src; dest = d.dest
+            src = d.src
+            dest = d.dest
             out[dest] = _year_2_to_4(parts.get(src, ""), d.century_floor or 1980)
         elif d.kind == "MAP":
             src = parts.get(d.src, "")
@@ -129,7 +144,8 @@ def _apply_derivations(parts: Dict[str, str], derivs: List[DerivationDecl]) -> D
             out[d.dest] = (d.sep or "").join(seq)
     return out
 
-def _try_scheme(value: str, scheme: CaseNumberScheme) -> Optional[CaseNumber]:
+
+def _try_scheme(value: str, scheme: CaseNumberScheme) -> CaseNumber | None:
     for r in scheme.rules:
         normalized, pat = _normalize(value, r)
         m = pat.match(normalized)
@@ -148,12 +164,13 @@ def _try_scheme(value: str, scheme: CaseNumberScheme) -> Optional[CaseNumber]:
         )
     return None
 
-def validate_case_number(value: str, court_key_hint: Optional[str] = None) -> CaseNumber:
+
+def validate_case_number(value: str, court_key_hint: str | None = None) -> CaseNumber:
     """
     Validate a value against schemes. If court_key_hint provided, only that court is tried.
     Otherwise, auto-detects across all known schemes.
     """
-    errors: List[str] = []
+    errors: list[str] = []
     if court_key_hint:
         for s in schemes_by_court().get(court_key_hint, []):
             try:
@@ -175,16 +192,18 @@ def validate_case_number(value: str, court_key_hint: Optional[str] = None) -> Ca
 
     raise ValueError("; ".join(errors) or "No scheme matched")
 
+
 # --- Convenience wrappers -----------------------------------------------------
 
-def load_case_number_schemes() -> List[CaseNumberScheme]:
+
+def load_case_number_schemes() -> list[CaseNumberScheme]:
     """Return all registered schemes (wrapper around registry)."""
     return list(all_schemes())
 
-def match_case_number(value: str, court_key_hint: Optional[str] = None) -> Optional[CaseNumber]:
+
+def match_case_number(value: str, court_key_hint: str | None = None) -> CaseNumber | None:
     """Like validate_case_number but returns None instead of raising."""
     try:
         return validate_case_number(value, court_key_hint=court_key_hint)
     except Exception:
         return None
-    

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from ...llm.runtime import SupportsHealthCheck
 

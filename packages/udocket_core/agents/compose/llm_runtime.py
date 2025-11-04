@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
 import random
 import time
-from typing import Any, Mapping, Tuple, cast
+from collections.abc import Mapping
+from typing import Any, cast
 
 from packages.udocket_common.json_utils import JSONObject
+
 from ...llm import LLMSettings
 from ...llm.runtime import ChatClientError, build_chat_client, build_provider_runtime_config
 from .errors import ComposeStageError
-from .settings import ComposeConfig, DEFAULT_PROVIDER_CHAIN, normalize_provider_chain
 from .llm_profiles import STAGE_MODEL_DEFAULTS
+from .settings import DEFAULT_PROVIDER_CHAIN, ComposeConfig, normalize_provider_chain
 
 logger = logging.getLogger("udocket.compose.llm_runtime")
 
@@ -47,7 +48,7 @@ def invoke_llm(
     provider_credentials: Mapping[str, JSONObject],
     config: ComposeConfig,
     settings: LLMSettings,
-) -> Tuple[str, dict[str, int], str, str]:
+) -> tuple[str, dict[str, int], str, str]:
     providers = normalize_provider_chain(config.provider_chain)
     assignment = settings.stage(stage)
     provider_name = ""
@@ -60,7 +61,9 @@ def invoke_llm(
 
     provider_meta = settings.provider(provider_name)
     if provider_meta is None:
-        raise ComposeStageError(stage, f"Unknown provider '{provider_name}'", provider=provider_name)
+        raise ComposeStageError(
+            stage, f"Unknown provider '{provider_name}'", provider=provider_name
+        )
 
     provider_info = cast(Any, provider_meta)
     default_model = cast(str, getattr(provider_info, "default_model", ""))
@@ -73,7 +76,9 @@ def invoke_llm(
         model_override = assignment.model
     model_name = model_override or default_model
     if not model_name:
-        raise ComposeStageError(stage, f"No model configured for provider '{provider_name}'", provider=provider_name)
+        raise ComposeStageError(
+            stage, f"No model configured for provider '{provider_name}'", provider=provider_name
+        )
 
     credentials = provider_credentials.get(provider_name)
     try:
@@ -115,7 +120,11 @@ def invoke_llm(
             )
             logger.debug(
                 "compose.llm.raw_prefix stage=%s provider=%s model=%s prefix=%r len=%d",
-                stage, provider_name, model_name, content[:200], len(content),
+                stage,
+                provider_name,
+                model_name,
+                content[:200],
+                len(content),
             )
 
             usage_map = {key: value for key, value in usage.items() if isinstance(value, int)}
@@ -135,11 +144,15 @@ def invoke_llm(
         except ChatClientError as exc:
             last_error = exc
             if not _should_retry(exc) or attempt >= attempts:
-                raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
+                raise ComposeStageError(
+                    stage, str(exc), provider=provider_name, model=model_name
+                ) from exc
         except RuntimeError as exc:
             last_error = exc
             if not _should_retry(exc) or attempt >= attempts:
-                raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
+                raise ComposeStageError(
+                    stage, str(exc), provider=provider_name, model=model_name
+                ) from exc
 
         jitter = random.uniform(0.0, min(0.5, delay_seconds * 0.25))
         sleep_time = delay_seconds + jitter

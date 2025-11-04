@@ -2,7 +2,8 @@ from __future__ import annotations
 
 """Shared helpers for tenant-aware filtering."""
 
-from typing import Any, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Any, TypeVar
 
 from django.apps import apps
 from django.conf import settings

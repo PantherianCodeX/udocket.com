@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import re
+from collections.abc import Mapping, Sequence
 from difflib import SequenceMatcher
-from typing import Mapping, Optional, Sequence
 
 from packages.udocket_common.json_utils import JSONObject, coerce_str
 
@@ -12,10 +11,14 @@ from .state import GuardReport
 
 
 def sentence_length_report(document: str, *, max_average_words: float) -> GuardReport:
-    filtered_lines = [line for line in document.splitlines() if not line.strip().startswith(("- ", "* "))]
+    filtered_lines = [
+        line for line in document.splitlines() if not line.strip().startswith(("- ", "* "))
+    ]
     body = "\n".join(filtered_lines)
     body = re.sub(r"^##.+$", "", body, flags=re.MULTILINE)
-    candidates = [candidate.strip() for candidate in re.split(r"(?<=[.!?])\s+|\n", body) if candidate.strip()]
+    candidates = [
+        candidate.strip() for candidate in re.split(r"(?<=[.!?])\s+|\n", body) if candidate.strip()
+    ]
     lengths: list[int] = []
     for candidate in candidates:
         words = re.findall(r"\b\w+\b", candidate)
@@ -74,8 +77,8 @@ def markdown_structure_report(
     required: Sequence[str],
     *,
     min_words: int,
-    per_section_min: Optional[Mapping[str, int]] = None,
-    per_section_max: Optional[Mapping[str, int]] = None,
+    per_section_min: Mapping[str, int] | None = None,
+    per_section_max: Mapping[str, int] | None = None,
 ) -> GuardReport:
     text = document.strip()
     if not text:
@@ -186,11 +189,16 @@ def factuality_report(
             continue
 
         atom_hit = (
-            any(atom in lower or SequenceMatcher(None, atom, lower).ratio() >= 0.82 for atom in atom_set)
+            any(
+                atom in lower or SequenceMatcher(None, atom, lower).ratio() >= 0.82
+                for atom in atom_set
+            )
             if atom_set
             else False
         )
-        event_hit = any(re.search(rf"(?<!\w){re.escape(eid)}(?!\w)", sentence) for eid in event_id_set)
+        event_hit = any(
+            re.search(rf"(?<!\w){re.escape(eid)}(?!\w)", sentence) for eid in event_id_set
+        )
 
         if not (atom_hit or event_hit) and len(lower) >= 24:
             errors.append(f"Unsupported assertion: '{sentence}'")

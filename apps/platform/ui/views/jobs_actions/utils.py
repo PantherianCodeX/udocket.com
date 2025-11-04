@@ -19,8 +19,7 @@ log = logging.getLogger("apps.platform.ui")
 
 
 class TaskWithDelay(Protocol):
-    def delay(self, *args: Any, **kwargs: Any) -> Any:
-        ...
+    def delay(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class CaseArtifactLike(Protocol):
@@ -28,8 +27,7 @@ class CaseArtifactLike(Protocol):
     title: str
     metadata: Any
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        ...
+    def save(self, *args: Any, **kwargs: Any) -> None: ...
 
 
 def resolve_job(case_id: str, job_id: UUID, request: HttpRequest) -> Job:

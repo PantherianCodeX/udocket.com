@@ -32,7 +32,9 @@ def decode_from_make(lines: Sequence[str], name: str) -> str:
     raise SystemExit(f"Missing definition for {name}")
 
 
-def collect_sections(lines: Sequence[str]) -> tuple[list[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
+def collect_sections(
+    lines: Sequence[str],
+) -> tuple[list[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
     sections: list[tuple[str, str]] = []
     commands: dict[str, list[tuple[str, str]]] = {}
     current: str | None = None
@@ -66,7 +68,13 @@ def select_sections(sections: Sequence[tuple[str, str]], slug: str) -> list[tupl
     if exact:
         return exact
 
-    prefix = [entry for entry in sections if entry[0].startswith(f"{slug}.") or entry[0].startswith(f"{slug}-") or (entry[0].startswith(slug) and entry[0] != slug)]
+    prefix = [
+        entry
+        for entry in sections
+        if entry[0].startswith(f"{slug}.")
+        or entry[0].startswith(f"{slug}-")
+        or (entry[0].startswith(slug) and entry[0] != slug)
+    ]
     if prefix:
         return prefix
 

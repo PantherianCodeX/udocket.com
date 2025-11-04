@@ -11,7 +11,6 @@ from xml.sax.saxutils import escape
 
 from packages.udocket_common.time import format_utc
 
-
 _CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -44,15 +43,15 @@ _CORE_PROPS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 
 def _paragraph_xml(text: str) -> str:
     safe = escape(text).replace("\n", "<w:br />")
-    return "<w:p><w:r><w:t xml:space=\"preserve\">" + safe + "</w:t></w:r></w:p>"
+    return '<w:p><w:r><w:t xml:space="preserve">' + safe + "</w:t></w:r></w:p>"
 
 
 def _document_xml(paragraphs: Sequence[str]) -> str:
     content = paragraphs or ("",)
     body = "".join(_paragraph_xml(paragraph) for paragraph in content)
     return (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
         f"<w:body>{body}<w:sectPr/></w:body>"
         "</w:document>"
     )

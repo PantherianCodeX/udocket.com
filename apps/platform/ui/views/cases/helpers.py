@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Tuple, cast
+
+from collections.abc import Iterable, Mapping, MutableMapping
+from typing import Any, cast
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
@@ -10,11 +12,10 @@ from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
-
-from ..presenters.cases import case_progress_context, collect_case_artifacts
-from ..selectors import job_telemetry_map
 from packages.udocket_common.json_utils import stringify_json
 
+from ..presenters.cases import case_progress_context
+from ..selectors import job_telemetry_map
 
 TOOL_KEY_ALIASES = {
     "": "intake",
@@ -38,7 +39,11 @@ def check_case_update_permission(request: HttpRequest, case: Case) -> HttpRespon
     user = getattr(request, "user", None)
     if dev_open:
         return None
-    if user and getattr(user, "is_authenticated", False) and has_capability(user, str(case.id), "case.update"):
+    if (
+        user
+        and getattr(user, "is_authenticated", False)
+        and has_capability(user, str(case.id), "case.update")
+    ):
         return None
     return HttpResponse("Forbidden", status=403)
 
@@ -53,7 +58,6 @@ def case_progress_response(request: HttpRequest, case: Case) -> HttpResponse:
     jobs_list: Iterable[Job] = scope_jobs(jobs_qs, getattr(request, "user", None))
     jobs_sequence = list(jobs_list)
     telemetry_map = job_telemetry_map(jobs_sequence, request)
-    artifacts = collect_case_artifacts(request, case)
     context = {
         "case": case,
         **case_progress_context(
@@ -89,7 +93,7 @@ def resolve_panel(
     panels: Mapping[str, object],
     default: str = "intake",
     allow_fallback: bool = True,
-) -> Tuple[str, object | None]:
+) -> tuple[str, object | None]:
     """Return the canonical tool key and corresponding panel."""
     key = resolve_tool_key(raw_key, panels.keys(), default, allow_fallback=allow_fallback)
     return key, panels.get(key)
@@ -101,7 +105,7 @@ def case_refresh_trigger(
     *,
     active_tool: str,
     tools: Iterable[str] | None = None,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     tools_list = list(tools) if tools is not None else [active_tool]
     tool_panels = state.get("tool_panels") if isinstance(state, Mapping) else {}
     active_panel = {}
@@ -157,7 +161,7 @@ def render_case_panel_with_refresh(
         "case_refresh": snippets,
     }
     response = render(request, "platform_ui/tools/_panel.html", context, status=status)
-    trigger_payload: Dict[str, object] = dict(extra_triggers or {})
+    trigger_payload: dict[str, object] = dict(extra_triggers or {})
     trigger_payload["case-view-refreshed"] = {
         "tools": refresh_payload.get("tools", []),
         "active_tool": refresh_payload.get("active_tool"),

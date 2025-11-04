@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.platform.jobs.models import Job
 from apps.platform.operations.channels import send_job_update
 from apps.platform.operations.utils import append_job_log, update_job_meta
+from packages.udocket_common.json_utils import JSONValue, coerce_json_value
 
 
 def _safe_job_meta(
@@ -52,7 +53,7 @@ def _emit_job_update(
     payload: Mapping[str, object] | None = None,
 ) -> None:
     try:
-        message = dict(payload or {})
+        message = _normalize_channel_payload(payload)
         message.pop("case_id", None)
         message.pop("event", None)
         if status is not None:
@@ -101,7 +102,7 @@ def emit_job_update(
     _emit_job_update(job_id, case_id=case_id, event=event, status=status, payload=payload)
 
 
-def _resolve_status(payload: dict[str, object], fallback: str | None) -> str | None:
+def _resolve_status(payload: dict[str, JSONValue], fallback: str | None) -> str | None:
     raw_status = payload.pop("status", None)
     if isinstance(raw_status, str):
         return raw_status
@@ -110,6 +111,15 @@ def _resolve_status(payload: dict[str, object], fallback: str | None) -> str | N
 
 def _empty_task_meta() -> dict[str, object]:
     return {}
+
+
+def _normalize_channel_payload(payload: Mapping[str, object] | None) -> dict[str, JSONValue]:
+    normalized: dict[str, JSONValue] = {}
+    if not payload:
+        return normalized
+    for key, value in payload.items():
+        normalized[str(key)] = coerce_json_value(value)
+    return normalized
 
 
 @dataclass
@@ -172,14 +182,14 @@ class JobRuntimeContext:
         _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "")
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
         if event:
-            payload = dict(job_event_payload or {})
-            event_status = _resolve_status(payload, status)
+            normalized_payload = _normalize_channel_payload(job_event_payload)
+            event_status = _resolve_status(dict(normalized_payload), status)
             _emit_job_update(
                 self.job_id,
                 case_id=self.case_id,
                 event=event,
                 status=event_status,
-                payload=payload,
+                payload=normalized_payload,
             )
         self._update_task_state(
             {
@@ -219,8 +229,8 @@ class JobRuntimeContext:
         _safe_job_log(self.case_id, self.org_id, self.job_id, log_message or "")
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
-        payload = dict(job_event_payload or {})
-        event_status = _resolve_status(payload, status)
+        payload = _normalize_channel_payload(job_event_payload)
+        event_status = _resolve_status(dict(payload), status)
         payload.pop("case_id", None)
         payload.pop("event", None)
         _emit_job_update(
@@ -231,8 +241,8 @@ class JobRuntimeContext:
             payload=payload,
         )
         for event_name, event_payload in events or ():
-            payload_with_status = dict(event_payload)
-            event_status_override = _resolve_status(payload_with_status, status)
+            payload_with_status = _normalize_channel_payload(event_payload)
+            event_status_override = _resolve_status(dict(payload_with_status), status)
             payload_with_status.pop("case_id", None)
             payload_with_status.pop("event", None)
             _emit_job_update(
@@ -284,11 +294,11 @@ class JobRuntimeContext:
         _safe_job_log(self.case_id, self.org_id, self.job_id, log_line, level="ERROR")
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
-        payload = dict(job_event_payload or {})
+        payload = _normalize_channel_payload(job_event_payload)
         payload.pop("case_id", None)
         payload.pop("event", None)
         payload.setdefault("error", error)
-        event_status = _resolve_status(payload, status)
+        event_status = _resolve_status(dict(payload), status)
         _emit_job_update(
             self.job_id,
             case_id=self.case_id,
@@ -297,11 +307,11 @@ class JobRuntimeContext:
             payload=payload,
         )
         for event_name, event_payload in events or ():
-            payload_with_error = dict(event_payload)
+            payload_with_error = _normalize_channel_payload(event_payload)
             payload_with_error.pop("case_id", None)
             payload_with_error.pop("event", None)
             payload_with_error.setdefault("error", error)
-            event_status_override = _resolve_status(payload_with_error, status)
+            event_status_override = _resolve_status(dict(payload_with_error), status)
             _emit_job_update(
                 self.job_id,
                 case_id=self.case_id,
@@ -356,7 +366,9 @@ class JobRuntimeContext:
         )
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
-        payload = dict(job_event_payload or {})
+        payload = _normalize_channel_payload(job_event_payload)
+        payload.pop("case_id", None)
+        payload.pop("event", None)
         payload.setdefault("error", reason or "Cancelled")
         _emit_job_update(
             self.job_id,
@@ -366,12 +378,13 @@ class JobRuntimeContext:
             payload=payload,
         )
         for event_name, event_payload in events or ():
+            normalized_event_payload = _normalize_channel_payload(event_payload)
             _emit_job_update(
                 self.job_id,
                 case_id=self.case_id,
                 event=event_name,
                 status=Job.Status.CANCELLED,
-                payload=event_payload,
+                payload=normalized_event_payload,
             )
 
         self._update_task_state(
@@ -414,8 +427,8 @@ class JobRuntimeContext:
         _safe_job_meta(self.case_id, self.org_id, self.job_id, meta_updates)
 
         if event:
-            payload = dict(job_event_payload or {})
-            event_status = _resolve_status(payload, status)
+            payload = _normalize_channel_payload(job_event_payload)
+            event_status = _resolve_status(dict(payload), status)
             _emit_job_update(
                 self.job_id,
                 case_id=self.case_id,
@@ -427,7 +440,7 @@ class JobRuntimeContext:
         self._update_task_state(task_meta_updates)
 
     def emit(self, event: str, *, status: str | None = None, **payload: object) -> None:
-        sanitized = dict(payload)
+        sanitized = _normalize_channel_payload(payload)
         sanitized.pop("case_id", None)
         sanitized.pop("event", None)
         _emit_job_update(

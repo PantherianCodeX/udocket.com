@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-# pyright: strict
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
-
-from packages.udocket_common.json_utils import stringify_pretty
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, HttpRequest
 from django.db.models import Count
+from django.http import Http404, HttpRequest
 
 from apps.platform.accounts.models import User
 from apps.platform.accounts.utils import resolve_request_organization
@@ -19,11 +15,18 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job, JobNote
+from apps.platform.jobs.notes import serialize_notes
 from apps.platform.jobs.telemetry import analyze_jobs
 from apps.platform.tenancy import scope_jobs
 
+# pyright: strict
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
+from packages.udocket_common.json_utils import stringify_pretty
+
 from .common import JobTelemetryPayload, as_dict
-from .presenters.job_actions import build_job_action_entries
+from .job_tables import build_job_table_state
+from .presenters.analysis_modules import analysis_modules_context
+from .presenters.case_fields import prepare_case_fields
 from .presenters.cases import (
     build_case_developer_cards,
     build_case_header_context,
@@ -31,16 +34,13 @@ from .presenters.cases import (
     case_progress_context,
     collect_case_artifacts,
 )
-from .presenters.case_fields import prepare_case_fields
-from .presenters.analysis_modules import analysis_modules_context
+from .presenters.job_actions import build_job_action_entries
 from .presenters.jobs import build_job_rows, friendly_job_title
 from .presenters.utils import render_audio_brief_panel_html, render_notes_panel_html
-from apps.platform.jobs.notes import serialize_notes
 from .selectors import job_telemetry_map, job_telemetry_payload
-from .job_tables import build_job_table_state
 
 
-def format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
+def format_metadata(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not metadata:
         return []
     items: list[dict[str, Any]] = []
@@ -62,7 +62,7 @@ def format_metadata(metadata: Dict[str, Any] | None) -> list[Dict[str, Any]]:
     return items
 
 
-def user_can_review_case(user: Optional[User], case: Case) -> bool:
+def user_can_review_case(user: User | None, case: Case) -> bool:
     if getattr(settings, "PLATFORM_DEV_OPEN", False):
         return True
     if not user or not getattr(user, "is_authenticated", False):
@@ -77,7 +77,7 @@ def compute_case_tool_state(
     case: Case,
     *,
     active_tool: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     jobs_qs = (
         Job.objects.select_related("case", "case__organization", "reviewed_by")
         .filter(case=case)
@@ -87,22 +87,19 @@ def compute_case_tool_state(
     jobs_list = list(scoped_jobs_qs)
 
     job_ids = [str(job.id) for job in jobs_list]
-    transcript_artifacts: Dict[str, CaseArtifact] = {}
+    transcript_artifacts: dict[str, CaseArtifact] = {}
     if job_ids:
-        for art in (
-            CaseArtifact.objects.filter(case_id=str(case.id), job_id__in=job_ids, type="TRANSCRIPT")
-            .order_by("-created_at")
-        ):
+        for art in CaseArtifact.objects.filter(
+            case_id=str(case.id), job_id__in=job_ids, type="TRANSCRIPT"
+        ).order_by("-created_at"):
             key = art.job_id or ""
             if key and key not in transcript_artifacts:
                 transcript_artifacts[key] = art
 
-    note_counts: Dict[str, int] = {}
+    note_counts: dict[str, int] = {}
     if jobs_list:
         note_count_rows = (
-            JobNote.objects.filter(job__in=jobs_list)
-            .values("job_id")
-            .annotate(count=Count("id"))
+            JobNote.objects.filter(job__in=jobs_list).values("job_id").annotate(count=Count("id"))
         )
         note_counts = {str(row["job_id"]): int(row["count"]) for row in note_count_rows}
 
@@ -110,7 +107,7 @@ def compute_case_tool_state(
     job_summary_last_dt = job_summary.get("last_update")
     job_summary["last_update"] = job_summary_last_dt.isoformat() if job_summary_last_dt else None
 
-    telemetry_map: Dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
+    telemetry_map: dict[str, JobTelemetryPayload] = job_telemetry_map(jobs_list, request)
 
     display_rows, flat_rows = build_job_rows(
         jobs_list,
@@ -131,7 +128,9 @@ def compute_case_tool_state(
         )
         latest_job = jobs_sorted[0]
         latest_job_telemetry = telemetry_map.get(str(latest_job.id))
-        latest_activity_ts = latest_job.finished_at or latest_job.started_at or latest_job.created_at
+        latest_activity_ts = (
+            latest_job.finished_at or latest_job.started_at or latest_job.created_at
+        )
 
     memberships = list(case.memberships.select_related("user"))
 
@@ -218,7 +217,9 @@ def compute_case_tool_state(
     )
 
     case_details_panel = tool_panels.get("intake") or {}
-    case_fields = case_details_panel.get("body_context", {}).get("fields", prepare_case_fields(case))
+    case_fields = case_details_panel.get("body_context", {}).get(
+        "fields", prepare_case_fields(case)
+    )
     case_header = build_case_header_context(
         case,
         panels=tool_panels,
@@ -244,6 +245,7 @@ def compute_case_tool_state(
         "job_row_total": table_state.pagination.get("total", total_display_rows),
     }
 
+
 DEFAULT_CASE_TOOL_CACHE_SECONDS = 15
 
 
@@ -267,7 +269,9 @@ def _cache_key(case: Case, user_id: str | None, tool_key: str | None) -> str:
             timestamp_component = str(int(case_updated.timestamp()))
         except Exception:
             timestamp_component = "0"
-    return f"case-tool-state:{case_component}:{user_component}:{normalized_tool}:{timestamp_component}"
+    return (
+        f"case-tool-state:{case_component}:{user_component}:{normalized_tool}:{timestamp_component}"
+    )
 
 
 def get_case_tool_state(
@@ -275,13 +279,15 @@ def get_case_tool_state(
     case: Case,
     *,
     active_tool: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     cache_seconds = _cache_seconds()
     if cache_seconds <= 0:
         return compute_case_tool_state(request, case, active_tool=active_tool)
 
     user = getattr(request, "user", None)
-    user_id = str(getattr(user, "id", "")) if user and getattr(user, "is_authenticated", False) else None
+    user_id = (
+        str(getattr(user, "id", "")) if user and getattr(user, "is_authenticated", False) else None
+    )
     key = _cache_key(case, user_id, active_tool)
     cached = cache.get(key)
     if cached is not None:
@@ -299,11 +305,13 @@ def job_detail_context(
     request: HttpRequest,
     job: Job,
     *,
-    telemetry: Optional[Dict[str, Any]] = None,
-    title_error: Optional[str] = None,
+    telemetry: dict[str, Any] | None = None,
+    title_error: str | None = None,
     title_edit: bool = False,
-) -> Dict[str, Any]:
-    telemetry_payload = telemetry if telemetry is not None else job_telemetry_payload(job, request, ui_mode=True)
+) -> dict[str, Any]:
+    telemetry_payload = (
+        telemetry if telemetry is not None else job_telemetry_payload(job, request, ui_mode=True)
+    )
     telemetry = telemetry_payload
     artifacts = telemetry.get("artifacts") or []
     artifact = artifacts[0] if artifacts else None
@@ -318,9 +326,8 @@ def job_detail_context(
     job_kind_lower = job_kind_raw.lower()
     job_kind_base = job_kind_lower.split(":")[-1] if job_kind_lower else ""
     is_audio_conversion = job_kind_base == "audio_conversion"
-    is_analysis_job = (
-        job_kind_base in {"analyze", "timeline"}
-        or job_kind_lower.startswith("analysis")
+    is_analysis_job = job_kind_base in {"analyze", "timeline"} or job_kind_lower.startswith(
+        "analysis"
     )
     metadata_items = format_metadata(metadata_map)
     azure_cancel_status = metadata_map.get("azure_cancel_status")
@@ -354,26 +361,25 @@ def job_detail_context(
     conversion_mark_targets = ",".join(filter(None, [str(job.id), source_job_id_value]))
 
     job_notes = list(
-        JobNote.objects.filter(job=job)
-        .select_related("created_by")
-        .order_by("-created_at")
+        JobNote.objects.filter(job=job).select_related("created_by").order_by("-created_at")
     )
     notes_entries = serialize_notes(job_notes)
     notes_updated_at = notes_entries[0]["created_at"] if notes_entries else None
     notes_updated_by = (
-        notes_entries[0].get("created_by_label")
-        or notes_entries[0].get("created_by")
+        notes_entries[0].get("created_by_label") or notes_entries[0].get("created_by")
         if notes_entries
         else ""
     )
     notes_count = len(notes_entries)
 
-    source_audio_meta: Dict[str, Any] | None = None
+    source_audio_meta: dict[str, Any] | None = None
     if is_audio_conversion:
         source_job_id = telemetry_meta.get("source_job_id")
         if source_job_id:
             try:
-                source_job = Job.objects.select_related("case", "case__organization").get(pk=source_job_id, case_id=job.case_id)
+                source_job = Job.objects.select_related("case", "case__organization").get(
+                    pk=source_job_id, case_id=job.case_id
+                )
                 source_telemetry = job_telemetry_payload(source_job, request, ui_mode=True)
                 source_audio_meta = as_dict(source_telemetry.get("audio"))
             except Job.DoesNotExist:
@@ -387,9 +393,7 @@ def job_detail_context(
     if dev_open:
         can_review = True
     elif user_obj and getattr(user_obj, "is_authenticated", False):
-        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id):
-            can_review = True
-        elif has_capability(user_obj, str(job.case_id), "case.update"):
+        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id) or has_capability(user_obj, str(job.case_id), "case.update"):
             can_review = True
 
     is_sub_job = bool(telemetry_meta.get("source_job_id"))
@@ -489,7 +493,7 @@ def job_detail_context(
             case_id=case_id_str,
         )
 
-    analysis_artifacts: List[Dict[str, Any]] = []
+    analysis_artifacts: list[dict[str, Any]] = []
     if is_analysis_job:
         artifacts_payload = telemetry.get("artifacts") if isinstance(telemetry, dict) else []
         if isinstance(artifacts_payload, list):

@@ -8,10 +8,14 @@ pipeline is implemented, additional helpers (configs, orchestrators, etc.) will
 live here to keep the contract aligned with root AGENTS guidelines.
 """
 
-from .errors import ComposeStageError, ComposeStageContext
-from .profiles import COMPOSE_STAGE_PROFILES, ComposeStageProfile
-from .settings import ComposeConfig, DEFAULT_PROVIDER_CHAIN, DOC_TEMPLATE_ENV, normalize_provider_chain
 from .context import assemble_context, serialize_context
+from .errors import ComposeStageContext, ComposeStageError
+from .guards import (
+    compliance_report,
+    factuality_report,
+    markdown_structure_report,
+    sentence_length_report,
+)
 from .io import (
     ArtifactWriter,
     build_bundle,
@@ -21,7 +25,16 @@ from .io import (
     render_docx_from_template,
     render_qa_markdown,
 )
+from .profiles import COMPOSE_STAGE_PROFILES, ComposeStageProfile
 from .prompt_config import ComposePromptConfig, LanePrompts, QAReviewPrompts, load_prompt_config
+from .qa import run_lane_qa_review
+from .run import ComposeRun, ComposeRunSnapshot
+from .settings import (
+    DEFAULT_PROVIDER_CHAIN,
+    DOC_TEMPLATE_ENV,
+    ComposeConfig,
+    normalize_provider_chain,
+)
 from .state import (
     ComposeArtifacts,
     ComposeContext,
@@ -46,14 +59,6 @@ from .state import (
     qa_result_to_json,
     serialize_compose_state,
 )
-from .guards import (
-    compliance_report,
-    factuality_report,
-    markdown_structure_report,
-    sentence_length_report,
-)
-from .qa import run_lane_qa_review
-from .run import ComposeRun, ComposeRunSnapshot
 
 __all__: list[str] = [
     "COMPOSE_STAGE_PROFILES",

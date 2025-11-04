@@ -6,4 +6,3 @@ from django.contrib import admin
 admin.site.site_header = "uDocket Admin"
 admin.site.site_title = "uDocket"
 admin.site.index_title = "Operations Console"
-

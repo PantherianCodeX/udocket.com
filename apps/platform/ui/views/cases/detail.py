@@ -1,10 +1,6 @@
 from __future__ import annotations
 
- 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
-
-from typing import Dict
-
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
@@ -43,11 +39,11 @@ def case_detail(request: HttpRequest, case_id: str) -> HttpResponse:
         return redirect("ui-case-detail", case_id=case_id)
 
     available_keys = [definition.key for definition in iter_tool_definitions()]
-    raw_tool = (request.GET.get("tool") or request.GET.get("module") or "")
+    raw_tool = request.GET.get("tool") or request.GET.get("module") or ""
     initial_tool_key = resolve_tool_key(raw_tool, available_keys, default="intake")
 
     state = get_case_tool_state(request, case, active_tool=initial_tool_key)
-    tool_panels: Dict[str, Dict[str, object]] = state["tool_panels"]
+    tool_panels: dict[str, dict[str, object]] = state["tool_panels"]
     if initial_tool_key and initial_tool_key not in tool_panels:
         # Fallback to full context if the targeted panel wasn't materialized.
         state = compute_case_tool_state(request, case)

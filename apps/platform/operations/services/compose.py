@@ -6,14 +6,10 @@ import logging
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
-from uuid import UUID
 
-from packages.udocket_core.agents import ComposeAgent, ComposeConfig
-from packages.udocket_core.llm.config import LLMSettings, load_llm_settings
-from apps.platform.jobs.models import Job
-from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.accounts.models import Organization
+from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.jobs.models import Job
 from apps.platform.operations.llm import (
     LLMConfigurationPayload,
     ensure_default_llm_configuration,
@@ -22,15 +18,8 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.runtime import JobRuntimeContext
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
-from packages.udocket_common.text import unique_title
-
-from .analysis import (
-    case_intake_payload,
-    case_paths,
-    collect_requested_providers,
-)
-from .files import sha256_file
 from packages.udocket_common.json_utils import (
+    JSONObject,
     JSONValue,
     coerce_json_object,
     coerce_str,
@@ -39,7 +28,23 @@ from packages.udocket_common.json_utils import (
     read_json_object,
     write_json_object,
 )
+from packages.udocket_common.operations import (
+    ComposeCaseMetadata,
+    ComposeProviderCredentials,
+    ComposeStageMap,
+    optional_json_object,
+)
+from packages.udocket_common.text import unique_title
+from packages.udocket_core.agents import ComposeAgent, ComposeConfig
+from packages.udocket_core.llm.config import LLMSettings, load_llm_settings
 from packages.udocket_core.logging.context import LogContext
+
+from .analysis import (
+    case_intake_payload,
+    case_paths,
+    collect_requested_providers,
+)
+from .files import sha256_file
 
 log = logging.getLogger("apps.platform.operations.compose_service")
 
@@ -112,13 +117,6 @@ def _resolve_path(value: str | None, case_dir: Path) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _coerce_any_mapping(value: object) -> dict[str, Any] | None:
-    if isinstance(value, Mapping):
-        normalized = coerce_json_object(cast(Mapping[object, object], value))
-        return {key: cast(Any, item) for key, item in normalized.items()}
-    return None
-
-
 def _summary_search_dirs(
     *,
     analysis_dir: Path,
@@ -154,11 +152,11 @@ def execute_compose_job(
     case_id: str,
     llm_config_id: str | None,
     resume: bool = False,
-) -> dict[str, Any]:
+) -> dict[str, str | None]:
     job_case = getattr(job, "case", None)
-    org_value = cast(UUID | None, getattr(job, "organization_id", None))
+    org_value = getattr(job, "organization_id", None)
     if org_value is None and job_case is not None:
-        org_value = cast(UUID | None, getattr(job_case, "organization_id", None))
+        org_value = getattr(job_case, "organization_id", None)
     if org_value is None:
         raise ValueError("Compose job requires an organization id")
     org_id = str(org_value)
@@ -193,9 +191,9 @@ def execute_compose_job(
 
     analysis_dir = case_dir / "analysis"
     summary_case = getattr(summary_job, "case", None)
-    summary_org_value = cast(UUID | None, getattr(summary_job, "organization_id", None))
+    summary_org_value = getattr(summary_job, "organization_id", None)
     if summary_org_value is None and summary_case is not None:
-        summary_org_value = cast(UUID | None, getattr(summary_case, "organization_id", None))
+        summary_org_value = getattr(summary_case, "organization_id", None)
     if summary_org_value is None:
         summary_org_str = org_id
     else:
@@ -208,7 +206,9 @@ def execute_compose_job(
     def _lookup_or_fallback(current: Path | None, stem: str, ext: str) -> Path | None:
         if current and current.exists():
             return current
-        return _find_fallback_file(stem=stem, extension=ext, search_dirs=search_dirs, summary_job_id=str(summary_job.id))
+        return _find_fallback_file(
+            stem=stem, extension=ext, search_dirs=search_dirs, summary_job_id=str(summary_job.id)
+        )
 
     summary_json_path = _lookup_or_fallback(summary_json_path, "summary_v1", "json")
     summary_markdown_path = _lookup_or_fallback(summary_markdown_path, "summary_v1", "md")
@@ -247,7 +247,9 @@ def execute_compose_job(
         drop_empty_keys=True,
         drop_nullish_values=True,
     )
-    start_message = "Worker resumed compose pipeline" if resume else "Worker started compose pipeline"
+    start_message = (
+        "Worker resumed compose pipeline" if resume else "Worker started compose pipeline"
+    )
     runtime.start(
         status=Job.Status.RUNNING,
         log_message=start_message,
@@ -259,13 +261,13 @@ def execute_compose_job(
     llm_settings: LLMSettings = load_llm_settings()
     organization_id_str = org_id or summary_org_str
 
-    active_config: dict[str, Any] = {}
+    active_config: JSONObject = {}
 
     def _assign_config(payload: LLMConfigurationPayload | None) -> bool:
         nonlocal active_config
         if payload is None:
             return False
-        active_config = dict(payload)
+        active_config = coerce_json_object(payload)
         return True
 
     if llm_config_id:
@@ -294,13 +296,7 @@ def execute_compose_job(
             )
         )
 
-    stage_map: dict[str, dict[str, Any]] = {}
-    raw_stage_map = _coerce_any_mapping(active_config.get("stage_map"))
-    if raw_stage_map:
-        for key, value in raw_stage_map.items():
-            nested = _coerce_any_mapping(value)
-            if nested is not None:
-                stage_map[key] = nested
+    stage_map = ComposeStageMap.from_mapping(optional_json_object(active_config.get("stage_map")))
 
     provider_chain_values = coerce_str_list(active_config.get("provider_chain"), unique=False)
     if not provider_chain_values:
@@ -311,19 +307,25 @@ def execute_compose_job(
         extra=job_context.extra(
             event="compose.service.providers",
             provider_chain=provider_chain,
-            stage_map=list(stage_map.keys()),
+            stage_map=list(stage_map.to_dict().keys()),
         ),
     )
 
-    provider_credentials: dict[str, dict[str, Any]] = {}
+    provider_credentials = ComposeProviderCredentials()
     if organization_id_str:
-        requested_providers = collect_requested_providers(list(compose_config.provider_chain), provider_chain, stage_map)
+        requested_providers = collect_requested_providers(
+            list(compose_config.provider_chain), provider_chain, stage_map
+        )
 
         for provider in requested_providers:
             secret_payload = get_provider_secret_with_metadata(organization_id_str, provider)
-            credential = _coerce_any_mapping(secret_payload)
-            if credential:
-                provider_credentials[provider] = credential
+            mapping_payload: Mapping[str, object] | None
+            if isinstance(secret_payload, Mapping):
+                mapping_payload = secret_payload
+            else:
+                mapping_payload = None
+            provider_credentials = provider_credentials.with_secret(provider, mapping_payload)
+            if mapping_payload is not None:
                 log.debug(
                     "Loaded compose provider credentials",
                     extra=job_context.extra(
@@ -341,31 +343,28 @@ def execute_compose_job(
                 )
 
     try:
-        intake_payload = _coerce_any_mapping(summary_meta.get("intake"))
-        if intake_payload is None:
-            intake_payload = case_intake_payload(job_case)
+        intake_payload = optional_json_object(summary_meta.get("intake")) or case_intake_payload(
+            job_case
+        )
 
-        case_metadata: dict[str, Any] = {
-            "case_id": case_id,
-            "compose_job_id": str(job.id),
-            "summary_job_id": str(summary_job.id),
-            "job_display_title": str(getattr(job, "display_title", "") or ""),
-        }
-        case_title = coerce_str(getattr(job_case, "title", None))
-        if case_title:
-            case_metadata["case_title"] = case_title
-        case_org_value = getattr(job_case, "organization_id", None)
-        if case_org_value:
-            case_metadata["organization_id"] = str(case_org_value)
-        case_organization = getattr(job_case, "organization", None)
-        if case_organization is not None:
-            org_name = coerce_str(getattr(case_organization, "name", None))
-            if org_name:
-                case_metadata["organization_name"] = org_name
-        if summary_markdown_path:
-            case_metadata["summary_markdown_file"] = summary_markdown_path.name
-        if summary_json_path:
-            case_metadata["summary_json_file"] = summary_json_path.name
+        job_display_title = str(getattr(job, "display_title", "") or "")
+        case_title = coerce_str(getattr(job_case, "title", None)) if job_case else None
+        case_org_value = getattr(job_case, "organization_id", None) if job_case else None
+        case_organization = getattr(job_case, "organization", None) if job_case else None
+        organization_name = (
+            coerce_str(getattr(case_organization, "name", None)) if case_organization else None
+        )
+        case_metadata = ComposeCaseMetadata(
+            case_id=case_id,
+            compose_job_id=str(job.id),
+            summary_job_id=str(summary_job.id),
+            job_display_title=job_display_title,
+            case_title=case_title,
+            organization_id=str(case_org_value) if case_org_value else None,
+            organization_name=organization_name,
+            summary_markdown_file=summary_markdown_path.name if summary_markdown_path else None,
+            summary_json_file=summary_json_path.name if summary_json_path else None,
+        ).to_json()
 
         compose_agent = ComposeAgent(compose_config)
 
@@ -375,7 +374,7 @@ def execute_compose_job(
                 stage=stage,
                 stage_event=stage_event,
                 summary_job_id=str(summary_job.id),
-                details={key: cast(Any, value) for key, value in details.items()},
+                details=dict(details),
             )
 
         log.info(
@@ -399,7 +398,7 @@ def execute_compose_job(
                 entity_hint_path=entity_hint_path,
                 intake=intake_payload,
                 case_metadata=case_metadata,
-                provider_credentials=provider_credentials,
+                provider_credentials=provider_credentials.to_dict(),
                 progress_callback=_progress,
                 resume=resume,
             )
@@ -422,22 +421,25 @@ def execute_compose_job(
 
     artifacts = result.artifacts
 
-    compose_meta_payload: dict[str, Any] = {}
+    compose_meta_payload: JSONObject = {}
     try:
-        compose_meta_payload = coerce_json_object(read_json_object(result.meta_json))
+        compose_meta_payload = read_json_object(result.meta_json)
     except Exception:
         compose_meta_payload = {}
 
-    meta_updates: dict[str, Any] = {
-        "compose_status": "completed",
-        "compose_meta_json": str(result.meta_json),
-        "compose_provider_chain": result.provider_chain,
-        "compose_stage_usage": result.stage_usage,
-        "compose_stage_durations": result.stage_durations,
-        "summary_job_id": str(summary_job.id),
-    }
-    artifact_sha_payload = coerce_json_object(compose_meta_payload.get("artifact_sha256"))
-    if artifact_sha_payload:
+    meta_updates = normalize_json_object(
+        {
+            "compose_status": "completed",
+            "compose_meta_json": str(result.meta_json),
+            "compose_provider_chain": list(result.provider_chain),
+            "compose_stage_usage": result.stage_usage,
+            "compose_stage_durations": result.stage_durations,
+            "summary_job_id": str(summary_job.id),
+        },
+        drop_empty_keys=True,
+    )
+    artifact_sha_payload = optional_json_object(compose_meta_payload.get("artifact_sha256"))
+    if artifact_sha_payload is not None:
         meta_updates["compose_artifact_sha256"] = artifact_sha_payload
     version_value = coerce_str(compose_meta_payload.get("udocket_core_version"))
     if version_value:
@@ -502,12 +504,15 @@ def execute_compose_job(
         for kind in ("COMPOSE", "TIMELINE", "GRAPH", "ENTITIES")
     }
 
+    def _artifact_metadata(**items: object) -> JSONObject:
+        return normalize_json_object(items, drop_nullish_values=True, drop_empty_keys=True)
+
     def _create_artifact(
         *,
         kind: str,
         path: Path | None,
         title_hint: str,
-        metadata: dict[str, Any],
+        metadata: JSONObject,
         schema_version: str = "v1",
     ) -> None:
         if path is None or not path.exists() or job_case is None:
@@ -543,71 +548,71 @@ def execute_compose_job(
         kind="COMPOSE",
         path=artifacts.client_markdown,
         title_hint="Client deliverable",
-        metadata={"format": "markdown", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="markdown", source_summary=summary_source_name),
     )
     _create_artifact(
         kind="COMPOSE",
         path=artifacts.client_docx,
         title_hint="Client deliverable (DOCX)",
-        metadata={"format": "docx", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="docx", source_summary=summary_source_name),
     )
     _create_artifact(
         kind="COMPOSE",
         path=artifacts.lawyer_markdown,
         title_hint="Lawyer deliverable",
-        metadata={"format": "markdown", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="markdown", source_summary=summary_source_name),
     )
     _create_artifact(
         kind="COMPOSE",
         path=artifacts.lawyer_docx,
         title_hint="Lawyer deliverable (DOCX)",
-        metadata={"format": "docx", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="docx", source_summary=summary_source_name),
     )
     _create_artifact(
         kind="COMPOSE",
         path=artifacts.timeline_summary,
         title_hint="Timeline narrative",
-        metadata={"format": "markdown", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="markdown", source_summary=summary_source_name),
     )
     _create_artifact(
         kind="COMPOSE",
         path=artifacts.entity_brief,
         title_hint="Entity briefing",
-        metadata={"format": "markdown", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="markdown", source_summary=summary_source_name),
     )
     _create_artifact(
         kind="GRAPH",
         path=artifacts.graph_html,
         title_hint="Relationship graph (HTML)",
-        metadata={"format": "html", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="html", source_summary=summary_source_name),
         schema_version="v2",
     )
     _create_artifact(
         kind="GRAPH",
         path=artifacts.graph_image,
         title_hint="Relationship graph (PNG)",
-        metadata={"format": "png", "source_summary": summary_source_name},
+        metadata=_artifact_metadata(format="png", source_summary=summary_source_name),
         schema_version="v2",
     )
     _create_artifact(
         kind="TIMELINE",
         path=artifacts.timeline_file,
         title_hint="Timeline",
-        metadata={"source_summary": summary_source_name, "schema": "v2"},
+        metadata=_artifact_metadata(source_summary=summary_source_name, schema="v2"),
         schema_version="v2",
     )
     _create_artifact(
         kind="GRAPH",
         path=artifacts.graph_file,
         title_hint="Relationship graph",
-        metadata={"source_summary": summary_source_name, "schema": "v2"},
+        metadata=_artifact_metadata(source_summary=summary_source_name, schema="v2"),
         schema_version="v2",
     )
     _create_artifact(
         kind="ENTITIES",
         path=artifacts.entities_file,
         title_hint="Entities",
-        metadata={"source_summary": summary_source_name, "schema": "v2"},
+        metadata=_artifact_metadata(source_summary=summary_source_name, schema="v2"),
         schema_version="v2",
     )
 

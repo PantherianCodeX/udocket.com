@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import hashlib
 import json
 import logging
 import re
 import time
-from typing import Any, Callable, Mapping, Optional, cast
+from collections.abc import Callable, Mapping
+from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -20,8 +20,9 @@ from packages.udocket_common.json_utils import (
     coerce_str,
 )
 
-from .errors import ComposeStageError
+from ...llm import LLMSettings
 from .context import assemble_context
+from .errors import ComposeStageError
 from .guards import (
     compliance_report,
     factuality_report,
@@ -29,9 +30,9 @@ from .guards import (
     sentence_length_report,
 )
 from .llm_runtime import invoke_llm
+from .logging_utils import ComposeLogContext, format_stage_message
 from .prompt_config import ComposePromptConfig, LanePrompts, QALanePrompts
 from .qa import run_lane_qa_review
-from .logging_utils import ComposeLogContext, format_stage_message
 from .run import ComposeRun
 from .settings import ComposeConfig
 from .state import (
@@ -46,7 +47,6 @@ from .state import (
     QAReviewerResult,
     clone_guard_report,
 )
-from ...llm import LLMSettings
 
 
 class ComposeOrchestrator:
@@ -79,7 +79,7 @@ class ComposeOrchestrator:
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> ComposeState:
         return self._run_graph(
             state=state,
@@ -92,7 +92,7 @@ class ComposeOrchestrator:
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> ComposeState:
         return await self._run_graph_async(
             state=state,
@@ -109,7 +109,7 @@ class ComposeOrchestrator:
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> None:
         def context_node(current: ComposeState) -> dict[str, object]:
             return self._context_assembler(current, progress)
@@ -263,7 +263,7 @@ class ComposeOrchestrator:
         graph.add_edge(START, "ContextAssembler")
         graph.add_edge("ContextAssembler", "ClientComposer")
         graph.add_edge("ContextAssembler", "LawyerComposer")
-        
+
         graph.add_edge("ClientComposer", "ClientStructureValidator")
         graph.add_edge("ClientStructureValidator", "ClientComplianceGuard")
         graph.add_edge("ClientComplianceGuard", "ClientFactualityGate")
@@ -326,7 +326,7 @@ class ComposeOrchestrator:
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> ComposeState:
         graph: Any = StateGraph(ComposeState)
         self._setup_graph(
@@ -344,14 +344,16 @@ class ComposeOrchestrator:
             for key, value in result_mapping.items():
                 setattr(state, key, value)
             return state
-        raise ComposeStageError("compose.graph", f"Unexpected graph result type: {type(result_state)!r}")
+        raise ComposeStageError(
+            "compose.graph", f"Unexpected graph result type: {type(result_state)!r}"
+        )
 
     async def _run_graph_async(
         self,
         *,
         state: ComposeState,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> ComposeState:
         graph: Any = StateGraph(ComposeState)
         self._setup_graph(
@@ -369,7 +371,9 @@ class ComposeOrchestrator:
             for key, value in result_mapping.items():
                 setattr(state, key, value)
             return state
-        raise ComposeStageError("compose.graph", f"Unexpected graph result type: {type(result_state)!r}")
+        raise ComposeStageError(
+            "compose.graph", f"Unexpected graph result type: {type(result_state)!r}"
+        )
 
     @staticmethod
     def _lane_state(state: ComposeState, lane: str) -> LaneRuntimeState:
@@ -397,7 +401,7 @@ class ComposeOrchestrator:
     def _context_assembler(
         self,
         state: ComposeState,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         stage_name = "compose.context"
         start_time = time.perf_counter()
@@ -420,7 +424,7 @@ class ComposeOrchestrator:
         *,
         lane: str,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         start_time = time.perf_counter()
@@ -458,15 +462,23 @@ class ComposeOrchestrator:
                 ),
             )
             if self.config.qa_enforced:
-                raise ComposeStageError(stage_name, "Maximum attempts exhausted", lane=lane, attempt=lane_state.attempts)
-        
+                raise ComposeStageError(
+                    stage_name, "Maximum attempts exhausted", lane=lane, attempt=lane_state.attempts
+                )
+
         lane_state.current_source = "revise" if is_revision else "draft"
-        start_payload: JSONObject = {"attempt": next_attempt, "lane": lane, "source": lane_state.current_source}
+        start_payload: JSONObject = {
+            "attempt": next_attempt,
+            "lane": lane,
+            "source": lane_state.current_source,
+        }
         self._log(logging.INFO, stage_name, "start", dict(start_payload))
         emit(progress, stage_name, "start", start_payload)
         lane_state.attempts = next_attempt
         lane_prompts = self._lane_prompts(lane)
-        temperature = self.config.temperature if lane == "client" else self.config.lawyer_temperature
+        temperature = (
+            self.config.temperature if lane == "client" else self.config.lawyer_temperature
+        )
         if is_revision:
             temperature = lane_state.config.revision_temperature
         system_prompt = (
@@ -478,7 +490,9 @@ class ComposeOrchestrator:
         user_prompt: str
         if is_revision:
             user_prompt = lane_user_prompt(
-                lane, context, lane_state.revision_brief,
+                lane,
+                context,
+                lane_state.revision_brief,
                 locale=self.config.locale,
                 instruction=instruction,
                 previous_document=lane_state.document,
@@ -488,7 +502,9 @@ class ComposeOrchestrator:
             )
         else:
             user_prompt = lane_user_prompt(
-                lane, context, None,
+                lane,
+                context,
+                None,
                 locale=self.config.locale,
                 instruction=instruction,
                 headings=list(lane_state.config.headings),
@@ -508,8 +524,14 @@ class ComposeOrchestrator:
         lane_state.revision_brief = None
         lane_state.document = document
         doc_hash = stable_doc_fingerprint(document)
-        if is_revision and lane_state.last_document_hash is not None and doc_hash == lane_state.last_document_hash:
-            raise ComposeStageError(stage_name, "Revision produced no changes", lane=lane, attempt=lane_state.attempts)
+        if (
+            is_revision
+            and lane_state.last_document_hash is not None
+            and doc_hash == lane_state.last_document_hash
+        ):
+            raise ComposeStageError(
+                stage_name, "Revision produced no changes", lane=lane, attempt=lane_state.attempts
+            )
         lane_state.last_document_hash = doc_hash
         lane_state.structure_report = None
         lane_state.compliance_report = None
@@ -541,7 +563,7 @@ class ComposeOrchestrator:
         state: ComposeState,
         *,
         lane: str,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         document = lane_state.document
@@ -561,11 +583,13 @@ class ComposeOrchestrator:
             "start",
             {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
         )
-        per_section_min: Optional[Mapping[str, int]] = None
-        per_section_max: Optional[Mapping[str, int]] = None
+        per_section_min: Mapping[str, int] | None = None
+        per_section_max: Mapping[str, int] | None = None
         if lane_state.config.lane == "client":
             from .llm_profiles import (
                 CLIENT_MAX_WORDS_BY_SECTION as _CLIENT_MAX,
+            )
+            from .llm_profiles import (
                 CLIENT_MIN_WORDS_BY_SECTION as _CLIENT_MIN,
             )
 
@@ -574,6 +598,8 @@ class ComposeOrchestrator:
         elif lane_state.config.lane == "lawyer":
             from .llm_profiles import (
                 LAWYER_MAX_WORDS_BY_SECTION as _LAWYER_MAX,
+            )
+            from .llm_profiles import (
                 LAWYER_MIN_WORDS_BY_SECTION as _LAWYER_MIN,
             )
 
@@ -629,7 +655,7 @@ class ComposeOrchestrator:
         state: ComposeState,
         *,
         lane: str,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         document = lane_state.document
@@ -685,7 +711,7 @@ class ComposeOrchestrator:
         state: ComposeState,
         *,
         lane: str,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         document = lane_state.document
@@ -753,7 +779,7 @@ class ComposeOrchestrator:
                 **self._guard_summary(report),
             },
         )
-        lanes_update: Optional[dict[str, LaneOutcome]] = None
+        lanes_update: dict[str, LaneOutcome] | None = None
         if (
             lane_state.structure_report
             and lane_state.structure_report.ok
@@ -775,7 +801,7 @@ class ComposeOrchestrator:
         state: ComposeState,
         *,
         lane: str,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         stage_name = f"compose.{lane}.revision"
@@ -786,7 +812,11 @@ class ComposeOrchestrator:
             "start",
             {"attempt": lane_state.attempts, "lane": lane},
         )
-        if lane_state.structure_report is None or lane_state.compliance_report is None or lane_state.factuality_report is None:
+        if (
+            lane_state.structure_report is None
+            or lane_state.compliance_report is None
+            or lane_state.factuality_report is None
+        ):
             raise ComposeStageError(stage_name, "Revision requested before guard reports computed")
         revision_brief = build_revision_brief(
             self.prompts.revision_header_template,
@@ -813,7 +843,7 @@ class ComposeOrchestrator:
         state: ComposeState,
         *,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         results: dict[str, object] = {}
         results.update(
@@ -841,7 +871,7 @@ class ComposeOrchestrator:
         *,
         lane: str,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         stage_name = f"compose.{lane}.qa_reviewer"
         lane_state = self._lane_state(state, lane)
@@ -1017,7 +1047,9 @@ class ComposeOrchestrator:
             },
         )
         self._snapshot(stage_name, state)
-        self._register_stage_duration(state, stage_name, time.perf_counter() - start_time, lane_state=lane_state)
+        self._register_stage_duration(
+            state, stage_name, time.perf_counter() - start_time, lane_state=lane_state
+        )
         return {
             lane: cast(object, lane_state),
             "stage_usage": cast(object, {stage_name: dict(usage)}),
@@ -1069,7 +1101,7 @@ class ComposeOrchestrator:
         self,
         state: ComposeState,
         *,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         stage_name = "compose.qa_join"
         start_time = time.perf_counter()
@@ -1080,15 +1112,25 @@ class ComposeOrchestrator:
         staff_sections: list[str] = []
         for lane, result in (("client", client_result), ("lawyer", lawyer_result)):
             lane_title = "Client" if lane == "client" else "Lawyer"
-            section_lines = [f"## {lane_title} Lane QA", "", result.staff_report.strip() or "No staff report supplied."]
+            section_lines = [
+                f"## {lane_title} Lane QA",
+                "",
+                result.staff_report.strip() or "No staff report supplied.",
+            ]
             if result.global_notes:
                 section_lines.extend(["", f"_Notes_: {result.global_notes.strip()}"])
             staff_sections.append("\n".join(section_lines).strip())
         staff_report = "# Staff Report\n\n" + "\n\n---\n\n".join(staff_sections)
         final_alerts = list(client_result.alerts) + list(lawyer_result.alerts)
-        final_recommendations = list(client_result.recommendations) + list(lawyer_result.recommendations)
-        combined_global_notes = "\n".join(filter(None, [client_result.global_notes, lawyer_result.global_notes])).strip()
-        provider_label = ",".join(filter(None, [client_result.provider, lawyer_result.provider])) or "synthetic"
+        final_recommendations = list(client_result.recommendations) + list(
+            lawyer_result.recommendations
+        )
+        combined_global_notes = "\n".join(
+            filter(None, [client_result.global_notes, lawyer_result.global_notes])
+        ).strip()
+        provider_label = (
+            ",".join(filter(None, [client_result.provider, lawyer_result.provider])) or "synthetic"
+        )
         lane_actions: dict[str, LaneActionDirective] = {
             "client": LaneActionDirective(
                 action=client_result.action.action,
@@ -1102,7 +1144,9 @@ class ComposeOrchestrator:
             ),
         }
         qa_result = QAReviewerResult(
-            status="ok" if all(action.action == "none" for action in lane_actions.values()) else "attention",
+            status="ok"
+            if all(action.action == "none" for action in lane_actions.values())
+            else "attention",
             alerts=final_alerts,
             recommendations=final_recommendations,
             staff_report=staff_report,
@@ -1123,7 +1167,9 @@ class ComposeOrchestrator:
         )
         state.qa = qa_result
         self._snapshot(stage_name, state)
-        self._register_stage_duration(state, stage_name, time.perf_counter() - start_time, lane_state=None)
+        self._register_stage_duration(
+            state, stage_name, time.perf_counter() - start_time, lane_state=None
+        )
         return {"qa": qa_result}
 
     def _qa_decision(self, state: ComposeState) -> str:
@@ -1152,11 +1198,13 @@ class ComposeOrchestrator:
         state: ComposeState,
         *,
         lane: str,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_result = state.qa_lane_results.get(lane)
         if lane_result is None:
-            raise ComposeStageError(f"compose.{lane}.qa_revision", "Lane QA result missing", lane=lane)
+            raise ComposeStageError(
+                f"compose.{lane}.qa_revision", "Lane QA result missing", lane=lane
+            )
         directive = lane_result.action
         stage_name = f"compose.{lane}.qa_revision"
         start_time = time.perf_counter()
@@ -1217,14 +1265,16 @@ class ComposeOrchestrator:
         *,
         lane: str,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_result = state.qa_lane_results.get(lane)
         if lane_result is None:
             raise ComposeStageError(f"compose.{lane}.editor", "Lane QA result missing", lane=lane)
         directive = lane_result.action
         if (directive.action or "none").strip().lower() != "editor":
-            raise ComposeStageError(f"compose.{lane}.editor", "No editor directive available", lane=lane)
+            raise ComposeStageError(
+                f"compose.{lane}.editor", "No editor directive available", lane=lane
+            )
         updates = self._run_lane_editor(
             state=state,
             lane=lane,
@@ -1242,7 +1292,7 @@ class ComposeOrchestrator:
         lane: str,
         directive: LaneActionDirective,
         provider_credentials: Mapping[str, JSONObject],
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         lane_state = self._lane_state(state, lane)
         stage_name = f"compose.{lane}.editor"
@@ -1298,7 +1348,12 @@ class ComposeOrchestrator:
             progress,
             stage_name,
             "start",
-            {"lane": lane, "attempt": lane_state.attempts, "revision_brief": revision_brief, "reason": directive.reason},
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "revision_brief": revision_brief,
+                "reason": directive.reason,
+            },
         )
         response, usage, provider, model = invoke_llm(
             stage=stage_name,
@@ -1312,10 +1367,22 @@ class ComposeOrchestrator:
         try:
             parsed = json.loads(response)
         except json.JSONDecodeError as exc:
-            raise ComposeStageError(stage_name, f"Invalid editor response: {exc}", lane=lane, provider=provider, model=model) from exc
+            raise ComposeStageError(
+                stage_name,
+                f"Invalid editor response: {exc}",
+                lane=lane,
+                provider=provider,
+                model=model,
+            ) from exc
         new_document = coerce_str(parsed.get("document")) or ""
         if not new_document.strip():
-            raise ComposeStageError(stage_name, "Editor returned empty document", lane=lane, provider=provider, model=model)
+            raise ComposeStageError(
+                stage_name,
+                "Editor returned empty document",
+                lane=lane,
+                provider=provider,
+                model=model,
+            )
         change_log_raw = parsed.get("change_log")
         change_log: list[str] = []
         if isinstance(change_log_raw, list):
@@ -1357,7 +1424,7 @@ class ComposeOrchestrator:
         self,
         state: ComposeState,
         *,
-        progress: Optional[Callable[[str, str, JSONObject], None]],
+        progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         stage_name = "compose.release_gate"
         start_time = time.perf_counter()
@@ -1417,7 +1484,9 @@ class ComposeOrchestrator:
                 },
             )
         except Exception:  # pragma: no cover - defensive
-            self.logger.debug("compose.logging_failed", extra={"stage": stage, "event": event}, exc_info=True)
+            self.logger.debug(
+                "compose.logging_failed", extra={"stage": stage, "event": event}, exc_info=True
+            )
 
     @staticmethod
     def _guard_summary(report: GuardReport | None) -> dict[str, object]:
@@ -1467,14 +1536,14 @@ def known_issues_from_brief(brief: str) -> list[str]:
 def lane_user_prompt(
     lane: str,
     context: ComposeContext,
-    revision_brief: Optional[str],
+    revision_brief: str | None,
     *,
     locale: str,
     instruction: str,
-    previous_document: Optional[str] = None,
-    headings: Optional[list[str]] = None,
-    min_words: Optional[int] = None,
-    min_timestamp_references: Optional[int] = None,
+    previous_document: str | None = None,
+    headings: list[str] | None = None,
+    min_words: int | None = None,
+    min_timestamp_references: int | None = None,
 ) -> str:
     user_prompt: dict[str, JSONValue] = {
         "context": coerce_json_object(
@@ -1559,8 +1628,9 @@ def lane_status_snapshot(client: LaneOutcome, lawyer: LaneOutcome) -> JSONObject
         }
     )
 
+
 def emit(
-    progress: Optional[Callable[[str, str, JSONObject], None]],
+    progress: Callable[[str, str, JSONObject], None] | None,
     stage: str,
     event: str,
     user_prompt: JSONObject,
@@ -1577,7 +1647,9 @@ def emit(
     try:
         progress(stage, event, envelope)
     except Exception:
-        logging.getLogger("udocket.compose.agent").debug("compose.progress_callback_failed", exc_info=True)
+        logging.getLogger("udocket.compose.agent").debug(
+            "compose.progress_callback_failed", exc_info=True
+        )
 
 
 __all__ = [

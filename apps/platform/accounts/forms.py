@@ -14,6 +14,7 @@ class UserCreationWizardForm(UserCreationForm):
     membership_role = forms.ChoiceField(choices=OrganizationMembership.Role.choices, required=True)
     display_name = forms.CharField(max_length=200, required=False)
     email = forms.EmailField(required=False)
+
     class Meta(UserCreationForm.Meta):
         model = User
         fields = ("username",)

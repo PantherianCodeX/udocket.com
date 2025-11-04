@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # pyright: strict
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 from uuid import UUID
 
 from django.conf import settings
@@ -10,13 +10,17 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.operations.utils import append_job_log, update_job_meta
 
 from ..auth import ensure_authenticated
 from ..contexts import user_can_review_case
 from ..selectors import job_telemetry_payload
-from ..transcripts import default_transcript_title, ensure_transcript_artifact, unique_transcript_title
+from ..transcripts import (
+    default_transcript_title,
+    ensure_transcript_artifact,
+    unique_transcript_title,
+)
 from .utils import CaseArtifactLike, resolve_job
-from apps.platform.operations.utils import append_job_log, update_job_meta
 
 
 @require_http_methods(["POST"])
@@ -34,16 +38,14 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
     if dev_open:
         can_manage = True
     elif user and getattr(user, "is_authenticated", False):
-        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
-            can_manage = True
-        elif user_can_review_case(user, case):
+        if case.reviewer_id and str(user.id) == str(case.reviewer_id) or user_can_review_case(user, case):
             can_manage = True
     if not can_manage:
         return JsonResponse({"status": "error", "detail": "Forbidden"}, status=403)
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
-    existing: Optional[CaseArtifact] = (
+    existing: CaseArtifact | None = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
         .order_by("-created_at")
         .first()
@@ -59,7 +61,9 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
     )
 
     if artifact is None:
-        return JsonResponse({"status": "error", "detail": "Transcript not found for this job."}, status=404)
+        return JsonResponse(
+            {"status": "error", "detail": "Transcript not found for this job."}, status=404
+        )
 
     artifact_obj: CaseArtifactLike = cast(CaseArtifactLike, artifact)
 
@@ -67,7 +71,9 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
     metadata_changed = False
     title_changed = False
     if title_input:
-        desired_title = unique_transcript_title(str(case.id), title_input, getattr(case, "organization_id", None))
+        desired_title = unique_transcript_title(
+            str(case.id), title_input, getattr(case, "organization_id", None)
+        )
         if artifact_obj.title != desired_title:
             artifact_obj.title = desired_title
             title_changed = True
@@ -81,9 +87,9 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
             title_changed = True
 
     raw_metadata = getattr(artifact_obj, "metadata", None)
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     if isinstance(raw_metadata, dict):
-        metadata = dict(cast(Dict[str, Any], raw_metadata))
+        metadata = dict(cast(dict[str, Any], raw_metadata))
     else:
         metadata = {}
     if metadata.get("created_via") is None:

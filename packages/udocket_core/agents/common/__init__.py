@@ -3,6 +3,7 @@
 """Shared helpers for agent implementations."""
 
 from .azure_client import AzureChatClient, AzureClientConfig
+from .base import AnalysisAgent, AnalysisResult
 from .io import (
     AnalysisArtifact,
     TranscriptParse,
@@ -13,7 +14,6 @@ from .io import (
     parse_transcript,
     sha256_file,
 )
-from .base import AnalysisAgent, AnalysisResult
 from .normalization import (
     coerce_mapping,
     coerce_mapping_list,

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django.conf import settings
 from django.db import models
+
+from packages.udocket_common.django.typing import TypedManager, get_typed_manager
 
 if TYPE_CHECKING:  # pragma: no cover
     from apps.platform.accounts.models import Organization, User
@@ -15,7 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 class JobQuerySet(models.QuerySet["Job"]):
-    def for_user(self, user: Any) -> "JobQuerySet":
+    def for_user(self, user: Any) -> JobQuerySet:
         from apps.platform import tenancy
 
         return tenancy.scope_jobs(self, user)
@@ -38,6 +40,7 @@ class Job(models.Model):
         if not isinstance(manager, JobManager):  # pragma: no cover - defensive
             raise TypeError("Job.objects is not a JobManager")
         return manager
+
     class Status(models.TextChoices):
         PENDING = "PENDING"
         RUNNING = "RUNNING"
@@ -64,12 +67,12 @@ class Job(models.Model):
         default=uuid.uuid4,
         editable=False,
     )
-    case: models.ForeignKey["Case", "Case"] = models.ForeignKey(
+    case: models.ForeignKey[Case, Case] = models.ForeignKey(
         "cases.Case",
         on_delete=models.PROTECT,
         related_name="jobs",
     )
-    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
+    organization: models.ForeignKey[Organization, Organization] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.PROTECT,
         related_name="jobs",
@@ -89,14 +92,24 @@ class Job(models.Model):
         default=Status.PENDING,
         db_index=True,
     )
-    error_message: models.TextField[Optional[str], Optional[str]] = models.TextField(null=True, blank=True)
-    transcript_path: models.TextField[Optional[str], Optional[str]] = models.TextField(null=True, blank=True)
-    duration_s: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True)
+    error_message: models.TextField[str | None, str | None] = models.TextField(
+        null=True, blank=True
+    )
+    transcript_path: models.TextField[str | None, str | None] = models.TextField(
+        null=True, blank=True
+    )
+    duration_s: models.FloatField[float | None, float | None] = models.FloatField(
+        null=True, blank=True
+    )
     display_title: models.CharField[str, str] = models.CharField(max_length=255, blank=True)
-    agent_type: models.CharField[str, str] = models.CharField(max_length=64, blank=True, db_index=True)
+    agent_type: models.CharField[str, str] = models.CharField(
+        max_length=64, blank=True, db_index=True
+    )
     agent_label: models.CharField[str, str] = models.CharField(max_length=128, blank=True)
-    job_kind: models.CharField[str, str] = models.CharField(max_length=64, blank=True, db_index=True)
-    source_job: models.ForeignKey["Job", Optional["Job"]] = models.ForeignKey(
+    job_kind: models.CharField[str, str] = models.CharField(
+        max_length=64, blank=True, db_index=True
+    )
+    source_job: models.ForeignKey[Job, Job | None] = models.ForeignKey(
         "self",
         null=True,
         blank=True,
@@ -104,25 +117,31 @@ class Job(models.Model):
         related_name="child_jobs",
     )
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
-    started_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
+    started_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
         null=True,
         blank=True,
         db_index=True,
     )
-    finished_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
-        null=True,
-        blank=True,
-        db_index=True,
+    finished_at: models.DateTimeField[datetime | None, datetime | None] = (
+        models.DateTimeField(
+            null=True,
+            blank=True,
+            db_index=True,
+        )
     )
-    upload_progress: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True)
+    upload_progress: models.FloatField[float | None, float | None] = models.FloatField(
+        null=True, blank=True
+    )
     review_status: models.CharField[str, str] = models.CharField(
         max_length=16,
         choices=ReviewStatus.choices,
         default=ReviewStatus.PENDING,
         db_index=True,
     )
-    reviewed_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True)
-    reviewed_by: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
+    reviewed_at: models.DateTimeField[datetime | None, datetime | None] = (
+        models.DateTimeField(null=True, blank=True)
+    )
+    reviewed_by: models.ForeignKey[User, User | None] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
@@ -130,10 +149,12 @@ class Job(models.Model):
         related_name="reviewed_jobs",
     )
     review_comment: models.TextField[str, str] = models.TextField(blank=True)
-    review_activity_id: models.UUIDField[Optional[uuid.UUID], Optional[uuid.UUID]] = models.UUIDField(
-        null=True,
-        blank=True,
-        editable=False,
+    review_activity_id: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = (
+        models.UUIDField(
+            null=True,
+            blank=True,
+            editable=False,
+        )
     )
 
     class Meta:
@@ -160,12 +181,13 @@ class Job(models.Model):
 
 class JobNote(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["JobNote"]:
-        return cast(models.Manager["JobNote"], cls.objects)
+    def typed_objects(cls) -> TypedManager[JobNote]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["JobNote"]:
+    def scoped(cls) -> TypedManager[JobNote]:
         return cls.typed_objects()
+
     id: models.UUIDField[uuid.UUID, uuid.UUID] = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -177,7 +199,7 @@ class JobNote(models.Model):
         related_name="notes",
     )
     text: models.TextField[str, str] = models.TextField()
-    created_by: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
+    created_by: models.ForeignKey[User, User | None] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,

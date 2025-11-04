@@ -1,12 +1,9 @@
 from __future__ import annotations
 
- 
-from typing import Dict
-
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.views.decorators.http import require_http_methods
 
 from apps.platform.artifacts.models import CaseArtifact
 
@@ -28,7 +25,7 @@ def case_guardian_report(request: HttpRequest, case_id: str) -> HttpResponse:
 
     case, _ = get_case_and_org(request, case_id)
 
-    artifacts: list[Dict[str, object]] = []
+    artifacts: list[dict[str, object]] = []
     for artifact in CaseArtifact.objects.filter(case_id=str(case.id)).order_by("-created_at"):
         metadata = artifact.metadata or {}
         if not metadata.get("guardian_history"):

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 # pyright: strict
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Mapping, Sequence, cast
+from typing import cast
 
 
 def _safe_int(value: object) -> int | None:
@@ -60,7 +61,7 @@ class ComposeLogContext:
     def prefix(self) -> str:
         return f"Case [{self.case_label}]"
 
-    def with_fallback(self, *, case_title: str | None = None) -> "ComposeLogContext":
+    def with_fallback(self, *, case_title: str | None = None) -> ComposeLogContext:
         if self.case_title:
             return self
         if case_title:
@@ -182,7 +183,9 @@ def format_run_message(
     if event.endswith("snapshot_restored"):
         suffix = f" #{sequence}" if sequence is not None else ""
         path_clause = f" ({snapshot_path})" if snapshot_path else ""
-        return f"{context.prefix}: Restored compose snapshot{suffix} for {stage_label}{path_clause}."
+        return (
+            f"{context.prefix}: Restored compose snapshot{suffix} for {stage_label}{path_clause}."
+        )
     if event.endswith("manifest_written"):
         suffix = f" #{sequence}" if sequence is not None else ""
         return f"{context.prefix}: Updated compose manifest{suffix} for {stage_label}."

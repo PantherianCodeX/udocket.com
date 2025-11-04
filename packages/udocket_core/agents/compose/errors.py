@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(slots=True)
 class ComposeStageContext:
     stage: str
-    lane: Optional[str] = None
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    attempt: Optional[int] = None
+    lane: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    attempt: int | None = None
 
 
 class ComposeStageError(RuntimeError):
@@ -27,10 +25,10 @@ class ComposeStageError(RuntimeError):
         stage: str,
         message: str,
         *,
-        lane: Optional[str] = None,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        attempt: Optional[int] = None,
+        lane: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        attempt: int | None = None,
     ) -> None:
         context = ComposeStageContext(
             stage=stage,

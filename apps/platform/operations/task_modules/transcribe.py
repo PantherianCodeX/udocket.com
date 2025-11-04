@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 # pyright: strict
-
 import logging
 import mimetypes
 import shutil
 import uuid
-from pathlib import Path
-
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from celery import shared_task
@@ -16,23 +14,21 @@ from celery import shared_task
 
 class TaskProtocol(Protocol):
     request: Any
+
+
 from django.utils import timezone
 
 from apps.platform.accounts.models import Organization
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
-from packages.udocket_common.text import unique_title
 from apps.platform.operations.blob_upload import UploadCancelled, upload_with_sas
 from apps.platform.operations.channels import send_case_update, send_job_update
 from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta
 from apps.platform.operations.services.files import sha256_file
-from apps.platform.operations.storage import ensure_case_paths, ops_dir as storage_ops_dir
+from apps.platform.operations.storage import ensure_case_paths
+from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta
-from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
-from packages.udocket_core.agents.transcribe_lib import ModeLiteral
-from packages.udocket_core.audio import probe_audio_metadata
 from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
@@ -42,6 +38,11 @@ from packages.udocket_common.json_utils import (
     normalize_json_object,
     read_json_object,
 )
+from packages.udocket_common.text import unique_title
+from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
+from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
+from packages.udocket_core.agents.transcribe_lib import ModeLiteral
+from packages.udocket_core.audio import probe_audio_metadata
 
 log = logging.getLogger("apps.platform.operations.tasks.transcribe")
 
@@ -187,7 +188,9 @@ def transcribe_job(
                     drop_empty_keys=True,
                     drop_nullish_values=True,
                 )
-                audio_meta_updates = merge_json_objects(audio_meta_updates, probe_audio_metadata(audio_path))
+                audio_meta_updates = merge_json_objects(
+                    audio_meta_updates, probe_audio_metadata(audio_path)
+                )
                 job_meta_target = job_obj
                 duration_val = audio_meta_updates.get("audio_duration_s")
                 if isinstance(duration_val, (int, float, str)):
@@ -347,11 +350,17 @@ def transcribe_job(
 
                     audio_dir = case_paths.audio
                     audio_dir.mkdir(parents=True, exist_ok=True)
-                    original_display = source_path.name.split("__", 1)[-1] if "__" in source_path.name else source_path.name
+                    original_display = (
+                        source_path.name.split("__", 1)[-1]
+                        if "__" in source_path.name
+                        else source_path.name
+                    )
                     requested_basename = Path(original_display).with_suffix(".wav").name
 
                     existing_meta = {}
-                    src_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
+                    src_meta_path = (
+                        storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
+                    )
                     if src_meta_path.exists():
                         try:
                             existing_meta = _load_json_dict(src_meta_path)
@@ -365,7 +374,9 @@ def transcribe_job(
                     )
                     if converted_job_id:
                         try:
-                            converted_job_obj = Job.typed_objects().select_related("case").get(pk=converted_job_id)
+                            converted_job_obj = (
+                                Job.typed_objects().select_related("case").get(pk=converted_job_id)
+                            )
                             existing_case = getattr(converted_job_obj, "case", None)
                             existing_case_id = getattr(existing_case, "id", None)
                             if existing_case_id is None or str(existing_case_id) != case_id:
@@ -408,8 +419,7 @@ def transcribe_job(
                                 audio_input="",
                                 mode=getattr(job_obj, "mode", Job.Mode.BATCH),
                                 diarization=False,
-                                language=
-                                getattr(job_obj, "language", language)
+                                language=getattr(job_obj, "language", language)
                                 or language
                                 or default_language
                                 or "en-CA",
@@ -418,7 +428,10 @@ def transcribe_job(
                                 finished_at=now_ts,
                             )
                         except Exception as exc:
-                            log.warning("failed to create wav job", extra={"job_id": job_id, "error": str(exc)})
+                            log.warning(
+                                "failed to create wav job",
+                                extra={"job_id": job_id, "error": str(exc)},
+                            )
                             converted_job_obj = None
                     else:
                         wav_job_uuid = converted_job_obj.id
@@ -444,7 +457,11 @@ def transcribe_job(
                     except Exception as exc:
                         log.warning(
                             "unable to persist converted wav",
-                            extra={"job_id": job_id, "converted_job_id": wav_job_id, "error": str(exc)},
+                            extra={
+                                "job_id": job_id,
+                                "converted_job_id": wav_job_id,
+                                "error": str(exc),
+                            },
                         )
                         converted_path = Path(str(upload_path))
 
@@ -516,9 +533,13 @@ def transcribe_job(
                             if key.startswith("audio_") and value is not None:
                                 converted_meta_updates.setdefault(f"converted_{key}", value)
                         if converted_sha:
-                            converted_meta_updates.setdefault("converted_audio_sha256", converted_sha)
+                            converted_meta_updates.setdefault(
+                                "converted_audio_sha256", converted_sha
+                            )
                         if converted_size is not None:
-                            converted_meta_updates.setdefault("converted_audio_size_bytes", converted_size)
+                            converted_meta_updates.setdefault(
+                                "converted_audio_size_bytes", converted_size
+                            )
                         try:
                             conversion_title = _unique_conversion_title(case_id, org_id, job_id)
                             converted_meta_updates["job_title"] = conversion_title
@@ -592,9 +613,7 @@ def transcribe_job(
                             if status_str is None:
                                 status_str = coerce_str(getattr(job_obj, "status", None))
                             current_status = (
-                                Job.Status(status_str)
-                                if status_str
-                                else Job.Status.RUNNING
+                                Job.Status(status_str) if status_str else Job.Status.RUNNING
                             )
                             send_job_update(
                                 job_id,
@@ -632,7 +651,9 @@ def transcribe_job(
                     "Using original audio format for batch upload",
                 )
             log.info("uploading source to blob", extra={"job_id": job_id})
-            append_job_log(case_id, org_id, job_id, f"Uploading audio to Azure Blob ({original_name})")
+            append_job_log(
+                case_id, org_id, job_id, f"Uploading audio to Azure Blob ({original_name})"
+            )
             last_progress = {"value": -1.0}
 
             def _progress_cb(ratio: float) -> None:
@@ -649,10 +670,14 @@ def transcribe_job(
                 )
 
             def _cancel_check() -> bool:
-                return bool(Job.typed_objects().filter(
-                    pk=job_id,
-                    status__in=(Job.Status.CANCELLING, Job.Status.CANCELLED),
-                ).exists())
+                return bool(
+                    Job.typed_objects()
+                    .filter(
+                        pk=job_id,
+                        status__in=(Job.Status.CANCELLING, Job.Status.CANCELLED),
+                    )
+                    .exists()
+                )
 
             try:
                 _progress_cb(0.0)
@@ -679,7 +704,9 @@ def transcribe_job(
                     pass
             except UploadCancelled:
                 log.info("upload cancelled mid-transfer", extra={"job_id": job_id})
-                append_job_log(case_id, org_id, job_id, "Upload cancelled mid-transfer", level="warning")
+                append_job_log(
+                    case_id, org_id, job_id, "Upload cancelled mid-transfer", level="warning"
+                )
                 raise
             except Exception as exc:
                 log.exception("blob upload failed", extra={"job_id": job_id, "error": str(exc)})
@@ -693,16 +720,9 @@ def transcribe_job(
                     pass
 
             status_value = (
-                Job.typed_objects()
-                .filter(pk=job_id)
-                .values_list("status", flat=True)
-                .first()
+                Job.typed_objects().filter(pk=job_id).values_list("status", flat=True).first()
             )
-            status_choice = (
-                Job.Status(status_value)
-                if isinstance(status_value, str)
-                else None
-            )
+            status_choice = Job.Status(status_value) if isinstance(status_value, str) else None
             if status_choice in (Job.Status.CANCELLING, Job.Status.CANCELLED):
                 raise UploadCancelled("Cancelled before transcription start")
             if batch_upload_meta:
@@ -756,7 +776,9 @@ def transcribe_job(
                 meta_payload = _load_json_dict(result.meta_json)
                 azure_url = meta_payload.get("azure_transcription_url")
                 if isinstance(azure_url, str) and azure_url:
-                    append_job_log(case_id, org_id, job_id, f"Azure transcription created: {azure_url}")
+                    append_job_log(
+                        case_id, org_id, job_id, f"Azure transcription created: {azure_url}"
+                    )
                     safe_job_meta(
                         case_id,
                         org_id,
@@ -764,7 +786,9 @@ def transcribe_job(
                         {"azure_transcription_url": azure_url},
                     )
         except Exception as exc:
-            log.debug("unable to parse transcription meta", extra={"job_id": job_id, "error": str(exc)})
+            log.debug(
+                "unable to parse transcription meta", extra={"job_id": job_id, "error": str(exc)}
+            )
     except UploadCancelled:
         cancel_meta: JSONObject = merge_json_objects(
             base_meta,
@@ -837,7 +861,9 @@ def transcribe_job(
             log_message=f"Job failed: {error_message}",
             meta_updates=failure_meta,
             job_updates={"upload_progress": None},
-            job_event_payload={k: v for k, v in failure_payload.items() if k not in {"job_id", "case_id", "event"}},
+            job_event_payload={
+                k: v for k, v in failure_payload.items() if k not in {"job_id", "case_id", "event"}
+            },
         )
         safe_job_meta(
             case_id,
@@ -872,7 +898,10 @@ def transcribe_job(
     except Exception:
         job_obj = Job.typed_objects().select_related("case").get(pk=job_id)
     if job_obj.status == Job.Status.CANCELLED:
-        log.info("job cancelled during execution; ignoring transcription output", extra={"job_id": job_id})
+        log.info(
+            "job cancelled during execution; ignoring transcription output",
+            extra={"job_id": job_id},
+        )
         try:
             transcript_path_obj = Path(result.transcript_file)
             if transcript_path_obj.exists():
@@ -901,10 +930,14 @@ def transcribe_job(
     artifact_title: str | None = None
     job_meta_title: str | None = None
     try:
-        existing_titles = CaseArtifact.typed_objects().filter(
-            case_id=str(case_id),
-            type="TRANSCRIPT",
-        ).values_list("title", flat=True)
+        existing_titles = (
+            CaseArtifact.typed_objects()
+            .filter(
+                case_id=str(case_id),
+                type="TRANSCRIPT",
+            )
+            .values_list("title", flat=True)
+        )
         job_meta_path = storage_ops_dir(case_id, org_id) / f"{job_id}_transcription_log.json"
         if job_meta_path.exists():
             job_meta_payload = _load_json_dict(job_meta_path)

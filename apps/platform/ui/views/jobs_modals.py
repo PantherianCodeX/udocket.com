@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 from uuid import UUID
 
 from django.http import Http404, HttpRequest, HttpResponse
@@ -19,18 +19,18 @@ from .presenters.jobs import friendly_job_title
 from .selectors import job_telemetry_payload
 
 
-def _dict_list(value: Any) -> List[Dict[str, Any]]:
+def _dict_list(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
-    typed_items: List[Dict[str, Any]] = []
-    for element in cast(List[Any], value):
+    typed_items: list[dict[str, Any]] = []
+    for element in cast(list[Any], value):
         if not isinstance(element, dict):
             continue
-        typed_items.append(cast(Dict[str, Any], element))
+        typed_items.append(cast(dict[str, Any], element))
     return typed_items
 
 
-_LEVEL_PRIORITY: Dict[str, int] = {
+_LEVEL_PRIORITY: dict[str, int] = {
     "CRITICAL": 0,
     "ERROR": 1,
     "WARNING": 2,
@@ -38,7 +38,7 @@ _LEVEL_PRIORITY: Dict[str, int] = {
     "DEBUG": 4,
 }
 
-_LEVEL_STYLE_MAP: Dict[str, str] = {
+_LEVEL_STYLE_MAP: dict[str, str] = {
     "CRITICAL": "text-red-200 font-semibold",
     "ERROR": "text-red-300",
     "WARNING": "text-amber-300",
@@ -47,8 +47,8 @@ _LEVEL_STYLE_MAP: Dict[str, str] = {
 }
 
 
-def _parse_log_entries(log_text: str) -> List[Dict[str, str]]:
-    entries: List[Dict[str, str]] = []
+def _parse_log_entries(log_text: str) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
     for raw_line in log_text.splitlines():
         stripped_line = raw_line.rstrip("\n")
         if not stripped_line.strip():
@@ -66,7 +66,7 @@ def _parse_log_entries(log_text: str) -> List[Dict[str, str]]:
             else:
                 timestamp = prefix_parts[0]
         normalized_level = level.upper()
-        entry: Dict[str, str] = {
+        entry: dict[str, str] = {
             "timestamp": timestamp,
             "level": normalized_level,
             "message": message,
@@ -108,9 +108,9 @@ def case_job_transcript(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
             transcript_text = ""
 
     telemetry_dict: JobTelemetryPayload = job_telemetry_payload(job, request, ui_mode=True)
-    download_url: Optional[str] = None
+    download_url: str | None = None
     raw_artifacts = telemetry_dict.get("artifacts")
-    artifacts_list: List[Dict[str, Any]] = _dict_list(raw_artifacts)
+    artifacts_list: list[dict[str, Any]] = _dict_list(raw_artifacts)
     for artifact in artifacts_list:
         artifact_type = str(artifact.get("type") or "").upper()
         download_candidate = artifact.get("download_url")
@@ -147,7 +147,7 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
     job = _resolve_job_or_404(case_id, job_id, request)
 
     log_path = job_log_path(str(job.case_id), getattr(job, "organization_id", None), str(job.id))
-    log_entries: List[Dict[str, str]] = []
+    log_entries: list[dict[str, str]] = []
     if not log_path.exists():
         log_text = "No log entries recorded for this job yet."
     else:
@@ -164,10 +164,12 @@ def case_job_logs_modal(request: HttpRequest, case_id: str, job_id: UUID) -> Htt
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
     friendly_title = friendly_job_title(job, telemetry_dict, None)
     modal_created = job.finished_at or job.started_at or job.created_at
-    meta_items: List[Dict[str, Any]] = []
+    meta_items: list[dict[str, Any]] = []
     if log_path.exists():
-        meta_items.append({"label": "Log path", "copy_text": str(log_path), "display": str(log_path)})
-    modal_log_levels: List[str] = []
+        meta_items.append(
+            {"label": "Log path", "copy_text": str(log_path), "display": str(log_path)}
+        )
+    modal_log_levels: list[str] = []
     if log_entries:
         seen_levels: set[str] = set()
         for entry in log_entries:
@@ -209,10 +211,12 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
     detail_context = job_detail_context(request, job, telemetry=telemetry_dict)
     raw_metadata_items = detail_context.get("metadata_items")
-    metadata_items: List[Dict[str, Any]] = _dict_list(raw_metadata_items)
-    friendly_title = detail_context.get("job_title") or friendly_job_title(job, telemetry_dict, detail_context.get("artifact"))
+    metadata_items: list[dict[str, Any]] = _dict_list(raw_metadata_items)
+    friendly_title = detail_context.get("job_title") or friendly_job_title(
+        job, telemetry_dict, detail_context.get("artifact")
+    )
     modal_created = job.finished_at or job.started_at or job.created_at
-    meta_summary: List[Dict[str, Any]] = []
+    meta_summary: list[dict[str, Any]] = []
     case_obj = getattr(job, "case", None)
     if case_obj:
         meta_summary.append(
@@ -223,13 +227,13 @@ def case_job_metadata_modal(request: HttpRequest, case_id: str, job_id: UUID) ->
             }
         )
     meta_summary.append({"label": "Job ID", "display": str(job.id), "copy_text": str(job.id)})
-    metadata_sections: List[Dict[str, Any]] = []
+    metadata_sections: list[dict[str, Any]] = []
     if metadata_items:
         metadata_sections.append({"title": "Metadata", "items": metadata_items})
 
     notes_entries = detail_context.get("notes_entries") or []
     if notes_entries:
-        note_items: List[Dict[str, Any]] = []
+        note_items: list[dict[str, Any]] = []
         for idx, note in enumerate(notes_entries, start=1):
             if not isinstance(note, dict):
                 continue

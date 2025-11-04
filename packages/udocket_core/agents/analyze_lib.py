@@ -8,14 +8,15 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
-from typing import Optional, TypedDict, cast
+from typing import TypedDict, cast
+
+from packages.udocket_common.json_utils import (
+    coerce_json_object,
+    coerce_object_dict,
+    read_json_object,
+)
 
 from ..config.paths import resolve_analyze_defaults_path
-from .common import parse_transcript, TranscriptParse
-from .common.io import TranscriptSegment
-from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
-from .analyze.utils import FinalizedOutputs, AnalyzePipeline
-from packages.udocket_common.json_utils import coerce_json_object, coerce_object_dict, read_json_object
 from ..llm import LLMSettings, load_llm_settings
 from ..llm.runtime import (
     ChatClient,
@@ -23,7 +24,11 @@ from ..llm.runtime import (
     build_chat_client,
     build_provider_runtime_config,
 )
+from .analyze.utils import AnalyzePipeline, FinalizedOutputs
+from .common import TranscriptParse, parse_transcript
+from .common.io import TranscriptSegment
 from .common.llm_health import ensure_llm_client_health
+from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
 
 StageOptions = dict[str, object]
 StageMap = dict[str, StageOptions]
@@ -96,6 +101,7 @@ def _normalize_providers(values: Sequence[str]) -> list[str]:
         normalized.append(name)
     return normalized
 
+
 @lru_cache(maxsize=1)
 def load_analyze_defaults() -> dict[str, object]:
     payload = read_json_object(resolve_analyze_defaults_path())
@@ -148,7 +154,7 @@ LLM_STAGE_KEYS = {
     "draft_markdown": "analyze.draft_markdown",
     "qa_and_finalize": "analyze.qa_and_finalize",
 }
-_llm_settings_cache: Optional[LLMSettings] = None
+_llm_settings_cache: LLMSettings | None = None
 
 _STAGE_ALIAS_LOOKUP: dict[str, str] = {}
 for _attr, _stage_key in LLM_STAGE_KEYS.items():
@@ -200,11 +206,7 @@ class StageOverride:
         if isinstance(options_payload, Mapping):
             option_items = cast(Mapping[object, object], options_payload)
             options = MappingProxyType(
-                {
-                    str(key): value
-                    for key, value in option_items.items()
-                    if key is not None
-                }
+                {str(key): value for key, value in option_items.items() if key is not None}
             )
         else:
             options = _empty_mapping_proxy()
@@ -216,12 +218,7 @@ class StageOverride:
             if parsed > 0:
                 max_tokens = parsed
 
-        if (
-            not normalized_providers
-            and model is None
-            and not options
-            and max_tokens is None
-        ):
+        if not normalized_providers and model is None and not options and max_tokens is None:
             return None
 
         return cls(
@@ -302,7 +299,7 @@ def _normalize_stage_map(
     return normalized
 
 
-def _normalize_stage_identifier(value: str) -> Optional[str]:
+def _normalize_stage_identifier(value: str) -> str | None:
     key = value.strip().lower()
     if not key:
         return None
@@ -403,6 +400,7 @@ def _stage_profile(stage_key: str) -> StageProfile:
 
 logger = logging.getLogger("udocket.analyze.agent")
 
+
 def _load_llm_settings() -> LLMSettings:
     global _llm_settings_cache
     if _llm_settings_cache is None:
@@ -420,9 +418,9 @@ class StageRuntime:
     providers: list[str]
     provider: str
     model: str
-    client: Optional[ChatClient]
+    client: ChatClient | None
     max_output_tokens: int
-    context_window_tokens: Optional[int]
+    context_window_tokens: int | None
     profile: StageProfile
     temperature: float
     options: dict[str, object] = field(default_factory=_empty_options)
@@ -439,8 +437,8 @@ class StageRuntime:
 def _stage_error_message(
     stage_key: str,
     *,
-    provider: Optional[str],
-    model: Optional[str],
+    provider: str | None,
+    model: str | None,
     reason: str,
 ) -> str:
     descriptor: list[str] = []
@@ -453,7 +451,8 @@ def _stage_error_message(
     if descriptor:
         message = f"{message} ({', '.join(descriptor)})"
     return (
-        f"{message}. Review the LLM configuration in Organization Settings and run the live model test before retrying."
+        f"{message}. Review the LLM configuration in Organization Settings and run the live model "
+        "test before retrying."
     )
 
 
@@ -476,27 +475,25 @@ class AnalyzeConfig:
     temperature: float = DEFAULT_TEMPERATURE
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     debug: bool = False
-    provider_chain: list[str] = field(
-        default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN)
-    )
+    provider_chain: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_CHAIN))
     max_prompt_segments: int = MAX_PROMPT_SEGMENTS
     max_prompt_chars: int = MAX_PROMPT_CHARS
-    prompt_segments_override: Optional[int] = None
-    prompt_chars_override: Optional[int] = None
+    prompt_segments_override: int | None = None
+    prompt_chars_override: int | None = None
     chars_per_token: float = DEFAULT_TOKENS_TO_CHAR_RATIO
 
     @classmethod
-    def from_env(cls) -> "AnalyzeConfig":
+    def from_env(cls) -> AnalyzeConfig:
         language = (os.getenv("LANGUAGE") or "en-CA").strip() or "en-CA"
         temperature = DEFAULT_TEMPERATURE
         max_tokens = DEFAULT_MAX_OUTPUT_TOKENS
         debug = os.getenv("DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
 
         max_prompt_segments = MAX_PROMPT_SEGMENTS
-        prompt_segments_override: Optional[int] = None
+        prompt_segments_override: int | None = None
 
         max_prompt_chars = MAX_PROMPT_CHARS
-        prompt_chars_override: Optional[int] = None
+        prompt_chars_override: int | None = None
 
         chars_per_token = DEFAULT_TOKENS_TO_CHAR_RATIO
 
@@ -520,8 +517,8 @@ class AnalyzeConfig:
     def stage_max_tokens_for(
         self,
         stage_key: str,
-        model_limit: Optional[int],
-        default_limit: Optional[int] = None,
+        model_limit: int | None,
+        default_limit: int | None = None,
     ) -> int:
         candidate = default_limit if default_limit and default_limit > 0 else self.max_output_tokens
         if not candidate or candidate <= 0:
@@ -540,10 +537,10 @@ class AnalyzeResult:
     status: str
     summary_file: Path
     summary_markdown_file: Path
-    outline_file: Optional[Path]
-    timeline_seeds_file: Optional[Path]
-    entity_hints_file: Optional[Path]
-    case_brief_file: Optional[Path]
+    outline_file: Path | None
+    timeline_seeds_file: Path | None
+    entity_hints_file: Path | None
+    case_brief_file: Path | None
     words: int
     source_transcript: Path
     meta_json: Path
@@ -552,7 +549,7 @@ class AnalyzeResult:
 
 
 class AnalyzeAgent:
-    def __init__(self, config: Optional[AnalyzeConfig] = None) -> None:
+    def __init__(self, config: AnalyzeConfig | None = None) -> None:
         self.config = config or AnalyzeConfig.from_env()
         self.logger = logger
         self._log_enabled = False
@@ -600,18 +597,14 @@ class AnalyzeAgent:
     def _log(self, level: int, message: str, **meta: object) -> None:
         if not self._log_enabled:
             return
-        details = " ".join(
-            f"{key}={value}"
-            for key, value in meta.items()
-            if value is not None
-        )
+        details = " ".join(f"{key}={value}" for key, value in meta.items() if value is not None)
         full_message = message if not details else f"{message} | {details}"
         self.logger.log(level, full_message)
 
     def analyze(
         self,
         *,
-        input: Optional[Path] = None,
+        input: Path | None = None,
         case_id: str,
         case_dir: Path,
         job_id: str,
@@ -620,8 +613,7 @@ class AnalyzeAgent:
         provider_chain: Sequence[str] | None = None,
         stage_map: Mapping[str, Mapping[str, object]] | None = None,
         provider_credentials: ProviderCredentials | None = None,
-        progress_callback: Callable[[str, str, Mapping[str, object]], None]
-        | None = None,
+        progress_callback: Callable[[str, str, Mapping[str, object]], None] | None = None,
     ) -> AnalyzeResult:
         case_dir = Path(case_dir)
         state: dict[str, object] = {
@@ -632,9 +624,7 @@ class AnalyzeAgent:
         if input is not None:
             state["input_path"] = Path(input)
 
-        self._log_enabled = (
-            self.config.debug or self.logger.isEnabledFor(logging.DEBUG)
-        )
+        self._log_enabled = self.config.debug or self.logger.isEnabledFor(logging.DEBUG)
         self._log_level = logging.INFO if self.config.debug else logging.DEBUG
         self._log(
             self._log_level,
@@ -647,9 +637,7 @@ class AnalyzeAgent:
         stage_map = _normalize_stage_map(stage_map)
         stage_overrides = _build_stage_override_index(stage_map)
         intake_mapping = intake or {}
-        intake_data: dict[str, object] = {
-            str(key): value for key, value in intake_mapping.items()
-        }
+        intake_data: dict[str, object] = {str(key): value for key, value in intake_mapping.items()}
         intake = intake_data
         transcript_hint_mapping = transcript_hint or {}
         transcript_hint_data: dict[str, object] = {
@@ -669,8 +657,7 @@ class AnalyzeAgent:
             provider_chain = list(DEFAULT_PROVIDER_CHAIN)
 
         provider_credentials = {
-            str(key): dict(value)
-            for key, value in (provider_credentials or {}).items()
+            str(key): dict(value) for key, value in (provider_credentials or {}).items()
         }
 
         stage_runtimes: dict[str, StageRuntime] = {}
@@ -696,9 +683,7 @@ class AnalyzeAgent:
                 )
 
             preferred_model = (
-                str(assignment.model).strip()
-                if assignment and assignment.model
-                else ""
+                str(assignment.model).strip() if assignment and assignment.model else ""
             )
             options: dict[str, object] = {}
             if assignment and assignment.options:
@@ -721,7 +706,7 @@ class AnalyzeAgent:
             credential_payload = provider_credentials.get(provider_name)
             provider_meta = settings.provider(provider_name)
 
-            chat_client: Optional[ChatClient] = None
+            chat_client: ChatClient | None = None
             model_meta = None
 
             if requires_chat:
@@ -804,9 +789,8 @@ class AnalyzeAgent:
                             reason=f"Provider rejected the connection: {exc}",
                         )
                     ) from exc
-            else:
-                if provider_meta and preferred_model:
-                    model_meta = provider_meta.models.get(preferred_model)
+            elif provider_meta and preferred_model:
+                model_meta = provider_meta.models.get(preferred_model)
 
             stage_max_tokens_base = (
                 model_meta.max_output_tokens
@@ -830,7 +814,9 @@ class AnalyzeAgent:
                 stage_temperature = _coerce_float(temperature_override, stage_temperature)
 
             context_window_tokens = (
-                model_meta.context_window_tokens if model_meta and model_meta.context_window_tokens else None
+                model_meta.context_window_tokens
+                if model_meta and model_meta.context_window_tokens
+                else None
             )
 
             runtime = StageRuntime(
@@ -865,7 +851,9 @@ class AnalyzeAgent:
             if client is None:
                 continue
 
-            def _raise_error(message: str, *, _stage: str = stage_key, _runtime: StageRuntime = runtime) -> Exception:
+            def _raise_error(
+                message: str, *, _stage: str = stage_key, _runtime: StageRuntime = runtime
+            ) -> Exception:
                 return RuntimeError(
                     _stage_error_message(
                         _stage,
@@ -897,9 +885,7 @@ class AnalyzeAgent:
             stage_runtimes=stage_runtimes,
             default_temperature=self.config.temperature,
             logger=self.logger,
-            progress_callback=self._build_progress_dispatch(
-                progress_callback, case_id, job_id
-            ),
+            progress_callback=self._build_progress_dispatch(progress_callback, case_id, job_id),
         )
 
         pipeline.emit_pipeline_event("start", provider_chain=provider_sequence)
@@ -912,9 +898,7 @@ class AnalyzeAgent:
         if not isinstance(transcript_path, Path):
             input_path_obj = state.get("input_path")
             input_path = input_path_obj if isinstance(input_path_obj, Path) else None
-            transcript_path = self._resolve_transcript(
-                input_path, case_dir
-            )
+            transcript_path = self._resolve_transcript(input_path, case_dir)
 
         status_value = final_state.get("status", "ok")
         status = status_value if isinstance(status_value, str) else "ok"
@@ -970,8 +954,7 @@ class AnalyzeAgent:
 
     def _build_progress_dispatch(
         self,
-        external_callback: Callable[[str, str, Mapping[str, object]], None]
-        | None,
+        external_callback: Callable[[str, str, Mapping[str, object]], None] | None,
         case_id: str,
         job_id: str,
     ) -> Callable[[str, str, Mapping[str, object]], None]:
@@ -994,9 +977,7 @@ class AnalyzeAgent:
 
         return dispatch
 
-    def _resolve_transcript(
-        self, input_path: Optional[Path], case_dir: Path
-    ) -> Path:
+    def _resolve_transcript(self, input_path: Path | None, case_dir: Path) -> Path:
         if input_path:
             resolved = Path(input_path)
             if not resolved.exists():
@@ -1004,15 +985,9 @@ class AnalyzeAgent:
             return resolved
         transcript_dir = case_dir / "transcript"
         if not transcript_dir.exists():
-            raise FileNotFoundError(
-                f"No transcript directory at {transcript_dir}"
-            )
+            raise FileNotFoundError(f"No transcript directory at {transcript_dir}")
         candidates = sorted(
-            (
-                p
-                for p in transcript_dir.glob("*__transcript.txt")
-                if p.is_file()
-            ),
+            (p for p in transcript_dir.glob("*__transcript.txt") if p.is_file()),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -1020,9 +995,7 @@ class AnalyzeAgent:
             raise FileNotFoundError("No transcript files found for case")
         return candidates[0]
 
-    def _build_context(
-        self, parse: TranscriptParse, intake: Mapping[str, object]
-    ) -> str:
+    def _build_context(self, parse: TranscriptParse, intake: Mapping[str, object]) -> str:
         snippets: list[str] = []
         chars = 0
         segment_limit = getattr(self.config, "max_prompt_segments", MAX_PROMPT_SEGMENTS)
@@ -1042,9 +1015,8 @@ class AnalyzeAgent:
             line = prefix + text
             snippets.append(line)
             chars += len(line)
-            if (
-                (not unlimited_segments and len(snippets) >= segment_limit)
-                or (not unlimited_chars and chars >= char_limit)
+            if (not unlimited_segments and len(snippets) >= segment_limit) or (
+                not unlimited_chars and chars >= char_limit
             ):
                 break
         context = "\n".join(snippets)

@@ -1,25 +1,31 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field, ConfigDict
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 TransformOp = Literal[
     "UPPER",
     "LOWER",
     "TRIM",
-    "REMOVE_CHARS",   # arg: "chars"
+    "REMOVE_CHARS",  # arg: "chars"
     "KEEP_ALNUM",
-    "REGEX_SUB"       # arg: {"pattern": "...", "repl": "..."}
+    "REGEX_SUB",  # arg: {"pattern": "...", "repl": "..."}
 ]
+
 
 class Transform(BaseModel):
     op: TransformOp
-    arg: Optional[Any] = None
+    arg: Any | None = None
+
 
 class RegexRule(BaseModel):
     """Anchored regex with optional transforms. Use named groups for parsed parts."""
+
     pattern: str
-    flags: List[Literal["IGNORECASE", "MULTILINE"]] = Field(default_factory=list)
-    transforms: List[Transform] = Field(default_factory=list)
+    flags: list[Literal["IGNORECASE", "MULTILINE"]] = Field(default_factory=list)
+    transforms: list[Transform] = Field(default_factory=list)
+
 
 class ConstraintDecl(BaseModel):
     """
@@ -29,11 +35,13 @@ class ConstraintDecl(BaseModel):
     - enum: {"group": "div", "allowed": ["CR","CV"]}
     - in_catalog_location_codes: {"group": "loc"}  # code present in court_catalog locations
     """
+
     kind: Literal["year_range", "length", "enum", "in_catalog_location_codes"]
     group: str
-    min: Optional[int] = None
-    max: Optional[int] = None
-    allowed: Optional[List[str]] = None
+    min: int | None = None
+    max: int | None = None
+    allowed: list[str] | None = None
+
 
 class DerivationDecl(BaseModel):
     """
@@ -42,38 +50,45 @@ class DerivationDecl(BaseModel):
     - MAP: {"src": "loc", "mapping": {"01": "Calgary"}, "dest": "loc_label"}
     - JOIN: {"src": ["year4","loc","seq"], "sep": "-", "dest": "normalized"}
     """
+
     kind: Literal["YEAR_2_TO_4", "MAP", "JOIN"]
     src: Any
     dest: str
-    century_floor: Optional[int] = None
-    mapping: Optional[Dict[str, str]] = None
-    sep: Optional[str] = None
+    century_floor: int | None = None
+    mapping: dict[str, str] | None = None
+    sep: str | None = None
+
 
 class CaseNumberScheme(BaseModel):
     """Generic scheme describing a jurisdiction’s case number format."""
+
     model_config = ConfigDict(extra="forbid")
 
-    key: str                      # e.g., "udocket.case_number.v1/CA-AB-KB"
+    key: str  # e.g., "udocket.case_number.v1/CA-AB-KB"
     kind: Literal["CASE_NUMBER"]
-    court_key: str                # e.g., "CA-AB-KB"
-    rules: List[RegexRule]
-    constraints: List[ConstraintDecl] = Field(default_factory=list)
-    derivations: List[DerivationDecl] = Field(default_factory=list)
-    examples_valid: List[str] = Field(default_factory=list)
-    examples_invalid: List[str] = Field(default_factory=list)
+    court_key: str  # e.g., "CA-AB-KB"
+    rules: list[RegexRule]
+    constraints: list[ConstraintDecl] = Field(default_factory=list)
+    derivations: list[DerivationDecl] = Field(default_factory=list)
+    examples_valid: list[str] = Field(default_factory=list)
+    examples_invalid: list[str] = Field(default_factory=list)
+
 
 class SchemeBundle(BaseModel):
     """Container for a set of schemes (JSON overlay)."""
+
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     schema_id: str = Field(alias="schema")
-    data: List[CaseNumberScheme]
-    meta: Dict[str, Any] = Field(default_factory=dict)  # source_urls, last_updated, version, etc.
+    data: list[CaseNumberScheme]
+    meta: dict[str, Any] = Field(default_factory=dict)  # source_urls, last_updated, version, etc.
+
 
 class CaseNumber(BaseModel):
     """Result of validating a case number string."""
+
     model_config = ConfigDict(extra="forbid")
     value: str
     court_key: str
     scheme_key: str
-    normalized: Optional[str] = None
-    parts: Dict[str, str] = Field(default_factory=dict)
+    normalized: str | None = None
+    parts: dict[str, str] = Field(default_factory=dict)

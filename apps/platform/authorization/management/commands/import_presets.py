@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 
 from apps.platform.accounts.models import Organization
+from apps.platform.authorization.capabilities import DEFAULT_CAPS
 from apps.platform.authorization.models import (
     PermissionPreset,
     PresetCapability,
     Role,
 )
-from apps.platform.authorization.capabilities import DEFAULT_CAPS
 
 
 class Command(BaseCommand):
@@ -81,10 +80,16 @@ class Command(BaseCommand):
                     preset.save(update_fields=["description", "system", "organization"])
                 # Capabilities
                 want_caps = set(p.get("capabilities", []) or [])
-                have_caps = set(PresetCapability.objects.filter(preset=preset).values_list("capability", flat=True))
+                have_caps = set(
+                    PresetCapability.objects.filter(preset=preset).values_list(
+                        "capability", flat=True
+                    )
+                )
                 for c in want_caps - have_caps:
                     PresetCapability.objects.create(preset=preset, capability=c)
-                PresetCapability.objects.filter(preset=preset, capability__in=list(have_caps - want_caps)).delete()
+                PresetCapability.objects.filter(
+                    preset=preset, capability__in=list(have_caps - want_caps)
+                ).delete()
                 if p.get("field_policies"):
                     self.stderr.write(
                         self.style.WARNING(

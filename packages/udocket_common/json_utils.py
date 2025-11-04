@@ -5,9 +5,9 @@ from __future__ import annotations
 """Utility helpers for working with JSON-compatible structures."""
 
 import json
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
-from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Callable, TypeAlias, TypeVar, cast, overload
+from typing import Any, TypeAlias, TypeVar, cast, overload
 
 JSONPrimitive: TypeAlias = int | float | bool | str | None
 JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
@@ -74,8 +74,7 @@ def json_object_to_dict(payload: JSONObject) -> dict[str, Any]:
 
 
 @overload
-def normalize_mapping(mapping: Mapping[KeyT, ValueT]) -> dict[str, ValueT]:
-    ...
+def normalize_mapping(mapping: Mapping[KeyT, ValueT]) -> dict[str, ValueT]: ...
 
 
 @overload
@@ -83,8 +82,7 @@ def normalize_mapping(
     mapping: Mapping[KeyT, ValueT],
     *,
     transform: Callable[[ValueT], ResultT],
-) -> dict[str, ResultT]:
-    ...
+) -> dict[str, ResultT]: ...
 
 
 def normalize_mapping(
@@ -320,9 +318,7 @@ def coerce_float(
     """Coerce a value to a float, enforcing optional bounds."""
 
     candidate: float | None
-    if isinstance(value, bool):
-        candidate = float(value)
-    elif isinstance(value, (int, float)):
+    if isinstance(value, bool) or isinstance(value, (int, float)):
         candidate = float(value)
     elif isinstance(value, str):
         try:
@@ -390,9 +386,7 @@ def write_json_object(
     """Write a mapping to disk as JSON."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    normalized: JSONObject = {
-        str(key): coerce_json_value(value) for key, value in payload.items()
-    }
+    normalized: JSONObject = {str(key): coerce_json_value(value) for key, value in payload.items()}
     path.write_text(json.dumps(normalized, ensure_ascii=False, indent=indent), encoding="utf-8")
 
 
