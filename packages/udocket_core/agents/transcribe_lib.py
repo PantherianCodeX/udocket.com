@@ -12,10 +12,11 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from ..audio import probe_audio_metadata
 from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
+from packages.udocket_common.agents import RegionLiteral, TranscriptionResult
 from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
@@ -371,20 +372,6 @@ class TranscriptionConfig:
             retry_base_s=int(os.getenv("RETRY_BASE_S", "3")),
             debug=(os.getenv("DEBUG", "0").strip() == "1"),
         )
-
-
-@dataclass
-class TranscriptionResult:
-    status: str
-    transcript_file: Path
-    region: str
-    language: str
-    attempts: int
-    duration_s: Optional[float]
-    meta_json: Path
-    meta_log: Path
-    audit_jsonl: Path
-    sha_map: dict[str, str]
 
 
 class _OnDemandTranscriber:
@@ -829,15 +816,18 @@ class TranscriptionAgent:
         except Exception:
             pass
 
+        sha_copy = dict(sha_map)
+        region_literal = cast(RegionLiteral, cfg.azure_speech_region)
         return TranscriptionResult(
-            status="ok",
             transcript_file=transcript_out,
-            region=cfg.azure_speech_region,
-            language=lang,
-            attempts=attempts,
-            duration_s=dur,
             meta_json=log_json_job,
             meta_log=log_txt_job,
             audit_jsonl=audit_jsonl,
-            sha_map=sha_map,
+            region=region_literal,  # Canada-only regions enforced via config validation
+            language=lang,
+            attempts=attempts,
+            duration_s=dur,
+            sha_map=sha_copy,
+            artifact_hashes=sha_copy,
+            udocket_core_version=UDOCKET_CORE_VERSION,
         )

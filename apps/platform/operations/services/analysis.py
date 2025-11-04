@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from apps.platform.cases.models import Case
-from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from apps.platform.operations.storage import ensure_case_paths, ops_dir as storage_ops_dir
 from packages.udocket_common.json_utils import (
     JSONObject,
     coerce_json_object,
@@ -19,8 +19,8 @@ from packages.udocket_common.json_utils import (
 
 
 def case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path, Path, Path]:
-    base = ensure_case_dirs(case_id, organization_id)
-    return base, base / "transcript", base / "analysis"
+    paths = ensure_case_paths(case_id, organization_id)
+    return paths.root, paths.transcript, paths.analysis
 
 
 def ops_dir(case_id: str, organization_id: str | None = None) -> Path:

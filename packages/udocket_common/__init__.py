@@ -1,11 +1,13 @@
 """Common utilities shared across uDocket packages."""
 
-from . import env, ids, json_utils, text, time
+from . import agents, env, ids, json_utils, paths, text, time
 
 __all__ = [
+    "agents",
     "env",
     "ids",
     "json_utils",
+    "paths",
     "text",
     "time",
 ]

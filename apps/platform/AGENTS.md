@@ -5,7 +5,7 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
 ## Architecture
 - ASGI‑first Django app with Channels, Celery, DRF, and HTMX UI.
 - Multi‑tenant: organization scoping enforced by view helpers and selectors; do not bypass them.
-- Storage: per‑tenant case roots under `MEDIA_ROOT/tenants/<ORG_ID>/cases/<case_id>/` created by `ensure_case_dirs` (apps/platform/operations/storage.py:20).
+- Storage: per‑tenant case roots under `MEDIA_ROOT/tenants/<ORG_ID>/cases/<case_id>/` created by `ensure_case_paths` (`apps/platform/operations/storage.py`).
 - Agents: implemented in `packages/udocket_core/agents/` and orchestrated via Celery tasks (apps/platform/operations/tasks.py:1). UI integrates through presenters + selectors.
  - Public API endpoints (DRF):
    - Jobs: `/api/v1/jobs/<id>/status/`, `/api/v1/jobs/<id>/detail/`, download endpoints
@@ -38,7 +38,7 @@ Scope: this file governs contributions across `apps/platform/` (accounts, author
   - Respect timeouts and avoid network calls outside Canada for PII
 
 ## Storage & Paths
-- Use `tenant_case_root`/`ensure_case_dirs` to allocate per‑case subfolders: `audio/`, `transcript/`, `analysis/`, `ops/` (apps/platform/operations/storage.py:12).
+- Use `tenant_case_root`/`ensure_case_paths` to allocate per‑case subfolders: `audio/`, `transcript/`, `analysis/`, `ops/`, `docs/`.
 - When regenerating artifacts, use versioned filenames (e.g., `_v2`) instead of overwriting (see `_next_versioned` in core agent).
 
 ## Jobs & Telemetry

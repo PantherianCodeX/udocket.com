@@ -28,7 +28,7 @@ from apps.platform.operations.blob_upload import UploadCancelled, upload_with_sa
 from apps.platform.operations.channels import send_case_update, send_job_update
 from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta
 from apps.platform.operations.services.files import sha256_file
-from apps.platform.operations.storage import ensure_case_dirs, ops_dir as storage_ops_dir
+from apps.platform.operations.storage import ensure_case_paths, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta
 from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
 from packages.udocket_core.audio import probe_audio_metadata
@@ -128,7 +128,8 @@ def transcribe_job(
         raise RuntimeError("Job organization is required for transcription")
     if case_obj is None:
         case_obj = Case.typed_objects().select_related("organization").filter(pk=case_id).first()
-    case_dir = ensure_case_dirs(case_id, org_id)
+    case_paths = ensure_case_paths(case_id, org_id)
+    case_dir = case_paths.root
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
     default_language_raw = getattr(cfg, "default_language", None)
@@ -339,7 +340,7 @@ def transcribe_job(
                         if key.startswith("audio_") and value is not None:
                             batch_upload_meta.setdefault(f"converted_{key}", value)
 
-                    audio_dir = case_dir / "audio"
+                    audio_dir = case_paths.audio
                     audio_dir.mkdir(parents=True, exist_ok=True)
                     original_display = source_path.name.split("__", 1)[-1] if "__" in source_path.name else source_path.name
                     requested_basename = Path(original_display).with_suffix(".wav").name
@@ -846,7 +847,8 @@ def transcribe_job(
         raise
 
     # If agent succeeded, persist results; notification errors won't flip status
-    artifact_sha256 = result.sha_map
+    artifact_sha256 = dict(result.artifact_hashes or result.sha_map)
+    core_version = result.udocket_core_version or UDOCKET_CORE_VERSION
     payload: dict[str, object] = {
         "status": "SUCCEEDED",
         "job_id": job_id,
@@ -858,7 +860,7 @@ def transcribe_job(
         "progress_percent": None,
         "upload_progress": None,
         "artifact_sha256": artifact_sha256,
-        "udocket_core_version": UDOCKET_CORE_VERSION,
+        "udocket_core_version": core_version,
     }
     try:
         job_obj.refresh_from_db()
@@ -923,8 +925,6 @@ def transcribe_job(
     except Exception:
         pass
 
-    artifact_sha256 = result.sha_map
-
     meta_updates: JSONObject = merge_json_objects(
         base_meta,
         {"transcription_status": "completed"},
@@ -974,7 +974,7 @@ def transcribe_job(
             "celery_task_finished_at": finished_ts.isoformat() if finished_ts else None,
             "celery_task_status": "succeeded" if celery_task_id else None,
             "artifact_sha256": artifact_sha256,
-            "udocket_core_version": UDOCKET_CORE_VERSION,
+            "udocket_core_version": core_version,
         },
     )
 

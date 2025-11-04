@@ -61,3 +61,4 @@ Notes
   - `TYPEWIZ_STATUSES="blocked close ready"` to print multiple buckets at once when using `make typing-readiness`.
   - `TYPEWIZ_LEVEL=file` for per-file listings.
   - `TYPEWIZ_LIMIT=5` to tighten the output focus.
+- Shared agent payloads (e.g., `packages.udocket_common.agents.TranscriptionResult`) keep platform and core modules aligned—prefer these over ad-hoc dicts when wiring new jobs.

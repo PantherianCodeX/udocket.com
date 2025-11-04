@@ -2,14 +2,7 @@ from __future__ import annotations
 
 # pyright: strict
 
-from .transcribe_lib import (
-    AudioNormalizationResult,
-    TranscriptionAgent,
-    TranscriptionConfig,
-    TranscriptionResult,
-    ensure_wav,
-    normalize_audio,
-)
+from .transcribe_lib import AudioNormalizationResult, TranscriptionAgent, TranscriptionConfig, ensure_wav, normalize_audio
 from .analyze_lib import (
     AnalyzeAgent,
     AnalyzeConfig,
@@ -31,6 +24,7 @@ from .langgraph_orchestrator import (
     AnalyzeNodeImpl,
     build_analyze_graph,
 )
+from packages.udocket_common.agents import TranscriptionResult
 
 __all__: list[str] = [
     "AudioNormalizationResult",

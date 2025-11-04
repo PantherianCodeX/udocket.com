@@ -9,6 +9,7 @@ from uuid import UUID
 from django.conf import settings
 
 from apps.platform.cases.models import Case
+from packages.udocket_common.paths import CasePaths, build_case_paths
 
 _DEFAULT_ORG_SLUG = "unassigned"
 
@@ -29,12 +30,19 @@ def tenant_case_root(case_id: str, organization_id: Optional[str | UUID] = None)
     return media_root / "tenants" / org_value / "cases" / case_id
 
 
+def case_paths(case_id: str, organization_id: Optional[str | UUID] = None) -> CasePaths:
+    return build_case_paths(tenant_case_root(case_id, organization_id))
+
+
+def ensure_case_paths(case_id: str, organization_id: Optional[str | UUID] = None) -> CasePaths:
+    paths = case_paths(case_id, organization_id)
+    paths.ensure()
+    return paths
+
+
 def ensure_case_dirs(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:
-    base = tenant_case_root(case_id, organization_id)
-    for sub in ("audio", "transcript", "analysis", "ops"):
-        (base / sub).mkdir(parents=True, exist_ok=True)
-    return base
+    return ensure_case_paths(case_id, organization_id).root
 
 
 def ops_dir(case_id: str, organization_id: Optional[str | UUID] = None) -> Path:
-    return (tenant_case_root(case_id, organization_id) / "ops").resolve()
+    return case_paths(case_id, organization_id).ops.resolve()

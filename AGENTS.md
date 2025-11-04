@@ -43,7 +43,7 @@ To make agents composable and observable when executed inside Celery workers, fo
 - Implement the `TranscriptionAgent` interface (see `packages/udocket_core/agents/transcribe_lib.py`).
   - Accepts structured config (`TranscriptionConfig`) instead of CLI flags.
   - Read configuration from `.env` where relevant, mirroring `config/settings.py` keys.
-- Return a `TranscriptionResult` object; raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
+- Return a `TranscriptionResult` (from `packages.udocket_common.agents`) and raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
 - Deterministic outputs:
   - Write artifacts with stable, case-scoped names and versioning (e.g., `_v2` suffix) when re-running the same job.
 - Ops logging:

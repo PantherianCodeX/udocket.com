@@ -1,40 +1,69 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable, Optional
 
-__version__: str
+from .audio import AudioConfig
+
 
 class PropertyId:
-    Speech_LogFilename: int
+    Speech_LogFilename: "PropertyId"
+
 
 class ProfanityOption:
-    Masked: int
+    Masked: "ProfanityOption"
+
+
+class ResultReason:
+    RecognizedSpeech: "ResultReason"
+    NoMatch: "ResultReason"
+    Canceled: "ResultReason"
+
+
+class CancellationReason:
+    Error: "CancellationReason"
+
+
+class EventSignal:
+    def connect(self, handler: Callable[..., Any]) -> None: ...
+
+
+class SpeechRecognitionResult:
+    reason: ResultReason
+    text: str
+    offset: int
+    duration: int
+
+
+class CancellationDetails:
+    reason: CancellationReason
+    error_details: Optional[str]
+
+    @staticmethod
+    def from_result(result: SpeechRecognitionResult) -> "CancellationDetails": ...
+
 
 class SpeechConfig:
     speech_recognition_language: str
 
-    def __init__(self, subscription: str, region: str) -> None: ...
-    def set_property(self, id: Any, value: str) -> None: ...
-    def request_word_level_timestamps(self) -> None: ...
-    def set_profanity(self, option: Any) -> None: ...
+    def __init__(self, *, subscription: str, region: str) -> None: ...
 
-class _Signal:
-    def connect(self, handler: Any) -> None: ...
+    def set_property(self, property_id: PropertyId, value: str) -> None: ...
+
+    def request_word_level_timestamps(self) -> None: ...
+
+    def set_profanity(self, option: ProfanityOption) -> None: ...
+
 
 class SpeechRecognizer:
-    recognizing: _Signal
-    recognized: _Signal
-    cancelled: _Signal
-    session_stopped: _Signal
+    recognizing: EventSignal
+    recognized: EventSignal
+    cancelled: EventSignal
+    session_stopped: EventSignal
 
-    def __init__(self, *, speech_config: SpeechConfig, audio_config: Any) -> None: ...
+    def __init__(self, *, speech_config: SpeechConfig, audio_config: AudioConfig) -> None: ...
+
+    def recognize_once(self) -> SpeechRecognitionResult: ...
+
     def start_continuous_recognition(self) -> None: ...
+
     def stop_continuous_recognition(self) -> None: ...
-
-class ResultReason:
-    RecognizedSpeech: int
-
-class audio:
-    class AudioConfig:
-        def __init__(self, *, filename: str) -> None: ...
-
