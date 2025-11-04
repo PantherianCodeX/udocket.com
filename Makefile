@@ -162,29 +162,28 @@ pytest.clean: ## Remove pytest cache directory
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
 typing.baseline: ## Run pyright and mypy type checks
 	mkdir -p reports/typing
-	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest reports/typing/typing_audit.json apps/platform packages/udocket_common tests
+	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform packages/udocket_common tests
 	$(UV) run --project apps/platform --extra dev mypy
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
 	$(PYTHON) scripts/typing/check_strict.py --tool both
-	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 || true
+	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest reports/typing/typing_audit.json
+	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format json --output reports/typing/dashboard.json || true
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
 
 ##@ Typewiz
 typewiz.audit: ## Generate Typewiz audit manifest
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json
+	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready
 typewiz.dashboard: ## Render Typewiz dashboards (MD + HTML)
 	$(MAKE) typewiz.audit
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html
 typewiz.readiness: ## Show Typewiz readiness summary (blocked/ready folders)
 	$(MAKE) typewiz.audit
-	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 || true
-	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 || true
+	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 typewiz.clean: ## Drop Typewiz caches and generated reports
 	rm -rf .typewiz_cache
 	rm -rf reports/typing
@@ -485,3 +484,6 @@ help:
 
 %.help:
 	@python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
+TYPEWIZ_STATUSES ?= blocked ready
+TYPEWIZ_LEVEL ?= folder
+TYPEWIZ_LIMIT ?= 20

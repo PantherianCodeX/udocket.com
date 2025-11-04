@@ -73,5 +73,5 @@ dev = [
     "black",
     "bandit",
     "django-upgrade",
-    "typewiz @ git+https://github.com/PantherianCodeX/typewiz@v0.1.0",
+    "typewiz @ git+https://github.com/PantherianCodeX/typewiz@v0.1.1",
 ]

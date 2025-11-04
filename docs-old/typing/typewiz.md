@@ -8,9 +8,21 @@ Overview
 
 Local usage
 -----------
-- Audit + manifest: `make typing-audit`
+- Audit + manifest: `make typing-audit` (`typewiz audit --readiness --readiness-status blocked --readiness-status ready` is wired in)
 - Dashboards (md + html): `make typing-dashboard`
-- Readiness (top blocked/ready folders): `make typing-readiness`
+- Readiness (targeted buckets): `make typing-readiness`
+- One-off console run:
+
+  ```bash
+  uv run --project apps/platform --extra dev typewiz audit \
+    --mode current \
+    --fail-on warnings \
+    --manifest reports/typing/typing_audit.json \
+    --readiness \
+    --readiness-status blocked \
+    --readiness-status ready \
+    apps/platform packages/udocket_common tests
+  ```
 
 CI/Nightly
 ----------
@@ -34,7 +46,15 @@ Configuration
 - Root config: `typewiz.toml` sets runners, paths, and profiles.
 - Folder override example (strict): `packages/udocket_core/logging/typewiz.dir.toml`.
 
+Readiness workflow (v0.1.1)
+---------------------------
+- Inline readiness output keeps CI summaries actionable (blocked/close/ready buckets show `<none>` when empty).
+- Use `typewiz readiness --status blocked --status ready` to re-evaluate without re-running the audit.
+- Switch to `--readiness-level file` for per-module diagnostics when promoting folders to strict mode.
+
 Notes
 -----
 - Aligns with AGENTS typing guidance; do not introduce `Any` in strict zones.
 - Keep Pyright and mypy configs as the source of truth; typewiz reads them.
+- Project pins `typewiz` at `v0.1.1`; run `uv lock --project apps/platform` after updating to later tags.
+- Environment overrides: `TYPEWIZ_STATUSES`, `TYPEWIZ_LEVEL`, and `TYPEWIZ_LIMIT` customise the Make targets (see `Makefile`).

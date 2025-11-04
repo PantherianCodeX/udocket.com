@@ -2313,8 +2313,8 @@ wheels = [
 
 [[package]]
 name = "typewiz"
-version = "0.1.0"
-source = { git = "https://github.com/PantherianCodeX/typewiz?rev=v0.1.0#124041038a40fdf902f64f5acab1097a0ec5d5c8" }
+version = "0.1.1"
+source = { git = "https://github.com/PantherianCodeX/typewiz?rev=v0.1.1#1eaf5c9a6269e1ba95c2eab86897c0943a6369e3" }
 dependencies = [
     { name = "mypy" },
     { name = "pydantic" },
@@ -2476,7 +2476,7 @@ dev = [
     { name = "types-requests" },
     { name = "types-requests-oauthlib" },
     { name = "types-setuptools" },
-    { name = "typewiz", git = "https://github.com/PantherianCodeX/typewiz?rev=v0.1.0" },
+    { name = "typewiz", git = "https://github.com/PantherianCodeX/typewiz?rev=v0.1.1" },
     { name = "watchfiles" },
 ]
 

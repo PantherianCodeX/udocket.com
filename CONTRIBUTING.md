@@ -18,7 +18,12 @@ This project treats contributor experience and code quality as first-class requi
 
   ```bash
   make typing.run          # pyright + mypy + strict enforcement scripts
-  uv run --project apps/platform --extra dev typewiz audit  # optional detailed report
+  uv run --project apps/platform --extra dev typewiz audit \
+    --mode current \
+    --manifest reports/typing/typing_audit.json \
+    --readiness \
+    --readiness-status blocked \
+    --readiness-status ready  # optional detailed report
   ```
 
 - Use Typewiz readiness reports to identify directories that are ready for stricter enforcement and to track regression risks. Do not introduce new `# type: ignore` comments without filing a follow-up ticket that references the typing roadmap.
