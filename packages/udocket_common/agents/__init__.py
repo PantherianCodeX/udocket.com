@@ -5,5 +5,11 @@ from __future__ import annotations
 """Shared agent-facing dataclasses and protocols."""
 
 from .results import RegionLiteral, TranscriptionResult
+from .base import AnalysisArtifact, AnalysisResult
 
-__all__ = ["TranscriptionResult", "RegionLiteral"]
+__all__ = [
+    "TranscriptionResult",
+    "RegionLiteral",
+    "AnalysisArtifact",
+    "AnalysisResult",
+]

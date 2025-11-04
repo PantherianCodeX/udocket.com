@@ -31,6 +31,7 @@ from apps.platform.operations.services.files import sha256_file
 from apps.platform.operations.storage import ensure_case_paths, ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta
 from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
+from packages.udocket_core.agents.transcribe_lib import ModeLiteral
 from packages.udocket_core.audio import probe_audio_metadata
 from packages.udocket_common.json_utils import (
     JSONObject,
@@ -92,8 +93,12 @@ def transcribe_job(
     case_id = str(case_id)
     job_id = str(job_id)
 
+    mode_value = str(mode).lower()
+    transcribe_mode: ModeLiteral = "batch" if mode_value == "batch" else "on-demand"
+    mode = transcribe_mode
+
     upload_required = (
-        mode == "batch"
+        transcribe_mode == "batch"
         and audio_input
         and not audio_input.lower().startswith(("http://", "https://"))
     )
@@ -724,7 +729,7 @@ def transcribe_job(
             "invoking transcription agent",
             extra={
                 "job_id": job_id,
-                "mode": mode,
+                "mode": transcribe_mode,
                 "diarization": diarization,
                 "language": language,
                 "upload_required": upload_required,
@@ -737,7 +742,7 @@ def transcribe_job(
             case_dir=case_dir,
             job_id=job_id,
             language=language,
-            mode=mode,
+            mode=transcribe_mode,
             diarization=diarization,
         )
         append_job_log(

@@ -9,7 +9,7 @@ from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup  # Requires: beautifulsoup4
 from mkdocs.config import config_options
 from mkdocs.plugins import BasePlugin
-from PIL import Image  # Requires: pillow
+from ._image_wrappers import open_image
 
 
 def _parse_svg_dimensions(svg_path: str) -> Optional[Tuple[float, float]]:
@@ -77,7 +77,7 @@ def _image_intrinsic_size(abs_path: str) -> Optional[Tuple[int, int]]:
             return int(round(dims[0])), int(round(dims[1]))
         return None
     try:
-        with Image.open(abs_path) as image:
+        with open_image(abs_path) as image:
             image.load()
             return image.width, image.height
     except Exception:

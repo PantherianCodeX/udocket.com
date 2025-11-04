@@ -12,7 +12,9 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, cast
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from ..audio import probe_audio_metadata
 from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
@@ -37,6 +39,8 @@ TARGET_BITS_PER_SAMPLE = 16
 TARGET_AUDIO_MIME = "audio/wav"
 TARGET_SAMPLE_FMTS = {"s16", "s16p", "s16le"}
 
+CANADA_REGIONS: tuple[RegionLiteral, ...] = ("canadacentral", "canadaeast")
+ModeLiteral = Literal["on-demand", "batch"]
 
 logger = logging.getLogger("udocket.transcribe.agent")
 
@@ -343,10 +347,11 @@ def _sdk_version() -> str:
     return "unknown"
 
 
-@dataclass
-class TranscriptionConfig:
+class TranscriptionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     azure_speech_key: str
-    azure_speech_region: str = "canadacentral"  # canadacentral|canadaeast only
+    azure_speech_region: RegionLiteral = "canadacentral"
     language: str = "en-CA"
     timestamp_sec: int = 180
     max_minutes: int = 120
@@ -355,16 +360,58 @@ class TranscriptionConfig:
     retry_base_s: int = 3
     debug: bool = False
 
+    @field_validator("azure_speech_key", "language", mode="before")
+    @classmethod
+    def _strip_text(cls, value: object) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("Value cannot be empty")
+        return text
+
+    @field_validator("timestamp_sec")
+    @classmethod
+    def _validate_timestamp(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("timestamp_sec must be >= 0")
+        return value
+
+    @field_validator("max_minutes", "sdk_timeout_s")
+    @classmethod
+    def _ensure_positive_duration(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Duration limits must be greater than 0")
+        return value
+
+    @field_validator("retry_max", "retry_base_s")
+    @classmethod
+    def _ensure_positive_retry(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Retry configuration must be greater than 0")
+        return value
+
+    @field_validator("azure_speech_region", mode="before")
+    @classmethod
+    def _normalize_region(cls, value: object) -> RegionLiteral:
+        region = str(value or "").strip().lower()
+        if region not in CANADA_REGIONS:
+            raise ValueError("Azure speech region must be canadacentral or canadaeast")
+        if region == "canadacentral":
+            return "canadacentral"
+        return "canadaeast"
+
     @classmethod
     def from_env(cls) -> "TranscriptionConfig":
-        key = (os.getenv("AZURE_SPEECH_KEY") or os.getenv("SPEECH_KEY") or "").strip()
-        if not key:
+        key = os.getenv("AZURE_SPEECH_KEY") or os.getenv("SPEECH_KEY")
+        if not key or not key.strip():
             raise RuntimeError("Missing AZURE_SPEECH_KEY (or SPEECH_KEY)")
-        region = (os.getenv("AZURE_SPEECH_REGION") or os.getenv("SPEECH_REGION") or "canadacentral").strip().lower()
+        region_raw = (os.getenv("AZURE_SPEECH_REGION") or os.getenv("SPEECH_REGION") or "canadacentral").strip().lower()
+        if region_raw not in CANADA_REGIONS:
+            raise RuntimeError("Region must be canadacentral or canadaeast")
+        region_literal: RegionLiteral = "canadacentral" if region_raw == "canadacentral" else "canadaeast"
         return cls(
             azure_speech_key=key,
-            azure_speech_region=region,
-            language=os.getenv("LANGUAGE", "en-CA").strip(),
+            azure_speech_region=region_literal,
+            language=os.getenv("LANGUAGE", "en-CA"),
             timestamp_sec=int(os.getenv("TIMESTAMP_SEC", "180")),
             max_minutes=int(os.getenv("MAX_MINUTES", "120")),
             sdk_timeout_s=int(os.getenv("SDK_TIMEOUT_S", "5400")),
@@ -456,7 +503,7 @@ class TranscriptionAgent:
     Mirrors the CLI behavior while being importable from Django/Celery.
     """
 
-    ALLOWED_REGIONS = {"canadacentral", "canadaeast"}
+    ALLOWED_REGIONS: set[RegionLiteral] = set(CANADA_REGIONS)
     AUDIO_EXTS = {".m4a", ".wav", ".mp3", ".flac", ".ogg", ".aac"}
 
     def __init__(self, config: Optional[TranscriptionConfig] = None) -> None:
@@ -486,7 +533,7 @@ class TranscriptionAgent:
         case_dir: Path,
         job_id: Optional[str] = None,
         language: Optional[str] = None,
-        mode: str = "on-demand",
+        mode: ModeLiteral = "on-demand",
         diarization: bool = False,
         diagnostics: bool = False,
     ) -> TranscriptionResult:
@@ -817,13 +864,12 @@ class TranscriptionAgent:
             pass
 
         sha_copy = dict(sha_map)
-        region_literal = cast(RegionLiteral, cfg.azure_speech_region)
         return TranscriptionResult(
             transcript_file=transcript_out,
             meta_json=log_json_job,
             meta_log=log_txt_job,
             audit_jsonl=audit_jsonl,
-            region=region_literal,  # Canada-only regions enforced via config validation
+            region=cfg.azure_speech_region,  # Canada-only regions enforced via config validation
             language=lang,
             attempts=attempts,
             duration_s=dur,

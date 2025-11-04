@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:  # pragma: no cover
     from config.settings import Settings
@@ -12,7 +12,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_ROOT = Path(os.environ.get("APP_ROOT", str(REPO_ROOT))).expanduser()
 
 
-def _get_settings(config: "Settings" | None = None) -> "Settings":
+@runtime_checkable
+class SettingsProtocol(Protocol):
+    APP_ROOT: Path | None
+    STORAGE_ROOT: Path | None
+
+
+def _get_settings(config: Settings | SettingsProtocol | None = None) -> SettingsProtocol:
     if config is not None:
         return config
     from config.settings import settings  # avoid import cycle
@@ -26,7 +32,7 @@ def resolve_repo_root() -> Path:
     return REPO_ROOT
 
 
-def resolve_app_root(config: "Settings" | None = None) -> Path:
+def resolve_app_root(config: SettingsProtocol | None = None) -> Path:
     cfg = _get_settings(config)
     value = cfg.APP_ROOT
     if value:
@@ -36,7 +42,7 @@ def resolve_app_root(config: "Settings" | None = None) -> Path:
     return DEFAULT_APP_ROOT
 
 
-def resolve_storage_root(config: "Settings" | None = None) -> Path:
+def resolve_storage_root(config: SettingsProtocol | None = None) -> Path:
     cfg = _get_settings(config)
     if config is None:
         django_storage = _django_storage_root()
@@ -48,7 +54,7 @@ def resolve_storage_root(config: "Settings" | None = None) -> Path:
     return resolve_app_root(cfg) / "storage"
 
 
-def ensure_storage_root(config: "Settings" | None = None) -> Path:
+def ensure_storage_root(config: SettingsProtocol | None = None) -> Path:
     root = resolve_storage_root(config)
     try:
         root.mkdir(parents=True, exist_ok=True)
@@ -57,17 +63,17 @@ def ensure_storage_root(config: "Settings" | None = None) -> Path:
     return root
 
 
-def resolve_media_root(config: Settings | None = None) -> Path:
+def resolve_media_root(config: SettingsProtocol | None = None) -> Path:
     return resolve_storage_root(config) / "media"
 
 
-def resolve_config_dir(config: Settings | None = None) -> Path:
+def resolve_config_dir(config: SettingsProtocol | None = None) -> Path:
     return resolve_app_root(config) / "config"
 
 
 def _django_storage_root() -> Path | None:
     try:
-        from django.conf import settings as django_settings  # type: ignore
+        from django.conf import settings as django_settings
     except Exception:
         return None
     storage_root = getattr(django_settings, "STORAGE_ROOT", None)

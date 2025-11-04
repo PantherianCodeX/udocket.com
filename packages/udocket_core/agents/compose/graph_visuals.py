@@ -8,9 +8,7 @@ import math
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
-from typing import Mapping, Sequence, cast
-
-from PIL import Image, ImageDraw, ImageFont
+from typing import Mapping, Sequence, Tuple, Protocol, runtime_checkable, cast
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_object_list, coerce_str
 
@@ -62,6 +60,91 @@ PNG_COLORS: Mapping[str, tuple[int, int, int]] = {
     "EVIDENCE": (249, 115, 22),
     "ISSUE": (245, 158, 11),
 }
+
+
+Coord = Tuple[float, float]
+Box = Tuple[float, float, float, float]
+
+
+@runtime_checkable
+class _DrawContext(Protocol):
+    def line(
+        self,
+        xy: Sequence[float] | Sequence[Coord] | Box,
+        fill: object | None = ...,
+        width: int | None = ...,
+    ) -> None: ...
+
+    def polygon(
+        self,
+        xy: Sequence[Coord],
+        fill: object | None = ...,
+        outline: object | None = ...,
+    ) -> None: ...
+
+    def ellipse(
+        self,
+        xy: Box,
+        fill: object | None = ...,
+        outline: object | None = ...,
+        width: int | None = ...,
+    ) -> None: ...
+
+    def rectangle(
+        self,
+        xy: Box,
+        fill: object | None = ...,
+        outline: object | None = ...,
+        width: int | None = ...,
+    ) -> None: ...
+
+    def text(
+        self,
+        xy: Coord,
+        text: str,
+        font: object | None = ...,
+        fill: object | None = ...,
+    ) -> None: ...
+
+
+def _new_image(width: int, height: int, *, color: tuple[int, int, int]) -> tuple[object, _DrawContext]:
+    from PIL import Image as _Image  # imported at runtime
+    from PIL import ImageDraw as _ImageDraw
+
+    image_new = getattr(_Image, "new", None)
+    if not callable(image_new):  # pragma: no cover - defensive
+        raise RuntimeError("PIL.Image.new not available")
+    image = image_new("RGB", (width, height), color=color)
+    draw_ctor = getattr(_ImageDraw, "Draw", None)
+    if not callable(draw_ctor):  # pragma: no cover - defensive
+        raise RuntimeError("PIL.ImageDraw.Draw not available")
+    draw = draw_ctor(image)
+    return image, cast(_DrawContext, draw)
+
+
+def _save_png(image: object) -> bytes:
+    buffer = BytesIO()
+    # mypy/pyright: treat as dynamic; _Image has save method on instances
+    getattr(image, "save")(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _load_font(size: int) -> object:
+    try:
+        from PIL import ImageFont as _ImageFont
+        fn = getattr(_ImageFont, "truetype", None)
+        if callable(fn):
+            return fn("DejaVuSans.ttf", size)
+    except Exception:
+        pass
+    try:
+        from PIL import ImageFont as _ImageFont
+        ld = getattr(_ImageFont, "load_default", None)
+        if callable(ld):
+            return ld()
+    except Exception:
+        pass
+    return object()
 
 
 def build_graph_visual_artifacts(
@@ -266,18 +349,15 @@ def _render_png(
     height: int,
     alt_text: str,
 ) -> bytes:
-    image = Image.new("RGB", (width, height), color=(249, 250, 251))
-    draw = ImageDraw.Draw(image)
+    image, draw = _new_image(width, height, color=(249, 250, 251))
     _draw_edges(draw, edges, layout)
     _draw_nodes(draw, nodes, layout)
     _draw_caption(draw, alt_text, width, height)
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
+    return _save_png(image)
 
 
 def _draw_edges(
-    draw: ImageDraw.ImageDraw,
+    draw: _DrawContext,
     edges: Sequence[GraphEdge],
     layout: Mapping[str, tuple[float, float]],
 ) -> None:
@@ -292,7 +372,7 @@ def _draw_edges(
         _draw_arrowhead(draw, x1, y1, x2, y2)
 
 
-def _draw_arrowhead(draw: ImageDraw.ImageDraw, x1: float, y1: float, x2: float, y2: float) -> None:
+def _draw_arrowhead(draw: _DrawContext, x1: float, y1: float, x2: float, y2: float) -> None:
     dx = x2 - x1
     dy = y2 - y1
     length = math.hypot(dx, dy)
@@ -312,22 +392,23 @@ def _draw_arrowhead(draw: ImageDraw.ImageDraw, x1: float, y1: float, x2: float, 
 
 
 def _draw_nodes(
-    draw: ImageDraw.ImageDraw,
+    draw: _DrawContext,
     nodes: Sequence[GraphNode],
     layout: Mapping[str, tuple[float, float]],
 ) -> None:
-    font: object
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", 16)
-    except OSError:
-        font = ImageFont.load_default()
+    font: object = _load_font(16)
     for node in nodes:
         position = layout.get(node.key)
         if position is None:
             continue
         x, y = position
         color = PNG_COLORS.get(node.kind, (99, 102, 241))
-        bbox = [x - NODE_RADIUS, y - NODE_RADIUS, x + NODE_RADIUS, y + NODE_RADIUS]
+        bbox: Box = (
+            float(x - NODE_RADIUS),
+            float(y - NODE_RADIUS),
+            float(x + NODE_RADIUS),
+            float(y + NODE_RADIUS),
+        )
         draw.ellipse(bbox, fill=color)
         text = node.label
         text_width, text_height = _measure_text(font, text)
@@ -339,16 +420,12 @@ def _draw_nodes(
         )
 
 
-def _draw_caption(draw: ImageDraw.ImageDraw, caption: str, width: int, height: int) -> None:
+def _draw_caption(draw: _DrawContext, caption: str, width: int, height: int) -> None:
     if not caption:
         return
-    font: object
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", 18)
-    except OSError:
-        font = ImageFont.load_default()
+    font: object = _load_font(18)
     text_width, text_height = _measure_text(font, caption)
-    rect = [(0.0, float(height - 48)), (float(width), float(height))]
+    rect: Box = (0.0, float(height - 48), float(width), float(height))
     draw.rectangle(rect, fill=(255, 255, 255, 230))
     text_y = height - 24 - text_height / 2
     draw.text(
@@ -383,19 +460,12 @@ def _empty_graph_html(alt_text: str) -> str:
 
 
 def _empty_png(width: int, height: int) -> bytes:
-    image = Image.new("RGB", (width, height), color=(248, 250, 252))
-    draw = ImageDraw.Draw(image)
+    image, draw = _new_image(width, height, color=(248, 250, 252))
     message = "No relationship data available"
-    font: object
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", 20)
-    except OSError:
-        font = ImageFont.load_default()
+    font: object = _load_font(20)
     text_width, text_height = _measure_text(font, message)
     draw.text(((width - text_width) / 2, (height - text_height) / 2), message, font=font, fill=(100, 116, 139))
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
+    return _save_png(image)
 
 
 __all__ = ["GraphVisualArtifacts", "build_graph_visual_artifacts"]

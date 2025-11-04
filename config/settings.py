@@ -8,9 +8,10 @@ import socket
 from collections.abc import Iterable as IterableABC, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Sequence, cast
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
+from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
 
@@ -116,7 +117,8 @@ def _json_or_mapping(value: object) -> dict[str, str]:
     if value is None:
         return {}
     if isinstance(value, Mapping):
-        items = [(str(k), str(v)) for k, v in value.items()]
+        mapping_value = cast(Mapping[object, object], value)
+        items = [(str(k), str(v)) for k, v in mapping_value.items()]
     else:
         text = str(value).strip()
         if not text:
@@ -136,15 +138,22 @@ def _json_or_mapping(value: object) -> dict[str, str]:
             items = pairs
         else:
             if isinstance(loaded, Mapping):
-                items = [(str(k), str(v)) for k, v in loaded.items()]
+                mapping_loaded = cast(Mapping[object, object], loaded)
+                items = [(str(k), str(v)) for k, v in mapping_loaded.items()]
             elif isinstance(loaded, IterableABC):
                 pairs_list: list[tuple[str, str]] = []
-                for entry in loaded:
+                iterable_loaded = cast(IterableABC[object], loaded)
+                for entry in iterable_loaded:
                     if isinstance(entry, Mapping):
-                        for k, v in entry.items():
+                        entry_map = cast(Mapping[object, object], entry)
+                        for k, v in entry_map.items():
                             pairs_list.append((str(k), str(v)))
-                    elif isinstance(entry, (list, tuple)) and len(entry) == 2:
-                        pairs_list.append((str(entry[0]), str(entry[1])))
+                    elif isinstance(entry, (list, tuple)):
+                        seq_entry = cast(Sequence[object], entry)
+                        if len(seq_entry) == 2:
+                            first_obj = seq_entry[0]
+                            second_obj = seq_entry[1]
+                            pairs_list.append((str(first_obj), str(second_obj)))
                 items = pairs_list
             else:
                 items = []
@@ -197,12 +206,47 @@ def _safe_mkdir(path: Path) -> bool:
     return True
 
 
+def _coerce_path(value: Path | str | None, default: Path) -> Path:
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return Path(text).expanduser()
+    return default
+
+
+def _settings_field_info(settings_cls: type[BaseSettings]) -> dict[str, FieldInfo]:
+    raw_fields = getattr(settings_cls, "model_fields", {})
+    if isinstance(raw_fields, Mapping):
+        mapping_fields = cast(Mapping[object, object], raw_fields)
+        result: dict[str, FieldInfo] = {}
+        for key, info in mapping_fields.items():
+            if isinstance(key, str) and isinstance(info, FieldInfo):
+                result[key] = info
+        return result
+    return {}
+
+
+def _settings_field_default(settings_cls: type[BaseSettings], field_name: str, fallback: Any = None) -> Any:
+    fields = _settings_field_info(settings_cls)
+    info = fields.get(field_name)
+    if info is None:
+        return fallback
+    default_value = getattr(info, "default", fallback)
+    if default_value is None:
+        return fallback
+    if default_value.__class__.__name__ == "PydanticUndefinedType":
+        return fallback
+    return default_value
+
+
 def _normalize_storage_values(
-    storage_root: Path,
+    storage_root: Path | None,
     database_url: str,
     test_database_url: str | None,
 ) -> tuple[Path, str, str | None]:
-    normalized_root = storage_root
+    normalized_root = _coerce_path(storage_root, DEFAULT_STORAGE_ROOT)
     normalized_db = database_url
     normalized_test_db = test_database_url
 
@@ -729,19 +773,20 @@ class Settings(BaseSettings):
     )
     @classmethod
     def ensure_int(cls, value: Any, info: ValidationInfo) -> int:
-        field_name = info.field_name
-        default_value = cls.model_fields[field_name].default if field_name in cls.model_fields else 0
+        field_name = info.field_name or ""
+        default_raw = _settings_field_default(cls, field_name, 0) if field_name else 0
         try:
             parsed = int(value)
         except (TypeError, ValueError):
-            parsed = int(default_value) if default_value is not None else 0
+            parsed = int(default_raw) if default_raw is not None else 0
         if parsed < 0:
-            return int(default_value) if default_value is not None else 0
+            return int(default_raw) if default_raw is not None else 0
         return parsed
 
     @model_validator(mode="before")
     @classmethod
     def apply_secret_files(cls, data: Any) -> dict[str, Any]:
+        field_map = _settings_field_info(cls)
         if data is None:
             data_dict: dict[str, Any] = {}
         elif isinstance(data, Mapping):
@@ -751,7 +796,7 @@ class Settings(BaseSettings):
             data_iter = cast(IterableABC[tuple[str, Any]], data)
             data_dict = dict(data_iter)
 
-        file_values = _collect_secret_file_values(cls.model_fields.keys())
+        file_values = _collect_secret_file_values(field_map.keys())
         for key, value in file_values.items():
             data_dict.setdefault(key, value)
 
@@ -779,8 +824,8 @@ class Settings(BaseSettings):
         else:
             db_url = "sqlite:///__AUTO__"
         allow_sqlite_raw = data_dict.get("ALLOW_SQLITE_DEV_FALLBACK")
-        if allow_sqlite_raw is None and "ALLOW_SQLITE_DEV_FALLBACK" in cls.model_fields:
-            allow_sqlite_raw = cls.model_fields["ALLOW_SQLITE_DEV_FALLBACK"].default
+        if allow_sqlite_raw is None:
+            allow_sqlite_raw = _settings_field_default(cls, "ALLOW_SQLITE_DEV_FALLBACK", False)
         allow_sqlite = _as_bool(allow_sqlite_raw, default=False)
         if db_url == "sqlite:///__AUTO__":
             if allow_sqlite:
@@ -1027,7 +1072,7 @@ def _build_settings_kwargs() -> dict[str, Any]:
 
 
 def _load_settings() -> Settings:
-    secret_values = _collect_secret_file_values(Settings.model_fields.keys())
+    secret_values = _collect_secret_file_values(_settings_field_info(Settings).keys())
     env_kwargs = _build_settings_kwargs()
     combined: dict[str, Any] = {**secret_values}
     combined.update(env_kwargs)
