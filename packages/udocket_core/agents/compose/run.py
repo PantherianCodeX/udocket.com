@@ -104,13 +104,10 @@ class ComposeRun:
                 {"stage": stage, "path": str(target)},
             )
             return
-        timestamp = (
-            coerce_str(envelope.get("timestamp")) or datetime.now(tz=UTC).isoformat()
-        )
+        timestamp = coerce_str(envelope.get("timestamp")) or datetime.now(tz=UTC).isoformat()
         self._write_manifest(
             stage=stage, sequence=self._sequence, filename=filename, timestamp=timestamp
         )
-        # self._log_event(logging.INFO, "compose.run.snapshot_recorded", {"stage": stage, "sequence": self._sequence, "path": str(target)})
 
     def restore_latest(self) -> ComposeRunSnapshot | None:
         manifest_path = self.snapshot_dir / LATEST_MANIFEST

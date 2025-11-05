@@ -5,11 +5,13 @@ config_version = 0
 full_paths = [
     "apps/platform/operations",
     "packages/udocket_core/agents",
+    "packages/udocket_core/logging",
     "packages/udocket_common",
     "config"
 ]
 runners = ["pyright", "mypy"]
-fail_on = "errors"
+fail_on = "warnings"
+skip_full = true
 # Also emit dashboards when running `typewiz audit`
 dashboard_json = "reports/typing/dashboard.json"
 dashboard_markdown = "reports/typing/dashboard.md"
@@ -26,6 +28,7 @@ plugin_args = ["--pythonversion", "3.12"]
 include = [
     "apps/platform/operations",
     "packages/udocket_core/agents",
+    "packages/udocket_core/logging",
     "packages/udocket_common",
     "config"
 ]
@@ -43,6 +46,8 @@ config_file = "mypy.ini"
 include = [
     "apps/platform/operations",
     "packages/udocket_core/agents",
+    "packages/udocket_core/logging",
     "packages/udocket_common",
     "config"
 ]
+env = { PYTHONWARNINGS = "ignore::UserWarning" }

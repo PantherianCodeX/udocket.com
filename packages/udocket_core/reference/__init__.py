@@ -2,7 +2,6 @@ from .catalogs.base import (
     CatalogBundle,
     Court,
     CourtCatalog,
-    CourtLevel,
     FilingCode,
     HearingCode,
     Location,
@@ -72,4 +71,5 @@ __all__ = [
     "load_case_number_schemes",
     "match_case_number",
     "validate_case_number",
+    "__version__",
 ]

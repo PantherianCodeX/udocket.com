@@ -184,7 +184,10 @@ def artifacts_index(request: HttpRequest) -> HttpResponse:
     section = {
         "pretitle": f"Artifacts · {organization.name}",
         "title": "Case artifacts",
-        "subtitle": "Review generated transcripts, summaries, timelines, and related outputs across this organization.",
+        "subtitle": (
+            "Review generated transcripts, summaries, timelines, and related outputs "
+            "across this organization."
+        ),
         "stats": [
             {
                 "label": "Total artifacts",

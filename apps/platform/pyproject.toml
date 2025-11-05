@@ -51,6 +51,8 @@ dev = [
     "pytest",
     "pytest-django",
     "pytest-asyncio",
+    "pytest-xdist",
+    "coverage",
     "watchfiles",
     "pyright",
     "mypy",

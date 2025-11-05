@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from packages.udocket_common.json_utils import coerce_json_object, write_json_object
+from packages.udocket_common.prompts import DEFAULT_LOCALE, PromptLogEntry
 from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
 
 from ..common import (
@@ -103,6 +104,7 @@ class AnalyzePipeline:
         self.provider_chain = list(provider_chain or [])
         self.logger = logger or logging.getLogger("udocket.analyze.pipeline")
         self.progress_callback = progress_callback
+        self.locale = getattr(config, "language", DEFAULT_LOCALE) or DEFAULT_LOCALE
         self.chars_per_token = (
             getattr(config, "chars_per_token", DEFAULT_CHARS_PER_TOKEN) or DEFAULT_CHARS_PER_TOKEN
         )
@@ -256,6 +258,7 @@ class AnalyzePipeline:
                 llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                locale=self.locale,
             )
         except Exception as exc:
             self._notify_stage(
@@ -310,6 +313,7 @@ class AnalyzePipeline:
                 llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                locale=self.locale,
             )
         except Exception as exc:
             self._notify_stage(
@@ -359,6 +363,7 @@ class AnalyzePipeline:
                 llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                locale=self.locale,
             )
         except Exception as exc:
             self._notify_stage(
@@ -415,6 +420,7 @@ class AnalyzePipeline:
                 llm_client=llm_client,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                locale=self.locale,
             )
         except Exception as exc:
             self._notify_stage(
@@ -446,6 +452,7 @@ class AnalyzePipeline:
             data=summary_result.data,
             markdown=markdown,
             usage=summary_result.usage,
+            prompts=summary_result.prompts,
         )
         self._notify_stage(
             "qa_and_finalize",
@@ -761,6 +768,27 @@ def finalize_outputs(
         meta["transcript_hint"] = transcript_hint
     if token_usage:
         meta["token_usage"] = token_usage
+
+    prompt_entries: dict[tuple[str, str, str, str], PromptLogEntry] = {}
+    for prompt in (
+        *outline_result.prompts,
+        *timeline_result.prompts,
+        *entity_result.prompts,
+        *summary_result.prompts,
+    ):
+        key = (prompt.domain, prompt.key, prompt.role, prompt.sha256)
+        prompt_entries.setdefault(key, prompt)
+    if prompt_entries:
+        meta["prompt_provenance"] = [
+            {
+                "domain": entry.domain,
+                "key": entry.key,
+                "locale": entry.locale,
+                "role": entry.role,
+                "sha256": entry.sha256,
+            }
+            for entry in prompt_entries.values()
+        ]
 
     meta_path = ops_dir / f"{job_id}__summary_log.json"
     write_json_object(meta_path, meta)

@@ -12,16 +12,15 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    - `APP_ROOT` defaults to `/udocket` inside containers; update it (and derived paths such as `STORAGE_ROOT`) when running directly on your host.
    - Runtime configuration checks run on startup. Use `UDOCKET_SKIP_RUNTIME_CHECKS=1` only for short-lived maintenance commands (e.g., a one-off `manage.py collectstatic` in CI); the core stack should run with validation enabled.
 3) Install the [`uv` CLI](https://astral.sh/uv) so local scripts and containers use the same dependency manager.
-4) Local parity: use a single repo-level env at `opt/venv` (matches containers). Remove any stale `.venv` folders in subprojects if present (`apps/platform/.venv`, `packages/udocket_common/.venv`). Then sync the project dependencies (dev extras included) into the shared env without installing the projects themselves:
+4) Local parity: sync the dev dependencies for each project (uv creates an isolated `.venv` beside every project automatically):
 
    ```bash
-   export UV_PROJECT_ENVIRONMENT="$PWD/opt/venv"
-   uv sync --frozen --group dev --no-install-project --project apps/platform
-   uv sync --frozen --group dev --no-install-project --project packages/udocket_common
-   uv sync --frozen --group dev --no-install-project --project packages/udocket_core
+   uv sync --frozen --group dev --project apps/platform
+   uv sync --frozen --group dev --project packages/udocket_common
+   uv sync --frozen --group dev --project packages/udocket_core
    ```
 
-   The container’s `PATH` already includes `/opt/venv/bin`, so activation isn’t required. Locally, prefer `uv run` to ensure the correct env is used. If you prefer an activated prompt, run `. opt/venv/bin/activate` after the sync above.
+   No manual activation is required—`uv run --project <path> …` will always pick the matching virtualenv.
 
    Everyday quality gates wrap uv automatically:
 
@@ -38,7 +37,11 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
    # Export pip-compatible manifests (pre-commit runs this automatically)
    make all.export-reqs
+   # Prompt resources
+   make prompts.lint
    ```
+
+   Prompt templates live under `packages/udocket_prompts`. Validate changes with `make prompts.lint`, or render a specific prompt via `make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json]` when iterating on copy.
 
 5) Build & run the stack:
 
@@ -107,6 +110,12 @@ PROJECT_NAME=udocket docker compose \
 PROJECT_NAME=udocket make stack.prod.ps
 PROJECT_NAME=udocket make stack.prod.logs
 ```
+
+## Continuous Integration
+
+- GitHub Actions runs Ruff, Pyright, and Mypy in parallel matrices per package so lint and type regressions surface quickly.
+- Package-specific pytest jobs execute with `-n auto` and publish XML/HTML coverage; a follow-up job combines reports for dashboards.
+- `make prompts.lint` and `make all.export-reqs` are enforced in CI (and pre-commit) to keep prompt metadata and requirements manifests deterministic.
 
 ### Maintenance shortcuts
 

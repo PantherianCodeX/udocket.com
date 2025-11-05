@@ -75,7 +75,10 @@ TypedQuerySet = QuerySetProtocol[T_co]
 def get_typed_manager(model: type[T_co]) -> TypedManager[T_co]:
     """Cast Django's ``objects`` attribute to a typed manager."""
 
-    return cast(TypedManager[T_co], model.objects)
+    manager_obj = getattr(model, "objects", None)
+    if manager_obj is None:
+        raise AttributeError(f"{model!r} does not expose an 'objects' manager")
+    return cast(TypedManager[T_co], manager_obj)
 
 
 __all__ = [

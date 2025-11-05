@@ -2,3 +2,9 @@ config_version = 0
 
 [active_profiles]
 pyright = "strict"
+
+[engines.pyright]
+include = ["."]
+
+[engines.mypy]
+include = ["."]

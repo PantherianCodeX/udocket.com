@@ -47,12 +47,10 @@ class Role(models.Model):
     )
     # Attach preset bundles to roles
     # Defined below but string-referenced to avoid ordering issues
-    presets: models.ManyToManyField[PermissionPreset, PermissionPreset] = (
-        models.ManyToManyField(
-            "authorization.PermissionPreset",
-            blank=True,
-            related_name="roles",
-        )
+    presets: models.ManyToManyField[PermissionPreset, PermissionPreset] = models.ManyToManyField(
+        "authorization.PermissionPreset",
+        blank=True,
+        related_name="roles",
     )
 
     class Meta:

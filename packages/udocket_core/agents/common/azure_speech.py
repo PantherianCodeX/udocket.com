@@ -372,9 +372,11 @@ class AzureSpeechClient:
         except Exception as exc:
             raise AzureSpeechError(f"Failed to list transcription files: {exc}") from exc
         if response.status_code >= 400:
-            raise AzureSpeechError(
-                f"Azure Speech files request failed (status={response.status_code}): {(response.text or '')[:500]}"
+            preview = (response.text or "")[:500]
+            message = (
+                f"Azure Speech files request failed (status={response.status_code}): {preview}"
             )
+            raise AzureSpeechError(message)
         payload = coerce_json_object(response.json())
         values = payload.get("values")
         files = coerce_object_list(values)
@@ -395,9 +397,12 @@ class AzureSpeechClient:
         except Exception as exc:
             raise AzureSpeechError(f"Failed to download transcription JSON: {exc}") from exc
         if response.status_code >= 400:
-            raise AzureSpeechError(
-                f"Azure Speech transcription download failed (status={response.status_code}): {(response.text or '')[:500]}"
+            preview = (response.text or "")[:500]
+            message = (
+                f"Azure Speech transcription download failed (status={response.status_code}): "
+                f"{preview}"
             )
+            raise AzureSpeechError(message)
         return coerce_json_object(response.json())
 
     def _extract_transcription(

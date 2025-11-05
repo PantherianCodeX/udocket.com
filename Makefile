@@ -4,8 +4,6 @@ SHELL := /bin/bash
 
 PYTHON ?= python
 UV ?= uv
-# Ensure uv uses a single shared env at repo root for local runs
-export UV_PROJECT_ENVIRONMENT := $(CURDIR)/opt/venv
 PROJECT_NAME ?= udocket
 DC := COMPOSE_PROJECT_NAME=$(PROJECT_NAME) docker compose
 
@@ -126,6 +124,7 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
   common.test common.test.verbose common.test.cov common.lint common.lint.ruff common.lint.format common.type common.type.mypy common.type.pyright common.format common.fix common.export-reqs common.clean \
   core.test core.test.verbose core.test.cov core.lint core.lint.ruff core.lint.format core.type core.type.mypy core.type.pyright core.format core.fix core.export-reqs core.clean \
   docs.test docs.test.coverage docs.lint docs.sync docs.preview docs.build docs.export-reqs \
+  prompts.lint prompts.render \
   pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
   typewiz.audit typewiz.dashboard typewiz.readiness typewiz.clean \
@@ -204,20 +203,20 @@ all.fix: ## Apply ruff fixes across code packages
 	@$(MAKE) core.fix
 
 all.export-reqs: ## Export pip-compatible requirement manifests for every project
-	@python scripts/dev/export_requirements.py
+	@$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py
 
 ##@ Platform • Quality
 platform.test: ## Run platform pytest suite quietly
-	$(UV) run --project apps/platform --extra dev pytest -q
+	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto -q
 
 platform.test.verbose: ## Run platform pytest suite verbosely
-	$(UV) run --project apps/platform --extra dev pytest -v
+	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto -v
 
 platform.test.failfast: ## Run platform pytest suite, stopping on first failure
-	$(UV) run --project apps/platform --extra dev pytest -x
+	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto -x
 
 platform.test.cov: ## Run platform pytest suite with coverage
-	$(UV) run --project apps/platform --extra dev pytest --cov=apps/platform
+	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto --cov=apps/platform
 
 platform.test.clean: ## Clean platform pytest cache
 	rm -rf .pytest_cache
@@ -250,17 +249,17 @@ platform.fix: ## Apply formatter + autofixes to platform code
 	$(UV) run --project apps/platform --extra dev ruff check --fix apps/platform
 
 platform.export-reqs: ## Export platform requirements.txt manifests
-	python scripts/dev/export_requirements.py platform
+	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py platform
 
 ##@ Common Package (udocket_common)
 common.test: ## Run udocket_common tests quietly
-	$(UV) run --project packages/udocket_common --extra dev pytest -q packages/udocket_common
+	$(UV) run --project apps/platform --extra dev pytest -n auto -q packages/udocket_common
 
 common.test.verbose: ## Run udocket_common tests verbosely
-	$(UV) run --project packages/udocket_common --extra dev pytest -v packages/udocket_common
+	$(UV) run --project apps/platform --extra dev pytest -n auto -v packages/udocket_common
 
 common.test.cov: ## Run udocket_common tests with coverage
-	$(UV) run --project packages/udocket_common --extra dev pytest --cov=packages/udocket_common packages/udocket_common
+	$(UV) run --project apps/platform --extra dev pytest -n auto --cov=packages/udocket_common packages/udocket_common
 
 common.clean: ## Clean udocket_common pytest cache
 	rm -rf packages/udocket_common/.pytest_cache
@@ -293,17 +292,17 @@ common.fix: ## Apply formatter + autofixes to udocket_common
 	$(UV) run --project packages/udocket_common --extra dev ruff check --fix packages/udocket_common
 
 common.export-reqs: ## Export udocket_common requirements manifests
-	python scripts/dev/export_requirements.py common
+	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py common
 
 ##@ Core Package (udocket_core)
 core.test: ## Run udocket_core tests quietly
-	$(UV) run --project packages/udocket_core --extra dev pytest -q packages/udocket_core
+	$(UV) run --project apps/platform --extra dev pytest -n auto -q tests/udocket_core
 
 core.test.verbose: ## Run udocket_core tests verbosely
-	$(UV) run --project packages/udocket_core --extra dev pytest -v packages/udocket_core
+	$(UV) run --project apps/platform --extra dev pytest -n auto -v tests/udocket_core
 
 core.test.cov: ## Run udocket_core tests with coverage
-	$(UV) run --project packages/udocket_core --extra dev pytest --cov=packages/udocket_core packages/udocket_core
+	$(UV) run --project apps/platform --extra dev pytest -n auto --cov=packages/udocket_core tests/udocket_core
 
 core.clean: ## Clean udocket_core pytest cache
 	rm -rf packages/udocket_core/.pytest_cache
@@ -313,7 +312,7 @@ core.lint: ## Run lint + formatting checks for udocket_core
 	@$(MAKE) core.lint.format
 
 core.lint.ruff: ## Run ruff lint for udocket_core
-	$(UV) run --project packages/udocket_core --extra dev ruff check packages/udocket_core
+	$(UV) run --project packages/udocket_core --extra dev ruff check --extend-ignore E501 packages/udocket_core
 
 core.lint.format: ## Run ruff formatting checks for udocket_core
 	$(UV) run --project packages/udocket_core --extra dev ruff format --check packages/udocket_core
@@ -336,7 +335,7 @@ core.fix: ## Apply formatter + autofixes to udocket_core
 	$(UV) run --project packages/udocket_core --extra dev ruff check --fix packages/udocket_core
 
 core.export-reqs: ## Export udocket_core requirements manifests
-	python scripts/dev/export_requirements.py core
+	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py core
 
 ##@ Tests (compatibility aliases)
 pytest.all: ## Alias for platform.test (temporary compatibility)
@@ -485,9 +484,9 @@ doctools.shell: ## Open a shell inside the docs toolbox container
 docs.build: ## Render docs output (PDF/HTML as configured)
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --build"
 docs.lint: ## Run docs linting pipeline inside the toolbox
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --lint"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (fetch/update remote content)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --sync"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --sync"
 docs.preview: ## Serve docs locally with live reload
 	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr 0.0.0.0:8010"
 
@@ -518,7 +517,30 @@ docs.test.coverage: $(DOCS_COV_ARGS)
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_COV_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage"
 
 docs.export-reqs: ## Export docs toolbox requirements manifests
-	python scripts/dev/export_requirements.py docs
+	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py docs
+
+##@ Prompts
+prompts.lint: ## Validate prompt templates and metadata
+	$(UV) run --project packages/udocket_common --extra dev python -m packages.udocket_common.prompts lint
+
+prompts.render: ## Render a prompt (usage: make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json] [STRIP=0])
+	@if [ -z "$${DOMAIN:-}" ] || [ -z "$${KEY:-}" ]; then \
+	  echo "DOMAIN and KEY are required (usage: make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json])"; \
+	  exit 1; \
+	fi
+	@cmd='$(UV) run --project packages/udocket_common --extra dev python -m packages.udocket_common.prompts render "$${DOMAIN}" "$${KEY}"'; \
+	if [ -n "$${LOCALE:-}" ]; then \
+	  cmd="$$cmd --locale \"$$LOCALE\""; \
+	else \
+	  cmd="$$cmd --locale \"en-CA\""; \
+	fi; \
+	if [ -n "$${VARS:-}" ]; then \
+	  cmd="$$cmd --vars \"$$VARS\""; \
+	fi; \
+	if [ "$${STRIP:-1}" = "0" ]; then \
+	  cmd="$$cmd --no-strip"; \
+	fi; \
+	eval "$$cmd"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image

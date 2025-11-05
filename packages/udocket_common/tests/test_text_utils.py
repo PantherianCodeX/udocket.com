@@ -47,3 +47,12 @@ def test_slugify_without_separator() -> None:
 def test_unique_title_ignores_non_numeric_suffix() -> None:
     existing = ["TitleAlpha", "Title-2"]
     assert text.unique_title("Title", existing) == "Title-3"
+
+
+def test_prompt_lines_trims_trailing_whitespace() -> None:
+    assert text.prompt_lines("Line 1  ", "Line 2\n") == "Line 1\nLine 2"
+
+
+def test_prompt_paragraphs_inserts_blank_line() -> None:
+    result = text.prompt_paragraphs("First line", "Second block")
+    assert result == "First line\n\nSecond block"

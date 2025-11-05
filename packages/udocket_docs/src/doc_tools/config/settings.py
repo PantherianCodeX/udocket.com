@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from packages.udocket_common.env import load_env_defaults
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[3]
-_REPO_ROOT = _PACKAGE_ROOT.parents[2]
+_REPO_ROOT = _PACKAGE_ROOT.parents[1]
 
 load_env_defaults(
     env_var="UDOCKET_DOCS_ENV_FILE",

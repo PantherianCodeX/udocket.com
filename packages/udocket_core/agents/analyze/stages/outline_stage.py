@@ -6,6 +6,7 @@ import json
 from collections import deque
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from textwrap import dedent
 from typing import cast
 
 from packages.udocket_common.ids import ensure_deterministic_uuids
@@ -18,6 +19,12 @@ from packages.udocket_common.json_utils import (
     coerce_str,
     parse_json_object,
 )
+from packages.udocket_common.prompts import (
+    DEFAULT_LOCALE,
+    PromptLogEntry,
+    inline_prompt_entry,
+)
+from packages.udocket_common.text import prompt_lines, prompt_paragraphs
 
 from ....llm.runtime import ChatClient
 from ...common.chunking import (
@@ -320,6 +327,7 @@ def _ensure_outline_identity(outline: JSONObject) -> None:
 class OutlineStageResult:
     outline: JSONObject
     usage: dict[str, int]
+    prompts: tuple[PromptLogEntry, ...]
 
 
 def _outline_template(
@@ -480,6 +488,7 @@ def generate_outline(
     llm_client: ChatClient | None,
     temperature: float,
     max_tokens: int,
+    locale: str = DEFAULT_LOCALE,
 ) -> OutlineStageResult:
     if llm_client is None:
         raise RuntimeError("LLM client is required for outline stage")
@@ -493,23 +502,47 @@ def generate_outline(
         case_brief_payload = coerce_json_object(case_brief)
         intake_payload = coerce_json_object(intake)
 
+        intake_json = json.dumps(intake_payload, ensure_ascii=False, indent=2)
+        case_brief_json = json.dumps(case_brief_payload, ensure_ascii=False, indent=2)
+        prompt_records: dict[tuple[str, str], PromptLogEntry] = {}
+
         while chunk_queue:
             chunk_text: str = chunk_queue.popleft()
             if not chunk_text.strip():
                 continue
 
-            system_prompt = (
-                "You are a Canadian paralegal assistant."
-                " Extract structured outline data from the provided transcript context."
-                " Only return JSON that matches the provided schema."
+            system_prompt = dedent(
+                """\
+                You are a Canadian paralegal assistant.
+                Extract structured outline data from the provided transcript context.
+                Only return JSON that matches the provided schema.
+                """
+            ).strip()
+            remaining_chunks = len(chunk_queue) + 1
+            user_prompt = prompt_paragraphs(
+                prompt_lines("Case intake info (may be empty):", intake_json),
+                prompt_lines("Case brief summary:", case_brief_json),
+                prompt_lines(
+                    f"Transcript excerpts (remaining chunks: {remaining_chunks}):",
+                    chunk_text,
+                ),
             )
-            user_prompt = (
-                "Case intake info (may be empty):\n"
-                f"{json.dumps(intake_payload, ensure_ascii=False, indent=2)}\n\n"
-                "Case brief summary:\n"
-                f"{json.dumps(case_brief_payload, ensure_ascii=False, indent=2)}\n\n"
-                f"Transcript excerpts (remaining chunks: {len(chunk_queue) + 1}):\n{chunk_text}\n"
+            system_entry = inline_prompt_entry(
+                domain="analyze",
+                key="outline_system",
+                locale=locale or DEFAULT_LOCALE,
+                role="system",
+                content=system_prompt,
             )
+            prompt_records.setdefault(("system", system_entry.sha256), system_entry)
+            user_entry = inline_prompt_entry(
+                domain="analyze",
+                key="outline_user",
+                locale=locale or DEFAULT_LOCALE,
+                role="user",
+                content=user_prompt,
+            )
+            prompt_records.setdefault(("user", user_entry.sha256), user_entry)
             try:
                 content, usage = llm_client.chat(
                     messages=[
@@ -558,7 +591,11 @@ def generate_outline(
         if aggregate_outline is None:
             raise RuntimeError("Outline stage returned no data")
         _ensure_outline_identity(aggregate_outline)
-        return OutlineStageResult(aggregate_outline, usage_totals)
+        return OutlineStageResult(
+            aggregate_outline,
+            usage_totals,
+            tuple(prompt_records.values()),
+        )
     except Exception as exc:  # pragma: no cover - defensive guard
         raise RuntimeError(f"Outline stage failed: {exc}") from exc
 

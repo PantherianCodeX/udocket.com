@@ -59,8 +59,9 @@ class Command(BaseCommand):
                 if org_slug:
                     org = Organization.objects.filter(id=org_slug).first()
                     if org is None:
+                        preset_hint = p.get("name") or p.get("slug") or "UNKNOWN"
                         raise CommandError(
-                            f"Organization not found for preset '{p.get('name') or p.get('slug') or 'UNKNOWN'}': {org_slug}"
+                            f"Preset '{preset_hint}' references missing organization '{org_slug}'"
                         )
                 preset_name = p.get("name") or p.get("slug")
                 if not preset_name:
@@ -93,7 +94,10 @@ class Command(BaseCommand):
                 if p.get("field_policies"):
                     self.stderr.write(
                         self.style.WARNING(
-                            f"Preset '{preset.name}' includes field_policies but field-level rules are no longer supported; entries were ignored."
+                            (
+                                f"Preset '{preset.name}' defines field-level policies; "
+                                "deprecated entries were ignored."
+                            )
                         )
                     )
 

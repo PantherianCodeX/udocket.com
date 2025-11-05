@@ -8,6 +8,8 @@ from typing import Any, cast
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
+from packages.udocket_common.prompts import DEFAULT_LOCALE, render_prompt
+
 
 class LanePrompts(BaseModel):
     system_prompt: str = Field(..., description="System prompt for initial draft generation")
@@ -38,7 +40,13 @@ class ComposePromptConfig(BaseModel):
     qa: QAReviewPrompts
 
 
-def load_prompt_config(path: Path) -> ComposePromptConfig:
+def load_prompt_config(
+    path: Path | None,
+    *,
+    locale: str = DEFAULT_LOCALE,
+) -> ComposePromptConfig:
+    if path is None:
+        return load_prompt_config_from_resources(locale=locale)
     if not path.exists():
         raise FileNotFoundError(f"Compose prompt config not found at {path}")
     try:
@@ -72,10 +80,43 @@ def load_prompt_config(path: Path) -> ComposePromptConfig:
         raise RuntimeError(f"Invalid prompt configuration at {path}: {exc}") from exc
 
 
+def load_prompt_config_from_resources(locale: str = DEFAULT_LOCALE) -> ComposePromptConfig:
+    def _render(key: str) -> str:
+        return render_prompt("compose", key, locale=locale)
+
+    client = LanePrompts(
+        system_prompt=_render("client_system"),
+        revision_system_prompt=_render("client_revision_system"),
+        draft_instruction=_render("client_draft_instruction"),
+        revision_instruction=_render("client_revision_instruction"),
+        editor_system_prompt=_render("client_editor_system"),
+        editor_instruction=_render("client_editor_instruction"),
+    )
+    lawyer = LanePrompts(
+        system_prompt=_render("lawyer_system"),
+        revision_system_prompt=_render("lawyer_revision_system"),
+        draft_instruction=_render("lawyer_draft_instruction"),
+        revision_instruction=_render("lawyer_revision_instruction"),
+        editor_system_prompt=_render("lawyer_editor_system"),
+        editor_instruction=_render("lawyer_editor_instruction"),
+    )
+    qa = QAReviewPrompts(
+        client=QALanePrompts(system_prompt=_render("qa_client_system")),
+        lawyer=QALanePrompts(system_prompt=_render("qa_lawyer_system")),
+    )
+    return ComposePromptConfig(
+        revision_header_template=_render("revision_header"),
+        client=client,
+        lawyer=lawyer,
+        qa=qa,
+    )
+
+
 __all__ = [
     "ComposePromptConfig",
     "LanePrompts",
     "QAReviewPrompts",
     "QALanePrompts",
     "load_prompt_config",
+    "load_prompt_config_from_resources",
 ]

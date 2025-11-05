@@ -14,6 +14,11 @@ from packages.udocket_common.json_utils import (
     coerce_str_list,
     parse_json_object,
 )
+from packages.udocket_common.prompts import (
+    DEFAULT_LOCALE,
+    PromptLogEntry,
+    inline_prompt_entry,
+)
 
 from ....llm.runtime import ChatClient
 from ...common.io import TranscriptParse
@@ -25,6 +30,7 @@ class SummaryStageResult:
     data: JSONObject
     markdown: str
     usage: dict[str, int]
+    prompts: tuple[PromptLogEntry, ...]
 
 
 def _usage_dict(usage: Mapping[str, object]) -> dict[str, int]:
@@ -60,11 +66,14 @@ def generate_summary_payload(
     llm_client: ChatClient | None,
     temperature: float,
     max_tokens: int,
+    locale: str = DEFAULT_LOCALE,
 ) -> SummaryStageResult:
     if llm_client is None:
         raise RuntimeError("LLM client is required for summary stage")
 
     try:
+        prompt_records: dict[tuple[str, str], PromptLogEntry] = {}
+
         schema_description: JSONObject = {
             "case_metadata_summary": {
                 "overview": "string",
@@ -131,23 +140,42 @@ def generate_summary_payload(
             "schema": schema_description,
         }
 
+        system_prompt = (
+            "You are a compliance-focused summarization assistant supporting Canadian "
+            "legal teams."
+            " Produce a structured JSON object matching the provided schema exactly."
+            " Never include legal advice, definitive interpretations, or "
+            "form-selection guidance."
+            " Flag any potentially risky content in the risks_gaps_questions section."
+            " Respond with JSON only and no surrounding prose."
+        )
+        system_entry = inline_prompt_entry(
+            domain="analyze",
+            key="summary_system",
+            locale=locale or DEFAULT_LOCALE,
+            role="system",
+            content=system_prompt,
+        )
+        prompt_records.setdefault(("system", system_entry.sha256), system_entry)
+        user_prompt = json.dumps(user_payload, ensure_ascii=False)
+        user_entry = inline_prompt_entry(
+            domain="analyze",
+            key="summary_user",
+            locale=locale or DEFAULT_LOCALE,
+            role="user",
+            content=user_prompt,
+        )
+        prompt_records.setdefault(("user", user_entry.sha256), user_entry)
+
         content, usage = llm_client.chat(
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are a compliance-focused summarization assistant supporting Canadian "
-                        "legal teams."
-                        " Produce a structured JSON object matching the provided schema exactly."
-                        " Never include legal advice, definitive interpretations, or "
-                        "form-selection guidance."
-                        " Flag any potentially risky content in the risks_gaps_questions section."
-                        " Respond with JSON only and no surrounding prose."
-                    ),
+                    "content": system_prompt,
                 },
                 {
                     "role": "user",
-                    "content": json.dumps(user_payload, ensure_ascii=False),
+                    "content": user_prompt,
                 },
             ],
             temperature=temperature,
@@ -158,7 +186,12 @@ def generate_summary_payload(
         data = _extract_json(raw)
         _validate_summary_schema(data)
         markdown = _render_markdown(data)
-        return SummaryStageResult(data=data, markdown=markdown, usage=_usage_dict(usage))
+        return SummaryStageResult(
+            data=data,
+            markdown=markdown,
+            usage=_usage_dict(usage),
+            prompts=tuple(prompt_records.values()),
+        )
     except Exception as exc:  # pragma: no cover - defensive guard
         raise RuntimeError(f"Summary stage failed: {exc}") from exc
 

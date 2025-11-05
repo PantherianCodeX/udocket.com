@@ -7,6 +7,13 @@ This project treats contributor experience and code quality as first-class requi
 - Shared utilities live under `packages.udocket_common.*`. Import helpers from that package rather than re-implementing them in app-specific modules.
 - When a helper becomes broadly useful (e.g., identifier generation, time formatting), promote it into `packages.udocket_common` together with tests.
 
+## Prompt resources
+
+- Prompt templates are stored in `packages/udocket_prompts/<domain>/<locale>/<key>.md.j2`.
+- Validate placeholder usage and metadata with `make prompts.lint` before sending a patch.
+- Use `make prompts.render DOMAIN=<domain> KEY=<key> [LOCALE=en-CA] [VARS=vars.json]` to preview rendered prompts; the command enforces locale fallback and required-variable checks.
+- Keep `required_placeholders` and `allowed_placeholders` metadata aligned with the template; the loader rejects inconsistent declarations.
+
 ## Dependency hygiene
 
 - Avoid “optional” imports. If a module is needed, add it to the appropriate `pyproject.toml` / lockfile group and commit the change.
@@ -53,6 +60,8 @@ This project treats contributor experience and code quality as first-class requi
   make all.fix           # apply ruff format + autofixes (when needed)
   make all.export-reqs   # regenerate requirements/*.txt (pre-commit runs this)
   ```
+
+- Pytest defaults to `-n auto`; ensure new tests remain deterministic under xdist.
 
 - Per-project commands (examples):
 

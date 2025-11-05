@@ -19,25 +19,30 @@ POLICIES = (
         "public",
         "cases_case",
         "case_org_isolation",
-        "CREATE POLICY case_org_isolation ON cases_case USING (organization_id::text = current_setting('app.current_organization', true));",
+        "CREATE POLICY case_org_isolation ON cases_case USING "
+        "(organization_id::text = current_setting('app.current_organization', true));",
     ),
     (
         "public",
         "cases_casemembership",
         "casemem_org_isolation",
-        "CREATE POLICY casemem_org_isolation ON cases_casemembership USING (case_id IN (SELECT id FROM cases_case WHERE organization_id::text = current_setting('app.current_organization', true)));",
+        "CREATE POLICY casemem_org_isolation ON cases_casemembership USING "
+        "(case_id IN (SELECT id FROM cases_case "
+        "WHERE organization_id::text = current_setting('app.current_organization', true)));",
     ),
     (
         "public",
         "jobs_job",
         "jobs_org_isolation",
-        "CREATE POLICY jobs_org_isolation ON jobs_job USING (organization_id::text = current_setting('app.current_organization', true));",
+        "CREATE POLICY jobs_org_isolation ON jobs_job USING "
+        "(organization_id::text = current_setting('app.current_organization', true));",
     ),
     (
         "public",
         "artifacts_caseartifact",
         "artifacts_org_isolation",
-        "CREATE POLICY artifacts_org_isolation ON artifacts_caseartifact USING (organization_id::text = current_setting('app.current_organization', true));",
+        "CREATE POLICY artifacts_org_isolation ON artifacts_caseartifact USING "
+        "(organization_id::text = current_setting('app.current_organization', true));",
     ),
 )
 
@@ -57,7 +62,10 @@ class Command(BaseCommand):
 
                 for schema, table, policy, create_sql in POLICIES:
                     cur.execute(
-                        "SELECT 1 FROM pg_policies WHERE schemaname=%s AND tablename=%s AND policyname=%s",
+                        (
+                            "SELECT 1 FROM pg_policies "
+                            "WHERE schemaname=%s AND tablename=%s AND policyname=%s"
+                        ),
                         [schema, table, policy],
                     )
                     if cur.fetchone():

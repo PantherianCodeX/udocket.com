@@ -37,3 +37,8 @@ repos:
         entry: python scripts/docs/lint_docs.py
         language: system
         pass_filenames: false
+      - id: prompts-lint
+        name: prompts lint
+        entry: uv run --project apps/platform --extra dev make prompts.lint
+        language: system
+        pass_filenames: false

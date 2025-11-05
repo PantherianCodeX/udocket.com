@@ -101,7 +101,10 @@ def build_case_team_alerts(case: Case, jobs: Sequence[Job]) -> list[dict[str, An
                 "severity_class": ALERT_SEVERITY_CLASSES.get(
                     severity, ALERT_SEVERITY_CLASSES["info"]
                 ),
-                "tooltip": f"Filing deadline on {case.filing_deadline:%B %d, %Y} ({_distance_label(days_until)})",
+                "tooltip": (
+                    f"Filing deadline on {case.filing_deadline:%B %d, %Y} "
+                    f"({_distance_label(days_until)})"
+                ),
                 "due": case.filing_deadline.isoformat(),
                 "due_kind": "date",
                 "sort_ts": case.filing_deadline.toordinal(),

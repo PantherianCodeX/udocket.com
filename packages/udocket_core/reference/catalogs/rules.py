@@ -42,7 +42,10 @@ def check_filing_division_consistency(court: Court) -> list[str]:
         required = FILING_DIVISION_HINTS.get(fc.category, None)
         if required and div != required:
             issues.append(
-                f"{court.key}: filing {fc.category} is in division {div}, expected {required} ({code})"
+                (
+                    f"{court.key}: filing {fc.category} is in division {div}, expected "
+                    f"{required} ({code})"
+                )
             )
     return issues
 

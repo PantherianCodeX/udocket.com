@@ -74,28 +74,36 @@ Use this guide together with the stack Make targets and the service-specific run
 Run these steps after each deployment or configuration change:
 
 1. Bring the stack up with the overlay:
+
    ```bash
    PROJECT_NAME=udocket docker compose \
        -f docker-compose.yml \
        -f docker-compose.prod.yml \
        up -d
    ```
+
 2. Confirm container health and port bindings:
+
    ```bash
    PROJECT_NAME=udocket make stack.prod.ps
    PROJECT_NAME=udocket make stack.smoke
    ```
+
 3. Inspect logs for regressions (5–10 minutes tail):
+
    ```bash
    PROJECT_NAME=udocket make stack.prod.logs SERVICES="platform keycloak"
    PROJECT_NAME=udocket make stack.prod.logs SERVICES="platform_worker platform_beat"
    ```
+
 4. Check Keycloak via the proxy and internally:
+
    ```bash
    curl -fsS https://<external-host>/realms/master/.well-known/openid-configuration
    docker compose -f docker-compose.yml exec keycloak \
      curl -fsS http://localhost:8085/realms/master/.well-known/openid-configuration
    ```
+
 5. Validate platform routes and admin login through the proxy with a smoke-test account.
 
 Record outcomes in the deployment log, including links to Grafana dashboards and Kibana searches used during verification.

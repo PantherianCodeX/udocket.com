@@ -252,15 +252,16 @@ class GuardianAgent:
 
             for attempt in range(attempts):
                 system_prompt = (
-                    "You are the uDocket Guardian, a compliance reviewer for AI outputs."
-                    " Evaluate the provided artifact for unauthorized legal advice, interpretations,"
-                    " form-selection guidance, or other policy violations."
-                    " Respond with strict JSON containing the fields:"
-                    " approved (bool), notes (string), remediation (string), and"
-                    " violations (array of objects with category, message, severity, citation, recommendation)."
-                    " Citations must reference transcript timestamps, artifact sections, or other verifiable anchors."
-                    " Provide remediation summarizing next safe steps when violations exist."
-                    " Approve only when no violations are present."
+                    "You are the uDocket Guardian, a compliance reviewer for AI outputs. "
+                    "Evaluate the provided artifact for unauthorized legal advice, "
+                    "interpretations, form-selection guidance, or other policy violations. "
+                    "Respond with strict JSON containing the fields: "
+                    "approved (bool), notes (string), remediation (string), and "
+                    "violations (array of objects with category, message, severity, citation, "
+                    "recommendation). "
+                    "Citations must reference transcript timestamps, artifact sections, or other "
+                    "verifiable anchors. Provide remediation summarizing next safe steps when "
+                    "violations exist. Approve only when no violations are present."
                 )
 
                 effective_context: dict[str, JSONValue] = {}

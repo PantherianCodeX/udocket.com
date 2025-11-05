@@ -5,7 +5,7 @@ import asyncio
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 from packages.udocket_common.json_utils import (
     JSONArray,
@@ -43,6 +43,28 @@ from .compose.state import (
     lane_history_payload,
 )
 
+
+class _QAReviewerStep(Protocol):
+    def __call__(
+        self,
+        state: ComposeState,
+        *,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]: ...
+
+
+class _LaneEditorStep(Protocol):
+    def __call__(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        directive: LaneActionDirective,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]: ...
+
 logger = logging.getLogger("udocket.compose.agent")
 
 
@@ -73,7 +95,10 @@ class ComposeAgent:
         self.config = config or ComposeConfig.from_env()
         self.settings: LLMSettings = load_llm_settings()
         self.logger = logger
-        self.prompts: ComposePromptConfig = load_prompt_config(self.config.prompt_config_path)
+        self.prompts: ComposePromptConfig = load_prompt_config(
+            self.config.prompt_config_path,
+            locale=self.config.locale,
+        )
 
     def _new_orchestrator(
         self,
@@ -140,7 +165,7 @@ class ComposeAgent:
         progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         orchestrator = self._new_orchestrator(log_context=self._log_context_from_state(state))
-        qa_step = orchestrator._qa_reviewer_step
+        qa_step = cast(_QAReviewerStep, getattr(orchestrator, "_qa_reviewer_step"))
         return qa_step(
             state=state,
             provider_credentials=provider_credentials,
@@ -157,7 +182,7 @@ class ComposeAgent:
         progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]:
         orchestrator = self._new_orchestrator(log_context=self._log_context_from_state(state))
-        editor_step = orchestrator._run_lane_editor
+        editor_step = cast(_LaneEditorStep, getattr(orchestrator, "_run_lane_editor"))
         return editor_step(
             state=state,
             lane=lane,
@@ -256,7 +281,10 @@ class ComposeAgent:
             run_context["resume_stage"] = restored_snapshot.stage
             run_context["resume_sequence"] = restored_snapshot.sequence
             self.logger.info(
-                f"{log_context.prefix}: Compose agent resuming at {restored_snapshot.stage} (snapshot #{restored_snapshot.sequence}).",
+                (
+                    f"{log_context.prefix}: Compose agent resuming at {restored_snapshot.stage} "
+                    f"(snapshot #{restored_snapshot.sequence})."
+                ),
                 extra={
                     "compose": {
                         "case_id": case_id,
@@ -306,7 +334,10 @@ class ComposeAgent:
                 state = asyncio.run(_invoke_async())
             except RuntimeError:
                 self.logger.debug(
-                    f"{log_context.prefix}: Async compose runner unavailable; falling back to sync execution.",
+                    (
+                        f"{log_context.prefix}: Async compose runner unavailable; falling back "
+                        "to sync execution."
+                    ),
                     exc_info=True,
                     extra={
                         "compose": {"case_id": case_id, "job_id": job_id},
@@ -331,7 +362,10 @@ class ComposeAgent:
         if self.config.qa_enforced and state.qa.status.lower() not in QA_REVIEWER_STATUS_OK:
             self._log_qa_rejection_details(state=state, log_context=log_context)
             self.logger.warning(
-                f"{log_context.prefix}: QA reviewer returned status '{state.qa.status}', proceeding with deliverable release.",
+                (
+                    f"{log_context.prefix}: QA reviewer returned status '{state.qa.status}', "
+                    "proceeding with deliverable release."
+                ),
                 extra={
                     "compose": {
                         "case_id": log_context.case_id,
@@ -516,7 +550,11 @@ class ComposeAgent:
             "qa_provider": qa_result.provider,
         }
         self.logger.debug(
-            f"{log_context.prefix}: QA rejection recorded (status={qa_result.status}, alerts={len(qa_result.alerts)}, recommendations={len(qa_result.recommendations)}).",
+            (
+                f"{log_context.prefix}: QA rejection recorded (status={qa_result.status}, "
+                f"alerts={len(qa_result.alerts)}, "
+                f"recommendations={len(qa_result.recommendations)})."
+            ),
             extra={
                 "compose": compose_payload,
                 "event": "compose.qa_rejection.summary",

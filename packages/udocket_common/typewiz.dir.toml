@@ -3,3 +3,6 @@ pyright = "strict"
 
 [engines.pyright]
 include = ["."]
+
+[engines.mypy]
+include = ["."]

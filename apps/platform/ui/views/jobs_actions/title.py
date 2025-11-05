@@ -55,7 +55,11 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
     if dev_open:
         can_edit = True
     elif user and getattr(user, "is_authenticated", False):
-        if case.reviewer_id and str(user.id) == str(case.reviewer_id) or user_can_review_case(user, case):
+        if (
+            case.reviewer_id
+            and str(user.id) == str(case.reviewer_id)
+            or user_can_review_case(user, case)
+        ):
             can_edit = True
     if not can_edit:
         return HttpResponse("Forbidden", status=403)

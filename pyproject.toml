@@ -9,6 +9,7 @@ select = [
     "F",  # pyflakes
     "I",  # import sorting (isort)
     "W",  # pycodestyle warnings
+    "ISC",  # implicit string concatenation
 ]
 ignore = ["E402"]
 

@@ -170,7 +170,11 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
             "exhibits": [],
             "legal_refs": [],
         }
-        return OutlineStageResult(outline, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
+        return OutlineStageResult(
+            outline,
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            (),
+        )
 
     def fake_timeline(**_: Any) -> TimelineStageResult:
         events = [
@@ -184,7 +188,11 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
                 "labels": ["summary"],
             }
         ]
-        return TimelineStageResult(events, {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12})
+        return TimelineStageResult(
+            events,
+            {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+            (),
+        )
 
     def fake_entities(**_: Any) -> EntityStageResult:
         hints = {
@@ -211,13 +219,18 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
                 }
             ],
         }
-        return EntityStageResult(hints, {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9})
+        return EntityStageResult(
+            hints,
+            {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9},
+            (),
+        )
 
     def fake_summary(**_: Any) -> SummaryStageResult:
         return SummaryStageResult(
             data=summary_payload,
             markdown=summary_text,
             usage={"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
+            prompts=(),
         )
 
     monkeypatch.setattr(
@@ -457,6 +470,7 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch: MonkeyPatch, tmp
             data={"executive_summary": {"bullets": ["Summary"]}},
             markdown="# Summary\n\n## Executive summary\n- Summary\n",
             usage={"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+            prompts=(),
         )
 
     monkeypatch.setattr(

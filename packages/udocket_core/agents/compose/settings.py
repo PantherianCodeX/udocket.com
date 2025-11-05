@@ -59,12 +59,11 @@ def _resolve_prompt_path(path: Path) -> Path:
     return resolved
 
 
-def _default_prompt_config_path() -> Path:
+def _default_prompt_config_path() -> Path | None:
     env_path = os.getenv(DEFAULT_PROMPT_CONFIG_ENV)
     if env_path:
         return _resolve_prompt_path(Path(env_path))
-    package_path = Path(__file__).resolve().parent.parent.parent / "config" / "compose_prompts.yaml"
-    return _resolve_prompt_path(package_path)
+    return None
 
 
 @dataclass(slots=True)
@@ -84,7 +83,7 @@ class ComposeConfig:
     lawyer_editor_model: str | None = None
     qa_iteration_limit: int = 3
     locale: str = "en-CA"
-    prompt_config_path: Path = field(default_factory=_default_prompt_config_path)
+    prompt_config_path: Path | None = field(default_factory=_default_prompt_config_path)
     llm_retry_attempts: int = 2
     llm_retry_initial_delay_seconds: float = 2.0
     enable_async: bool = False

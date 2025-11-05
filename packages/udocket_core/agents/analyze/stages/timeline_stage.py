@@ -7,10 +7,17 @@ import logging
 from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from textwrap import dedent
 from typing import Any, cast
 
 from packages.udocket_common.ids import ensure_deterministic_uuids, normalize_id
 from packages.udocket_common.json_utils import parse_json_value
+from packages.udocket_common.prompts import (
+    DEFAULT_LOCALE,
+    PromptLogEntry,
+    inline_prompt_entry,
+)
+from packages.udocket_common.text import prompt_lines, prompt_paragraphs
 
 from ....llm.runtime import ChatClient, ResponseFormat
 from ...common.chunking import (
@@ -55,6 +62,7 @@ TIMELINE_SPLIT_CONFIG = ChunkSplitConfig(min_lines=10, min_chars=2500)
 class TimelineStageResult:
     events: list[dict[str, Any]]
     usage: dict[str, int]
+    prompts: tuple[PromptLogEntry, ...]
 
 
 def _ensure_chunks(context: Any) -> list[str]:
@@ -146,6 +154,7 @@ def generate_timeline(
     llm_client: ChatClient | None,
     temperature: float,
     max_tokens: int,
+    locale: str = DEFAULT_LOCALE,
 ) -> TimelineStageResult:
     if llm_client is None:
         raise RuntimeError("LLM client is required for timeline stage")
@@ -154,29 +163,51 @@ def generate_timeline(
         chunk_queue: deque[str] = deque(_ensure_chunks(context_snippet))
         aggregated: list[dict[str, Any]] = []
         usage_totals: dict[str, int] = {}
-        signatures: set[tuple[str | None, float | None, float | None, str | None, str]] = (
-            set()
-        )
+        signatures: set[tuple[str | None, float | None, float | None, str | None, str]] = set()
+        outline_json = json.dumps(outline_issues, ensure_ascii=False, indent=2)
+        case_brief_json = json.dumps(case_brief, ensure_ascii=False, indent=2)
+        prompt_records: dict[tuple[str, str], PromptLogEntry] = {}
+
         while chunk_queue:
             chunk_text = chunk_queue.popleft()
             if not chunk_text or not chunk_text.strip():
                 continue
-            system_prompt = (
-                "You are a legal timeline analyst."
-                " Produce normalized events with start/end offsets (seconds), optional speakers,"
-                " and descriptive labels."
-            )
+            system_prompt = dedent(
+                """\
+                You are a legal timeline analyst.
+                Produce normalized events with start/end offsets (seconds) and optional speakers.
+                Provide descriptive labels for each event.
+                """
+            ).strip()
             remaining_chunks = len(chunk_queue) + 1
-            outline_json = json.dumps(outline_issues, ensure_ascii=False)
-            case_brief_json = json.dumps(case_brief, ensure_ascii=False)
-            user_prompt = (
-                "Use these transcript excerpts to generate events. Ensure every object includes "
-                "labels array.\n"
-                f"Outline issues (for context): {outline_json}\n\n"
-                f"Case brief summary: {case_brief_json}\n\n"
-                f"Transcript excerpts (remaining chunks: {remaining_chunks}):\n"
-                f"{chunk_text}"
+            user_prompt = prompt_paragraphs(
+                prompt_lines(
+                    "Use these transcript excerpts to generate events.",
+                    "Ensure every object includes a labels array.",
+                ),
+                prompt_lines("Outline issues (for context):", outline_json),
+                prompt_lines("Case brief summary:", case_brief_json),
+                prompt_lines(
+                    f"Transcript excerpts (remaining chunks: {remaining_chunks}):",
+                    chunk_text,
+                ),
             )
+            system_entry = inline_prompt_entry(
+                domain="analyze",
+                key="timeline_system",
+                locale=locale or DEFAULT_LOCALE,
+                role="system",
+                content=system_prompt,
+            )
+            prompt_records.setdefault(("system", system_entry.sha256), system_entry)
+            user_entry = inline_prompt_entry(
+                domain="analyze",
+                key="timeline_user",
+                locale=locale or DEFAULT_LOCALE,
+                role="user",
+                content=user_prompt,
+            )
+            prompt_records.setdefault(("user", user_entry.sha256), user_entry)
             try:
                 response_format = cast(
                     ResponseFormat,
@@ -244,7 +275,7 @@ def generate_timeline(
             _merge_usage(usage_totals, usage)
         if not aggregated:
             raise RuntimeError("Timeline stage returned no events")
-        return TimelineStageResult(aggregated, usage_totals)
+        return TimelineStageResult(aggregated, usage_totals, tuple(prompt_records.values()))
     except Exception as exc:
         raise RuntimeError(f"Timeline stage failed: {exc}") from exc
 

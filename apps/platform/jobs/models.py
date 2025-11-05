@@ -41,6 +41,10 @@ class Job(models.Model):
             raise TypeError("Job.objects is not a JobManager")
         return manager
 
+    # Hint auto-generated FK identifiers for type checkers
+    case_id: uuid.UUID
+    organization_id: uuid.UUID | None
+
     class Status(models.TextChoices):
         PENDING = "PENDING"
         RUNNING = "RUNNING"
@@ -122,12 +126,10 @@ class Job(models.Model):
         blank=True,
         db_index=True,
     )
-    finished_at: models.DateTimeField[datetime | None, datetime | None] = (
-        models.DateTimeField(
-            null=True,
-            blank=True,
-            db_index=True,
-        )
+    finished_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
     )
     upload_progress: models.FloatField[float | None, float | None] = models.FloatField(
         null=True, blank=True
@@ -138,8 +140,8 @@ class Job(models.Model):
         default=ReviewStatus.PENDING,
         db_index=True,
     )
-    reviewed_at: models.DateTimeField[datetime | None, datetime | None] = (
-        models.DateTimeField(null=True, blank=True)
+    reviewed_at: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
+        null=True, blank=True
     )
     reviewed_by: models.ForeignKey[User, User | None] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -149,12 +151,10 @@ class Job(models.Model):
         related_name="reviewed_jobs",
     )
     review_comment: models.TextField[str, str] = models.TextField(blank=True)
-    review_activity_id: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = (
-        models.UUIDField(
-            null=True,
-            blank=True,
-            editable=False,
-        )
+    review_activity_id: models.UUIDField[uuid.UUID | None, uuid.UUID | None] = models.UUIDField(
+        null=True,
+        blank=True,
+        editable=False,
     )
 
     class Meta:

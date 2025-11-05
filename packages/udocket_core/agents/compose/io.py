@@ -2,11 +2,18 @@ from __future__ import annotations
 
 # pyright: strict
 import logging
+import warnings
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from docxtpl import DocxTemplate
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message="pkg_resources is deprecated as an API",
+        category=UserWarning,
+    )
+    from docxtpl import DocxTemplate
 
 from ..common import next_versioned
 from ..common.docx import write_basic_docx

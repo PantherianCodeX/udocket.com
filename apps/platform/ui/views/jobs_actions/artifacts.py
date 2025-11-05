@@ -38,7 +38,11 @@ def case_job_create_artifact(request: HttpRequest, case_id: str, job_id: UUID) -
     if dev_open:
         can_manage = True
     elif user and getattr(user, "is_authenticated", False):
-        if case.reviewer_id and str(user.id) == str(case.reviewer_id) or user_can_review_case(user, case):
+        if (
+            case.reviewer_id
+            and str(user.id) == str(case.reviewer_id)
+            or user_can_review_case(user, case)
+        ):
             can_manage = True
     if not can_manage:
         return JsonResponse({"status": "error", "detail": "Forbidden"}, status=403)

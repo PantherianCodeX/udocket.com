@@ -332,7 +332,10 @@ def analysis_modules_context(
     analyze_module = build_module(
         key="analyze",
         label="Analyze",
-        description="Generate layered summaries and companion analysis artifacts with AI assistance.",
+        description=(
+            "Generate layered summaries and companion analysis artifacts with "
+            "AI assistance."
+        ),
         artifacts=summary_artifacts,
         empty_message="No analyze jobs yet. Generate one from the latest transcript.",
         action_label="Queue analyze job",
@@ -451,7 +454,10 @@ def analysis_modules_context(
         analyze_module = build_module(
             key="analyze",
             label="Analyze",
-            description="Generate layered summaries and companion analysis artifacts with AI assistance.",
+            description=(
+                "Generate layered summaries and companion analysis artifacts with "
+                "AI assistance."
+            ),
             artifacts=summary_artifacts,
             empty_message="No analyze jobs yet. Generate one from the latest transcript.",
             action_label="Queue analyze job",
@@ -554,7 +560,10 @@ def analysis_modules_context(
     compose_module: dict[str, Any] = {
         "key": "compose",
         "label": "Compose",
-        "description": "Generate client and lawyer deliverables from approved summaries and transcripts.",
+        "description": (
+            "Generate client and lawyer deliverables from approved summaries and "
+            "transcripts."
+        ),
         "panel_id": "module-compose",
         "status": compose_status,
         "status_class": status_class(compose_status),

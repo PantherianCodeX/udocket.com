@@ -156,7 +156,10 @@ def jobs(request: HttpRequest) -> HttpResponse:
         "section": {
             "pretitle": f"Jobs · {organization.name}",
             "title": "Recent transcription jobs",
-            "subtitle": "Track automations across this tenant, including their status, agent, and originating case.",
+            "subtitle": (
+                "Track automations across this tenant, including their status, agent, "
+                "and originating case."
+            ),
             "stats": [
                 {
                     "label": "Displayed",

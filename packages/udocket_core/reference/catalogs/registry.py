@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config.paths import resolve_data_root
-from ..utils import safe_dump  # NEW
+from ..utils import safe_dump
 from .base import CatalogBundle, Court, CourtCatalog
 from .plugin_protocol import validate_catalogs
 
@@ -28,7 +28,7 @@ def _load_bundle(p: Path) -> CatalogBundle:
 def _check_cross_catalog_localcode_uniqueness(catalogs: list[CourtCatalog]) -> None:
     """
     Enforce that LocalCodes are unique *across* courts (strong guard).
-    If you need to allow a shared code across two courts, set env UDOCKET_ALLOW_LOCALCODE_DUPLICATES=1.
+    If two courts must share a code, set env UDOCKET_ALLOW_LOCALCODE_DUPLICATES=1.
     """
     allow_dupes = os.getenv("UDOCKET_ALLOW_LOCALCODE_DUPLICATES") == "1"
     seen: dict[str, tuple[str, str]] = {}  # code -> (court_key, jurisdiction_key)
@@ -40,7 +40,10 @@ def _check_cross_catalog_localcode_uniqueness(catalogs: list[CourtCatalog]) -> N
                 code = item.code.code
                 owner = seen.get(code)
                 if owner and (owner[0] != court.key):
-                    msg = f"LocalCode '{code}' appears in courts '{owner[0]}' and '{court.key}' (jurisdictions: {owner[1]} vs {juris_key})"
+                    msg = (
+                        f"LocalCode '{code}' appears in courts '{owner[0]}' and '{court.key}' "
+                        f"(jurisdictions: {owner[1]} vs {juris_key})"
+                    )
                     if allow_dupes:
                         print(f"[udocket] WARNING: {msg}")  # soft warning
                     else:

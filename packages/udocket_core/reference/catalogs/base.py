@@ -87,11 +87,11 @@ class Court(BaseModel):
     @model_validator(mode="after")
     def _integrity(self) -> Court:
         # 1) At least one base point
-        if not any(l.is_base_point for l in self.locations):
+        if not any(loc.is_base_point for loc in self.locations):
             raise ValueError(f"Court {self.key}: must define at least one base point location")
 
         # Build lookup for admin base checks
-        by_slug = {l.slug: l for l in self.locations}
+        by_slug = {loc.slug: loc for loc in self.locations}
 
         # 2) admin_base_slug must refer to an existing base
         for loc in self.locations:
@@ -99,11 +99,17 @@ class Court(BaseModel):
                 base = by_slug.get(loc.admin_base_slug)
                 if base is None:
                     raise ValueError(
-                        f"Court {self.key}: location '{loc.slug}' references missing admin_base_slug='{loc.admin_base_slug}'"
+                        (
+                            f"Court {self.key}: location '{loc.slug}' references missing "
+                            f"admin_base_slug='{loc.admin_base_slug}'"
+                        )
                     )
                 if not base.is_base_point:
                     raise ValueError(
-                        f"Court {self.key}: admin_base_slug='{loc.admin_base_slug}' for '{loc.slug}' must point to a base location"
+                        (
+                            f"Court {self.key}: admin_base_slug='{loc.admin_base_slug}' "
+                            f"for '{loc.slug}' must point to a base location"
+                        )
                     )
 
         # 3) divisions_served subset of Court.divisions (for all locations)
@@ -111,8 +117,11 @@ class Court(BaseModel):
         for loc in self.locations:
             if not set(loc.divisions_served).issubset(court_divs) and loc.divisions_served:
                 raise ValueError(
-                    f"Court {self.key}: location '{loc.slug}' has divisions {sorted(loc.divisions_served)} "
-                    f"not subset of court divisions {sorted(court_divs)}"
+                    (
+                        f"Court {self.key}: location '{loc.slug}' has divisions "
+                        f"{sorted(loc.divisions_served)} not subset of court divisions "
+                        f"{sorted(court_divs)}"
+                    )
                 )
 
         # 4) LocalCode uniqueness within the court
@@ -132,8 +141,11 @@ class Court(BaseModel):
         for h in self.hearing_codes:
             if h.divisions and not set(h.divisions).issubset(court_divs):
                 raise ValueError(
-                    f"Court {self.key}: hearing code '{h.code.code}' divisions {sorted(h.divisions)} "
-                    f"not subset of court divisions {sorted(court_divs)}"
+                    (
+                        f"Court {self.key}: hearing code '{h.code.code}' divisions "
+                        f"{sorted(h.divisions)} not subset of court divisions "
+                        f"{sorted(court_divs)}"
+                    )
                 )
 
         return self

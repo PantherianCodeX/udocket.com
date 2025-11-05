@@ -9,7 +9,11 @@ description = "Shared helpers for uDocket services"
 requires-python = ">=3.12"
 license = "LicenseRef-Proprietary"
 readme = "README.md"
-dependencies = []
+dependencies = [
+    "jinja2>=3.1.0,<4",
+    "pydantic>=2.9.0,<3",
+    "PyYAML>=6.0.0,<7",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -19,6 +23,7 @@ include = ["*"]
 dev = [
     "pytest>=8.0.0,<9",
     "pytest-cov>=4.1.0,<5",
+    "pytest-xdist>=3.6.1,<4",
     "ruff",
     "mypy",
     "pyright",

@@ -10,21 +10,144 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: devops-actions/actionlint@v0.1.9
-  test:
-    needs: [lint-workflows]
+
+  ruff:
+    needs: lint-workflows
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.task == 'typewiz' }}
     strategy:
       fail-fast: false
       matrix:
-        task:
-          - pytest
-          - pyright
-          - mypy
-          - strict_pragmas
-          - strict_manifest
-          - docs_tools
-          - typewiz
+        package: [platform, core, common]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync dependencies
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv sync --frozen --group dev --project apps/platform
+              ;;
+            core)
+              uv sync --frozen --group dev --project packages/udocket_core
+              ;;
+            common)
+              uv sync --frozen --group dev --project packages/udocket_common
+              ;;
+          esac
+      - name: Ruff check
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv run --project apps/platform --extra dev ruff check apps/platform
+              ;;
+            core)
+              uv run --project packages/udocket_core --extra dev ruff check packages/udocket_core
+              ;;
+            common)
+              uv run --project packages/udocket_common --extra dev ruff check packages/udocket_common
+              ;;
+          esac
+
+  pyright:
+    needs: lint-workflows
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [platform, core, common]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync dependencies
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv sync --frozen --group dev --project apps/platform
+              ;;
+            core)
+              uv sync --frozen --group dev --project packages/udocket_core
+              ;;
+            common)
+              uv sync --frozen --group dev --project packages/udocket_common
+              ;;
+          esac
+      - name: Pyright
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv run --project apps/platform --extra dev pyright apps/platform
+              ;;
+            core)
+              uv run --project packages/udocket_core --extra dev pyright packages/udocket_core
+              ;;
+            common)
+              uv run --project packages/udocket_common --extra dev pyright packages/udocket_common
+              ;;
+          esac
+
+  mypy:
+    needs: lint-workflows
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [platform, core, common]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync dependencies
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv sync --frozen --group dev --project apps/platform
+              ;;
+            core)
+              uv sync --frozen --group dev --project packages/udocket_core
+              ;;
+            common)
+              uv sync --frozen --group dev --project packages/udocket_common
+              ;;
+          esac
+      - name: Mypy
+        env:
+          MYPY_CACHE_DIR: .mypy_cache
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv run --project apps/platform --extra dev mypy apps/platform
+              ;;
+            core)
+              uv run --project packages/udocket_core --extra dev mypy packages/udocket_core
+              ;;
+            common)
+              uv run --project packages/udocket_common --extra dev mypy packages/udocket_common
+              ;;
+          esac
+
+  typing-scripts:
+    needs: lint-workflows
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,116 +157,20 @@ jobs:
         with:
           version: "0.5.*"
       - name: Sync platform dependencies
-        if: ${{ matrix.task != 'docs_tools' }}
         working-directory: apps/platform
         run: |
           set -euo pipefail
-          printf '%s\n' "Starting: sync dependencies (${{ matrix.task }})" >> "$GITHUB_STEP_SUMMARY"
           uv sync --frozen --group dev --no-install-project
-          printf '%s\n' "Finished: sync dependencies (${{ matrix.task }})" >> "$GITHUB_STEP_SUMMARY"
-      - name: Sync docs dependencies
-        if: ${{ matrix.task == 'docs_tools' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: sync docs dependencies" >> "$GITHUB_STEP_SUMMARY"
-          uv sync --frozen --extra dev --project packages/udocket_docs
-          printf '%s\n' "Finished: sync docs dependencies" >> "$GITHUB_STEP_SUMMARY"
-      - name: Run migrations
-        if: ${{ matrix.task == 'pytest' }}
-        env:
-          DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
-          DATABASE_URL: sqlite:///./udocket_ci.db
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: run migrations" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform python manage.py migrate --noinput
-          printf '%s\n' "Finished: run migrations" >> "$GITHUB_STEP_SUMMARY"
-      - name: Pytest
-        if: ${{ matrix.task == 'pytest' }}
-        env:
-          DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
-          DATABASE_URL: sqlite:///./udocket_ci.db
-          CELERY_TASK_ALWAYS_EAGER: '1'
-          PLATFORM_DEV_OPEN: '1'
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: pytest" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform pytest -q tests
-          printf '%s\n' "Finished: pytest" >> "$GITHUB_STEP_SUMMARY"
-      - name: Pyright
-        if: ${{ matrix.task == 'pyright' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform pyright
-          printf '%s\n' "Finished: pyright type checks" >> "$GITHUB_STEP_SUMMARY"
-      - name: Mypy
-        if: ${{ matrix.task == 'mypy' }}
-        env:
-          MYPY_CACHE_DIR: .mypy_cache
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform mypy
-          printf '%s\n' "Finished: mypy type checks" >> "$GITHUB_STEP_SUMMARY"
       - name: Enforce strict pragmas
-        if: ${{ matrix.task == 'strict_pragmas' }}
         run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform python scripts/typing/ci_enforce_strict.py
-          printf '%s\n' "Finished: enforce strict pragmas" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform --extra dev python scripts/typing/ci_enforce_strict.py
       - name: Strict manifest check
-        if: ${{ matrix.task == 'strict_manifest' }}
         run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: strict manifest check" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform python scripts/typing/check_strict.py
-          printf '%s\n' "Finished: strict manifest check" >> "$GITHUB_STEP_SUMMARY"
-      - name: Docs toolbox tests
-        if: ${{ matrix.task == 'docs_tools' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: docs toolbox tests (coverage)" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage
-          printf '%s\n' "Finished: docs toolbox tests (coverage)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Typewiz audit
-        if: ${{ matrix.task == 'typewiz' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
-          mkdir -p reports/typing
-          uv run --project apps/platform typewiz audit --mode current --manifest reports/typing/typing_audit.json
-          uv run --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
-          uv run --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
-          printf '%s\n' "Finished: typewiz audit" >> "$GITHUB_STEP_SUMMARY"
-      - name: Typewiz readiness summary
-        if: ${{ matrix.task == 'typewiz' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
-          printf '%s\n' "" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "Typewiz ready folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
-      - name: Upload typewiz artifacts
-        if: ${{ matrix.task == 'typewiz' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: typewiz-reports
-          path: |
-            reports/typing/typing_audit.json
-            reports/typing/dashboard.md
-            reports/typing/dashboard.html
+          uv run --project apps/platform --extra dev python scripts/typing/check_strict.py
 
-  supply-chain:
-    name: Supply Chain
+  typewiz:
+    needs: lint-workflows
     runs-on: ubuntu-latest
-    needs: [test]
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [platform, docs]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -152,81 +179,208 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
-      - name: Verify platform lockfile
-        if: ${{ matrix.image == 'platform' }}
+      - name: Sync platform dependencies
         working-directory: apps/platform
         run: |
           set -euo pipefail
-          printf '%s\n' "Starting: verify platform lockfile" >> "$GITHUB_STEP_SUMMARY"
-          uv lock --check
-          printf '%s\n' "Finished: verify platform lockfile" >> "$GITHUB_STEP_SUMMARY"
-      - name: Verify docs lockfile
-        if: ${{ matrix.image == 'docs' }}
-        working-directory: packages/udocket_docs
+          uv sync --frozen --group dev --no-install-project
+      - name: Typewiz audit
         run: |
           set -euo pipefail
-          printf '%s\n' "Starting: verify docs lockfile" >> "$GITHUB_STEP_SUMMARY"
-          uv lock --check
-          printf '%s\n' "Finished: verify docs lockfile" >> "$GITHUB_STEP_SUMMARY"
-      - name: Ensure lockfiles committed
-        if: ${{ matrix.image == 'platform' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: ensure lockfiles committed" >> "$GITHUB_STEP_SUMMARY"
-          git diff --exit-code
-          printf '%s\n' "Finished: ensure lockfiles committed" >> "$GITHUB_STEP_SUMMARY"
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Prepare sbom directory
-        run: |
-          printf '%s\n' "Starting: prepare sbom directory" >> "$GITHUB_STEP_SUMMARY"
-          mkdir -p sbom
-          printf '%s\n' "Finished: prepare sbom directory" >> "$GITHUB_STEP_SUMMARY"
-      - name: Build platform image
-        if: ${{ matrix.image == 'platform' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: build platform image" >> "$GITHUB_STEP_SUMMARY"
-          docker buildx build --file infra/docker/Dockerfile.platform --target app --tag udocket-platform:ci --load .
-          printf '%s\n' "Finished: build platform image" >> "$GITHUB_STEP_SUMMARY"
-      - name: Build docs image
-        if: ${{ matrix.image == 'docs' }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "Starting: build docs image" >> "$GITHUB_STEP_SUMMARY"
-          docker buildx build --file packages/udocket_docs/Dockerfile --tag udocket-docs:ci --load .
-          printf '%s\n' "Finished: build docs image" >> "$GITHUB_STEP_SUMMARY"
-      - name: Generate platform SBOM
-        if: ${{ matrix.image == 'platform' }}
-        uses: anchore/sbom-action@v0
-        with:
-          image: udocket-platform:ci
-          format: cyclonedx-json
-          output-file: sbom/udocket-platform.cyclonedx.json
-      - name: Generate docs SBOM
-        if: ${{ matrix.image == 'docs' }}
-        uses: anchore/sbom-action@v0
-        with:
-          image: udocket-docs:ci
-          format: cyclonedx-json
-          output-file: sbom/udocket-docs.cyclonedx.json
-      - name: Upload SBOM artifact
+          mkdir -p reports/typing
+          uv run --project apps/platform --extra dev typewiz audit --mode current --manifest reports/typing/typing_audit.json
+          uv run --project apps/platform --extra dev typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
+          uv run --project apps/platform --extra dev typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
+          printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          printf '\nTypewiz ready folders (top 20):\n' >> "$GITHUB_STEP_SUMMARY"
+          uv run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+      - name: Upload typewiz artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-${{ matrix.image }}
-          path: ${{ format('sbom/udocket-{0}.cyclonedx.json', matrix.image) }}
+          name: typewiz-reports
+          path: |
+            reports/typing/typing_audit.json
+            reports/typing/dashboard.md
+            reports/typing/dashboard.html
 
-  stack-smoke:
-    name: Stack Smoke
+  tests:
+    needs: lint-workflows
     runs-on: ubuntu-latest
-    needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [platform, core, common, docs]
     steps:
       - uses: actions/checkout@v4
-      - name: Compose smoke test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync dependencies
         run: |
           set -euo pipefail
-          printf '%s\n' "Starting: stack smoke" >> "$GITHUB_STEP_SUMMARY"
-          PROJECT_NAME=ci make stack.smoke
-          printf '%s\n' "Finished: stack smoke" >> "$GITHUB_STEP_SUMMARY"
+          case "${{ matrix.package }}" in
+            platform)
+              uv sync --frozen --group dev --project apps/platform
+              ;;
+            core)
+              uv sync --frozen --group dev --project packages/udocket_core
+              ;;
+            common)
+              uv sync --frozen --group dev --project packages/udocket_common
+              ;;
+            docs)
+              uv sync --frozen --extra dev --project packages/udocket_docs
+              ;;
+          esac
+      - name: Run tests
+        env:
+          DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
+          DATABASE_URL: sqlite:///./udocket_ci.db
+          CELERY_TASK_ALWAYS_EAGER: '1'
+          PLATFORM_DEV_OPEN: '1'
+          COVERAGE_FILE: .coverage.${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          case "${{ matrix.package }}" in
+            platform)
+              uv run --project apps/platform --extra dev python manage.py migrate --noinput
+              uv run --project apps/platform --extra dev pytest -n auto --cov=apps/platform --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests
+              ;;
+            core)
+              uv run --project packages/udocket_core --extra dev pytest -n auto --cov=packages/udocket_core --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests/udocket_core
+              ;;
+            common)
+              uv run --project packages/udocket_common --extra dev pytest -n auto --cov=packages/udocket_common --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml packages/udocket_common
+              ;;
+            docs)
+              uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage
+              if [ -f coverage.xml ]; then mv coverage.xml coverage-${{ matrix.package }}.xml; fi
+              ;;
+          esac
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.package }}
+          path: |
+            .coverage.${{ matrix.package }}
+            coverage-${{ matrix.package }}.xml
+        if-no-files-found: ignore
+
+  prompts:
+    needs: lint-workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync platform dependencies
+        working-directory: apps/platform
+        run: |
+          set -euo pipefail
+          uv sync --frozen --group dev --no-install-project
+      - name: Lint prompts
+        run: |
+          make prompts.lint
+
+  requirements:
+    needs: lint-workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync platform dependencies
+        working-directory: apps/platform
+        run: |
+          set -euo pipefail
+          uv sync --frozen --group dev --no-install-project
+      - name: Verify exported requirements
+        run: |
+          set -euo pipefail
+          make all.export-reqs
+          git diff --stat requirements/ >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code requirements/
+
+  coverage-combine:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-artifacts
+      - name: Combine coverage
+        env:
+          COVERAGE_FILE: .coverage
+        run: |
+          set -euo pipefail
+          find coverage-artifacts -name '.coverage.*' -exec mv {} . \;
+          uv run --project apps/platform --extra dev coverage combine .coverage.*
+          uv run --project apps/platform --extra dev coverage xml
+          uv run --project apps/platform --extra dev coverage html
+      - name: Upload combined coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-combined
+          path: |
+            coverage.xml
+            htmlcov
+
+  parity:
+    needs:
+      - ruff
+      - pyright
+      - mypy
+      - typing-scripts
+      - typewiz
+      - tests
+      - prompts
+      - requirements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.*"
+      - name: Sync platform dependencies
+        working-directory: apps/platform
+        run: |
+          set -euo pipefail
+          uv sync --frozen --group dev --no-install-project
+      - name: Make lint aggregate
+        run: |
+          make all.lint
+      - name: Make type aggregate
+        run: |
+          make all.type
+      - name: Make test aggregate
+        env:
+          DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
+          DATABASE_URL: sqlite:///./udocket_ci.db
+          CELERY_TASK_ALWAYS_EAGER: '1'
+          PLATFORM_DEV_OPEN: '1'
+        run: |
+          make all.test

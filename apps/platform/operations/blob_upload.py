@@ -57,7 +57,7 @@ def upload_with_sas(
         raise RuntimeError("AZURE_BLOB_CONTAINER is not configured")
 
     original = original_name or local_file.name
-    # Strip our local naming prefix "<jobUUID>__" if present so we don't duplicate the job id in blob name
+    # Strip local naming prefix "<jobUUID>__" so the blob name avoids duplicating the job id.
     original = re.sub(r"^[0-9a-fA-F-]{36}__", "", original)
     safe_original = re.sub(r"[^A-Za-z0-9_.-]", "_", original)
     if not safe_original:
@@ -74,7 +74,8 @@ def upload_with_sas(
     else:
         if not account or not key:
             raise RuntimeError(
-                "Missing Azure Blob credentials (AZURE_BLOB_ACCOUNT/AZURE_BLOB_KEY or connection string)"
+                "Missing Azure Blob credentials (AZURE_BLOB_ACCOUNT/AZURE_BLOB_KEY "
+                "or connection string)"
             )
         account_url = f"https://{account}.blob.core.windows.net"
         svc = BlobServiceClient(account_url=account_url, credential=key)
@@ -166,7 +167,8 @@ def upload_with_sas(
 
     if not account_name or not key:
         raise RuntimeError(
-            "Missing account key for SAS signing (set AZURE_BLOB_KEY or include AccountKey in connection string)"
+            "Missing account key for SAS signing (set AZURE_BLOB_KEY or include AccountKey "
+            "in connection string)"
         )
 
     sas = generate_blob_sas(

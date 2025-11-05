@@ -57,7 +57,7 @@ def compose_job(
         task_meta={"summary_job_id": summary_job_id, "requested_llm_config_id": llm_config_id},
     )
 
-    result = execute_compose_job(
+    raw_result = execute_compose_job(
         runtime=runtime,
         compose_config=compose_config,
         job=job,
@@ -66,6 +66,7 @@ def compose_job(
         llm_config_id=llm_config_id,
         resume=resume,
     )
+    result: dict[str, object] = {key: value for key, value in raw_result.items()}
 
     send_job_update(
         str(job.id),

@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
-from typing import Protocol, cast, runtime_checkable
+from typing import IO, Any, Protocol, cast, runtime_checkable
 
 from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_object_list, coerce_str
 
@@ -108,9 +108,14 @@ class _DrawContext(Protocol):
     ) -> None: ...
 
 
+@runtime_checkable
+class _ImageLike(Protocol):
+    def save(self, fp: IO[bytes], format: str, **kwargs: Any) -> None: ...
+
+
 def _new_image(
     width: int, height: int, *, color: tuple[int, int, int]
-) -> tuple[object, _DrawContext]:
+) -> tuple[_ImageLike, _DrawContext]:
     from PIL import Image as _Image  # imported at runtime
     from PIL import ImageDraw as _ImageDraw
 
@@ -122,10 +127,10 @@ def _new_image(
     if not callable(draw_ctor):  # pragma: no cover - defensive
         raise RuntimeError("PIL.ImageDraw.Draw not available")
     draw = draw_ctor(image)
-    return image, cast(_DrawContext, draw)
+    return cast(_ImageLike, image), cast(_DrawContext, draw)
 
 
-def _save_png(image: object) -> bytes:
+def _save_png(image: _ImageLike) -> bytes:
     buffer = BytesIO()
     # mypy/pyright: treat as dynamic; _Image has save method on instances
     image.save(buffer, format="PNG")
@@ -282,8 +287,9 @@ def _render_svg(
     notes: str | None,
 ) -> str:
     arrow_head = (
-        '<defs><marker id="arrowhead" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto" '
-        'markerUnits="strokeWidth"><path d="M0,0 L0,8 L12,4 z" fill="#4b5563"/></marker></defs>'
+        '<defs><marker id="arrowhead" markerWidth="12" markerHeight="8" refX="10" refY="4" '
+        'orient="auto" markerUnits="strokeWidth">'
+        '<path d="M0,0 L0,8 L12,4 z" fill="#4b5563"/></marker></defs>'
     )
     edge_lines: list[str] = []
     for edge in edges:
@@ -294,10 +300,11 @@ def _render_svg(
         x1, y1 = source_pos
         x2, y2 = target_pos
         edge_lines.append(
-
-                f'<line class="edge-line" x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
-                'stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />'
-
+            (
+                f'<line class="edge-line" x1="{x1:.2f}" y1="{y1:.2f}" '
+                f'x2="{x2:.2f}" y2="{y2:.2f}" stroke="#4b5563" '
+                'stroke-width="2" marker-end="url(#arrowhead)" />'
+            )
         )
     node_groups: list[str] = []
     for node in nodes:
@@ -308,12 +315,13 @@ def _render_svg(
         color = NODE_COLORS.get(node.kind, "#6366f1")
         safe_label = escape(node.label)
         node_groups.append(
-
+            (
                 f'<g class="node" transform="translate({x:.2f},{y:.2f})">'
                 f'<circle r="{NODE_RADIUS}" fill="{color}" opacity="0.92" />'
-                f'<text text-anchor="middle" dominant-baseline="middle" fill="#ffffff">{safe_label}</text>'
+                f'<text text-anchor="middle" dominant-baseline="middle" '
+                f'fill="#ffffff">{safe_label}</text>'
                 "</g>"
-
+            )
         )
     notes_markup = ""
     if notes:
@@ -335,8 +343,10 @@ def _wrap_html(svg_markup: str, alt_text: str, notes: str | None) -> str:
         '  <meta charset="utf-8" />\n'
         "  <title>Relationship graph</title>\n"
         "  <style>\n"
-        "    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 24px; background: #f9fafb; color: #111827; }\n"
-        "    .graph-figure { max-width: 1024px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px rgba(30, 41, 59, 0.08); padding: 24px; }\n"
+        "    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 24px; "
+        "background: #f9fafb; color: #111827; }\n"
+        "    .graph-figure { max-width: 1024px; margin: 0 auto; background: #ffffff; "
+        "border-radius: 12px; box-shadow: 0 10px 25px rgba(30, 41, 59, 0.08); padding: 24px; }\n"
         "    svg { width: 100%; height: auto; display: block; }\n"
         "    .graph-notes { margin-top: 16px; font-size: 0.95rem; color: #334155; }\n"
         "    figcaption { margin-top: 16px; font-weight: 600; }\n"
@@ -457,10 +467,14 @@ def _empty_graph_html(alt_text: str) -> str:
         "<head>\n"
         '  <meta charset="utf-8" />\n'
         "  <title>Relationship graph</title>\n"
-        "  <style>body{font-family:Arial,sans-serif;padding:48px;color:#111827;background:#f8fafc}"
-        "  .placeholder{max-width:640px;margin:0 auto;text-align:center;background:#fff;border-radius:12px;"
-        "box-shadow:0 10px 25px rgba(30,41,59,0.08);padding:32px;}h1{font-size:1.5rem;margin-bottom:12px;}"
-        "p{font-size:1rem;color:#475569;}</style>\n"
+        "  <style>"
+        "body{font-family:Arial,sans-serif;padding:48px;color:#111827;background:#f8fafc}"
+        "  .placeholder{max-width:640px;margin:0 auto;text-align:center;"
+        "background:#fff;border-radius:12px;"
+        "box-shadow:0 10px 25px rgba(30,41,59,0.08);padding:32px;}"
+        "h1{font-size:1.5rem;margin-bottom:12px;}"
+        "p{font-size:1rem;color:#475569;}"
+        "</style>\n"
         "</head>\n"
         "<body>\n"
         '  <div class="placeholder">\n'

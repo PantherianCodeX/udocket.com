@@ -258,11 +258,16 @@ class JobViewSet(viewsets.ModelViewSet):
         if len(snippet) > 80:
             snippet = f"{snippet[:77]}…"
         try:
+            author_label = (
+                latest_entry.get("created_by_label")
+                if latest_entry
+                else (created_by_name or "unknown")
+            )
             append_job_log(
                 str(job.case_id),
                 job.organization_id,
                 str(job.id),
-                f"UI note added by {latest_entry.get('created_by_label') if latest_entry else created_by_name or 'unknown'}: {snippet}",
+                f"UI note added by {author_label}: {snippet}",
             )
         except Exception:
             pass
@@ -1201,8 +1206,9 @@ class JobViewSet(viewsets.ModelViewSet):
 
                 cred_entry = provider_credentials.get(provider_name, {})
                 if not cred_entry:
+                    provider_label = provider_meta.display_name or provider_name
                     provider_issues.append(
-                        f"Provider '{provider_meta.display_name or provider_name}' is not configured."
+                        f"Provider '{provider_label}' is not configured."
                     )
                     continue
 

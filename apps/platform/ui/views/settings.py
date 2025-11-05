@@ -327,9 +327,18 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
         "guardian": "Guardian",
     }
     stage_descriptions = {
-        "analyze": "Choose providers and models for Analyze pipelines, including outlines, timelines, and staff reports.",
-        "compose": "Manage Compose deliverable generation defaults, including timelines and graph builders.",
-        "guardian": "Control Guardian review model selection and author the compliance instructions applied to every run.",
+        "analyze": (
+            "Choose providers and models for Analyze pipelines, including outlines, "
+            "timelines, and staff reports."
+        ),
+        "compose": (
+            "Manage Compose deliverable generation defaults, including timelines and "
+            "graph builders."
+        ),
+        "guardian": (
+            "Control Guardian review model selection and author the compliance "
+            "instructions applied to every run."
+        ),
     }
 
     primary_nav = [
@@ -350,12 +359,16 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
         "general": {
             "title": "General settings",
             "description": (
-                f"Manage organization profile, contact details, and high-level defaults for {organization.name}."
+                "Manage organization profile, contact details, and high-level defaults "
+                f"for {organization.name}."
             ),
         },
         "providers": {
             "title": "LLM providers",
-            "description": "Configure organization-wide LLM credentials, deployments, and test connections.",
+            "description": (
+                "Configure organization-wide LLM credentials, deployments, and "
+                "test connections."
+            ),
         },
     }
 
@@ -625,7 +638,8 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
                     provider_obj = llm_settings.provider(provider_key)
                     if not provider_obj:
                         errors.append(
-                            "Unknown provider selected. Choose a template like 'Azure' or 'OpenAI', or ensure the endpoint matches the provider."
+                            "Unknown provider selected. Choose a template like 'Azure' or "
+                            "'OpenAI', or ensure the endpoint matches the provider."
                         )
                     else:
                         analysis = evaluate_provider_setup(
@@ -653,9 +667,10 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
                                 metadata=cred.get("metadata") or {},
                                 enabled=desired,
                             )
+                            status_label = "enabled" if desired else "disabled"
                             messages.success(
                                 request,
-                                f"Provider '{provider_key}' {'enabled' if desired else 'disabled'}.",
+                                f"Provider '{provider_key}' {status_label}.",
                             )
         elif action == "provider-test":
             provider_obj = llm_settings.provider(provider_key)
@@ -663,7 +678,8 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
                 errors.append("Provider key is required for testing.")
             elif not provider_obj:
                 errors.append(
-                    "Unknown provider selected. Use the 'Load template' menu to set a provider type."
+                    "Unknown provider selected. Use the 'Load template' menu to set a "
+                    "provider type."
                 )
             elif not errors:
                 cred = existing_cred or {}
@@ -742,7 +758,8 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
                 errors.append("Provider key is required for testing.")
             elif not provider_obj:
                 errors.append(
-                    "Unknown provider selected. Use the 'Load template' menu to set a provider type."
+                    "Unknown provider selected. Use the 'Load template' menu to set a "
+                    "provider type."
                 )
             else:
                 payload_raw = (request.POST.get("model_test_payload") or "").strip()
@@ -1040,9 +1057,9 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
                         )
                     else:
                         messages.success(request, f"{target.title()} configuration saved.")
-                    return redirect(
-                        f"{reverse('ui-organization-settings-section', args=[target])}?config={updated['id']}"
-                    )
+                    section_url = reverse("ui-organization-settings-section", args=[target])
+                    redirect_url = f"{section_url}?config={updated['id']}"
+                    return redirect(redirect_url)
         else:
             errors.append("Unknown action.")
 

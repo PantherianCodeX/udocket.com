@@ -245,7 +245,10 @@ def validate_llm_settings(settings: LLMSettings) -> None:
                 )
             if assignment.model not in provider_obj.models:
                 raise LLMConfigError(
-                    f"Stage '{stage_key}' references unknown model '{assignment.model}' for provider '{provider_name}'"
+                    (
+                        f"Stage '{stage_key}' references unknown model '{assignment.model}' "
+                        f"for provider '{provider_name}'"
+                    )
                 )
 
 

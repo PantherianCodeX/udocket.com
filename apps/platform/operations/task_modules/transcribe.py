@@ -104,14 +104,7 @@ def transcribe_job(
         and not audio_input.lower().startswith(("http://", "https://"))
     )
 
-    converting_attr = getattr(Job.Status, "CONVERTING", Job.Status.RUNNING)
-    if isinstance(converting_attr, str):
-        try:
-            converting_status = Job.Status(converting_attr)
-        except ValueError:
-            converting_status = Job.Status.RUNNING
-    else:
-        converting_status = converting_attr
+    converting_status = str(getattr(Job.Status, "CONVERTING", Job.Status.RUNNING))
 
     org_id: str | None = None
     case_obj: Case | None = None
@@ -120,7 +113,7 @@ def transcribe_job(
         job_obj = Job.typed_objects().select_related("case").get(pk=job_id)
         if job_obj.status == Job.Status.CANCELLED:
             log.info("job already cancelled before execution", extra={"job_id": job_id})
-            return {"status": Job.Status.CANCELLED.value, "job_id": job_id, "case_id": case_id}
+            return {"status": str(Job.Status.CANCELLED), "job_id": job_id, "case_id": case_id}
         org_value = getattr(job_obj, "organization_id", None)
         if org_value:
             org_id = str(org_value)
@@ -218,7 +211,7 @@ def transcribe_job(
         extra={"job_id": job_id, "case_id": case_id, "mode": mode, "diarization": diarization},
     )
 
-    initial_status = Job.Status.RUNNING
+    initial_status: str = str(Job.Status.RUNNING)
     initial_event = "job.started"
     initial_meta_status = "running"
     initial_job_updates: dict[str, object] = {"upload_progress": None}
@@ -231,7 +224,7 @@ def transcribe_job(
             initial_meta_status = "converting"
             initial_job_updates["upload_progress"] = 0.0
         else:
-            initial_status = Job.Status.UPLOADING
+            initial_status = str(Job.Status.UPLOADING)
             initial_event = "job.uploading"
             initial_meta_status = "uploading"
             initial_job_updates["upload_progress"] = 0.0
@@ -800,7 +793,7 @@ def transcribe_job(
             cancel_meta.setdefault("celery_task_id", celery_task_id)
             cancel_meta["celery_task_status"] = "cancelled"
         cancel_payload = {
-            "status": Job.Status.CANCELLED.value,
+            "status": str(Job.Status.CANCELLED),
             "job_id": job_id,
             "case_id": case_id,
             "progress_percent": None,
@@ -893,9 +886,13 @@ def transcribe_job(
         "artifact_sha256": artifact_sha256,
         "udocket_core_version": core_version,
     }
-    try:
-        job_obj.refresh_from_db()
-    except Exception:
+    refresh_fn = getattr(job_obj, "refresh_from_db", None)
+    if callable(refresh_fn):
+        try:
+            refresh_fn()
+        except Exception:
+            job_obj = Job.typed_objects().select_related("case").get(pk=job_id)
+    else:
         job_obj = Job.typed_objects().select_related("case").get(pk=job_id)
     if job_obj.status == Job.Status.CANCELLED:
         log.info(
@@ -915,7 +912,7 @@ def transcribe_job(
                     local_audio.unlink(missing_ok=True)
         except Exception:
             pass
-        return {"status": Job.Status.CANCELLED.value, "job_id": job_id, "case_id": case_id}
+        return {"status": str(Job.Status.CANCELLED), "job_id": job_id, "case_id": case_id}
 
     transcript_path_obj = Path(result.transcript_file)
     transcript_checksum: str | None = None
@@ -996,7 +993,10 @@ def transcribe_job(
         "upload_progress": None,
     }
 
-    log_message = f"Job succeeded: transcript={transcript_path_obj.name} duration={payload.get('duration_s')}s"
+    log_message = (
+        "Job succeeded: "
+        f"transcript={transcript_path_obj.name} duration={payload.get('duration_s')}s"
+    )
     finished_ts = runtime.succeed(
         log_message=log_message,
         meta_updates=meta_updates,

@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-__all__ = ["slugify", "unique_title"]
+__all__ = ["prompt_lines", "prompt_paragraphs", "slugify", "unique_title"]
 _UNIQUE_SUFFIX_RE = re.compile(r"(?:\(|-)(\d+)\)?$")
 
 
@@ -54,3 +54,43 @@ def unique_title(base: str, existing: Iterable[str]) -> str:
         max_idx = max(max_idx, idx)
 
     return f"{base_clean}-{max_idx + 1}"
+
+
+def prompt_lines(*parts: str, trailing_newline: bool = False) -> str:
+    """Join *parts* with single newlines while trimming trailing whitespace per line.
+
+    Each argument may include embedded newlines. Empty strings are preserved as blank
+    lines between sections. The result omits trailing blank lines unless
+    ``trailing_newline`` is requested.
+    """
+
+    lines: list[str] = []
+    for part in parts:
+        if part == "":
+            lines.append("")
+            continue
+        for raw_line in part.splitlines():
+            lines.append(raw_line.rstrip())
+
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    text = "\n".join(lines)
+    if trailing_newline and text:
+        return f"{text}\n"
+    return text
+
+
+def prompt_paragraphs(*paragraphs: str, trailing_newline: bool = False) -> str:
+    """Join *paragraphs* with blank lines, respecting whitespace discipline."""
+
+    blocks: list[str] = []
+    for paragraph in paragraphs:
+        block = prompt_lines(paragraph)
+        if block:
+            blocks.append(block)
+
+    text = "\n\n".join(blocks)
+    if trailing_newline and text:
+        return f"{text}\n"
+    return text

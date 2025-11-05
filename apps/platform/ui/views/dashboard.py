@@ -290,21 +290,33 @@ def index(request: HttpRequest) -> HttpResponse:
         features: tuple[LandingFeature, ...] = (
             {
                 "title": "Build reliable transcripts",
-                "description": "Secure, Canada-only speech services generate structured transcripts and audit trails for every job.",
+                "description": (
+                    "Secure, Canada-only speech services generate structured transcripts "
+                    "and audit trails for every job."
+                ),
             },
             {
                 "title": "Stack layered analyses",
-                "description": "Summaries, outlines, and timelines stay linked to source evidence so reviewers can trace conclusions quickly.",
+                "description": (
+                    "Summaries, outlines, and timelines stay linked to source evidence "
+                    "so reviewers can trace conclusions quickly."
+                ),
             },
             {
                 "title": "Deliver polished reports",
-                "description": "Compose client-ready and lawyer-ready deliverables with provenance and version control baked in.",
+                "description": (
+                    "Compose client-ready and lawyer-ready deliverables with provenance "
+                    "and version control baked in."
+                ),
             },
         )
 
         context: LandingPageContext = {
             "hero_title": "Case intelligence, orchestrated by uDocket agents",
-            "hero_subtitle": "Transcribe hearings, analyze evidence, and publish deliverables with transparent workflows and reviewer controls.",
+            "hero_subtitle": (
+                "Transcribe hearings, analyze evidence, and publish deliverables with "
+                "transparent workflows and reviewer controls."
+            ),
             "features": features,
             "login_url": reverse("ui-login"),
             "show_dashboard_link": dev_open_enabled,

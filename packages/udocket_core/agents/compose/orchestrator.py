@@ -889,7 +889,9 @@ class ComposeOrchestrator:
                 status="iteration_limit",
                 alerts=["QA iteration limit reached."],
                 recommendations=[],
-                staff_report="# Staff Report\n\nQA iteration limit reached; manual review recommended.",
+                staff_report=(
+                    "# Staff Report\n\nQA iteration limit reached; manual review recommended."
+                ),
                 provider="limit",
                 action=LaneActionDirective(action="none", reason=reason),
                 global_notes=reason,

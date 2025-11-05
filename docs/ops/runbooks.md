@@ -47,7 +47,7 @@ This appendix consolidates runbook sections from service and application specifi
 ______________________________________________________________________
 
 <!-- BEGIN AUTO-GENERATED: runbook-catalog -->
-<!-- AUTO-GENERATED: Run `python -m doc_tools.build.runbook_catalog` to refresh. -->
+<!-- AUTO-GENERATED: Run `python -m docs.tools.build.runbook_catalog` to refresh. -->
 
 ## Guardian Service — 8.3 Runbooks & Drills (binding) {#guardian-8-3-runbooks-drills-binding} {#guardian-service-8-3-runbooks-drills-binding-guardian-8-3-runbooks-drills-binding}
 

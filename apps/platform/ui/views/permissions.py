@@ -91,7 +91,10 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
 
     section = {
         "title": "Permission Catalog",
-        "subtitle": "Browse artifact fields, presets, and roles. Editing remains in the legacy admin while we finalize parity.",
+        "subtitle": (
+            "Browse artifact fields, presets, and roles. Editing remains in the legacy "
+            "admin while we finalize parity."
+        ),
         "body_template": "platform_ui/permissions/_section_body.html",
         "body_context": {
             "registry": registry,

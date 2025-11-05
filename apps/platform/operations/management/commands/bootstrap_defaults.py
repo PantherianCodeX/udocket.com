@@ -18,8 +18,10 @@ from apps.platform.operations.bootstrap import (
 
 class Command(BaseCommand):
     help = (
-        "Bootstrap the local platform using environment defaults (superuser, organization, presets). "
-        "Set PLATFORM_BOOTSTRAP_ENABLED=1 to run automatically or pass --force for a one-off execution."
+        "Bootstrap the local platform using environment defaults "
+        "(superuser, organization, presets). "
+        "Set PLATFORM_BOOTSTRAP_ENABLED=1 to run automatically "
+        "or pass --force for a one-off execution."
     )
 
     def add_arguments(self, parser: CommandParser) -> None:

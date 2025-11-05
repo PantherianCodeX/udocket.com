@@ -393,7 +393,11 @@ def job_detail_context(
     if dev_open:
         can_review = True
     elif user_obj and getattr(user_obj, "is_authenticated", False):
-        if job.case.reviewer_id and str(user_obj.id) == str(job.case.reviewer_id) or has_capability(user_obj, str(job.case_id), "case.update"):
+        if (
+            job.case.reviewer_id
+            and str(user_obj.id) == str(job.case.reviewer_id)
+            or has_capability(user_obj, str(job.case_id), "case.update")
+        ):
             can_review = True
 
     is_sub_job = bool(telemetry_meta.get("source_job_id"))

@@ -68,7 +68,8 @@ def run_lane_qa_review(
                 extra={"attempt": attempt, "error": str(exc)},
             )
             payload["format_hint"] = (
-                "Ensure keys: status, alerts, recommendations, staff_report, global_notes, action, reason, revision_brief."
+                "Ensure keys: status, alerts, recommendations, staff_report, global_notes, action, "
+                "reason, revision_brief."
             )
             continue
 

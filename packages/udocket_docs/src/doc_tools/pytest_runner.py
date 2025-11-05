@@ -71,6 +71,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         pytest_args = [
             *coverage_flags,
             "--cov-report=term-missing",
+            "--cov-report=xml",
             f"--cov-fail-under={threshold}",
             *pytest_args,
         ]

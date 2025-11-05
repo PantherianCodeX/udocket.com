@@ -493,7 +493,10 @@ def build_chat_client(
                 allow_non_ca = allow_non_ca_env
                 if allow_non_ca_env:
                     logger.warning(
-                        "AZURE_OPENAI_ALLOW_NON_CA_REGION enabled; non-Canadian Azure endpoints are allowed."
+                        (
+                            "AZURE_OPENAI_ALLOW_NON_CA_REGION enabled; non-Canadian Azure "
+                            "endpoints are allowed."
+                        )
                     )
         api_version_value = (
             _string_option(options, "api_version")

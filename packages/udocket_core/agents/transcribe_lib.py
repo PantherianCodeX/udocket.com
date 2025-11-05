@@ -608,16 +608,11 @@ class TranscriptionAgent:
         log_json_job = case_dir / "ops" / f"{job_id}_transcription_log.json"
 
         # Start logs
-        for pth, line in (
-            (
-                log_txt,
-                f"{_now_utc()} START | file={audio_name} mode={mode} diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n",
-            ),
-            (
-                log_txt_job,
-                f"{_now_utc()} START | file={audio_name} mode={mode} diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n",
-            ),
-        ):
+        start_line = (
+            f"{_now_utc()} START | file={audio_name} mode={mode} "
+            f"diar={bool(diarization)} lang={lang} region={cfg.azure_speech_region}\n"
+        )
+        for pth, line in ((log_txt, start_line), (log_txt_job, start_line)):
             try:
                 pth.write_text(line, encoding="utf-8")
             except Exception:
@@ -692,7 +687,10 @@ class TranscriptionAgent:
                         dur = None
             if dur and dur / 60.0 > cfg.max_minutes:
                 raise RuntimeError(
-                    f"Audio too long ({int(dur) // 60:02d}:{int(dur) % 60:02d}) > MAX_MINUTES={cfg.max_minutes}"
+                    (
+                        f"Audio too long ({int(dur) // 60:02d}:{int(dur) % 60:02d}) "
+                        f"> MAX_MINUTES={cfg.max_minutes}"
+                    )
                 )
 
         # Transcribe
@@ -887,14 +885,14 @@ class TranscriptionAgent:
             ),
         )
         try:
+            done_line = (
+                f"{_now_utc()} DONE | out={transcript_out.name} "
+                f"words={meta.get('word_count')} dur_s={dur} diar={bool(diarization)}\n"
+            )
             with open(log_txt, "a", encoding="utf-8") as f:
-                f.write(
-                    f"{_now_utc()} DONE | out={transcript_out.name} words={meta.get('word_count')} dur_s={dur} diar={bool(diarization)}\n"
-                )
+                f.write(done_line)
             with open(log_txt_job, "a", encoding="utf-8") as f:
-                f.write(
-                    f"{_now_utc()} DONE | out={transcript_out.name} words={meta.get('word_count')} dur_s={dur} diar={bool(diarization)}\n"
-                )
+                f.write(done_line)
         except Exception:
             pass
 

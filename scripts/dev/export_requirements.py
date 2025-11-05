@@ -9,17 +9,22 @@ import subprocess
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
+import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 REQUIREMENTS_DIR = REPO_ROOT / "requirements"
 
 Project = tuple[str, Path, Iterable[str | None]]
+
+if sys.version_info < (3, 12):
+    raise RuntimeError("Python 3.12 or newer is required to run export_requirements.py")
 
 PROJECTS: tuple[Project, ...] = (
     ("platform", REPO_ROOT / "apps" / "platform", (None, "dev")),
     ("common", REPO_ROOT / "packages" / "udocket_common", (None, "dev")),
     ("core", REPO_ROOT / "packages" / "udocket_core", (None, "dev")),
     ("docs", REPO_ROOT / "packages" / "udocket_docs", (None, "dev")),
+    ("prompts", REPO_ROOT / "packages" / "udocket_prompts", (None,)),
 )
 
 
@@ -66,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "projects",
         nargs="*",
-        choices=[name for name, *_ in PROJECTS],
+        metavar="project",
         help="Project slugs to export (default: all projects)",
     )
     return parser.parse_args()
@@ -75,6 +80,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     REQUIREMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    valid_names = {name for name, *_ in PROJECTS}
+    unknown = sorted(set(args.projects) - valid_names)
+    if unknown:
+        joined = ", ".join(sorted(valid_names))
+        raise SystemExit(f"Unknown project(s): {', '.join(unknown)}. Valid options: {joined}.")
+
     selected = [entry for entry in PROJECTS if not args.projects or entry[0] in args.projects]
     for project, project_dir, groups in selected:
         if not project_dir.exists():
