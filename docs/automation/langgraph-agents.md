@@ -101,11 +101,16 @@ ______________________________________________________________________
 
 **Purpose:** Enumerate each agent’s charter, lane responsibilities, and artifact ownership. **|**
 **Contract:** Agents must implement the shared `AgentRunner` interface, persist deterministic outputs, honour Guardian judgments, and expose audit-friendly manifests for every job. **|**
-**State:** Each agent manages job manifests, manifests for derived artifacts, envelope hashes, QA logs, and Ops JSON per run. **|**
+**State:** Each agent manages job manifests, manifests for derived artifacts, envelope hashes, QA logs, Ops JSON per run, and (for Analyze) the internal `AtomsIndex` leveraged by downstream validation. **|**
 **Failures & handling:** Runtime failures map to the taxonomy in §5; Guardian quarantine or waiver flows apply when policy gates fail; Worker Cluster retries jobs according to agent-specific rules. **|**
-**Observability:** Metrics `agent_job_duration_seconds{agent=}`, `agent_retry_total`, QA issue density, and pipeline activation dashboards track compliance; SSE updates keep UI state in sync. **|**
+**Observability:** Metrics `agent_job_duration_seconds{agent=}`, `agent_retry_total`, `atoms_extracted_total`, QA issue density, and pipeline activation dashboards track compliance; SSE updates keep UI state in sync. **|**
 **Breadcrumbs:** Transcription `packages/udocket_core/agents/transcribe_lib.py`, Analyze `packages/udocket_core/agents/analyze_lib.py` + stages `packages/udocket_core/agents/analyze/stages/`, Compose `packages/udocket_core/agents/compose_lib.py` + orchestrator `packages/udocket_core/agents/compose/orchestrator.py`, Celery wrappers `apps/platform/operations/tasks/agents.py`, manifests `packages/udocket_core/agents/manifests.py`. **|**
 **References:** TDD §6 summary, Guardian spec §2–§3, Worker Cluster spec §3, Ops runbooks `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`.
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/pipeline-overview-v1.svg" alt="LangGraph pipeline overview">
+  <figcaption style="font-size: 0.9em; color: #555;">Pipeline overview showing Transcribe → Analyze (Atoms) → Compose flow with Guardian gating</figcaption>
+</figure>
 
 ### 2.1 Transcription agent (binding) {#21-transcription-agent}
 
@@ -117,26 +122,54 @@ ______________________________________________________________________
 - Capability negotiation: `TranscriptionCapabilityMap` validates language/diarisation support before dispatch; unsupported combinations raise `E_INPUT_INVALID`.
 - Cancellation: best-effort cancellation propagates through provider APIs; manifests mark `cancel_requested` and retain partial progress for audit.
 
+<figure class="full-width-diagram">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/transcribe-pipeline-v1.svg" alt="Transcribe pipeline">
+  <figcaption style="font-size: 0.9em; color: #555;">Transcribe pipeline with normalization, Azure health checks, retry loops, and artifact emission</figcaption>
+</figure>
+
 ### 2.2 Analyze agent (binding) {#22-analyze-agent}
 
-- Inputs: transcript JSON (or transcript text fallback), intake/questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts, stage concurrency, token budgets, and idempotency keys.
+- Inputs: structured transcript JSON (`transcript/<job_id>__transcript_v1.json`, text fallback only when JSON is unavailable), intake/questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts, stage concurrency, token budgets, and idempotency keys.
 - Parallel lanes: outline-from-template, timeline (events), entities (and relations), issues, gaps, flags/alerts. Lanes run concurrently with deterministic UUID generation (`uuid5` signatures) and schema enforcement.
 - Outputs: discrete artifacts under `analysis/` — `outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json` — plus per-run metadata JSON and `ops/ops_summary.jsonl` audit entries.
 - Summary lane: consumes all upstream JSON artifacts (not Analyze Markdown) to generate canonical `summary_v1.json`; Compose reads this JSON directly.
 - QA gating: every lane validates against JSON Schema snapshots (exported to `spec/schemas/agents/`). QA stage aggregates coverage metrics into `qa_report_v1.json` and blocks finalize on schema failures or questionnaire gaps.
 - Retry & cancellation: lane retries follow transient budgets; GraphRunner cancellation halts active nodes and preserves checkpoint digests so resumed jobs avoid duplicate work.
 
+<figure class="full-width-diagram">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-pipeline-v3.svg" alt="Analyze pipeline">
+  <figcaption style="font-size: 0.9em; color: #555;">Analyze LangGraph pipeline with atom-fed lanes, QA feedback loops, and artifact emission</figcaption>
+</figure>
+
+#### 2.2.1 Atom layer (binding) {#221-atom-layer}
+
+- Purpose: derive internal “Atoms” — normalised, evidence-backed statements with deterministic UUIDs — from transcript segments. Atoms remain internal to Analyze and power validation, conflict detection, and QA scoring.
+- Extraction flow: sentence heuristics plus (optional, Canada-only) LLM assists yield candidate claims; the pipeline canonicalises text, detects negation cues, attaches transcript evidence (`segment_id`, timestamps, speakers), assigns UUIDs, and merges corroborating statements into an `AtomsIndex`.
+- Validation hooks: outline, timeline, entities, issues, gaps, flags, alerts, and summary lanes consult the shared `AtomsIndex` to attach citations, flag unsupported claims, and surface `SummaryCheck` verdicts (`CONFIRMED`, `CONFLICTED`, `UNSUPPORTED`, `AMBIGUOUS`) into `qa_report_v1.json`.
+- Observability: per-run ops JSON records atom counts, conflict groups, extraction latency, and thresholds; optional debug dumps (`analysis/<job_id>__atoms_v1.json`) emit only when `ANALYZE_SAVE_ATOMS=1` for diagnostics.
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/atoms-pipeline-v1.svg" alt="Atoms extraction pipeline">
+  <figcaption style="font-size: 0.9em; color: #555;">Atoms extraction and validation overlay feeding Analyze quality gates</figcaption>
+</figure>
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-compose-atoms-v1.svg" alt="Analyze atom pipeline and Compose citation loops">
+  <figcaption style="font-size: 0.9em; color: #555;">Analyze atom pipeline feeding canonical artifacts and Compose citation guards</figcaption>
+</figure>
+
 ### 2.3 Compose agent (binding) {#23-compose-agent}
 
-- Inputs: Analyze summary JSON, timeline/entities/issues/gaps/flags/alerts artifacts, intake data, deliverable templates (DOCX/Markdown), organization policies (`compose.policy.*`, `guardian.policy.*`), and Settings concurrency budgets.
+- Inputs: canonical Analyze artifacts (`summary_v1.json|.md`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`), intake data, deliverable templates (DOCX/Markdown), organization policies (`compose.policy.*`, `guardian.policy.*`), and Settings concurrency budgets.
 - Lanes: parallel client and lawyer deliverable pipelines (draft → editor passes → lane QA), optional bundle excerpt, followed by cross-lane QA review and final packaging. Lanes share shared context (summary JSON + structured artifacts) but render voice-specific outputs.
 - Outputs: client and lawyer deliverables (`docs/<job_id>__compose_client_v1.md|.docx`, `docs/<job_id>__compose_lawyer_v1.md|.docx`), bundle excerpt Markdown (if enabled), compose staff report (`docs/<job_id>__compose_staff_report_v1.md`), compose QA report (`docs/<job_id>__compose_qa_report_v1.md` / `.json`), per-run metadata JSON, and `ops/ops_compose.jsonl` audit lines.
 - Safety & policy: lane validators enforce forbidden patterns, required sections, link limits, and jurisdictional voice guidance. Guardian refuses promotion without QA PASS and documented policy compliance.
+- Factuality guard: Compose relies on citations embedded in canonical Analyze artifacts (driven by Atoms) and enforces minimum citation thresholds per deliverable section before promotion.
 - Retry & cancellation: SectionWriter nodes retry within configured budgets; QA issues capture severity and references. Cancellation stops graph execution, leaves partial artifacts versioned `_v{n}`, and records state in manifests.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-pipeline-v2.svg" alt="Transcribe, Analyze, and Compose pipeline flow">
-  <figcaption style="font-size: 0.9em; color: #555;">Transcribe, Analyze, and Compose pipeline flow</figcaption>
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/compose-pipeline-v1.svg" alt="Compose pipeline">
+  <figcaption style="font-size: 0.9em; color: #555;">Compose pipeline with dual lanes, guard loops, cross-lane QA, and Guardian promotion</figcaption>
 </figure>
 
 ### 2.4 Timeline & relationship agents (roadmap, informative) {#24-timeline-relationship-agents}

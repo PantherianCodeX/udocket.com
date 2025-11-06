@@ -1,0 +1,26 @@
+%% transcribe-pipeline-v1.mmd
+flowchart TD
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef action fill:#ecf8ff,stroke:#2684ff,stroke-width:1.1px,color:#111;
+    classDef decision fill:#fff0f0,stroke:#d14545,stroke-width:1.2px,color:#111;
+
+    Ingest["Input Discovery\n(local path / HTTPS SAS)"]:::stage
+    Validate["Validate format + allowlists"]:::stage
+    Normalize["Normalize / convert audio\n(ffmpeg)"]:::action
+    Health["Azure Speech health check"]:::stage
+    Mode["Select mode\n(batch vs streaming)"]:::stage
+    RunBatch["Queue batch transcription"]:::stage
+    RunStream["Run streaming transcription"]:::stage
+    RetryDecision{Retry budget?}:::decision
+    Outputs["Write artifacts\n• transcript.txt\n• transcript_v1.json\n• ops logs / manifests"]:::stage
+    Audit["Append audit JSONL\n`ops/ops_transcription.jsonl`"]:::action
+    Guardian["Guardian policy check\n(region / diarisation)"]:::stage
+
+    Ingest --> Validate --> Normalize --> Health --> Mode
+    Mode -->|Batch| RunBatch --> RetryDecision
+    Mode -->|Streaming| RunStream --> RetryDecision
+    RetryDecision -->|Success| Outputs --> Audit --> Guardian
+    Guardian --> Outputs
+
+    RetryDecision -->|Retry| Normalize
+    Normalize -->|Conversion failure| Guardian

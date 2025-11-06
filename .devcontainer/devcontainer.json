@@ -20,6 +20,9 @@
     "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
     "ENV_READ_DOTENV": "1"
   },
+  "containerEnv": {
+    "HOST_REPO_ROOT": "${localWorkspaceFolder}"
+  },
   "postCreateCommand": "bash -lc './scripts/devcontainer/post_create.sh'",
   "postStartCommand": "bash -lc '[ -d /opt/venv ] || ./scripts/devcontainer/post_create.sh'",
   "customizations": {

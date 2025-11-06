@@ -102,7 +102,7 @@ services:
       - packages/udocket_docs/.env
     working_dir: /udocket
     volumes:
-      - .:/udocket:cached
+      - ${HOST_REPO_ROOT:-.}:/udocket:cached
     tty: true
     command: sleep infinity
     environment:

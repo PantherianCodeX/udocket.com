@@ -62,7 +62,9 @@ def resolve_targets(raw_targets: Sequence[str]) -> list[Path]:
         if not path.is_absolute():
             path = REPO_ROOT / path
         if not path.exists():
-            print(f"[manage-docs] warning: target '{entry}' does not exist; skipping", file=sys.stderr)
+            print(
+                f"[manage-docs] warning: target '{entry}' does not exist; skipping", file=sys.stderr
+            )
             continue
         resolved.append(path)
     return resolved
@@ -162,6 +164,13 @@ def builder_sync_doc_assets(ctx: RunContext) -> list[str]:
     return cmd
 
 
+def builder_sync_adr_nav(ctx: RunContext) -> list[str]:
+    cmd = python_task("doc_tools.sync.adr_nav")
+    if ctx.dry_run:
+        cmd.append("--dry-run")
+    return cmd
+
+
 def builder_runbook_update(ctx: RunContext) -> list[str]:
     if ctx.dry_run:
         return python_task("doc_tools.build.runbook_catalog", "--check")
@@ -188,7 +197,7 @@ def builder_api_error_update(ctx: RunContext) -> list[str]:
 
 
 def builder_mkdocs(ctx: RunContext) -> list[str]:
-    cmd = python_task("doc_tools.build.mkdocs")
+    cmd = python_task("doc_tools.build.mkdocs_site")
     if ctx.dry_run:
         cmd.append("--dry-run")
     return cmd
@@ -274,24 +283,19 @@ TASKS: list[Task] = [
         builder=builder_check_headings,
     ),
     Task(
-        name="sync document controls",
-        category="sync",
-        builder=builder_sync_doc_controls,
-    ),
-    Task(
         name="sync doc assets",
         category="sync",
         builder=builder_sync_doc_assets,
     ),
     Task(
-        name="build runbook catalog",
-        category="sync",
-        builder=builder_runbook_update,
-    ),
-    Task(
         name="build diagram index",
         category="sync",
         builder=builder_diagram_update,
+    ),
+    Task(
+        name="build runbook catalog",
+        category="sync",
+        builder=builder_runbook_update,
     ),
     Task(
         name="build SLO index",
@@ -302,6 +306,11 @@ TASKS: list[Task] = [
         name="build API error codes",
         category="sync",
         builder=builder_api_error_update,
+    ),
+    Task(
+        name="sync ADR nav",
+        category="sync",
+        builder=builder_sync_adr_nav,
     ),
     Task(
         name="mkdocs build --strict",
@@ -338,15 +347,17 @@ def run_task(task: Task, ctx: RunContext) -> bool:
             hint = f" ({task.install_hint})" if task.install_hint else ""
             print(f"⤷ Skipping optional task '{task.name}'{hint}\n")
             return True
-        print(f"✗ {task.name} failed: command not found ({cmd[0]!r})")
+        print(f"✗ {task.name} failed: command not found ({cmd[0]!r})\n")
         if task.install_hint:
-            print(f"  Install hint: {task.install_hint}")
+            print(f"  Install hint: {task.install_hint}\n")
         return False
     except subprocess.CalledProcessError as exc:
         if task.optional:
-            print(f"⤷ Optional task '{task.name}' failed with exit code {exc.returncode}; continuing\n")
+            print(
+                f"⤷ Optional task '{task.name}' failed with exit code {exc.returncode}; continuing\n"
+            )
             return True
-        print(f"✗ {task.name} failed with exit code {exc.returncode}")
+        print(f"✗ {task.name} failed with exit code {exc.returncode}\n")
         return False
 
 
@@ -392,7 +403,16 @@ def list_tasks() -> None:
 def determine_categories(args: argparse.Namespace) -> list[str]:
     if args.all:
         return ["lint", "sync", "build", "pdf"]
-    selected = [cat for cat, flag in (("lint", args.lint), ("sync", args.sync), ("build", args.build), ("pdf", args.pdf)) if flag]
+    selected = [
+        cat
+        for cat, flag in (
+            ("lint", args.lint),
+            ("sync", args.sync),
+            ("build", args.build),
+            ("pdf", args.pdf),
+        )
+        if flag
+    ]
     if not selected:
         return ["lint"]
     return selected
@@ -420,11 +440,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not run_task(task, ctx):
             failures += 1
     if failures:
-        print(f"[manage-docs] {failures} task(s) failed.")
+        print(f"[manage-docs] {failures} task(s) failed.\n")
         return 1
-    print("[manage-docs] completed successfully.")
+    print("[manage-docs] completed successfully.\n")
     return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
+    import sys
+
+    raise SystemExit(main(sys.argv[1:]))

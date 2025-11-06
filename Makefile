@@ -39,6 +39,7 @@ AUTO_PUSH ?= 1
 RELEASE_PATTERN ?= ^v[0-9]
 SKIP_PUSH ?= 0
 LOAD ?= 0
+PUSH ?=
 REGISTRY ?= ghcr.io/udocket
 IMAGES ?= platform docs keycloak
 SERVICES ?= platform platform_worker platform_beat redis postgres postgres-keycloak keycloak
@@ -46,6 +47,11 @@ SERVICE ?= platform
 CMD ?=
 DEV_SERVICE := platform-dev
 DOCS_SERVICE := docs
+DOCSITE_CONTAINER ?= udocket-docs-site
+DOCSITE_ADDR ?= 0.0.0.0
+DOCSITE_HOST ?= localhost
+DOCSITE_PORT ?= 8010
+DOCSITE_URL ?= http://$(DOCSITE_HOST):$(DOCSITE_PORT)
 PLATFORM_IMAGE := udocket-platform
 DOCS_IMAGE := udocket-docs-toolbox
 KEYCLOAK_IMAGE := udocket-keycloak
@@ -122,7 +128,7 @@ endif
 BAKE_CACHE_FLAGS := $(BAKE_FILES) --progress=$(PROGRESS) --set *.platform=$(PLATFORMS)
 BAKE_CACHE_FLAGS += $(BAKE_EXTRA_FLAGS)
 
-CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; exit 1; fi
+CONFIRM_CMD = @CONFIRM_TARGET="$@" $(PYTHON) scripts/confirm.py
 
 .PHONY: \
   help %.help \
@@ -311,12 +317,50 @@ docs.lint: ## Run docs linting pipeline inside the toolbox
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (fetch/update remote content)
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --sync"
-docs.preview: ## Serve docs locally with live reload
-	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr 0.0.0.0:8010"
+docs.preview: ## Open the docs site in your default browser
+	$(PYTHON) -c "import os, webbrowser; webbrowser.open(os.environ.get('DOCSITE_URL', 'http://localhost:8010'))"
+docs.verify: ## Validate docs build prerequisites without modifying artifacts
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; \
+	TMP_DIR=$$(mktemp -d); \
+	trap 'rm -rf \$$TMP_DIR' EXIT; \
+	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.sync.doc_assets --dry-run; \
+	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.build.diagram_index --check; \
+	$(UV) run --project packages/udocket_docs --extra dev mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/udocket_docs/mkdocs.yml"
+
+docs.clean: ## Remove rendered docs artifacts (diagrams + site outputs)
+	$(CONFIRM_CMD)
+	rm -rf docs/build
+	rm -rf packages/udocket_docs/build
+
+##@ Docsite • MkDocs Dev Server
+docsite.up: ## Start MkDocs live-reload server in the docs container
+	@docker rm -f $(DOCSITE_CONTAINER) >/dev/null 2>&1 || true
+	DOCS_DEV_PORT=$(DOCSITE_PORT) $(DOCS_COMPOSE) run -d --name $(DOCSITE_CONTAINER) --service-ports \
+		-e DOCSITE_ADDR="$(DOCSITE_ADDR)" \
+		-e DOCSITE_PORT="$(DOCSITE_PORT)" \
+		$(DOCS_SERVICE) bash -lc "set +u; set -eo pipefail; $(UV) run --project packages/udocket_docs --extra dev mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr \"$${DOCSITE_ADDR:-0.0.0.0}:$${DOCSITE_PORT:-8010}\""
+	@echo "[docsite] Serving docs at $(DOCSITE_URL)"
+
+docsite.down: ## Stop the MkDocs dev server container
+	$(CONFIRM_CMD)
+	@docker rm -f $(DOCSITE_CONTAINER) >/dev/null 2>&1 || true
+
+docsite.restart: ## Restart the MkDocs dev server container
+	$(CONFIRM_CMD)
+	@$(MAKE) docsite.down CONFIRM_BYPASS=1 >/dev/null
+	@$(MAKE) docsite.up DOCSITE_ADDR="$(DOCSITE_ADDR)" DOCSITE_PORT="$(DOCSITE_PORT)" DOCSITE_HOST="$(DOCSITE_HOST)"
+
+docsite.clean: ## Stop dev server and remove rendered docs artifacts
+	$(CONFIRM_CMD)
+	@$(MAKE) docsite.down CONFIRM_BYPASS=1 >/dev/null
+	@$(MAKE) docs.clean CONFIRM_BYPASS=1
+
+docsite.build: ## Build docs output (alias for docs.build)
+	@$(MAKE) docs.build
 
 escape_dquotes = $(subst ",\",$(1))
 
-.PHONY: docs.test docs.test.coverage
+.PHONY: docs.preview docs.verify docs.clean docsite.up docsite.down docsite.restart docsite.clean docsite.build docs.test docs.test.coverage
 
 DOCS_ARGS ?= $(filter-out docs.test docs.test.coverage,$(MAKECMDGOALS))
 
@@ -359,10 +403,10 @@ docker.prune: ## Remove dangling containers/images/networks/volumes (global)
 	docker volume prune --force
 docker.reset: ## Run full Docker & Buildx cleanup sequence
 	$(CONFIRM_CMD)
-	@$(MAKE) compose.reset CONFIRM=1
-	@$(MAKE) docker.prune CONFIRM=1
-	@$(MAKE) buildx.prune CONFIRM=1
-	@$(MAKE) buildx.reset CONFIRM=1
+	@$(MAKE) compose.reset CONFIRM_BYPASS=1
+	@$(MAKE) docker.prune CONFIRM_BYPASS=1
+	@$(MAKE) buildx.prune CONFIRM_BYPASS=1
+	@$(MAKE) buildx.reset CONFIRM_BYPASS=1
 	@$(MAKE) docker.du
 
 ##@ Docker • Contexts
@@ -392,8 +436,8 @@ containers.prune: ## Remove all stopped Docker containers
 	docker container prune --force
 containers.reset: ## Stop and remove all Docker containers
 	$(CONFIRM_CMD)
-	@$(MAKE) containers.stop.all CONFIRM=1
-	@$(MAKE) containers.remove.all CONFIRM=1
+	@$(MAKE) containers.stop.all CONFIRM_BYPASS=1
+	@$(MAKE) containers.remove.all CONFIRM_BYPASS=1
 
 ##@ Docker • Images
 images.list: ## List all Docker images
@@ -436,10 +480,10 @@ compose.reset: ## Stop stack, remove images/volumes/orphans for this project
 	$(DEV_COMPOSE) down --rmi all --volumes --remove-orphans
 compose.reset.all: ## Full reset of Docker Compose resources for this project
 	$(CONFIRM_CMD)
-	@$(MAKE) compose.reset CONFIRM=1
-	@$(MAKE) images.prune CONFIRM=1
-	@$(MAKE) volumes.prune CONFIRM=1
-	@$(MAKE) networks.prune CONFIRM=1
+	@$(MAKE) compose.reset CONFIRM_BYPASS=1
+	@$(MAKE) images.prune CONFIRM_BYPASS=1
+	@$(MAKE) volumes.prune CONFIRM_BYPASS=1
+	@$(MAKE) networks.prune CONFIRM_BYPASS=1
 
 ##@ Docker • Buildx
 buildx.du: ## Show BuildKit cache disk usage
@@ -456,16 +500,16 @@ buildx.prune: ## Prune all BuildKit caches for the active builder
 	docker buildx prune --all --force
 buildx.reset: ## Refresh Buildx cache directories
 	$(CONFIRM_CMD)
-	@$(MAKE) buildx.clean CONFIRM=1
+	@$(MAKE) buildx.clean CONFIRM_BYPASS=1
 	@$(MAKE) buildx.setup
 buildx.reset.builders: ## Remove all non-default BuildKit builders
 	$(CONFIRM_CMD)
 	docker buildx ls | awk 'NR>1 && $$1 != "default" {print $$1}' | xargs -r -n1 docker buildx rm
 buildx.reset.all: ## Full Buildx cleanup (caches and builders)
 	$(CONFIRM_CMD)
-	@$(MAKE) buildx.prune CONFIRM=1
-	@$(MAKE) buildx.clean CONFIRM=1
-	@$(MAKE) buildx.reset.builders CONFIRM=1
+	@$(MAKE) buildx.prune CONFIRM_BYPASS=1
+	@$(MAKE) buildx.clean CONFIRM_BYPASS=1
+	@$(MAKE) buildx.reset.builders CONFIRM_BYPASS=1
 
 
 .DEFAULT_GOAL := help
@@ -482,15 +526,15 @@ help:
 		$(MAKEFILE_LIST)
 	@printf "\n"
 	@printf $(HELP_GROUP_FORMAT) "Common arguments (override per call):"
-	@printf $(HELP_CMD_FORMAT) "CONFIRM=1" " Unlock guarded destructive commands"
 	@printf $(HELP_CMD_FORMAT) "SERVICES=\"platform docs\"" " Scope stack actions"
 	@printf $(HELP_CMD_FORMAT) "PLATFORMS=linux/amd64,linux/arm64" "Multi-arch Bake builds"
 	@printf $(HELP_CMD_FORMAT) "FOLLOW=0" " Disable streaming in stack.logs"
+	@printf "  Destructive commands prompt for confirmation automatically.\n"
 	@printf "\nHint: run \033[36mmake <group>.help\033[0m for a specific group (e.g., 'tests.help').\n"
 	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options."
 
 %.help:
-	@python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
+	@$(UV) run --project packages/udocket_docs --extra dev python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
 TYPEWIZ_STATUSES ?= blocked ready
 TYPEWIZ_LEVEL ?= folder
 TYPEWIZ_LIMIT ?= 20

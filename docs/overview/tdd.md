@@ -870,9 +870,9 @@ Example
 
 **Purpose:** Provide a high-level view of the LangGraph-powered agent suite (Transcribe, Analyze, Compose, Timeline, Relationship) and show how they collaborate with Settings, Guardian, and Worker Cluster. **|**
 **Contract:** Canonical pipelines, inputs/outputs, manifests, and QA guardrails are defined in [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); this section highlights integration edges and shared dependencies other services rely on. **|**
-**State:** Agents persist transcript text + JSON, discrete analysis artifacts (outline, timeline, entities, issues, gaps, flags, alerts, summary JSON, staff report MD, QA report JSON), compose deliverables, manifests, and audit streams under `storage/media/tenants/<ORG_ID>/cases/<case>/`. Settings stores pipeline/tool configuration and region allowlists; Worker Cluster orchestrates LangGraph jobs; Guardian verdicts gate promotion. **|**
+**State:** Agents persist transcript text + JSON, the internal Analyze `AtomsIndex`, discrete analysis artifacts (outline, timeline, entities, issues, gaps, flags, alerts, summary JSON, staff report MD, QA report JSON), compose deliverables, manifests, and audit streams under `storage/media/tenants/<ORG_ID>/cases/<case>/`. Settings stores pipeline/tool configuration and region allowlists; Worker Cluster orchestrates LangGraph jobs; Guardian verdicts gate promotion. **|**
 **Failures & handling:** Failure taxonomy (`TRANSIENT`, `POLICY`, `INPUT`, `INTEGRITY`, `CONCURRENCY`, `REGION_POLICY`) is defined in the LangGraph agents spec; Worker Cluster retries and Guardian quarantines apply consistently across pipelines. **|**
-**Observability:** Dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs”, lane-level metrics (`agent_lane_duration_seconds`, `agent_lane_queue_wait_seconds`, `agent_lane_schema_fail_total`), and audit JSONL streams provide traceability; quality targets remain anchored in the LangGraph agents spec. **|**
+**Observability:** Dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs”, lane-level metrics (`agent_lane_duration_seconds`, `agent_lane_queue_wait_seconds`, `agent_lane_schema_fail_total`, `atoms_extracted_total`), and audit JSONL streams provide traceability; quality targets remain anchored in the LangGraph agents spec. **|**
 **Breadcrumbs:** Canonical design [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); runtime `packages/udocket_core/agents/langgraph_orchestrator.py`; analyze stages `packages/udocket_core/agents/analyze/stages/`; compose orchestrator `packages/udocket_core/agents/compose/orchestrator.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
 **References:** §3 (platform architecture), §5 (artifact lifecycle), §§7–8 (Guardian & Signer summaries), Appendices I & U, LangGraph agents spec §§1–10, spec schemas `spec/schemas/agents/`.
 
@@ -893,16 +893,18 @@ Example
 ### 6.3 Analyze pipeline (summary)
 
 - *Primary spec:* [`LangGraph agents §2.2`](../automation/langgraph-agents.md#22-analyze-agent).
-- Inputs: transcript JSON (or txt fallback), intake questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts and lane concurrency.
+- Inputs: structured transcript JSON (text fallback only when JSON is unavailable), intake questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts and lane concurrency.
 - Parallel lanes emit discrete artifacts: `analysis/<job_id>__outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, summary JSON (`summary_v1.json`), staff report Markdown (`staff_report_v1.md`), QA report JSON (`qa_report_v1.json`). All records carry deterministic UUIDs (`uuid5` signatures) and schema_version headers.
-- QA gates validate JSON Schema compliance, evidence linking, and questionnaire coverage before finalize persists artifacts; reruns create `_v{n}` versions while preserving manifests and audit history (`ops/ops_summary.jsonl`).
+- Atom layer: transcript segments flow through an internal extraction pipeline that canonicalises statements, detects negation cues, assigns deterministic UUIDs, aggregates evidence, and produces an `AtomsIndex`. Downstream lanes consume the index to attach citations, detect conflicts, and populate `SummaryCheck` verdicts surfaced in `qa_report_v1.json`. Optional debug dumps (`analysis/<job_id>__atoms_v1.json`) remain feature-flagged (`ANALYZE_SAVE_ATOMS`).
+- QA gates validate JSON Schema compliance, atom-backed evidence linking, and questionnaire coverage before finalize persists artifacts; reruns create `_v{n}` versions while preserving manifests and audit history (`ops/ops_summary.jsonl`).
 
 ### 6.4 Compose pipeline (summary)
 
 - *Primary spec:* [`LangGraph agents §2.3`](../automation/langgraph-agents.md#23-compose-agent).
-- Inputs: Analyze summary JSON, timeline/entities/issues/gaps/flags/alerts artifacts, intake data, deliverable templates (DOCX/Markdown), and policy settings. No dependence on Analyze Markdown since summary JSON is canonical.
+- Inputs: canonical Analyze artifacts (`summary_v1.json|.md`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`), intake data, deliverable templates (DOCX/Markdown), and policy settings. No dependence on Analyze Markdown since summary JSON is canonical.
 - Dual deliverable lanes (client, lawyer) draft in parallel with dedicated editor passes and QA reviewers; optional bundle excerpt runs alongside. Outputs: client/lawyer deliverables (`docs/<job_id>__compose_client_v1.*`, `docs/<job_id>__compose_lawyer_v1.*`), bundle excerpt, QA/staff reports, manifests, and `ops/ops_compose.jsonl` audit lines.
 - Policy lints and Guardian gating enforce forbidden content, required sections, link limits, and region compliance before promotion. Manual/agent edits produce new artifact versions subject to reviewer approval.
+- Factuality guard relies on atom-derived citations embedded in canonical Analyze artifacts; sections must meet citation thresholds before delivery artifacts promote.
 
 ### 6.5 Timeline & relationship pipelines (summary)
 

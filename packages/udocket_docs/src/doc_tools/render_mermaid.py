@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import shlex
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,15 +15,14 @@ DEFAULT_OUT = paths.BUILD_ROOT / "diagrams"
 DEFAULT_PUPPETEER_CONFIG = paths.CONFIG_ROOT / "puppeteer.config.json"
 DEFAULT_CONFIG = paths.CONFIG_ROOT / "mermaid.config.json"
 DEFAULT_DIFF_BASE = "origin/main"
+CLI_PATH = paths.DOCS_PACKAGE_ROOT / "node_modules" / ".bin" / "mmdc"
 
 
-def detect_cli(cli_override: Sequence[str] | None = None) -> list[str]:
-    if cli_override:
-        return list(cli_override)
-    mmdc = shutil.which("mmdc")
-    if mmdc:
-        return [mmdc]
-    return ["npx", "--yes", "@mermaid-js/mermaid-cli"]
+def detect_cli() -> list[str]:
+    if CLI_PATH.exists():
+        return [str(CLI_PATH)]
+    sys.stderr.write("[render-mermaid] Mermaid CLI not found. Run `npm ci` in the docs toolbox image.\n")
+    sys.exit(1)
 
 
 def git_changed(diff_base: str, repo_root: Path) -> list[Path]:
@@ -129,10 +126,6 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT, help="Destination directory for rendered diagrams")
     parser.add_argument("--format", choices=["svg", "png"], default="svg", help="Rendered output format")
     parser.add_argument("--diff-base", default=DEFAULT_DIFF_BASE, help="Git commit/ref to diff against in --changed mode")
-    parser.add_argument(
-        "--cli",
-        help="Override Mermaid CLI command (e.g. 'mmdc' or 'docker run ...').",
-    )
     parser.add_argument("--verbose", action="store_true", help="Print rendered files")
     parser.add_argument(
         "--src-root",
@@ -159,8 +152,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         mode = "changed"
 
-    cli_override = shlex.split(args.cli) if args.cli else None
-    cli = detect_cli(cli_override)
+    cli = detect_cli()
     sources = collect_sources(mode, paths.REPO_ROOT, args.src_root, args.diff_base, paths_args)
     if not sources:
         if args.verbose:
@@ -185,4 +177,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

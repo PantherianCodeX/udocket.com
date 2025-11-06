@@ -19,8 +19,8 @@ target "platform" {
 
 target "docs" {
   inherits   = ["common"]
-  context    = "packages/udocket_docs"
-  dockerfile = "Dockerfile"
+  context    = "."
+  dockerfile = "packages/udocket_docs/Dockerfile"
   cache-from = ["type=local,src=.docker/buildx-cache/docs"]
   cache-to   = ["type=local,dest=.docker/buildx-cache/docs,mode=max"]
 }

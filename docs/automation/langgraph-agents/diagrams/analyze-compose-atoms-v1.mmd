@@ -1,0 +1,81 @@
+%% analyze-compose-atoms-v1.mmd
+%% Authoritative high-level view of Analyze atom pipeline and Compose loops
+flowchart LR
+    subgraph T["Transcribe"]
+        T0[Upload / SAS URL]
+        T1["Normalize Audio\n(PCM 16 kHz mono)"]
+        T2["Structured Transcript\ntranscript_v1.json"]
+        T0 --> T1 --> T2
+    end
+
+    subgraph A["Analyze — LangGraph pipeline"]
+        direction LR
+        A0[Load Intake & Case Metadata]
+        A1["Extract Atoms\nNormalize, Negation, Confidence"]
+        A2["Build AtomsIndex\nMerge & Link Evidence"]
+        A3[Outline Lane]
+        A4[Timeline Lane]
+        A5[Entities Lane]
+        A6[Issues & Gaps Lanes]
+        A7[Flags & Alerts Lane]
+        A8["Summary Lane\n(Citations, SummaryChecks)"]
+        A9["QA Lane\n(Schema + Coverage)"]
+        A10["QA Feedback\n(Requeue Lanes)"]
+
+        A0 --> A1 --> A2
+        A2 --> A3
+        A2 --> A4
+        A2 --> A5
+        A2 --> A6
+        A2 --> A7
+        A3 --> A8
+        A4 --> A8
+        A5 --> A8
+        A6 --> A8
+        A7 --> A8
+        A8 --> A9 --> A10
+        A10 -->|Retry Outline| A3
+        A10 -->|Retry Timeline| A4
+        A10 -->|Retry Entities| A5
+        A10 -->|Retry Issues/Gaps| A6
+        A10 -->|Retry Flags/Alerts| A7
+        A10 -->|Retry Summary| A8
+        A1 -. optional debug .-> AD[(atoms_v1.json)]
+    end
+
+    subgraph C["Compose — LangGraph pipeline"]
+        direction LR
+        C0["Compose Context\n(Summary + Canonical JSON)"]
+        subgraph Client["Client Lane"]
+            direction TB
+            C1[Draft Client Deliverable]
+            C2[Structure / Compliance Guards]
+            C3["Factuality Guard\n(Atom Citations)"]
+            C4[Lane QA]
+        end
+        subgraph Lawyer["Lawyer Lane"]
+            direction TB
+            L1[Draft Lawyer Deliverable]
+            L2[Structure / Compliance Guards]
+            L3["Factuality Guard\n(Atom Citations)"]
+            L4[Lane QA]
+        end
+        C5["Cross-Lane QA\n(Bundle, Staff, QA Reports)"]
+        C6[Finalize & Version Artifacts]
+
+        C0 --> C1 --> C2 --> C3 --> C4
+        C0 --> L1 --> L2 --> L3 --> L4
+        C4 -->|PASS| C5
+        L4 -->|PASS| C5
+        C5 --> C6
+
+        C2 -->|REVISION| C1
+        C3 -->|REVISION| C1
+        C4 -->|REVISION| C1
+        L2 -->|REVISION| L1
+        L3 -->|REVISION| L1
+        L4 -->|REVISION| L1
+    end
+
+    T2 --> A0
+    A9 -->|Artifacts & Citations| C0

@@ -44,7 +44,10 @@ popd >/dev/null
 
 printf '[devcontainer] Syncing docs toolbox environment…\n'
 pushd packages/udocket_docs >/dev/null
-uv sync --frozen --extra dev
+uv sync --frozen --group dev
 popd >/dev/null
+
+printf '[devcontainer] Initializing Codex home and port…\n'
+./scripts/devcontainer/setup_codex_home.sh
 
 printf '[devcontainer] All tooling ready. Happy hacking! 🚀\n'

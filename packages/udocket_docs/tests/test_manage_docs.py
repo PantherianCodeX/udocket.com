@@ -81,6 +81,18 @@ def test_organise_tasks_filters_categories(monkeypatch: pytest.MonkeyPatch) -> N
     assert [task.name for task in filtered] == ["sync"]
 
 
+def test_sync_task_order_matches_pipeline() -> None:
+    sync_names = [task.name for task in md.TASKS if task.category == "sync"]
+    assert sync_names == [
+        "sync doc assets",
+        "build diagram index",
+        "build runbook catalog",
+        "build SLO index",
+        "build API error codes",
+        "sync ADR nav",
+    ]
+
+
 def test_determine_categories_defaults() -> None:
     args = argparse.Namespace(lint=False, sync=False, build=False, pdf=False, all=False)
     assert md.determine_categories(args) == ["lint"]
@@ -230,6 +242,11 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert assets_cmd[-1] == "doc_tools.sync.doc_assets"
     assets_dry_cmd = md.builder_sync_doc_assets(dry_ctx)
     assert assets_dry_cmd[-1] == "--dry-run"
+
+    adr_cmd = md.builder_sync_adr_nav(ctx)
+    assert adr_cmd[-1] == "doc_tools.sync.adr_nav"
+    adr_dry_cmd = md.builder_sync_adr_nav(dry_ctx)
+    assert adr_dry_cmd[-1] == "--dry-run"
 
     assert md.builder_runbook_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.runbook_catalog"]
     assert md.builder_runbook_update(dry_ctx)[-1] == "--check"
