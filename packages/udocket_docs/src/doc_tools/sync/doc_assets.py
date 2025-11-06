@@ -63,6 +63,25 @@ def _run_render(mode: str, diff_base: str, out_dir: Path) -> bool:
     return render_mermaid.main(argv) == 0
 
 
+def _format_rel(path: Path) -> str:
+    try:
+        return str(path.relative_to(paths.REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _log_render_plan(label: str, sources: Sequence[Path], *, limit: int | None = None) -> None:
+    total = len(sources)
+    print(f"[sync-doc-assets] {label}: {total} diagram(s)")
+    if not sources:
+        return
+    display = sources if limit is None else sources[:limit]
+    for path in display:
+        print(f"  - {_format_rel(path)}")
+    if limit is not None and total > limit:
+        print(f"  ... ({total - limit} more)")
+
+
 def copy_tree(src: Path, dest: Path, *, dry_run: bool) -> bool:
     if not src.exists():
         print(f"[sync-doc-assets] source directory missing: {src}")
@@ -115,8 +134,10 @@ def main(argv: list[str] | None = None) -> int:
         print("[sync-doc-assets] dry-run mode")
         if bootstrap_needed:
             print("[sync-doc-assets] would run bootstrap render (--all)")
+            _log_render_plan("Bootstrap render targets", all_sources, limit=20)
         elif changed_sources:
             print(f"[sync-doc-assets] would render {len(changed_sources)} changed diagram(s) (--changed --diff-base {args.diff_base})")
+            _log_render_plan("Changed diagrams", changed_sources)
         else:
             print("[sync-doc-assets] no diagram sources changed; render skipped")
         _report_manifest("render cache", missing_render, zero_render)
@@ -129,10 +150,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if bootstrap_needed:
         print("[sync-doc-assets] Bootstrap render: generating full diagram set...")
+        _log_render_plan("Bootstrap render targets", all_sources, limit=20)
         if not _run_render("all", args.diff_base, render_dir):
             return 1
     elif changed_sources:
         print(f"[sync-doc-assets] Rendering {len(changed_sources)} changed diagram(s)...")
+        _log_render_plan("Changed diagrams", changed_sources)
         if not _run_render("changed", args.diff_base, render_dir):
             return 1
     else:

@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from pathlib import Path
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Sequence
 
 from doc_tools import paths
@@ -21,13 +21,25 @@ CLI_PATH = paths.DOCS_PACKAGE_ROOT / "node_modules" / ".bin" / "mmdc"
 def detect_cli() -> list[str]:
     if CLI_PATH.exists():
         return [str(CLI_PATH)]
-    sys.stderr.write("[render-mermaid] Mermaid CLI not found. Run `npm ci` in the docs toolbox image.\n")
+    sys.stderr.write(
+        "[render-mermaid] Mermaid CLI not found. Run `npm ci` in the docs toolbox image.\n"
+    )
     sys.exit(1)
 
 
 def git_changed(diff_base: str, repo_root: Path) -> list[Path]:
     result = subprocess.run(
-        ["git", "-C", str(repo_root), "diff", "--name-only", "--diff-filter=ACMRTUXB", diff_base, "--", "*.mmd"],
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMRTUXB",
+            diff_base,
+            "--",
+            "*.mmd",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -53,9 +65,21 @@ def render_file(
         cmd.extend(["-p", str(puppeteer_config)])
     if cli_config and cli_config.exists():
         cmd.extend(["-c", str(cli_config)])
+    rel_source = _display_path(source)
+    rel_destination = _display_path(destination)
     if verbose:
-        print("Rendering", source.relative_to(paths.REPO_ROOT), "->", destination.relative_to(paths.REPO_ROOT))
-    subprocess.run(cmd, check=True)
+        message = (
+            f"[render-mermaid] Rendering {rel_source} -> {rel_destination} (cmd: {' '.join(cmd)})"
+        )
+        print(message, flush=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"[render-mermaid] Mermaid CLI failed while rendering {rel_source}. See command output above.",
+            file=sys.stderr,
+        )
+        raise exc
     if fmt == "svg" and destination.exists():
         postprocess_svg(destination)
 
@@ -82,7 +106,9 @@ def _gather_from_paths(paths_args: list[Path]) -> list[Path]:
     return _dedupe_sorted(resolved)
 
 
-def collect_sources(mode: str, repo_root: Path, src_root: Path, diff_base: str, paths_args: list[Path]) -> list[Path]:
+def collect_sources(
+    mode: str, repo_root: Path, src_root: Path, diff_base: str, paths_args: list[Path]
+) -> list[Path]:
     if mode == "paths":
         return _gather_from_paths(paths_args)
     if mode == "all":
@@ -113,19 +139,56 @@ def build_output_relative(source: Path, src_root: Path) -> Path:
     return rel
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(paths.REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _log_render_plan(sources: Sequence[Path], out_dir: Path, src_root: Path, fmt: str) -> None:
+    src_root_display = _display_path(src_root)
+    out_dir_display = _display_path(out_dir)
+    src_pattern = f"{src_root_display}/**/diagrams/*.mmd"
+    dest_pattern = f"{out_dir_display}/**.{fmt}"
+    print(
+        f"[render-mermaid] Rendering {len(sources)} diagram(s)",
+        f"   {src_pattern} -> {dest_pattern}",
+        flush=True,
+    )
+    print("[render-mermaid]   pass --verbose for per-file output details", flush=True)
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Render Mermaid diagrams with consistent defaults.")
+    parser = argparse.ArgumentParser(
+        description="Render Mermaid diagrams with consistent defaults."
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--all",
         action="store_true",
         help="Render every Mermaid source found under the docs tree (diagrams directories only)",
     )
-    group.add_argument("--changed", action="store_true", help="Render only files changed relative to --diff-base")
-    group.add_argument("--paths", nargs="*", default=None, help="Explicit Mermaid source file paths")
-    parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT, help="Destination directory for rendered diagrams")
-    parser.add_argument("--format", choices=["svg", "png"], default="svg", help="Rendered output format")
-    parser.add_argument("--diff-base", default=DEFAULT_DIFF_BASE, help="Git commit/ref to diff against in --changed mode")
+    group.add_argument(
+        "--changed", action="store_true", help="Render only files changed relative to --diff-base"
+    )
+    group.add_argument(
+        "--paths", nargs="*", default=None, help="Explicit Mermaid source file paths"
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=DEFAULT_OUT,
+        help="Destination directory for rendered diagrams",
+    )
+    parser.add_argument(
+        "--format", choices=["svg", "png"], default="svg", help="Rendered output format"
+    )
+    parser.add_argument(
+        "--diff-base",
+        default=DEFAULT_DIFF_BASE,
+        help="Git commit/ref to diff against in --changed mode",
+    )
     parser.add_argument("--verbose", action="store_true", help="Print rendered files")
     parser.add_argument(
         "--src-root",
@@ -159,6 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("No Mermaid sources to render", file=sys.stderr)
         return 0
 
+    _log_render_plan(sources, args.out_dir, args.src_root, args.format)
     for source in sources:
         if not source.exists():
             continue
