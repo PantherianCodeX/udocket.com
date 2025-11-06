@@ -65,6 +65,7 @@ class _LaneEditorStep(Protocol):
         progress: Callable[[str, str, JSONObject], None] | None,
     ) -> dict[str, object]: ...
 
+
 logger = logging.getLogger("udocket.compose.agent")
 
 

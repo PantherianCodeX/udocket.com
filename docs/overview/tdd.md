@@ -869,59 +869,59 @@ Example
 ## 6) Agent ecosystem
 
 **Purpose:** Provide a high-level view of the LangGraph-powered agent suite (Transcribe, Analyze, Compose, Timeline, Relationship) and show how they collaborate with Settings, Guardian, and Worker Cluster. **|**
-**Contract:** Implementation details, canonical pipelines, manifests, QA gates, and operational guardrails live in [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); this section summarises integration edges and key dependencies other services rely on. **|**
-**State:** Agents persist manifests, ops logs, and deterministic artifacts under `storage/media/tenants/<ORG_ID>/cases/<case>/`; Settings stores pipeline/tool configuration; Worker Cluster orchestrates Celery jobs; Guardian verdicts gate promotion. **|**
+**Contract:** Canonical pipelines, inputs/outputs, manifests, and QA guardrails are defined in [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); this section highlights integration edges and shared dependencies other services rely on. **|**
+**State:** Agents persist transcript text + JSON, discrete analysis artifacts (outline, timeline, entities, issues, gaps, flags, alerts, summary JSON, staff report MD, QA report JSON), compose deliverables, manifests, and audit streams under `storage/media/tenants/<ORG_ID>/cases/<case>/`. Settings stores pipeline/tool configuration and region allowlists; Worker Cluster orchestrates LangGraph jobs; Guardian verdicts gate promotion. **|**
 **Failures & handling:** Failure taxonomy (`TRANSIENT`, `POLICY`, `INPUT`, `INTEGRITY`, `CONCURRENCY`, `REGION_POLICY`) is defined in the LangGraph agents spec; Worker Cluster retries and Guardian quarantines apply consistently across pipelines. **|**
-**Observability:** Metrics dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs” plus audit JSONL streams provide traceability; quality targets (WER, reviewer delta, QA issue density) remain anchored in the LangGraph agents spec. **|**
-**Breadcrumbs:** Canonical design [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); runtime `packages/udocket_core/agents/graph_runner.py`; Settings integration `apps/platform/settings/agents_pipeline.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
-**References:** §3 (platform architecture), §5 (artifact lifecycle), §§7–8 (Guardian & Signer summaries), Appendices I & U, LangGraph agents spec §§1–10.
+**Observability:** Dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs”, lane-level metrics (`agent_lane_duration_seconds`, `agent_lane_queue_wait_seconds`, `agent_lane_schema_fail_total`), and audit JSONL streams provide traceability; quality targets remain anchored in the LangGraph agents spec. **|**
+**Breadcrumbs:** Canonical design [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); runtime `packages/udocket_core/agents/langgraph_orchestrator.py`; analyze stages `packages/udocket_core/agents/analyze/stages/`; compose orchestrator `packages/udocket_core/agents/compose/orchestrator.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
+**References:** §3 (platform architecture), §5 (artifact lifecycle), §§7–8 (Guardian & Signer summaries), Appendices I & U, LangGraph agents spec §§1–10, spec schemas `spec/schemas/agents/`.
 
 ### 6.1 LangGraph orchestration (summary)
 
-- *Primary spec:* [`LangGraph agents §3`](../automation/langgraph-agents.md#3-pipeline--api-contract).
-- Pipelines are declared in Settings (`agents.pipeline.*`) with blue/green rollout, deterministic manifests, and schema hashes enforced by GraphRunner before activation.
-- Tool catalogue (`agents.tools.catalog[]`) governs residency/PII metadata, retry safety, and telemetry; onboarding requires schema validation and dry-run LangGraph execution.
-- Assistant pipelines reuse the same activation path, ensuring retrieval, guardrails, and moderation inherit policy controls before customer exposure.
+- *Primary spec:* [`LangGraph agents §3`](../automation/langgraph-agents.md#3-api-contract).
+- GraphRunner compiles the Transcribe → Analyze → Compose DAG with explicit fan-out/fan-in nodes: Analyze runs timeline, entities, issues, gaps, and flags/alerts lanes in parallel before converging into summary, staff, and QA stages; Compose retains dual deliverable lanes with QA gating. Finalize nodes remain the sole writers for deterministic artifacts.
+- Settings (`agents.pipeline.*`, `agents.tools.*`) declare pipelines, lane concurrency, region allowlists, and idempotency keys; activation lints enforce schema hashes and contract tests prior to rollout.
+- Assistant pipelines reuse the same activation pathway, ensuring retrieval, moderation, and responder lanes inherit identical policy controls and manifest discipline.
 
 ### 6.2 Transcription pipeline (summary)
 
 - *Primary spec:* [`LangGraph agents §2.1`](../automation/langgraph-agents.md#21-transcription-agent).
-- Supports on-demand streaming and Azure batch modes with diarisation (batch only); artifacts land under `transcript/` with deterministic headers/hashes.
-- Capability negotiation (`TranscriptionCapabilityMap`) enforces region, language, and diarisation support; unsupported combinations raise `E_INPUT_INVALID`.
-- Ops telemetry writes human + JSON logs and appends to `ops_transcription.jsonl`; retries/cancellations follow the shared failure taxonomy.
+- Modes: streaming and batch ingestion of local files or HTTPS SAS URLs. Inputs capture language, region (validated against Settings allowlists), diarisation flag (batch only), and provider choices.
+- Outputs: transcript text `transcript/<job_id>__transcript.txt`, structured transcript JSON `transcript/<job_id>__transcript_v1.json` (segment UUIDs, speaker roster, hashes), per-run meta JSON `ops/<job_id>__transcription_log.json`, human log, and `ops/ops_transcription.jsonl` audit append.
+- Capability negotiation ensures format/language support before dispatch; retries follow provider budgets with exponential backoff; conversion to PCM WAV (ffmpeg) is captured in manifest metadata for forensic review.
 
 ### 6.3 Analyze pipeline (summary)
 
 - *Primary spec:* [`LangGraph agents §2.2`](../automation/langgraph-agents.md#22-analyze-agent).
-- Produces summary markdown/JSON, outline, timeline seeds, entity hints, and mandatory staff report with deterministic UUIDs.
-- QA gates enforce schema, evidence references, and score reporting before Guardian promotion; reruns version outputs with `_v{n}` suffix.
-- Ops metadata (`ops/ops_summary.jsonl`) and manifests capture template hashes, settings snapshot, and Guardian dependencies for downstream Compose lanes.
+- Inputs: transcript JSON (or txt fallback), intake questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts and lane concurrency.
+- Parallel lanes emit discrete artifacts: `analysis/<job_id>__outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, summary JSON (`summary_v1.json`), staff report Markdown (`staff_report_v1.md`), QA report JSON (`qa_report_v1.json`). All records carry deterministic UUIDs (`uuid5` signatures) and schema_version headers.
+- QA gates validate JSON Schema compliance, evidence linking, and questionnaire coverage before finalize persists artifacts; reruns create `_v{n}` versions while preserving manifests and audit history (`ops/ops_summary.jsonl`).
 
 ### 6.4 Compose pipeline (summary)
 
 - *Primary spec:* [`LangGraph agents §2.3`](../automation/langgraph-agents.md#23-compose-agent).
-- Generates client/lawyer deliverables, bundle excerpts, staff & QA reports while enforcing policy lints (forbidden patterns, required sections, link limits).
-- Templates come from Settings deliverable catalog; manifests record template + pipeline version, Guardian judgement IDs, and Signer dependencies.
-- QA loops block promotion until PASS; manual or agent edits create new artifact versions subject to reviewer approval.
+- Inputs: Analyze summary JSON, timeline/entities/issues/gaps/flags/alerts artifacts, intake data, deliverable templates (DOCX/Markdown), and policy settings. No dependence on Analyze Markdown since summary JSON is canonical.
+- Dual deliverable lanes (client, lawyer) draft in parallel with dedicated editor passes and QA reviewers; optional bundle excerpt runs alongside. Outputs: client/lawyer deliverables (`docs/<job_id>__compose_client_v1.*`, `docs/<job_id>__compose_lawyer_v1.*`), bundle excerpt, QA/staff reports, manifests, and `ops/ops_compose.jsonl` audit lines.
+- Policy lints and Guardian gating enforce forbidden content, required sections, link limits, and region compliance before promotion. Manual/agent edits produce new artifact versions subject to reviewer approval.
 
 ### 6.5 Timeline & relationship pipelines (summary)
 
-- *Primary spec:* [`LangGraph agents §2.4`](../automation/langgraph-agents.md#24-timeline--relationship-agents-roadmap).
-- Prototype lanes turn transcripts + Analyze seeds into events and entity graphs with deterministic IDs; residency and Guardian gating apply before UI exposure.
-- Graduation to binding requires QA + shadow metrics to meet thresholds; roadmap tracked in LangGraph agents §10.
+- *Primary spec:* [`LangGraph agents §2.4`](../automation/langgraph-agents.md#24-timeline-relationship-agents).
+- Roadmap agents consume Analyze timeline/events and entities JSON to build richer chronological views and relationship graphs, preserving UUID lineage and evidence pointers.
+- Graduation to binding requires QA + shadow metrics to meet thresholds; roadmap tracked in LangGraph agents §10. Outputs will reuse the `analysis/<job_id>__timeline_v1.json` and `entities_v1.json` signatures to avoid duplication.
 
 ### 6.6 Manifests, lineage, and failure taxonomy (summary)
 
-- *Primary spec:* [`LangGraph agents §4–§5`](../automation/langgraph-agents.md#4-state-management--artifacts).
-- Every job writes manifests with input hashes, settings snapshot, pipeline version, tool usage, and Guardian references; audit JSONL streams remain append-only.
-- Failure classes map to error codes (`E_TRANSIENT_PROVIDER`, `E_POLICY_FORBIDDEN`, etc.); Worker Cluster enforces retries/backoff and surfaces SSE updates to the UI.
+- *Primary spec:* [`LangGraph agents §4–§5`](../automation/langgraph-agents.md#4-state-management).
+- Manifests capture input hashes, settings snapshot SHA, pipeline + graph versions, tool usage, region assignments, prompt provenance, and artifact checksums (including schema_version). Audit JSONL streams remain append-only.
+- Failure classes map to error codes (`E_TRANSIENT_PROVIDER`, `E_POLICY_FORBIDDEN`, `E_INPUT_INVALID`, `E_INTEGRITY_MISMATCH`, `E_CONCURRENCY_LIMIT`, `E_REGION_POLICY`); Worker Cluster propagates retries/backoff and surfaces SSE updates to the UI.
 
 ### 6.7 Quality, security, and operations (summary)
 
-- *Primary spec:* [`LangGraph agents §6–§9`](../automation/langgraph-agents.md#6-observability--quality).
-- Quality KPIs (WER, reviewer delta, QA issue density, FinOps blend) drive acceptance tests and shadow mode gates; results archived as `QUALITY_KPI_REPORT` artifacts.
-- Residency/HIPAA/SPI enforcement relies on Settings allowlists and Guardian policy integration; compliance details documented in §7 of the LangGraph agents spec.
-- Operational procedures (pipeline activation, shadow runs, migration plans) follow blue/green rollout with rollback triggers; Ops runbooks `RB-AGENT-*` provide drills referenced in §8–§9.
+- *Primary spec:* [`LangGraph agents §6–§9`](../automation/langgraph-agents.md#6-observability).
+- Quality KPIs include transcription accuracy, timeline/entity coverage, issue/gap precision, deliverable QA pass rate, and cost/time budgets; results land in `analysis/<job_id>__qa_report_v1.json` and compose QA artifacts.
+- Region enforcement is policy-driven—Settings allowlists gate providers and regions; Guardian audits waivers; manifests log region selections for every lane. HIPAA/SPI controls and Guardian policy integration ensure data handling remains compliant across regions.
+- Operational procedures (pipeline activation, rollbacks, shadow runs) follow LangGraph spec; Ops runbooks `RB-AGENT-*` cover drills, cancellation, and incident playbooks referenced in §8–§9.
 
 ## 7) Digital signing & Guardian services
 

@@ -50,7 +50,9 @@ def _setup_diagram_env(tmp_path: Path) -> None:
         "%% id: root-only\n%%  \n%% comment-without-colon\nflowchart LR; E-->F;\n",
         encoding="utf-8",
     )
-    (src_dir / "build" / "ignored.mmd").write_text("flowchart LR; G-->H;\n", encoding="utf-8")
+    build_dir = src_dir / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    (build_dir / "ignored.mmd").write_text("flowchart LR; G-->H;\n", encoding="utf-8")
 
 
 def test_build_content_renders_tables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,7 +60,7 @@ def test_build_content_renders_tables(tmp_path: Path, monkeypatch: pytest.Monkey
     src_dir = tmp_path / "docs"
     appendix = src_dir / "overview" / "tdd" / "appendices" / "diagrams.md"
 
-    monkeypatch.setattr(bdi, "SRC_DIR", src_dir)
+    monkeypatch.setattr(bdi, "DOCS_DIR", src_dir)
     monkeypatch.setattr(bdi, "APPENDIX_FILE", appendix)
     monkeypatch.setattr(bdi, "APPENDIX_DIR", appendix.parent)
 
@@ -76,7 +78,7 @@ def test_main_updates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     src_dir = tmp_path / "docs"
     appendix = src_dir / "overview" / "tdd" / "appendices" / "diagrams.md"
 
-    monkeypatch.setattr(bdi, "SRC_DIR", src_dir)
+    monkeypatch.setattr(bdi, "DOCS_DIR", src_dir)
     monkeypatch.setattr(bdi, "APPENDIX_FILE", appendix)
     monkeypatch.setattr(bdi, "APPENDIX_DIR", appendix.parent)
 
@@ -93,7 +95,7 @@ def test_main_updates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 def test_collect_diagrams_covers_orphans(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _setup_diagram_env(tmp_path)
     src_dir = tmp_path / "docs"
-    monkeypatch.setattr(bdi, "SRC_DIR", src_dir)
+    monkeypatch.setattr(bdi, "DOCS_DIR", src_dir)
 
     diagrams = bdi.collect_diagrams()
 
@@ -108,10 +110,10 @@ def test_render_groups_handles_empty() -> None:
 
 def test_main_flags_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     _setup_diagram_env(tmp_path)
-    src_dir = tmp_path / "docs" / "src"
+    src_dir = tmp_path / "docs"
     appendix = src_dir / "overview" / "tdd" / "appendices" / "diagrams.md"
 
-    monkeypatch.setattr(bdi, "SRC_DIR", src_dir)
+    monkeypatch.setattr(bdi, "DOCS_DIR", src_dir)
     monkeypatch.setattr(bdi, "APPENDIX_FILE", appendix)
     monkeypatch.setattr(bdi, "APPENDIX_DIR", appendix.parent)
 

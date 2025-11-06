@@ -333,8 +333,7 @@ def analysis_modules_context(
         key="analyze",
         label="Analyze",
         description=(
-            "Generate layered summaries and companion analysis artifacts with "
-            "AI assistance."
+            "Generate layered summaries and companion analysis artifacts with AI assistance."
         ),
         artifacts=summary_artifacts,
         empty_message="No analyze jobs yet. Generate one from the latest transcript.",
@@ -455,8 +454,7 @@ def analysis_modules_context(
             key="analyze",
             label="Analyze",
             description=(
-                "Generate layered summaries and companion analysis artifacts with "
-                "AI assistance."
+                "Generate layered summaries and companion analysis artifacts with AI assistance."
             ),
             artifacts=summary_artifacts,
             empty_message="No analyze jobs yet. Generate one from the latest transcript.",
@@ -561,8 +559,7 @@ def analysis_modules_context(
         "key": "compose",
         "label": "Compose",
         "description": (
-            "Generate client and lawyer deliverables from approved summaries and "
-            "transcripts."
+            "Generate client and lawyer deliverables from approved summaries and transcripts."
         ),
         "panel_id": "module-compose",
         "status": compose_status,

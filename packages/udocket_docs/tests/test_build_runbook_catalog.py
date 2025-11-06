@@ -16,7 +16,7 @@ def _setup_tmp_docs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Pa
     output.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(brc, "DOCS_DIR", docs_root)
     monkeypatch.setattr(brc, "OUTPUT_FILE", output)
-    monkeypatch.setattr(brc, "SERVICE_ROOTS", [Path("platform")])
+    monkeypatch.setattr(brc.paths, "SERVICE_ROOTS", [area_root])
     return area_root, output
 
 
@@ -140,7 +140,7 @@ def test_iter_source_files_skips_templates_and_missing_roots(tmp_path: Path, mon
     portal_doc.write_text("### Runbook", encoding="utf-8")
     (platform_root / "_template.md").write_text("ignored", encoding="utf-8")
     monkeypatch.setattr(brc, "DOCS_DIR", docs_root)
-    monkeypatch.setattr(brc, "SERVICE_ROOTS", [Path("platform")])
+    monkeypatch.setattr(brc.paths, "SERVICE_ROOTS", [platform_root])
 
     sources = list(brc.iter_source_files())
 

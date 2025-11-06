@@ -18,10 +18,13 @@ from doc_tools.check_structure import (
     build_template_spec,
     check_document_controls,
     ensure_template_requirements,
+    extract_tables,
     extract_numbering,
+    find_section_header,
     gather_preamble,
     main as cs_main,
     parse_args as cs_parse_args,
+    parse_table,
     parse_sections,
     validate_sections,
     walk_targets,
@@ -146,7 +149,7 @@ def test_parse_args_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
     args = cs_parse_args()
 
-    assert args.paths == [Path("docs")]
+    assert args.paths == [cs.paths.DOCS_ROOT]
     assert args.template is None
     assert args.frontmatter is False
 
@@ -171,11 +174,53 @@ def test_find_template_search_failure(tmp_path: Path) -> None:
         cs.find_template(target, None)
 
 
+def test_find_section_header_missing_raises() -> None:
+    with pytest.raises(ValueError):
+        cs.find_section_header(["## Intro"], "## Missing")
+
+
 def test_extract_numbering_variants() -> None:
     assert extract_numbering("1) Heading") == (1,)
     assert extract_numbering("2.3 Title") == (2, 3)
     assert extract_numbering("3.1.4 Title") == (3, 1, 4)
     assert extract_numbering("Heading") is None
+
+
+def test_parse_table_requires_minimum_rows() -> None:
+    with pytest.raises(ValueError):
+        parse_table(["| Field | Value |"])
+
+
+def test_parse_table_discards_incomplete_data_row() -> None:
+    header, separator, rows = parse_table([
+        "| Field | Value |",
+        "| --- | --- |",
+        "| OnlyField |",
+    ])
+
+    assert header.startswith("| Field")
+    assert rows == []
+
+
+def test_extract_tables_skips_incomplete_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cs,
+        "iter_markdown_tables",
+        lambda segment, allow_optional_tags: [(0, ["header", "separator", "row"])],
+    )
+    monkeypatch.setattr(cs, "split_table_row", lambda raw: [] if raw == "header" else [])
+
+    tables = extract_tables(["dummy"], 0, 1, allow_optional_tags=False)
+
+    assert tables == []
+
+
+def test_extract_tables_ignores_short_tables(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cs, "iter_markdown_tables", lambda segment, allow_optional_tags: [(0, ["header"])])
+
+    tables = extract_tables(["dummy"], 0, 1, allow_optional_tags=False)
+
+    assert tables == []
 
 
 def test_parse_sections_and_preamble_normalisation() -> None:
@@ -202,6 +247,14 @@ def test_build_front_matter_index_injects_primary(monkeypatch: pytest.MonkeyPatc
     index = cs.build_front_matter_index({"Custom Key": "value"})
     assert "custom_key" in index
     monkeypatch.setattr(cs, "key_variants", original)
+
+
+def test_build_front_matter_index_skips_empty_variants(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cs, "key_variants", lambda value: ("", "alias"))
+
+    index = build_front_matter_index({"Example": "value"})
+
+    assert index == {"example": ["Example"], "alias": ["Example"]}
 
 
 def test_template_disabled_detection(tmp_path: Path) -> None:

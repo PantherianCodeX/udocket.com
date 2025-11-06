@@ -64,6 +64,15 @@ def test_git_changed_collects_files(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     assert files == [repo_root / "docs/diagram.mmd"]
 
 
+def test_git_changed_handles_no_differences(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    process = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+    monkeypatch.setattr(rm.subprocess, "run", lambda *_, **__: process)  # type: ignore[assignment]
+
+    files = rm.git_changed("origin/main", tmp_path)
+
+    assert files == []
+
+
 def test_git_changed_raises_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     process = subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="fatal error")
     monkeypatch.setattr(rm.subprocess, "run", lambda *_, **__: process)  # type: ignore[assignment]
@@ -246,10 +255,12 @@ def test_collect_sources_invalid_mode(tmp_path: Path) -> None:
         rm.collect_sources("invalid", repo_root, src_root, "origin/main", [])
 
 
-def test_main_no_sources_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_no_sources_verbose(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(rm, "collect_sources", lambda *args, **kwargs: [])
     monkeypatch.setattr(rm, "detect_cli", lambda override=None: ["mock-cli"])
 
     rc = rm.main(["--verbose"])
 
+    captured = capsys.readouterr()
     assert rc == 0
+    assert "No Mermaid sources" in captured.err

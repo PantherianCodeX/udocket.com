@@ -51,6 +51,15 @@ DOCS_IMAGE := udocket-docs-toolbox
 KEYCLOAK_IMAGE := udocket-keycloak
 BAKE_EXTRA_FLAGS ?=
 
+HOST_CPUS := $(shell nproc 2>/dev/null)
+ifeq ($(strip $(HOST_CPUS)),)
+  HOST_CPUS := $(shell sysctl -n hw.ncpu 2>/dev/null)
+endif
+ifeq ($(strip $(HOST_CPUS)),)
+  HOST_CPUS := 4
+endif
+JOBS ?= $(HOST_CPUS)
+
 empty :=
 space := $(empty) $(empty)
 comma := ,
@@ -118,13 +127,6 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
 .PHONY: \
   help %.help \
   ci.precommit.install ci.check \
-  all.test all.lint all.lint.ruff all.lint.format all.type all.type.mypy all.type.pyright all.format all.fix all.export-reqs \
-  platform.test platform.test.verbose platform.test.failfast platform.test.cov platform.test.clean \
-  platform.lint platform.lint.ruff platform.lint.format platform.type platform.type.mypy platform.type.pyright platform.format platform.fix platform.export-reqs \
-  common.test common.test.verbose common.test.cov common.lint common.lint.ruff common.lint.format common.type common.type.mypy common.type.pyright common.format common.fix common.export-reqs common.clean \
-  core.test core.test.verbose core.test.cov core.lint core.lint.ruff core.lint.format core.type core.type.mypy core.type.pyright core.format core.fix core.export-reqs core.clean \
-  docs.test docs.test.coverage docs.lint docs.sync docs.preview docs.build docs.export-reqs \
-  prompts.lint prompts.render \
   pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
   typewiz.audit typewiz.dashboard typewiz.readiness typewiz.clean \
@@ -151,209 +153,31 @@ CONFIRM_CMD = @if [ "$(CONFIRM)" != "1" ]; then echo "Set CONFIRM=1 to run $@"; 
 ci.precommit.install: ## Install pre-commit and register git hooks
 	$(UV) pip install --quiet pre-commit || true
 	pre-commit install
-ci.check: typing.run all.lint all.type all.test ## Run typing, lint, and tests (CI parity)
+ci.check: typing.run docs.lint all.test ## Run typing checks, docs lint, and tests (CI parity)
 
-##@ Aggregate
-all.test: ## Run all automated tests (common → core → platform → docs)
-	@$(MAKE) common.test
-	@$(MAKE) core.test
-	@$(MAKE) platform.test
-	@$(MAKE) docs.test
+##@ Tests
+all.test: ## Run all automated test suites in parallel
+	@$(MAKE) -j $(JOBS) DOCS_ARGS= common.test core.test platform.test docs.test
 
-all.lint: ## Run lint + formatting checks for every project
-	@$(MAKE) platform.lint
-	@$(MAKE) common.lint
-	@$(MAKE) core.lint
-	@$(MAKE) docs.lint
-
-all.lint.ruff: ## Run ruff lint across all projects
-	@$(MAKE) platform.lint.ruff
-	@$(MAKE) common.lint.ruff
-	@$(MAKE) core.lint.ruff
-	@$(MAKE) docs.lint
-
-all.lint.format: ## Run formatting checks across code packages
-	@$(MAKE) platform.lint.format
-	@$(MAKE) common.lint.format
-	@$(MAKE) core.lint.format
-
-all.type: ## Run mypy + pyright on core code packages
-	@$(MAKE) platform.type
-	@$(MAKE) common.type
-	@$(MAKE) core.type
-
-all.type.mypy: ## Run mypy on all code packages
-	@$(MAKE) platform.type.mypy
-	@$(MAKE) common.type.mypy
-	@$(MAKE) core.type.mypy
-
-all.type.pyright: ## Run pyright on all code packages
-	@$(MAKE) platform.type.pyright
-	@$(MAKE) common.type.pyright
-	@$(MAKE) core.type.pyright
-
-all.format: ## Apply ruff formatting across code packages
-	@$(MAKE) platform.format
-	@$(MAKE) common.format
-	@$(MAKE) core.format
-
-all.fix: ## Apply ruff fixes across code packages
-	@$(MAKE) platform.fix
-	@$(MAKE) common.fix
-	@$(MAKE) core.fix
-
-all.export-reqs: ## Export pip-compatible requirement manifests for every project
-	@$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py
-
-##@ Platform • Quality
-platform.test: ## Run platform pytest suite quietly
-	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto -q
-
-platform.test.verbose: ## Run platform pytest suite verbosely
-	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto -v
-
-platform.test.failfast: ## Run platform pytest suite, stopping on first failure
-	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto -x
-
-platform.test.cov: ## Run platform pytest suite with coverage
-	DJANGO_SETTINGS_MODULE=apps.platform.config.settings.dev $(UV) run --project apps/platform --extra dev pytest -n auto --cov=apps/platform
-
-platform.test.clean: ## Clean platform pytest cache
+pytest.all: ## Execute pytest suite quietly (backwards compatible alias)
+	@$(MAKE) all.test
+pytest.verbose: ## Execute pytest suite with verbose output
+	$(UV) run --project apps/platform --extra dev pytest -v
+pytest.failfast: ## Execute pytest suite, stopping on first failure
+	$(UV) run --project apps/platform --extra dev pytest -x
+pytest.cov: ## Execute pytest suite with coverage reporting
+	$(UV) run --project apps/platform --extra dev pytest --cov=apps/platform
+pytest.clean: ## Remove pytest cache directory
 	rm -rf .pytest_cache
 
-platform.lint: ## Run lint + formatting checks for platform code
-	@$(MAKE) platform.lint.ruff
-	@$(MAKE) platform.lint.format
-
-platform.lint.ruff: ## Run ruff lint for platform code (legacy ignores applied)
-	$(UV) run --project apps/platform --extra dev ruff check --extend-ignore E402,E501 apps/platform
-
-platform.lint.format: ## Run ruff formatting checks for high-churn platform modules
-	$(UV) run --project apps/platform --extra dev ruff format --check apps/platform/operations apps/platform/jobs || true
-
-platform.type: ## Run mypy and pyright on platform code
-	@$(MAKE) platform.type.mypy
-	@$(MAKE) platform.type.pyright
-
-platform.type.mypy: ## Run mypy on platform code
-	$(UV) run --project apps/platform --extra dev mypy apps/platform
-
-platform.type.pyright: ## Run pyright on platform code
-	$(UV) run --project apps/platform --extra dev pyright apps/platform
-
-platform.format: ## Apply ruff formatter to platform code
-	$(UV) run --project apps/platform --extra dev ruff format apps/platform
-
-platform.fix: ## Apply formatter + autofixes to platform code
-	$(UV) run --project apps/platform --extra dev ruff format apps/platform
-	$(UV) run --project apps/platform --extra dev ruff check --fix apps/platform
-
-platform.export-reqs: ## Export platform requirements.txt manifests
-	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py platform
-
-##@ Common Package (udocket_common)
-common.test: ## Run udocket_common tests quietly
+common.test: ## Run udocket_common test suite
 	$(UV) run --project apps/platform --extra dev pytest -n auto -q packages/udocket_common
 
-common.test.verbose: ## Run udocket_common tests verbosely
-	$(UV) run --project apps/platform --extra dev pytest -n auto -v packages/udocket_common
-
-common.test.cov: ## Run udocket_common tests with coverage
-	$(UV) run --project apps/platform --extra dev pytest -n auto --cov=packages/udocket_common packages/udocket_common
-
-common.clean: ## Clean udocket_common pytest cache
-	rm -rf packages/udocket_common/.pytest_cache
-
-common.lint: ## Run lint + formatting checks for udocket_common
-	@$(MAKE) common.lint.ruff
-	@$(MAKE) common.lint.format
-
-common.lint.ruff: ## Run ruff lint for udocket_common
-	$(UV) run --project packages/udocket_common --extra dev ruff check packages/udocket_common
-
-common.lint.format: ## Run ruff formatting checks for udocket_common
-	$(UV) run --project packages/udocket_common --extra dev ruff format --check packages/udocket_common
-
-common.type: ## Run mypy and pyright on udocket_common
-	@$(MAKE) common.type.mypy
-	@$(MAKE) common.type.pyright
-
-common.type.mypy: ## Run mypy on udocket_common
-	$(UV) run --project packages/udocket_common --extra dev mypy packages/udocket_common
-
-common.type.pyright: ## Run pyright on udocket_common
-	$(UV) run --project packages/udocket_common --extra dev pyright packages/udocket_common
-
-common.format: ## Apply ruff formatter to udocket_common
-	$(UV) run --project packages/udocket_common --extra dev ruff format packages/udocket_common
-
-common.fix: ## Apply formatter + autofixes to udocket_common
-	$(UV) run --project packages/udocket_common --extra dev ruff format packages/udocket_common
-	$(UV) run --project packages/udocket_common --extra dev ruff check --fix packages/udocket_common
-
-common.export-reqs: ## Export udocket_common requirements manifests
-	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py common
-
-##@ Core Package (udocket_core)
-core.test: ## Run udocket_core tests quietly
+core.test: ## Run udocket_core test suite
 	$(UV) run --project apps/platform --extra dev pytest -n auto -q tests/udocket_core
 
-core.test.verbose: ## Run udocket_core tests verbosely
-	$(UV) run --project apps/platform --extra dev pytest -n auto -v tests/udocket_core
-
-core.test.cov: ## Run udocket_core tests with coverage
-	$(UV) run --project apps/platform --extra dev pytest -n auto --cov=packages/udocket_core tests/udocket_core
-
-core.clean: ## Clean udocket_core pytest cache
-	rm -rf packages/udocket_core/.pytest_cache
-
-core.lint: ## Run lint + formatting checks for udocket_core
-	@$(MAKE) core.lint.ruff
-	@$(MAKE) core.lint.format
-
-core.lint.ruff: ## Run ruff lint for udocket_core
-	$(UV) run --project packages/udocket_core --extra dev ruff check --extend-ignore E501 packages/udocket_core
-
-core.lint.format: ## Run ruff formatting checks for udocket_core
-	$(UV) run --project packages/udocket_core --extra dev ruff format --check packages/udocket_core
-
-core.type: ## Run mypy and pyright on udocket_core
-	@$(MAKE) core.type.mypy
-	@$(MAKE) core.type.pyright
-
-core.type.mypy: ## Run mypy on udocket_core
-	$(UV) run --project packages/udocket_core --extra dev mypy packages/udocket_core
-
-core.type.pyright: ## Run pyright on udocket_core
-	$(UV) run --project packages/udocket_core --extra dev pyright packages/udocket_core
-
-core.format: ## Apply ruff formatter to udocket_core
-	$(UV) run --project packages/udocket_core --extra dev ruff format packages/udocket_core
-
-core.fix: ## Apply formatter + autofixes to udocket_core
-	$(UV) run --project packages/udocket_core --extra dev ruff format packages/udocket_core
-	$(UV) run --project packages/udocket_core --extra dev ruff check --fix packages/udocket_core
-
-core.export-reqs: ## Export udocket_core requirements manifests
-	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py core
-
-##@ Tests (compatibility aliases)
-pytest.all: ## Alias for platform.test (temporary compatibility)
-	@$(MAKE) platform.test
-
-pytest.verbose: ## Alias for platform.test.verbose
-	@$(MAKE) platform.test.verbose
-
-pytest.failfast: ## Alias for platform.test.failfast
-	@$(MAKE) platform.test.failfast
-
-pytest.cov: ## Alias for platform.test.cov
-	@$(MAKE) platform.test.cov
-
-pytest.clean: ## Alias for platform.test.clean
-	@$(MAKE) platform.test.clean
-
-##@ Docs Toolbox
+platform.test: ## Run platform test suite
+	$(UV) run --project apps/platform --extra dev pytest -n auto -q
 
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
@@ -362,8 +186,8 @@ typing.baseline: ## Run pyright and mypy type checks
 	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/udocket_core/agents packages/udocket_common
 	$(UV) run --project apps/platform --extra dev mypy
 typing.strict: ## Enforce strict typing gates
-	$(UV) run --project apps/platform --extra dev python scripts/typing/ci_enforce_strict.py
-	$(UV) run --project apps/platform --extra dev python scripts/typing/check_strict.py --tool both
+	$(PYTHON) scripts/typing/ci_enforce_strict.py
+	$(PYTHON) scripts/typing/check_strict.py --tool both
 	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
 	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/udocket_core/agents packages/udocket_common
@@ -482,65 +306,25 @@ doctools.shell: ## Open a shell inside the docs toolbox container
 
 ##@ Doctools • Tools
 docs.build: ## Render docs output (PDF/HTML as configured)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run python -m doc_tools.manage_docs --build"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --build"
 docs.lint: ## Run docs linting pipeline inside the toolbox
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (fetch/update remote content)
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --sync"
 docs.preview: ## Serve docs locally with live reload
-	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr 0.0.0.0:8010"
-
-DOCS_TEST_ARGS := $(filter-out docs.test,$(MAKECMDGOALS))
-DOCS_COV_ARGS := $(filter-out docs.test.coverage,$(MAKECMDGOALS))
+	$(DOCS_COMPOSE) run --rm --service-ports $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr 0.0.0.0:8010"
 
 escape_dquotes = $(subst ",\",$(1))
 
 .PHONY: docs.test docs.test.coverage
 
-ifeq ($(firstword $(MAKECMDGOALS)),docs.test)
-  DOCS_EXTRA_GOALS := $(DOCS_TEST_ARGS)
-else ifeq ($(firstword $(MAKECMDGOALS)),docs.test.coverage)
-  DOCS_EXTRA_GOALS := $(DOCS_COV_ARGS)
-else
-  DOCS_EXTRA_GOALS :=
-endif
+DOCS_ARGS ?= $(filter-out docs.test docs.test.coverage,$(MAKECMDGOALS))
 
-ifneq ($(strip $(DOCS_EXTRA_GOALS)),)
-%:
-	@:
-endif
+docs.test:
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner"
 
-docs.test: $(DOCS_TEST_ARGS)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_TEST_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner"
-
-docs.test.coverage: $(DOCS_COV_ARGS)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_COV_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage"
-
-docs.export-reqs: ## Export docs toolbox requirements manifests
-	$(UV) run --project apps/platform --extra dev python scripts/dev/export_requirements.py docs
-
-##@ Prompts
-prompts.lint: ## Validate prompt templates and metadata
-	$(UV) run --project packages/udocket_common --extra dev python -m packages.udocket_common.prompts lint
-
-prompts.render: ## Render a prompt (usage: make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json] [STRIP=0])
-	@if [ -z "$${DOMAIN:-}" ] || [ -z "$${KEY:-}" ]; then \
-	  echo "DOMAIN and KEY are required (usage: make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json])"; \
-	  exit 1; \
-	fi
-	@cmd='$(UV) run --project packages/udocket_common --extra dev python -m packages.udocket_common.prompts render "$${DOMAIN}" "$${KEY}"'; \
-	if [ -n "$${LOCALE:-}" ]; then \
-	  cmd="$$cmd --locale \"$$LOCALE\""; \
-	else \
-	  cmd="$$cmd --locale \"en-CA\""; \
-	fi; \
-	if [ -n "$${VARS:-}" ]; then \
-	  cmd="$$cmd --vars \"$$VARS\""; \
-	fi; \
-	if [ "$${STRIP:-1}" = "0" ]; then \
-	  cmd="$$cmd --no-strip"; \
-	fi; \
-	eval "$$cmd"
+docs.test.coverage:
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image
@@ -706,7 +490,7 @@ help:
 	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options."
 
 %.help:
-	@$(UV) run --project apps/platform --extra dev python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
+	@python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
 TYPEWIZ_STATUSES ?= blocked ready
 TYPEWIZ_LEVEL ?= folder
 TYPEWIZ_LIMIT ?= 20

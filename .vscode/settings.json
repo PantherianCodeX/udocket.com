@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": "./opt/venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/opt/venv/bin/python",
   "python.terminal.activateEnvironment": true,
   "python.analysis.djangoEnabled": true,
   "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
@@ -9,10 +9,10 @@
   "markdown.preview.scrollEditorWithPreview": true,
   "markdown.preview.scrollPreviewWithEditor": true,
 
-  "vale.configPath": "docs/config/vale.ini",
-  "markdownlint.configFile": "docs/config/.markdownlint.json",
-  "mkdocs.projectDirectory": "docs",
-  "mkdocs.configFilePath": "docs/config/mkdocs.yml",
+  "vale.configPath": "packages/udocket_docs/config/vale.ini",
+  "markdownlint.configFile": "packages/udocket_docs/config/.markdownlint.json",
+  "mkdocs.projectDirectory": "packages/udocket_docs",
+  "mkdocs.configFilePath": "packages/udocket_docs/config/mkdocs.yml",
 
   "markdown-pdf.executablePath": "/usr/bin/chromium",
   "markdown-pdf.launchOptions": [
@@ -53,5 +53,30 @@
     "marimo/_lsp/**": true,
     "__marimo__/**": true
   },
-  "makefile.configureOnOpen": false
+  "makefile.configureOnOpen": false,
+  "python.formatting.provider": "none",
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
+  },
+  "ruff.path": [
+    "${workspaceFolder}/opt/venv/bin/ruff"
+  ],
+  "ruff.nativeServer": "on",
+  "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+  "mypy-type-checker.path": [
+    "${workspaceFolder}/opt/venv/bin/mypy"
+  ],
+  "mypy-type-checker.interpreter": [
+    "${workspaceFolder}/opt/venv/bin/python"
+  ],
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "mypy-type-checker.args": [
+    "--config-file",
+    "${workspaceFolder}/mypy.ini"
+  ]
 }

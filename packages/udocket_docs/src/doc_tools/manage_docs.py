@@ -142,6 +142,10 @@ def builder_check_links(_: RunContext) -> list[str]:
     return python_task("doc_tools.check_links")
 
 
+def builder_check_headings(_: RunContext) -> list[str]:
+    return python_task("doc_tools.check_heading_tags", "docs/automation/langgraph-agents.md")
+
+
 def builder_sync_doc_controls(ctx: RunContext) -> list[str]:
     cmd = python_task("doc_tools.sync.document_controls")
     if ctx.targets:
@@ -263,6 +267,11 @@ TASKS: list[Task] = [
         category="lint",
         builder=builder_check_links,
         env={"STRICT_DOCS": "1"},
+    ),
+    Task(
+        name="check_heading_tags.py",
+        category="lint",
+        builder=builder_check_headings,
     ),
     Task(
         name="sync document controls",

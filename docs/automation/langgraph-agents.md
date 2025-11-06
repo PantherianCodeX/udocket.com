@@ -104,64 +104,59 @@ ______________________________________________________________________
 **State:** Each agent manages job manifests, manifests for derived artifacts, envelope hashes, QA logs, and Ops JSON per run. **|**
 **Failures & handling:** Runtime failures map to the taxonomy in §5; Guardian quarantine or waiver flows apply when policy gates fail; Worker Cluster retries jobs according to agent-specific rules. **|**
 **Observability:** Metrics `agent_job_duration_seconds{agent=}`, `agent_retry_total`, QA issue density, and pipeline activation dashboards track compliance; SSE updates keep UI state in sync. **|**
-**Breadcrumbs:** Transcription `packages/udocket_core/agents/transcribe_lib.py`, Analyze `packages/udocket_core/agents/analyze_pipeline.py`, Compose `packages/udocket_core/agents/compose_pipeline.py`, Timeline/Relationship prototypes `packages/udocket_core/agents/timeline_pipeline.py`, Celery wrappers `apps/platform/operations/tasks/agents.py`, manifests `packages/udocket_core/agents/manifests.py`. **|**
+**Breadcrumbs:** Transcription `packages/udocket_core/agents/transcribe_lib.py`, Analyze `packages/udocket_core/agents/analyze_lib.py` + stages `packages/udocket_core/agents/analyze/stages/`, Compose `packages/udocket_core/agents/compose_lib.py` + orchestrator `packages/udocket_core/agents/compose/orchestrator.py`, Celery wrappers `apps/platform/operations/tasks/agents.py`, manifests `packages/udocket_core/agents/manifests.py`. **|**
 **References:** TDD §6 summary, Guardian spec §2–§3, Worker Cluster spec §3, Ops runbooks `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`.
 
 ### 2.1 Transcription agent (binding) {#21-transcription-agent}
 
-- Modes: `on-demand` (local streaming) and `batch` (Azure Batch Transcription via SAS URL). Diarisation is enabled for batch jobs only.
-- Inputs: local path or HTTPS SAS URL, language, region (`canadacentral` or `canadaeast`), diarisation flag (batch only). Guardian enforces residency restrictions before execution.
-- Outputs: transcript text `storage/media/tenants/<ORG_ID>/cases/<case>/transcript/<job_id>__transcript.txt`, job metadata JSON (`ops/<job_id>_transcription_log.json`), human log, audit JSONL append (`ops/ops_transcription.jsonl`).
-- Header metadata: case + job identifiers, source hashes, language, region, duration, diarisation mode, settings snapshot hash, provider version(s).
-- Retry semantics: streaming jobs auto-resume from buffered offsets; batch jobs poll Azure status and retry failed uploads with exponential backoff capped at 3 attempts.
-- Provider fallback: disabled by default—Settings `speech.jobs[]` may enumerate alternative providers but Guardian requires waiver before enabling; see §5.1 for failure handling.
-- Capability negotiation: `TranscriptionCapabilityMap` resolves diarisation, language, and format support before dispatch; unsupported combos raise `E_INPUT_INVALID`.
-- Audio normalization: agent converts to PCM WAV 16 kHz mono via ffmpeg when needed; conversion hashes recorded in manifest for forensic review.
-- Cancellation: best-effort cancellation via provider API; local jobs stop streaming immediately, batch jobs mark manifest as `cancel_requested` and wait for provider acknowledgement.
+- Modes: streaming (WebSocket) and batch (provider-hosted jobs). Diarisation is enabled for batch jobs only.
+- Inputs: local filesystem path or HTTPS SAS URL, language, region (any value permitted by Settings allowlists), diarisation flag (batch only), optional transcription overrides (`transcription.*`).
+- Outputs: transcript text `storage/media/tenants/<ORG_ID>/cases/<case>/transcript/<job_id>__transcript.txt`, structured transcript JSON `transcript/<job_id>__transcript_v1.json` (segments with deterministic UUIDs, speaker roster, hashes), per-run metadata JSON `ops/<job_id>__transcription_log.json`, human-readable log, and audit append `ops/ops_transcription.jsonl`.
+- Header & manifest metadata: case/job identifiers, source hashes, language, region, duration, diarisation mode, settings snapshot SHA, provider version, conversion fingerprints (e.g., ffmpeg SHA-256).
+- Retry semantics: streaming jobs resume from buffered offsets; batch jobs poll provider status and retry failed uploads with exponential backoff capped by settings budgets. Provider fallback is disabled unless Settings explicitly assigns alternates.
+- Capability negotiation: `TranscriptionCapabilityMap` validates language/diarisation support before dispatch; unsupported combinations raise `E_INPUT_INVALID`.
+- Cancellation: best-effort cancellation propagates through provider APIs; manifests mark `cancel_requested` and retain partial progress for audit.
 
 ### 2.2 Analyze agent (binding) {#22-analyze-agent}
 
-- Lanes: `Summary`, `Outline`, `Timeline Seeds`, `Entity Hints`, `Staff Report`. Each lane produces typed Pydantic models with deterministic UUIDs (`uuid5` of canonical content when upstream UUID absent).
-- Inputs: latest transcript (or override path), intake data, Guardian manifests, Settings overrides for prompt templates and lane enablement.
-- Outputs: `analysis/<job_id>__summary_v1.md`, optional JSON/outline/timeline/entity files, `analysis/<job_id>__staff_report_v1.md`, QA logs, ops metadata JSON, audit append to `ops/ops_summary.jsonl`.
-- QA gating: lane-specific validators enforce schema, evidence references, and canonical section ordering; staff report must include questionnaire score, gaps, risks/discrepancies.
-- Retry semantics: lanes retry transient provider failures (`E_TRANSIENT_PROVIDER`) per settings budgets; deterministic idempotency ensures re-run outputs versioned `_v{n}`.
-- Cancellation: GraphRunner cancellation stops active nodes; resumed jobs compare checkpoint digests to guard against duplicate work before continuing.
-- Timeline seeds / entity hints: produce deterministic `uuid` fields for downstream merge; merges dedupe by UUID and canonical signature.
+- Inputs: transcript JSON (or transcript text fallback), intake/questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts, stage concurrency, token budgets, and idempotency keys.
+- Parallel lanes: outline-from-template, timeline (events), entities (and relations), issues, gaps, flags/alerts. Lanes run concurrently with deterministic UUID generation (`uuid5` signatures) and schema enforcement.
+- Outputs: discrete artifacts under `analysis/` — `outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json` — plus per-run metadata JSON and `ops/ops_summary.jsonl` audit entries.
+- Summary lane: consumes all upstream JSON artifacts (not Analyze Markdown) to generate canonical `summary_v1.json`; Compose reads this JSON directly.
+- QA gating: every lane validates against JSON Schema snapshots (exported to `spec/schemas/agents/`). QA stage aggregates coverage metrics into `qa_report_v1.json` and blocks finalize on schema failures or questionnaire gaps.
+- Retry & cancellation: lane retries follow transient budgets; GraphRunner cancellation halts active nodes and preserves checkpoint digests so resumed jobs avoid duplicate work.
 
 ### 2.3 Compose agent (binding) {#23-compose-agent}
 
-- Lanes: client deliverable, lawyer deliverable, bundle excerpt, QA loops (Section QA, Final QA). Compose orchestrates SectionWriter nodes per deliverable lane before merging in `FinalWeave`.
-- Inputs: Analyze outputs, intake questionnaire, case metadata, deliverable templates (DOCX/Markdown), Settings policies (`compose.policy.*`, `guardian.policy.*`), timeline/entity seeds.
-- Outputs: `docs/<job_id>__compose_client_v1.md|.docx`, `docs/<job_id>__compose_lawyer_v1.md|.docx`, `docs/<job_id>__compose_bundle_v1.md`, QA staff report `docs/<job_id>__compose_staff_report_v1.md`, `docs/<job_id>__compose_qa_report_v1.md`, ops metadata JSON, audit append `ops/ops_compose.jsonl`.
-- Safety: enforces forbidden patterns, required sections, link limits; `E_POLICY_FORBIDDEN` halts lane and requires manual intervention. Guardian refuses promotion without QA PASS and policy compliance.
-- Templates: deliverable catalog `deliverables.catalog[]` in Settings enumerates lane templates and signature policies; Compose manifest records template SHA-256 + version.
-- Retry semantics: SectionWriter nodes retry within budgets; QA issues recorded with severity/refs; concurrency guard ensures OCC on artifact writes using `udlock`.
-- Cancellation: cancellation request stops graph; partial outputs remain versioned `_v{n}` and flagged `cancelled=true` in manifest for audit.
+- Inputs: Analyze summary JSON, timeline/entities/issues/gaps/flags/alerts artifacts, intake data, deliverable templates (DOCX/Markdown), organization policies (`compose.policy.*`, `guardian.policy.*`), and Settings concurrency budgets.
+- Lanes: parallel client and lawyer deliverable pipelines (draft → editor passes → lane QA), optional bundle excerpt, followed by cross-lane QA review and final packaging. Lanes share shared context (summary JSON + structured artifacts) but render voice-specific outputs.
+- Outputs: client and lawyer deliverables (`docs/<job_id>__compose_client_v1.md|.docx`, `docs/<job_id>__compose_lawyer_v1.md|.docx`), bundle excerpt Markdown (if enabled), compose staff report (`docs/<job_id>__compose_staff_report_v1.md`), compose QA report (`docs/<job_id>__compose_qa_report_v1.md` / `.json`), per-run metadata JSON, and `ops/ops_compose.jsonl` audit lines.
+- Safety & policy: lane validators enforce forbidden patterns, required sections, link limits, and jurisdictional voice guidance. Guardian refuses promotion without QA PASS and documented policy compliance.
+- Retry & cancellation: SectionWriter nodes retry within configured budgets; QA issues capture severity and references. Cancellation stops graph execution, leaves partial artifacts versioned `_v{n}`, and records state in manifests.
 
-### 2.4 Timeline & relationship agents (roadmap, informative) {#24-timeline--relationship-agents-roadmap}
+<figure class="full-width-diagram">
+  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-pipeline-v2.svg" alt="Transcribe, Analyze, and Compose pipeline flow">
+  <figcaption style="font-size: 0.9em; color: #555;">Transcribe, Analyze, and Compose pipeline flow</figcaption>
+</figure>
 
-- Timeline agent ingests transcripts + Analyze seeds to create normalized event timeline artifacts (`analysis/<job_id>__timeline_v2.json` to-be-defined). Relationship/graph agent produces entity relationship graph outputs with deterministic IDs.
-- Responsibilities: maintain speaker attribution, diarised offsets, event classifications, and evidence references; align with Guardian status gating before exposing to portal/UI.
-- Dependencies: reuse LangGraph pipelines with dedicated nodes for diarisation merge, event normalization, entity clustering, QA scoring.
-- Current status: prototype graphs exit shadow mode once QA metrics meet targets in §6.2; spec will be elevated to binding when pipelines graduate.
+### 2.4 Timeline & relationship agents (roadmap, informative) {#24-timeline-relationship-agents}
+
+- Roadmap agents will consume Analyze timeline/events and entities JSON to produce richer chronological visualisations and relationship graphs with deterministic UUID lineage.
+- Responsibilities: maintain speaker attribution, event windows, entity linkage, and evidence references; align outputs with Guardian gating and Settings activation before UI exposure.
+- Dependencies: reuse LangGraph pipelines with dedicated nodes for diarisation merge, event normalisation, entity clustering, and QA scoring.
+- Current status: prototypes remain in shadow mode until QA metrics meet §6 targets; binding specification will follow once promoted.
 
 ______________________________________________________________________
 
-## 3) API Contract {#3-pipeline--api-contract}
+## 3) API Contract {#3-api-contract}
 
-**Purpose:** Govern the configurable LangGraph pipelines, tool catalog, and agent interfaces that keep jobs deterministic and auditable. **|**
-**Contract:** Pipelines are defined in Settings (`agents.pipeline.*`), tools in `agents.tools.*`, and assistant pipelines follow the same activation rules. GraphRunner enforces schema hashes, stage ordering, and deterministic manifests. **|**
-**State:** Activation metadata persists manifests (`graph_version`, `graph_schema_sha256`, `settings_snapshot_sha256`), local cache of compiled graphs, and per-job checkpoints. Tool registry caches schema-validated bindings. **|**
-**Failures & handling:** Invalid activations fail closed with actionable errors; runtime mismatches raise `E_INPUT_INVALID` or `E_INTEGRITY_MISMATCH`; missing tools block activation. **|**
-**Observability:** Activation dashboards, CI contract tests, tool registry validation logs, and ops manifests capture pipeline changes. **|**
-**Breadcrumbs:** Settings integration `apps/platform/settings/agents_pipeline.py`, pipeline catalog `packages/udocket_core/agents/pipeline_catalog.py`, tool registry `packages/udocket_core/agents/tool_registry.py`, GraphRunner `packages/udocket_core/agents/graph_runner.py`, activation tests `tests/agents/test_pipeline_catalog.py`. **|**
+**Purpose:** Govern the configurable LangGraph pipelines, tool catalog, concurrency rules, and agent interfaces that keep jobs deterministic, auditable, and region-aware. **|**
+**Contract:** Pipelines are defined in Settings (`agents.pipeline.*`), tools in `agents.tools.*`, and assistant graphs follow the same activation rules. GraphRunner enforces schema hashes, stage ordering, deterministic manifests, and single-writer finalize semantics. **|**
+**State:** Activation metadata captures `graph_version`, `graph_schema_sha256`, `settings_snapshot_sha256`, lane concurrency budgets, and idempotency keys; compiled graphs are cached for reuse alongside per-job checkpoints. Tool registry cache stores schema-validated bindings. **|**
+**Failures & handling:** Invalid activations fail closed with actionable errors (`E_INPUT_INVALID`, `E_SCHEMA_MISMATCH`); runtime mismatches raise `E_INTEGRITY_MISMATCH`; missing tools block activation. **|**
+**Observability:** Activation dashboards, CI contract tests, tool registry validation logs, prompts provenance, and ops manifests capture pipeline changes and drifting configurations. **|**
+**Breadcrumbs:** Settings integration `apps/platform/settings/agents_pipeline.py`, pipeline catalog `packages/udocket_core/agents/pipeline_catalog.py`, LangGraph orchestrator `packages/udocket_core/agents/langgraph_orchestrator.py`, analyze stages `packages/udocket_core/agents/analyze/stages/`, compose orchestrator `packages/udocket_core/agents/compose/orchestrator.py`, activation tests `tests/agents/test_pipeline_catalog.py`. **|**
 **References:** TDD §6 summary, Settings spec §5.4, LLM Registry spec §2, Worker Cluster spec §3, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-AGENT-ACTIVATION`.
-
-<figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-compose-v1.svg" alt="Analyze and Compose pipeline overview">
-  <figcaption style="font-size: 0.9em; color: #555;">Analyze and Compose pipeline overview</figcaption>
-</figure>
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
@@ -170,22 +165,24 @@ ______________________________________________________________________
 
 ### 3.1 External Interfaces (binding)
 
-- Celery task wrappers under `apps/platform/operations/tasks/agents.py` expose LangGraph pipelines to the Operations service layer and publish job progress over SSE to the Web App and Communications services.
-- Settings activation endpoints (`agents.pipeline.*`, `agents.tools.*`, `assistant.*`) gate configuration changes; they enforce schema validation, blue/green rollout, and post-activation contract tests before exposing new graphs.
-- Guardian, Worker Cluster, and Web App integrations consume structured status payloads (`job.accepted|running|completed`), manifest references, and QA summaries to keep UI and safety gating aligned.
-- Manual/Agent edit tooling interacts through `ops/agent_edit` APIs that accept deterministic manifests and enforce reviewer approvals before promotion.
+- Celery task wrappers under `apps/platform/operations/tasks/agents.py` expose LangGraph pipelines to Operations and publish progress/events over SSE to UI clients. Task payloads carry manifest references, idempotency keys, and settings snapshot hashes for replay.
+- Settings activation endpoints (`agents.pipeline.*`, `agents.tools.*`, `assistant.*`) gate configuration changes; they validate JSON Schemas, concurrency budgets, region allowlists, and provider credentials before promotion.
+- Guardian, Worker Cluster, and Web App integrations consume structured status payloads (`job.accepted|running|completed`), QA summaries, and artifact pointers to drive UI visibility and safety gating.
+- Manual/Agent edit tooling uses `ops/agent_edit` APIs that accept deterministic manifests, enforce reviewer approvals, and produce new artifact versions before promotion.
 
 ### 3.2 Internal Interfaces (binding)
 
-- Pipeline catalog, tool registry, and GraphRunner compose the internal contract that orchestrates LangGraph execution, retries, and checkpoint management.
+- Pipeline catalog, tool registry, and LangGraph orchestrator form the internal contract that manages stage ordering, lane concurrency, retries, and checkpoint management.
+- Analyze stage implementations (`packages/udocket_core/agents/analyze/stages/*`) expose typed callables that operate on transcript JSON, intake data, and lane-specific context, returning structured payloads that comply with exported JSON Schemas.
+- Compose orchestrator merges shared context (summary JSON + analysis artifacts) into role-specific lanes, ensuring that only finalize nodes write deliverables.
 
-- `agents.pipeline.definitions[]` enumerates each pipeline with `{pipeline_id, graph_version, graph_schema_sha256, runner, stages[]}`; defaults seed from `config/*.json`.
+- `agents.pipeline.definitions[]` enumerates each pipeline with `{pipeline_id, graph_version, graph_schema_sha256, runner, stages[]}`; defaults populate from `config/*.json`.
 - Stage metadata: `{stage_id, langgraph_node_id, llm_profile_id, prompt_template_id, tool_ids[], enabled, retry_budget, cost_ceiling, depends_on[]}`. Structural edits (`stages[]` reorder/insert/delete) require SYSTEM scope.
 - Assignments & overrides: `agents.pipeline.assignments[]` maps org/case to pipelines; `agents.pipeline.overrides[]` permits tightening budgets, toggling stage enablement, or swapping templates within validator bounds.
 - Activation safety: contract tests validate schema hashes, stage wiring, and GraphRunner compatibility before promotion. Activations follow blue/green rollout; manifests capture which orgs completed cutover.
 - Versioning: stage definitions are additive; prior versions remain callable for queued jobs & replays until Guardian signs off; deletion blocked until archival manifests exist.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding) {#33-api-error-codes}
 
 **Purpose:** Enumerate LangGraph agent `ApiError.code` values so service clients, worker orchestration, and UI flows respond deterministically. **|**
 **Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
@@ -241,7 +238,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State Management {#4-state-management--artifacts}
+## 4) State Management {#4-state-management}
 
 **Purpose:** Describe how agents persist manifests, artifacts, and lineage to provide forensic traceability. **|**
 **Contract:** Every agent job produces manifests capturing input hashes, settings snapshot, pipeline + graph versions, tool usage, Guardian/Signer dependencies, and resulting artifact paths. **|**
@@ -251,7 +248,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Manifest models `packages/udocket_core/agents/manifests.py`, ops logging `packages/udocket_core/agents/logging.py`, lineage tooling `packages/udocket_core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**
 **References:** TDD §5.2, §6 summary, Compose spec §4, Guardian spec §2.4, Ops runbooks `RB-LINEAGE-BACKFILL`.
 
-- Filesystem layout: transcripts under `transcript/`, analysis outputs under `analysis/`, compose deliverables under `docs/`, ops metadata/logs under `ops/`.
+- Filesystem layout: transcripts (text + JSON) under `transcript/`; analysis artifacts (`outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json`) under `analysis/`; compose deliverables and QA/staff artifacts under `docs/`; ops metadata/logs under `ops/`.
 - Naming convention: `<job_id>__<artifact>[_v{n}]<extension>` ensures sorted history; manual or agent edits create new versions requiring reviewer approval.
 - Hashing: manifests include SHA-256 of outputs, pipeline manifest version, tool versions, provider/model versions, compute/storage regions, Guardian judgment IDs, and settings snapshot hash.
 - Lineage: manifests link `source_transcript`, `case_id`, `job_id`, upstream artifact IDs, template IDs, and Guardian judgment reference. Compose manifest references analyze outputs by UUID to preserve traceability.
@@ -277,7 +274,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability {#6-observability--quality}
+## 6) Observability {#6-observability}
 
 **Purpose:** Define the metrics, QA harnesses, and continuous evaluation commitments for LangGraph agents. **|**
 **Contract:** All pipelines must emit metrics for job duration, retries, QA issue density, WER (transcription), review deltas (Analyze/Compose), and FinOps cost budgets. QA harnesses replay golden datasets per release. **|**
@@ -313,7 +310,7 @@ ______________________________________________________________________
 ## 7) Security & Compliance
 
 **Purpose:** Ensure LangGraph agents honour residency, privacy, and policy constraints enforced across the platform. **|**
-**Contract:** Agents execute only within approved Canadian regions, enforce HIPAA/SPI policies, respect Guardian verdicts, and produce audit-ready manifests linking to waivers when exceptions granted. **|**
+**Contract:** Agents execute only within organization-approved regions, enforce HIPAA/SPI policies, respect Guardian verdicts, and produce audit-ready manifests linking to waivers when exceptions granted. **|**
 **State:** Residency allowlists stored in Settings, manifests record residency decisions, Guardian judgment IDs, waiver references, and policy enforcement metadata. **|**
 **Failures & handling:** Residency violations block execution (`E_REGION_POLICY`); policy violations escalate to Guardian; HIPAA/SPI detection mismatch triggers quarantine and manual review per Guardian runbooks. **|**
 **Observability:** Residency enforcement metrics, Guardian dashboards, audit logs, and Settings activation lint rules catch drifts. **|**
@@ -472,83 +469,46 @@ ______________________________________________________________________
 
 **Purpose:** Provide typed schema examples and canonical error codes for agent outputs. **|**
 **Contract:** Schemas must remain in sync with implementation; error codes are authoritative and map to failure classes in §5. **|**
-**State:** Pydantic models defined in `packages/udocket_core/agents/models.py`; schema snapshots exported to `spec/schemas/agents/*.schema.json`; QA harness uses these models for validation. **|**
+**State:** Pydantic models live in `packages/udocket_core/agents/schemas.py`; schema snapshots export to `spec/schemas/agents/*.schema.json`; lane validators and QA harnesses use these schemas for runtime validation. **|**
 **Failures & handling:** Schema drift fails CI; unknown error codes block merges via lint; manifests lacking schema versions trigger `E_INTEGRITY_MISMATCH`. **|**
 **Observability:** Schema lints in CI, error code coverage dashboards, QA harness logs. **|**
-**Breadcrumbs:** Models `packages/udocket_core/agents/models.py`, schemas `spec/schemas/agents/`, tests `tests/agents/test_schema_consistency.py`. **|**
+**Breadcrumbs:** Models `packages/udocket_core/agents/schemas.py`, schemas `spec/schemas/agents/`, tests `tests/agents/test_schema_consistency.py`. **|**
 **References:** Compose spec Appendix B, Analyze spec Appendix A, Platform TDD §6.
 
 ### A.1 Analyze agent schema (binding)
 
-```python
-from __future__ import annotations
+Exported JSON Schemas (all under `spec/schemas/agents/`):
 
-from datetime import datetime
-from typing import Literal
-from uuid import UUID
+- `transcript_v1.schema.json` — TranscriptJSON (segment UUIDs, speakers, hashes, diarisation flag).
+- `analyze_outline_v1.schema.json` — OutlineJSON derived from DOCX template headings.
+- `analyze_timeline_v1.schema.json` — TimelineJSON with events (`uuid`, timestamps, speaker, text, labels).
+- `analyze_entities_v1.schema.json` — EntitiesJSON with entities and relations (plus evidence pointers).
+- `analyze_issues_v1.schema.json` — IssuesJSON describing issue text, risk level, notes, evidence references.
+- `analyze_gaps_v1.schema.json` — GapsJSON capturing missing information, impact, and follow-up needs.
+- `analyze_flags_v1.schema.json` — FlagsJSON enumerating case flags with severity levels and references.
+- `analyze_alerts_v1.schema.json` — AlertsJSON highlighting priority alerts and escalation metadata.
+- `analyze_summary_v1.schema.json` — SummaryJSON (case metadata summary, executive summary bullets, detailed narrative sections, procedural posture, issues, checklist, supporting quotes).
+- `analyze_qa_report_v1.schema.json` — QAReportJSON with completeness/consistency/schema scores and narrative notes.
 
-from pydantic import BaseModel, Field
-
-
-class SourceSpan(BaseModel):
-    start_ms: int
-    end_ms: int
-
-
-class AnalyzeEvent(BaseModel):
-    id: UUID
-    title: str
-    datetime: datetime | None = None
-    participants: list[UUID] = Field(default_factory=list)
-    source_spans: list[SourceSpan] = Field(default_factory=list)
-    notes: str | None = None
-
-
-class AnalyzeIssue(BaseModel):
-    id: UUID
-    label: str
-    description: str
-    related_events: list[UUID] = Field(default_factory=list)
-    risk: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
-```
+Each schema includes `schema_version`, `produced_at`, and deterministic UUID requirements that align with manifests.
 
 ### A.2 Compose agent schema (binding)
 
-```python
-from __future__ import annotations
-
-from typing import Literal
-from uuid import UUID
-
-from pydantic import BaseModel, Field
-
-
-class ComposeSection(BaseModel):
-    key: str
-    title: str
-    body_md: str
-    references: list[UUID] = Field(default_factory=list)
-
-
-class ComposeDocument(BaseModel):
-    doc_type: Literal["CLIENT", "LAWYER"]
-    language: str | None = None
-    sections: list[ComposeSection]
-    outline: list[str]
-    analyze_refs: dict[str, list[UUID]] = Field(default_factory=dict)
-```
+- `compose_section_output_v1.schema.json` — SectionOutput (section identifiers, role, markdown body, linked issues).
+- `compose_document_v1.schema.json` — Deliverable container for client, lawyer, or bundle outputs.
+- `compose_qa_report_v1.schema.json` — Compose QA report (status, findings, references).
+- `compose_manifest_v1.schema.json` — Manifest snapshot linking templates, analyze artifacts, provider selections, Guardian verdicts.
 
 ### A.3 Additional lane models
 
-- Analyze outputs:
-  - `SummaryJSON { uuid, sections[], word_count, tone, highlights[], source_refs[] }`
-  - `OutlineJSON { uuid, version, nodes[] }`
-  - `TimelineSeed { uuid, timestamp, speaker, summary, evidence_refs[] }`
-  - `EntityHint { uuid, entity_type, display_name, attributes{}, evidence_refs[] }`
-  - `StaffReport { uuid, risk_rating, questionnaire_score, gaps[], discrepancies[] }`
-- Compose QA artifacts:
-  - `SectionOutput { uuid, section_id, role, text_md, envelope_id, issues[] }`
-  - `ComposeQAReport { uuid, status, issues[{code, level, message, section_ref?}] }`
+- Shared helpers:
+  - `event_reference.schema.json` — Canonical reference to timeline events by UUID and timestamp.
+  - `issue_reference.schema.json` — Lightweight pointer to Analyze issues for Compose sections and QA findings.
+  - `evidence_pointer.schema.json` — Standardised pointer to transcript segments or document excerpts.
+  - `idempotency_key.schema.json` — Manifest record of lane-specific idempotency tokens.
+  - `prompt_provenance.schema.json` — Recorded for every LLM invocation in per-run metadata.
+- QA metrics:
+  - `qa_metric.schema.json` — Normalised representation of completeness/consistency/schema scores embedded in Analyze and Compose QA reports.
 
 ### A.4 Error codes
 

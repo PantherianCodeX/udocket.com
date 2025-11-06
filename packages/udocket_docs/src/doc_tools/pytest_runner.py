@@ -12,15 +12,7 @@ from doc_tools import paths
 
 DEFAULT_TARGET = "packages/udocket_docs/tests/doc_tools"
 ENV_VAR = "DOCS_PYTEST_ARGS"
-COVERAGE_MODULES = [
-    "doc_tools.paths",
-    "doc_tools.render_mermaid",
-    "doc_tools.pdf_build",
-    "doc_tools.hash_and_manifest",
-    "doc_tools.pytest_runner",
-    "doc_tools.sync.doc_assets",
-    "doc_tools.sync.document_controls",
-]
+COVERAGE_MODULES = ["doc_tools"]
 DEFAULT_COVERAGE_THRESHOLD = 90
 COVERAGE_THRESHOLD_ENV = "DOCS_COV_MIN"
 

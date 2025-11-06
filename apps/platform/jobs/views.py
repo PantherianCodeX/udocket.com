@@ -1207,9 +1207,7 @@ class JobViewSet(viewsets.ModelViewSet):
                 cred_entry = provider_credentials.get(provider_name, {})
                 if not cred_entry:
                     provider_label = provider_meta.display_name or provider_name
-                    provider_issues.append(
-                        f"Provider '{provider_label}' is not configured."
-                    )
+                    provider_issues.append(f"Provider '{provider_label}' is not configured.")
                     continue
 
                 secret_details = get_provider_secret_with_metadata(org_id_str, provider_name) or {}

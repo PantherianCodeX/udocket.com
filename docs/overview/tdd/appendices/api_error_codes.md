@@ -183,7 +183,7 @@ This appendix aggregates the API error code sections from every service and app 
 | `POLICY_BLOCK` | 403 | Yes | identity_api_error_total |
 | `RATE_LIMIT` | 429 | No | identity_api_error_total<br>identity_rate_limit_total |
 
-### [LangGraph Agent Orchestration](../../../automation/langgraph-agents.md#3-3-api-error-codes-binding) {#langgraph-agent-orchestration}
+### [LangGraph Agent Orchestration](../../../automation/langgraph-agents.md#33-api-error-codes) {#langgraph-agent-orchestration}
 
 | Code | Scenario | Client guidance |
 | --- | --- | --- |

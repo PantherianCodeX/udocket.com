@@ -366,8 +366,7 @@ def organization_settings(request: HttpRequest, section: str | None = None) -> H
         "providers": {
             "title": "LLM providers",
             "description": (
-                "Configure organization-wide LLM credentials, deployments, and "
-                "test connections."
+                "Configure organization-wide LLM credentials, deployments, and test connections."
             ),
         },
     }

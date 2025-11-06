@@ -169,6 +169,7 @@ __azurite_db_*.json
 
 # mkdocs documentation
 packages/udocket_docs/build/
+!packages/udocket_docs/src/doc_tools/build/
 
 # mypy
 .mypy_cache/

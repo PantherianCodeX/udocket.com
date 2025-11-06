@@ -7,13 +7,6 @@ This project treats contributor experience and code quality as first-class requi
 - Shared utilities live under `packages.udocket_common.*`. Import helpers from that package rather than re-implementing them in app-specific modules.
 - When a helper becomes broadly useful (e.g., identifier generation, time formatting), promote it into `packages.udocket_common` together with tests.
 
-## Prompt resources
-
-- Prompt templates are stored in `packages/udocket_prompts/<domain>/<locale>/<key>.md.j2`.
-- Validate placeholder usage and metadata with `make prompts.lint` before sending a patch.
-- Use `make prompts.render DOMAIN=<domain> KEY=<key> [LOCALE=en-CA] [VARS=vars.json]` to preview rendered prompts; the command enforces locale fallback and required-variable checks.
-- Keep `required_placeholders` and `allowed_placeholders` metadata aligned with the template; the loader rejects inconsistent declarations.
-
 ## Dependency hygiene
 
 - Avoid “optional” imports. If a module is needed, add it to the appropriate `pyproject.toml` / lockfile group and commit the change.
@@ -51,32 +44,11 @@ This project treats contributor experience and code quality as first-class requi
 
 ## Tests & coverage
 
-- Core quality commands (all wrap uv and respect the shared env):
+- Unit tests run via `pytest`:
 
   ```bash
-  make all.test          # common → core → platform → docs
-  make all.lint          # ruff lint + format checks for code packages
-  make all.type          # mypy + pyright across packages
-  make all.fix           # apply ruff format + autofixes (when needed)
-  make all.export-reqs   # regenerate requirements/*.txt (pre-commit runs this)
-  ```
-
-- Pytest defaults to `-n auto`; ensure new tests remain deterministic under xdist.
-
-- Per-project commands (examples):
-
-  ```bash
-  make platform.test      # pytest (platform)
-  make common.test        # pytest (packages/udocket_common)
-  make core.test          # pytest (packages/udocket_core)
-  make docs.test          # pytest (docs toolbox in container)
-
-  make platform.lint      # ruff check + format --check
-  make platform.type      # mypy + pyright
-
-  make common.lint.ruff   # ruff only
-  make common.format      # ruff format code layout
-  make core.type.mypy     # targeted checks
+  make pytest.all
+  make pytest.cov
   ```
 
 - Target ≥90 % coverage per module. Critical shared packages (e.g., `packages.udocket_common`) must meet or exceed this target before changes are merged.

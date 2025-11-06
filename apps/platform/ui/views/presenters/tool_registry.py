@@ -43,8 +43,7 @@ _REGISTRY: dict[str, ToolDefinition] = {
         key="intake",
         label="Intake",
         description=(
-            "Manage intake details, assignments, and questionnaire artifacts for "
-            "this case."
+            "Manage intake details, assignments, and questionnaire artifacts for this case."
         ),
         body_template="platform_ui/tools/case_details.html",
         notes_enabled=True,
@@ -62,8 +61,7 @@ _REGISTRY: dict[str, ToolDefinition] = {
         key="analyze",
         label="Analyze",
         description=(
-            "Generate layered summaries and companion analysis artifacts from approved "
-            "transcripts."
+            "Generate layered summaries and companion analysis artifacts from approved transcripts."
         ),
         body_template="platform_ui/tools/analyze.html",
         notes_enabled=True,
@@ -77,8 +75,7 @@ _REGISTRY: dict[str, ToolDefinition] = {
         key="compose",
         label="Compose",
         description=(
-            "Generate client and lawyer-ready deliverables from approved summaries "
-            "and transcripts."
+            "Generate client and lawyer-ready deliverables from approved summaries and transcripts."
         ),
         body_template="platform_ui/tools/compose.html",
         notes_enabled=True,

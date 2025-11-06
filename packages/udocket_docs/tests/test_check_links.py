@@ -8,7 +8,7 @@ from doc_tools import check_links as lc
 
 
 def test_check_diagrams_detects_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(lc, "ROOT", tmp_path)
+    monkeypatch.setattr(lc, "REPO_ROOT", tmp_path)
     content = "![Diagram](docs/platform/sample/diagrams/flow.mmd)"
 
     problems = lc.check_diagrams(content)
@@ -20,7 +20,7 @@ def test_check_diagrams_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     diagram = tmp_path / "docs" / "platform" / "sample" / "diagrams" / "flow.mmd"
     diagram.parent.mkdir(parents=True)
     diagram.write_text("graph TD;", encoding="utf-8")
-    monkeypatch.setattr(lc, "ROOT", tmp_path)
+    monkeypatch.setattr(lc, "REPO_ROOT", tmp_path)
     content = "![Diagram](docs/platform/sample/diagrams/flow.mmd)"
 
     problems = lc.check_diagrams(content)
@@ -53,7 +53,7 @@ def test_main_strict_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ca
     doc.mkdir(parents=True)
     path = doc / "tdd.md"
     path.write_text("See App.Z.", encoding="utf-8")
-    monkeypatch.setattr(lc, "ROOT", tmp_path)
+    monkeypatch.setattr(lc, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(lc, "DOC", path)
     monkeypatch.setenv("STRICT_DOCS", "1")
 
@@ -69,7 +69,7 @@ def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: p
     doc.mkdir(parents=True)
     path = doc / "tdd.md"
     path.write_text("## 1) Intro\nSee App.A.\n## Appendix A\n", encoding="utf-8")
-    monkeypatch.setattr(lc, "ROOT", tmp_path)
+    monkeypatch.setattr(lc, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(lc, "DOC", path)
     monkeypatch.delenv("STRICT_DOCS", raising=False)
 

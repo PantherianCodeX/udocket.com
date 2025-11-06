@@ -152,6 +152,8 @@ def test_main_failure_counts_errors(monkeypatch: pytest.MonkeyPatch, capsys: pyt
 
 def test_main_requires_tdd_doc(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(md, "REPO_ROOT", tmp_path, raising=False)
+    missing_docs = tmp_path / "docs"
+    monkeypatch.setattr(md, "DOCS_DIR", missing_docs, raising=False)
     monkeypatch.setattr(md, "organise_tasks", lambda categories: [], raising=False)
 
     rc = md.main(["--lint"])
@@ -200,6 +202,15 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert str(structure_dir) in structure_cmd
 
     assert md.builder_check_appendices(ctx)[-1] == "doc_tools.check_appendices"
+
+    heading_cmd = md.builder_check_headings(ctx)
+    expected_target = Path("docs/automation/langgraph-agents.md")
+    assert heading_cmd == [
+        md.PYTHON,
+        "-m",
+        "doc_tools.check_heading_tags",
+        str(expected_target),
+    ]
 
     markdown_cmd = md.builder_markdownlint(ctx)
     assert markdown_cmd[0] == "npx"
