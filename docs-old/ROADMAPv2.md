@@ -4,7 +4,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 
 ## Guiding Principles
 - **North star** (docs/AGENTS_LANGGRAPH.md): generate accurate, auditable legal artifacts from transcripts to accelerate court form preparation without sending PII outside Canada.
-- **Agent contract** (root `AGENTS.md`, `packages/udocket_core/AGENTS.md`): deterministic outputs, versioned artifacts, per-run ops JSON, append-only audit JSONL, SHA-256 hashing, Canada-only Azure by default.
+- **Agent contract** (root `AGENTS.md`): deterministic outputs, versioned artifacts, per-run ops JSON, append-only audit JSONL, SHA-256 hashing, Canada-only Azure by default.
 - **Typing discipline** (`docs/typing_refactor_plan.md` & `docs/typing_debt_assessment.md`): no regression in mypy/pyright counts, prioritize high-churn modules, define TypedDict/Protocol for shared payloads, track hotspots.
 - **Architecture option 3** (docs/ROADMAP.md): single Django project with DRF, Channels, Celery, Postgres (RLS), OIDC (Keycloak), and Oso policies for authorization.
 - **LLM execution**: provider-agnostic but fully Canadian-compliant; never fall back to offline heuristics for content; expose configuration via stage maps and per-org policies.
@@ -28,7 +28,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 ### Phase 0 – Foundation & Typing Guardrails
 - Finalise baseline items above, ensuring tests cover repo bootstrap.
 - Integrate best-in-class LLM chat clients (docs/ROADMAP.md todo) for AWS Bedrock & Google Gemini; validate region guard rails.
-- Seed file-driven defaults (`config/AGENTS.md`): roles (Reviewer), reviewer policies, LLM stage maps per target (`summary`, `compose`, `guardian`, etc.), DOCX templates (uDocket default + per-org override), alert thresholds, data retention (default 90 days), questionnaire seeds, branding/theme.
+- Seed file-driven defaults (see `AGENTS.md` standards): roles (Reviewer), reviewer policies, LLM stage maps per target (`summary`, `compose`, `guardian`, etc.), DOCX templates (uDocket default + per-org override), alert thresholds, data retention (default 90 days), questionnaire seeds, branding/theme.
 - Clean typing hotspots (`docs/typing_debt_assessment.md`): begin annotating `apps/platform/operations/tasks.py`, `jobs/views.py`, `ui/views/*`, and remove legacy ignores where touched.
 - Establish ToolDefinition schema (see Phase 1) with typed dataclasses/TypedDict to keep future pipeline typed.
 
@@ -42,7 +42,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 
 ### Phase 2 – Core Deliverables & Staff Workflow
 - **Compose Agent** (root `AGENTS.md`, docs/ROADMAP.md, AGENTS_LANGGRAPH): LLM-only pipeline producing client (grade-6 voice) and lawyer (professional) Markdown + DOCX deliverables, embedding timeline/graph assets (`timeline_v2.*`, `graph_v2.*`) with ops/audit logs.
-- **Analyze Enhancements** (`packages/udocket_core/agents/analyze/AGENTS.md`): staff report artifact, discrepancy detector generating alerts, speaker mapping proposals with approval, removal of timeline/entity seeding (now Compose).
+- **Analyze Enhancements** (see `AGENTS.md` Analyze section): staff report artifact, discrepancy detector generating alerts, speaker mapping proposals with approval, removal of timeline/entity seeding (now Compose).
 - **Questionnaire Tool & Interview Hub**: intake LLM tool with per-org question seeds, jobs history, Manual/Agent edits, Markdown artifact, transcript completion score; per-case interview page with live checklist, notes, call logging, questionnaire links, ops audit entries.
 - **Alert Tool**: allow LLMs/staff to raise alerts (severity, category, message, action). Display on case banner & Alerts tab; audit everything. Acknowledgement deferred for future roadmap.
 - **Parent/Child UI & Approvals**: parent rows show blocking child actions; pending edits set parent to waiting; cancelled children ignored. Reviewer-configurable approvals promote Manual/Agent edits; modal viewers expose version history & diffs.

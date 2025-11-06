@@ -114,7 +114,7 @@ attempts: dict[str, int]
 
 - `extract_outline` (Azure JSON schema)
   - In: segments (plus brief)
-  - Out: `outline` (see packages/udocket_core/agents/summary/AGENTS.md schema)
+  - Out: `outline` (see `AGENTS.md` Analyze schema)
 
 - `build_timeline_seeds` (Azure JSON schema)
   - In: segments
@@ -139,7 +139,7 @@ attempts: dict[str, int]
 
 ## Prompt Principles
 - Shared system prompt: Canadian paralegal assistant. Use only provided info. Do not fabricate. Return exact schema/Markdown requested.
-- JSON stages use response_format: json_schema with schemas defined in the Analyze agent AGENTS.
+- JSON stages use response_format: json_schema with schemas defined in the root `AGENTS.md` Analyze section.
 - Include compact context: intake brief + a bounded window of diarized segments (chunk and slide if needed; keep token limits configurable).
 
 

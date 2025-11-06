@@ -2,23 +2,21 @@
 
 This document defines how automation and contributors should add and operate "agents" in the uDocket stack. It covers the current transcription agent and lays down clear conventions for future agents such as summarization, timelines, and relationship/graph extraction.
 
-Note: This is the root guide and the single source of truth. All other `AGENTS.md` files now point back here to avoid drift; add any new guidance to this file (with section anchors for specific areas) instead of duplicating it elsewhere.
+**Single source:** This is the only AGENTS guide. All area-specific copies have been removed; reference this file (and the TDD’s engineering standards in §2.3) whenever you need binding guidance.
 
-Quick index of AGENTS guides in this repo:
+## Engineering standards (binding) {#agent-engineering-standards}
 
-- apps/platform/AGENTS.md
-- apps/platform/ui/AGENTS.md
-- apps/platform/operations/AGENTS.md
-- apps/platform/jobs/AGENTS.md
-- apps/platform/cases/AGENTS.md
-- apps/platform/artifacts/AGENTS.md
-- apps/platform/accounts/AGENTS.md
-- apps/platform/authorization/AGENTS.md
-- packages/udocket_core/AGENTS.md
-- packages/udocket_core/agents/compose/AGENTS.md
-- config/AGENTS.md
-- infra/AGENTS.md
-- tests/AGENTS.md
+- **Type-first development.** Before editing logic, introduce the strongly typed primitives the file needs (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers, or helper classes). Provider payloads must be represented by precise types or local stubs—never raw dicts. Missing third-party stubs are added alongside the change (no TODOs).
+- **Zero tolerance for `Any`.** New code may not add `typing.Any`. When touching legacy code, remove Any annotations as part of the change. Casts are a last resort: keep them in helper functions with a short comment explaining the invariant they protect. Never add `# type: ignore` or lint ignores; fix the root cause instead.
+- **Strict Python 3.12+.** Use modern syntax (`match/case`, `StrEnum`, `dataclasses`, `contextlib.asynccontextmanager`, `zoneinfo`). Delete compatibility branches for earlier Python versions and refuse polyfills/back-compat shims.
+- **Separation of concerns.** Main modules orchestrate flows; supporting modules provide models and pure helpers. Do not mix HTTP/Django concerns with LangGraph orchestration or disk IO in the same function. Extract shared helpers to `packages/udocket_common` when they are framework-agnostic, otherwise keep them in package-scoped `utils.py`. Module-level helpers stay short and single-purpose.
+- **Quality over speed.** Restructure when the design demands it. Keep functions small (prefer <40 LOC) and files cohesive. Document invariants whenever you add or change behavior.
+- **Testing discipline.** Every touched module must remain ≥90% line coverage (unit + property tests). Add property tests for determinism (UUIDs, manifests, approvals) whenever you add new data structures. Integration tests cover Celery tasks, Guardian/Signer interactions, and settings activation. No change merges without green tests.
+- **Tooling requirements.** Run commands through the provided containers/venvs (`make ...`, `uv run --project …`). Never install ad-hoc dependencies via `pip`. Docs/spec changes must pass `doc_tools.check_links` and MkDocs builds.
+- **Helper placement & wrappers.** Cross-cutting helpers (JSON, hashing, parsing) belong in `packages/udocket_common`. Agent-specific helpers live alongside the agent implementation. Use thin wrappers (value objects) around primitive strings/IDs instead of passing raw literals between layers.
+- **No back-compat.** When removing deprecated APIs or flags, delete the compat code entirely. Do not add toggles to support “old” behavior—migrations happen in one direction.
+- **Flow of control.** Entry-point modules validate inputs, snapshot settings, and delegate to type-safe helpers. They never mutate global state or perform best-effort retries outside the shared retry utilities.
+- **Additional expectations.** Always update specs (this file + TDD §2.3) when you introduce new behaviors, include Guardian/Settings impacts in PR descriptions, and keep ops/audit logging additive and deterministic.
 
 ## Overview
 

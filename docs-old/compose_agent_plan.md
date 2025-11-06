@@ -1,6 +1,6 @@
 # Compose Agent LangGraph Plan
 
-This plan captures the responsibilities, data contracts, and LangGraph orchestration strategy for the Compose agent. It reflects the current implementation in `packages/udocket_core/agents/compose_lib.py` and should stay in sync with the `packages/udocket_core/agents/compose/AGENTS.md` guide and the operations service.
+This plan captures the responsibilities, data contracts, and LangGraph orchestration strategy for the Compose agent. It reflects the current implementation in `packages/udocket_core/agents/compose_lib.py` and should stay in sync with the root [`AGENTS.md`](../AGENTS.md) guide and the operations service.
 
 ## Objectives
 - Assemble client- and lawyer-facing deliverables from Analyze outputs without leaving Canadian Azure regions.

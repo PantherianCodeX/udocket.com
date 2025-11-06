@@ -266,6 +266,20 @@ ______________________________________________________________________
   | ISO/IEC 27001 & 27701 | Security management, retention schedules, risk assessments, policy bundles | §2.2, §12.6, §14, App.K |
   | PIPEDA / CPPA / PHIPA | Residency controls, consent logging, legal hold & retention automation | §2.2, §3.8, §14.2, App.N |
 
+### 2.3 Engineering standards (binding) {#23-engineering-standards}
+
+*Purpose: codify the coding, typing, linting, and testing rules that keep the agent ecosystem deterministic and auditable.*\
+*Contract: every change must satisfy these requirements before review. This section and [`AGENTS.md`](../../AGENTS.md#agent-engineering-standards) form the canonical reference; deviations require Architecture approval.*
+
+- **Type-first development.** When editing a module, define the strongly typed primitives upfront (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers, helpers, stub packages). Provider payloads never travel as untyped dicts; add typed facades or stubs in the same patch.
+- **Typing rules.** `typing.Any` is banned in new code and must be removed when touched. Casts are acceptable only to narrow third-party responses and must live inside helper functions with short invariant comments. `# type: ignore` (and lint ignores) are prohibited—fix the root cause or add a typed wrapper. Pyright and mypy run in `--strict` mode for touched packages; CI fails when they fail.
+- **Language level.** The repository targets Python ≥3.12 exclusively. Delete compatibility shims, version guards, and legacy syntax when encountered. Prefer modern constructs (`match/case`, `contextlib.asynccontextmanager`, `zoneinfo`, `StrEnum`) and structural pattern matching.
+- **Separation of concerns & helper placement.** Entry-point modules validate inputs, snapshot settings, and delegate to typed helpers. Business logic lives in dedicated helpers/models—not Django views or Celery tasks. Framework-agnostic helpers live in `packages/udocket_common`; package-scoped helpers live in `utils.py`; inline helpers stay under ten lines. Never mix HTTP, database, and LangGraph orchestration concerns inside one function.
+- **Testing & coverage.** Every module maintains ≥90% line coverage (unit + property tests). Deterministic behaviors (UUIDs, manifests, approvals) require property-based tests. Integration suites cover Celery orchestration, Guardian/Signer flows, and settings activation. CI enforces coverage via `make common.test`, `make core.test`, `make platform.test`, `make docs.test.coverage`, and companion jobs.
+- **Execution environment.** Run commands via the curated containers/venvs (`make …`, `uv run --project …`). Avoid ad-hoc `pip install`. Docs/spec changes must pass `doc_tools.check_links --strict` and MkDocs builds before merge.
+- **Quality over speed.** Restructure when it reduces complexity. Keep functions <40 LOC, keep files cohesive, and remove dead code. No back-compat toggles or “temporary” fallbacks; migrations move forward only.
+- **Logging, ops, and docs.** Changes that affect artifacts/logs/settings update manifests, this TDD, and `AGENTS.md`. Ops logging stays additive and deterministic. Guardian/Settings impacts appear in PR descriptions, and doc tooling (`doc_tools.manage_docs --lint`) must remain green.
+
 - HIPAA mode: applies only to U.S. workloads with an executed BAA. Org activation (`privacy.hipaa.enabled=true`) requires dual approval (`org_admin` + platform `sysadmin`), verifies BAA-backed storage and compute, and enforces per-org field encryption (`security.field_encryption.enabled=true`, `security.field_encryption.key_scope='per_org'`) plus WebAuthn for privileged roles (`security.mfa.webauthn_required_roles` includes `org_admin|org_manager|org_operator|org_reviewer`). Settings expose `privacy.hipaa.enforcement_mode ∈ {optional, required}`—`required` is reserved for U.S. orgs under BAA, while `optional` allows voluntary adoption elsewhere. Outside the U.S. HIPAA stays optional; organizations may opt in for contractual reasons, but enforcement defaults to the general SPI/PHI controls unless HIPAA mode is explicitly enabled.
 
 - Guardian-driven enforcement runs entirely within the service; see `../platform/guardian.md` for service-level procedures.
@@ -276,7 +290,7 @@ ______________________________________________________________________
 
 - Audit linkage: DPIA/RoPA artifacts, CCPA notice ledgers, and HIPAA override activations are referenced in audit seals (`§14.2`, Appendix N); HIPAA activations require Compliance approval and manifest tagging.
 
-### 2.3 Non-functional requirements (SLOs, latency budgets, availability)
+#### 2.3.1 Non-functional requirements (SLOs, latency budgets, availability)
 
 *Purpose: Capture performance and reliability expectations.*
 
@@ -944,7 +958,7 @@ Example
 
 - Platform signatures: Document Signer converts canonical content to PDF/A (or COSE/JWS), applies platform signatures, and records signature manifests with TSA/OCSP evidence. Deliverables remain blocked until Guardian verifies the manifest.
 - Signature policies & acknowledgements: Settings `sign.signature_policies[]` drive platform signatures and client acknowledgement flows. Portal prompts for countersignatures where required and stores auxiliary artifacts referenced in manifests. Full policy catalog, default mappings, and waiver handling appear in §2.2 of the signer spec.
-- Trust roots & PKI: Managed HSM keys, offline/online certificate hierarchy, and rotation procedures are documented in §2.3. Settings activation validates attestation (`sign.hsm.key_id`, `sign.trust_roots[]`) and records `SIGN_TRUST_ROOTS@<version>` artifacts.
+- Trust roots & PKI: Managed HSM keys, offline/online certificate hierarchy, and rotation procedures are documented in [`../data/digital-signer.md §2.3`](../data/digital-signer.md#23-trust-roots-pki-and-hsm-integration-binding). Settings activation validates attestation (`sign.hsm.key_id`, `sign.trust_roots[]`) and records `SIGN_TRUST_ROOTS@<version>` artifacts.
 - TSA/OCSP posture: Soft-fail windows, responder failover, and metrics (`ocsp_latency_seconds`, `tsa_time_drift_seconds`, `sign_verify_status_total`) are owned by the signer service (§2.4, §5.1). Portal quarantine behaviour after soft-fail windows inherits from that spec.
 - FIPS compliance: `security.crypto.fips_requirement` and deliverable policies dictate FIPS mode. Startup attestation, algorithm enforcement, waiver governance, and monitoring live in §7.
 - APIs: Signing, verification, and certificate retrieval endpoints plus acknowledgement flows are formalised in signer §3. Integrators MUST use HMAC headers and Idempotency keys per that contract.
@@ -983,8 +997,8 @@ The canonical specification for registry, moderation, FinOps, and replay require
 
 - **Provider registry & residency:** Compose/Analyze lanes must call the registry for every LLM invocation. Residency allowlists, failover parity, and waiver handling are enforced per §2.1 of the service spec; Guardian/Settings tests ensure policy drift pages the RB-LLM-003 responders.
 - **Prompts, redaction, and evidence:** Prompt templates, masking rules, and reproducibility envelopes follow §2.2. Jobs record envelope IDs in manifests and depend on the evidence store for replay audits. HIPAA posture requires masked prompts everywhere outside the evidence store.
-- **Safety harness & moderation:** Pre-call filters, multi-stage moderation, QA evaluators, and Guardian quarantine workflow are defined in §2.3 with ops playbooks RB-LLM-JB/Jailbreak. WARN-mode tuning is limited to non-production orgs and is time-bound.
-- **FinOps guardrails:** Token ceilings, monthly caps, deploy gates, and budget hold workflows follow §2.4. Compose/Analyze workers surface `PAUSED_AWAITING_BUDGET` and SSE warnings when the FinOps controller halts spend; overrides require dual approval.
+- **Safety harness & moderation:** Pre-call filters, multi-stage moderation, QA evaluators, and Guardian quarantine workflow are defined in [`../automation/llm-registry.md §2.3`](../automation/llm-registry.md#23-safety-harness-jailbreak-tests--policy-enforcement-binding). WARN-mode tuning is limited to non-production orgs and is time-bound.
+- **FinOps guardrails:** Token ceilings, monthly caps, deploy gates, and budget hold workflows follow [`../automation/llm-registry.md §2.4`](../automation/llm-registry.md#24-cost-controls--finops-budgets-binding). Compose/Analyze workers surface `PAUSED_AWAITING_BUDGET` and SSE warnings when the FinOps controller halts spend; overrides require dual approval.
 - **Replay & provenance:** Reproducibility envelopes, golden-set drills, and the illustrative provider matrix live in §§4.1–4.2. Job retry tooling must carry `envelope_id`/`retry_token` pairs so operators can execute RB-LLM-REPLAY without losing traceability.
 - **Runbooks & dashboards:** Operational responders rely on RB-LLM-003 (circuit), RB-LLM-JB (moderation), RB-LLM-FINOPS (budgets), and RB-LLM-REPLAY (envelopes). Observability dashboards referenced in the service spec remain mandatory for SRE review.
 
@@ -1465,7 +1479,7 @@ ______________________________________________________________________
 - Test gates: required to pass in CI before promoting settings or rules changes; failure blocks deploy.
 - Property-based tests validate fingerprint/UUIDv5 determinism, manifest integrity, and advisory locks across edge cases.
 - Fingerprint vectors from `spec/vectors/uuid_fingerprints.json` feed analyze/compose determinism tests ensuring helper outputs remain stable across refactors.
-- Coverage targets: ≥ 90% for critical modules (agents, Guardian, Settings) per AGENTS guides.
+- Coverage targets: ≥ 90% for every module (unit + property) as mandated by §2.3; CI fails when thresholds drop below that line.
 
 ### 13.3 Governance/privacy acceptance suites
 
