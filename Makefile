@@ -324,11 +324,11 @@ docs.verify: ## Validate docs build prerequisites without modifying artifacts
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf \$$TMP_DIR' EXIT; \
 	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.sync.doc_assets --dry-run; \
+	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.check_asset_paths docs; \
 	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.build.diagram_index --check; \
 	$(UV) run --project packages/udocket_docs --extra dev mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/udocket_docs/mkdocs.yml"
 
 docs.clean: ## Remove rendered docs artifacts (diagrams + site outputs)
-	$(CONFIRM_CMD)
 	rm -rf docs/build
 	rm -rf packages/udocket_docs/build
 

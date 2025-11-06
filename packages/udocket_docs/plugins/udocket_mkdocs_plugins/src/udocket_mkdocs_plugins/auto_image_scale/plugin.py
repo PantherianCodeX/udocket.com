@@ -126,6 +126,9 @@ class AutoImageScalePlugin(BasePlugin):
 
         changed = False
 
+        warned_missing: set[str] = set()
+        warned_size: set[str] = set()
+
         for image in soup.find_all("img"):
             try:
                 scale: Optional[float] = None
@@ -152,12 +155,26 @@ class AutoImageScalePlugin(BasePlugin):
                 if not abs_path:
                     if self.config.get("strict_missing"):
                         raise FileNotFoundError(f"Cannot resolve image path for: {src}")
+                    if src and src not in warned_missing:
+                        self.logger.warning(
+                            "auto-image-scale: could not resolve image path for %s; skipping resize.",
+                            src,
+                        )
+                        warned_missing.add(src)
                     continue
 
                 dims = _image_intrinsic_size(abs_path)
                 if not dims:
                     if self.config.get("strict_missing"):
                         raise RuntimeError(f"Cannot determine size for: {src}")
+                    key = abs_path if abs_path else src or "<unknown>"
+                    if key not in warned_size:
+                        self.logger.warning(
+                            "auto-image-scale: could not determine intrinsic size for %s (%s); skipping resize.",
+                            src or "<unknown>",
+                            abs_path,
+                        )
+                        warned_size.add(key)
                     continue
 
                 width, height = dims
@@ -172,9 +189,21 @@ class AutoImageScalePlugin(BasePlugin):
                     image["height"] = str(scaled_height)
 
                 changed = True
-            except Exception:
+            except RuntimeError as exc:
+                # Open-image errors (e.g. Pillow missing) must surface loudly.
+                self.logger.error(
+                    "auto-image-scale: fatal error while processing %s: %s",
+                    image.get("src") or "<unknown>",
+                    exc,
+                )
+                raise
+            except Exception as exc:  # pragma: no cover - defensive
                 if self.config.get("strict_missing"):
                     raise
+                self.logger.exception(
+                    "auto-image-scale: unexpected error processing %s; skipping.",
+                    image.get("src") or "<unknown>",
+                )
                 continue
 
         return str(soup) if changed else html

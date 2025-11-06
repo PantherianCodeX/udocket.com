@@ -25,7 +25,12 @@ class ImageContext(Protocol):
 
 
 def open_image(path: str) -> ImageContext:
-    pil_image = importlib.import_module("PIL.Image")
+    try:
+        pil_image = importlib.import_module("PIL.Image")
+    except ModuleNotFoundError as exc:  # pragma: no cover - environment guard
+        raise RuntimeError(
+            "auto-image-scale requires Pillow; install the 'pillow' dependency or disable the plugin."
+        ) from exc
     open_func = getattr(pil_image, "open", None)
     if not callable(open_func):  # pragma: no cover - defensive
         raise AttributeError("PIL.Image.open not available")

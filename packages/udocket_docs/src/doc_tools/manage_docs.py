@@ -148,6 +148,13 @@ def builder_check_headings(_: RunContext) -> list[str]:
     return python_task("doc_tools.check_heading_tags", "docs/automation/langgraph-agents.md")
 
 
+def builder_check_asset_paths(ctx: RunContext) -> list[str]:
+    targets = ctx.targets or [paths.DOCS_ROOT]
+    cmd = python_task("doc_tools.check_asset_paths")
+    cmd.extend(str(target) for target in targets)
+    return cmd
+
+
 def builder_sync_doc_controls(ctx: RunContext) -> list[str]:
     cmd = python_task("doc_tools.sync.document_controls")
     if ctx.targets:
@@ -281,6 +288,11 @@ TASKS: list[Task] = [
         name="check_heading_tags.py",
         category="lint",
         builder=builder_check_headings,
+    ),
+    Task(
+        name="check_asset_paths.py",
+        category="lint",
+        builder=builder_check_asset_paths,
     ),
     Task(
         name="sync doc assets",

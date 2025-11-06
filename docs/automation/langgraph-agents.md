@@ -108,7 +108,7 @@ ______________________________________________________________________
 **References:** TDD §6 summary, Guardian spec §2–§3, Worker Cluster spec §3, Ops runbooks `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/pipeline-overview-v1.svg" alt="LangGraph pipeline overview">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/pipeline-overview-v1.svg" alt="LangGraph pipeline overview">
   <figcaption style="font-size: 0.9em; color: #555;">Pipeline overview showing Transcribe → Analyze (Atoms) → Compose flow with Guardian gating</figcaption>
 </figure>
 
@@ -123,7 +123,7 @@ ______________________________________________________________________
 - Cancellation: best-effort cancellation propagates through provider APIs; manifests mark `cancel_requested` and retain partial progress for audit.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/transcribe-pipeline-v1.svg" alt="Transcribe pipeline">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/transcribe-pipeline-v1.svg" alt="Transcribe pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Transcribe pipeline with normalization, Azure health checks, retry loops, and artifact emission</figcaption>
 </figure>
 
@@ -137,7 +137,7 @@ ______________________________________________________________________
 - Retry & cancellation: lane retries follow transient budgets; GraphRunner cancellation halts active nodes and preserves checkpoint digests so resumed jobs avoid duplicate work.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-pipeline-v3.svg" alt="Analyze pipeline">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/analyze-pipeline-v3.svg" alt="Analyze pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze LangGraph pipeline with atom-fed lanes, QA feedback loops, and artifact emission</figcaption>
 </figure>
 
@@ -149,12 +149,12 @@ ______________________________________________________________________
 - Observability: per-run ops JSON records atom counts, conflict groups, extraction latency, and thresholds; optional debug dumps (`analysis/<job_id>__atoms_v1.json`) emit only when `ANALYZE_SAVE_ATOMS=1` for diagnostics.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/atoms-pipeline-v1.svg" alt="Atoms extraction pipeline">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/atoms-pipeline-v1.svg" alt="Atoms extraction pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Atoms extraction and validation overlay feeding Analyze quality gates</figcaption>
 </figure>
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/analyze-compose-atoms-v1.svg" alt="Analyze atom pipeline and Compose citation loops">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/analyze-compose-atoms-v1.svg" alt="Analyze atom pipeline and Compose citation loops">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze atom pipeline feeding canonical artifacts and Compose citation guards</figcaption>
 </figure>
 
@@ -168,7 +168,7 @@ ______________________________________________________________________
 - Retry & cancellation: SectionWriter nodes retry within configured budgets; QA issues capture severity and references. Cancellation stops graph execution, leaves partial artifacts versioned `_v{n}`, and records state in manifests.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/compose-pipeline-v1.svg" alt="Compose pipeline">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/compose-pipeline-v1.svg" alt="Compose pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Compose pipeline with dual lanes, guard loops, cross-lane QA, and Guardian promotion</figcaption>
 </figure>
 
@@ -192,7 +192,7 @@ ______________________________________________________________________
 **References:** TDD §6 summary, Settings spec §5.4, LLM Registry spec §2, Worker Cluster spec §3, Ops runbooks `RB-SETTINGS-ACTIVATION`, `RB-AGENT-ACTIVATION`.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../../build/diagrams/automation/langgraph-agents/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/agent-orchestration-classes-v1.svg" alt="Agent orchestration classes">
   <figcaption style="font-size: 0.9em; color: #555;">Agent orchestration classes</figcaption>
 </figure>
 

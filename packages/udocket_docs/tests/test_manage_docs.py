@@ -224,6 +224,10 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
         str(expected_target),
     ]
 
+    asset_cmd = md.builder_check_asset_paths(ctx)
+    assert asset_cmd[:3] == [md.PYTHON, "-m", "doc_tools.check_asset_paths"]
+    assert asset_cmd[-1] == str(structure_dir)
+
     markdown_cmd = md.builder_markdownlint(ctx)
     assert markdown_cmd[0] == "npx"
 
