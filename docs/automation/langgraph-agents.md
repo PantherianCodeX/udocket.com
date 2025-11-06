@@ -134,6 +134,7 @@ ______________________________________________________________________
 - Outputs: discrete artifacts under `analysis/` — `outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json` — plus per-run metadata JSON and `ops/ops_summary.jsonl` audit entries.
 - Summary lane: consumes all upstream JSON artifacts (not Analyze Markdown) to generate canonical `summary_v1.json`; Compose reads this JSON directly.
 - QA gating: every lane validates against JSON Schema snapshots (exported to `spec/schemas/agents/`). QA stage aggregates coverage metrics into `qa_report_v1.json` and blocks finalize on schema failures or questionnaire gaps.
+- Revision directives: QA emits structured lane-scoped directives that reference failing UUIDs, cite evidence gaps, and instruct the same lane agent to revise only the affected slices. Passing artifacts stay frozen across retries to reduce regressions and token churn.
 - Retry & cancellation: lane retries follow transient budgets; GraphRunner cancellation halts active nodes and preserves checkpoint digests so resumed jobs avoid duplicate work.
 
 <figure class="full-width-diagram">
@@ -154,8 +155,8 @@ ______________________________________________________________________
 </figure>
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/analyze-compose-atoms-v1.svg" alt="Analyze atom pipeline and Compose citation loops">
-  <figcaption style="font-size: 0.9em; color: #555;">Analyze atom pipeline feeding canonical artifacts and Compose citation guards</figcaption>
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/analyze-feedback-loops-v1.svg" alt="Analyze lane feedback and revision directives">
+  <figcaption style="font-size: 0.9em; color: #555;">Analyze lane feedback loop with targeted revision directives that preserve passing outputs</figcaption>
 </figure>
 
 ### 2.3 Compose agent (binding) {#23-compose-agent}
@@ -165,19 +166,35 @@ ______________________________________________________________________
 - Outputs: client and lawyer deliverables (`docs/<job_id>__compose_client_v1.md|.docx`, `docs/<job_id>__compose_lawyer_v1.md|.docx`), bundle excerpt Markdown (if enabled), compose staff report (`docs/<job_id>__compose_staff_report_v1.md`), compose QA report (`docs/<job_id>__compose_qa_report_v1.md` / `.json`), per-run metadata JSON, and `ops/ops_compose.jsonl` audit lines.
 - Safety & policy: lane validators enforce forbidden patterns, required sections, link limits, and jurisdictional voice guidance. Guardian refuses promotion without QA PASS and documented policy compliance.
 - Factuality guard: Compose relies on citations embedded in canonical Analyze artifacts (driven by Atoms) and enforces minimum citation thresholds per deliverable section before promotion.
-- Retry & cancellation: SectionWriter nodes retry within configured budgets; QA issues capture severity and references. Cancellation stops graph execution, leaves partial artifacts versioned `_v{n}`, and records state in manifests.
+- Revision directives: QA nodes emit structured `RevisionDirective` payloads that name the failing sections, preserve passing segments, and provide edit-specific prompts for the same drafting agent. Directives include citation expectations and acceptance criteria to minimise thrash.
+- Retry & cancellation: SectionWriter nodes retry within configured budgets; revision directives are replayed until PASS, and successful sections are frozen between attempts. Cancellation stops graph execution, leaves partial artifacts versioned `_v{n}`, and records state in manifests.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/compose-pipeline-v1.svg" alt="Compose pipeline">
-  <figcaption style="font-size: 0.9em; color: #555;">Compose pipeline with dual lanes, guard loops, cross-lane QA, and Guardian promotion</figcaption>
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/compose-overview-v1.svg" alt="Compose pipeline overview">
+  <figcaption style="font-size: 0.9em; color: #555;">Compose pipeline overview with revision directives feeding the same agent instead of full rewrites</figcaption>
+</figure>
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/compose-lanes-v1.svg" alt="Compose lanes with targeted revisions">
+  <figcaption style="font-size: 0.9em; color: #555;">Client, lawyer, and bundle lanes share revision directives so only failing sections are redrafted</figcaption>
 </figure>
 
 ### 2.4 Timeline & relationship agents (roadmap, informative) {#24-timeline-relationship-agents}
 
 - Roadmap agents will consume Analyze timeline/events and entities JSON to produce richer chronological visualisations and relationship graphs with deterministic UUID lineage.
 - Responsibilities: maintain speaker attribution, event windows, entity linkage, and evidence references; align outputs with Guardian gating and Settings activation before UI exposure.
-- Dependencies: reuse LangGraph pipelines with dedicated nodes for diarisation merge, event normalisation, entity clustering, and QA scoring.
+- Dependencies: reuse LangGraph pipelines with dedicated nodes for diarisation merge, event normalisation, entity clustering, and QA scoring. QA stages must emit focused revision directives (event-level or edge-level) so replays correct only failing segments while preserving accepted evidence.
 - Current status: prototypes remain in shadow mode until QA metrics meet §6 targets; binding specification will follow once promoted.
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/timeline-pipeline-v1.svg" alt="Timeline agent pipeline">
+  <figcaption style="font-size: 0.9em; color: #555;">Future timeline agent pipeline with revision directives scoped to event corrections</figcaption>
+</figure>
+
+<figure class="full-width-diagram">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/relationship-pipeline-v1.svg" alt="Relationship agent pipeline">
+  <figcaption style="font-size: 0.9em; color: #555;">Future relationship agent pipeline with edge-level revision directives to prevent unnecessary rewrites</figcaption>
+</figure>
 
 ______________________________________________________________________
 
@@ -211,6 +228,7 @@ ______________________________________________________________________
 
 - `agents.pipeline.definitions[]` enumerates each pipeline with `{pipeline_id, graph_version, graph_schema_sha256, runner, stages[]}`; defaults populate from `config/*.json`.
 - Stage metadata: `{stage_id, langgraph_node_id, llm_profile_id, prompt_template_id, tool_ids[], enabled, retry_budget, cost_ceiling, depends_on[]}`. Structural edits (`stages[]` reorder/insert/delete) require SYSTEM scope.
+- Revision directives: QA nodes emit `RevisionDirective` payloads `{stage_id, target_uuid[], failing_checks[], instructions, preserve_spans[]}`. GraphRunner attaches directives to the target stage checkpoint and replays the same agent with delta prompts; passing sections stay locked unless the directive lists them.
 - Assignments & overrides: `agents.pipeline.assignments[]` maps org/case to pipelines; `agents.pipeline.overrides[]` permits tightening budgets, toggling stage enablement, or swapping templates within validator bounds.
 - Activation safety: contract tests validate schema hashes, stage wiring, and GraphRunner compatibility before promotion. Activations follow blue/green rollout; manifests capture which orgs completed cutover.
 - Versioning: stage definitions are additive; prior versions remain callable for queued jobs & replays until Guardian signs off; deletion blocked until archival manifests exist.

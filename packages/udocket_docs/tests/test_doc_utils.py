@@ -201,6 +201,26 @@ def test_iter_markdown_tables_requires_separator() -> None:
     assert tables == []
 
 
+def test_auto_generated_comment_with_command_sequence() -> None:
+    comment = du.auto_generated_comment(refresh_command=["python", "-m", "tool.build"])
+    assert comment == "<!-- AUTO-GENERATED: Run `python -m tool.build` to refresh. -->"
+
+
+def test_auto_generated_comment_with_note() -> None:
+    comment = du.auto_generated_comment(note="Managed elsewhere.")
+    assert comment == "<!-- AUTO-GENERATED: Managed elsewhere. -->"
+
+
+def test_auto_generated_comment_defaults_to_note() -> None:
+    comment = du.auto_generated_comment()
+    assert comment == "<!-- AUTO-GENERATED: Managed automatically; do not edit manually. -->"
+
+
+def test_auto_generated_header_returns_comment_and_blank_line() -> None:
+    header = du.auto_generated_header(refresh_command="python -m tool.run")
+    assert header == ["<!-- AUTO-GENERATED: Run `python -m tool.run` to refresh. -->", ""]
+
+
 def test_iter_markdown_tables_rejects_non_separator_row() -> None:
     lines = [
         "| Col | Value |",

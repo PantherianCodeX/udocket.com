@@ -12,6 +12,7 @@ from typing import Dict, Sequence
 
 from doc_tools import paths
 from doc_tools.doc_utils import (
+    auto_generated_header,
     begin_auto_generated_marker,
     derive_doc_label,
     end_auto_generated_marker,
@@ -190,8 +191,7 @@ def render_table_row(diagram: Diagram) -> str:
 
 def render_groups(groups: Sequence[OwnerGroup]) -> str:
     lines: list[str] = []
-    lines.append("<!-- AUTO-GENERATED: Run `python -m doc_tools.build.diagram_index` to refresh. -->")
-    lines.append("")
+    lines.extend(auto_generated_header(refresh_command="python -m doc_tools.build.diagram_index"))
     if not groups:
         lines.append("_No diagrams detected._")
         lines.append("")

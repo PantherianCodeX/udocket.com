@@ -14,6 +14,7 @@ from typing import Any, Sequence, cast
 
 from doc_tools import paths
 from doc_tools.doc_utils import (
+    auto_generated_header,
     begin_auto_generated_marker,
     derive_doc_label,
     end_auto_generated_marker,
@@ -324,10 +325,8 @@ def _rel_from_appendix(target: Path) -> str:
 
 
 def _render_appendix(components: list[Component]) -> str:
-    lines: list[str] = [
-        "<!-- AUTO-GENERATED: Run `python -m doc_tools.build.api_error_codes` to refresh. -->",
-        "",
-    ]
+    lines: list[str] = []
+    lines.extend(auto_generated_header(refresh_command="python -m doc_tools.build.api_error_codes"))
     for component in components:
         doc_rel = _rel_from_appendix(component.doc_path)
         target = f"{doc_rel}#{component.section_anchor}" if component.section_anchor else doc_rel

@@ -12,7 +12,9 @@ from typing import Iterable, Iterator, List
 from doc_tools import paths
 from doc_tools.doc_utils import (
     DOCUMENT_CONTROL_OPTIONAL_FIELDS,
+    begin_auto_generated_marker,
     build_document_control_map,
+    end_auto_generated_marker,
     parse_front_matter,
     yaml,
 )
@@ -20,8 +22,9 @@ from doc_tools.doc_utils import (
 PROJECT_ROOT = paths.REPO_ROOT
 OPTIONAL_FIELDS = DOCUMENT_CONTROL_OPTIONAL_FIELDS
 DEFAULT_ROOTS = paths.SERVICE_ROOTS
-MARKER_BEGIN = "<!-- BEGIN AUTO-GENERATED: document-controls -->"
-MARKER_END = "<!-- END AUTO-GENERATED: document-controls -->"
+MARKER_LABEL = "document-controls"
+MARKER_BEGIN = begin_auto_generated_marker(MARKER_LABEL)
+MARKER_END = end_auto_generated_marker(MARKER_LABEL)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

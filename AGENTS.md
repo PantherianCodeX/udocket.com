@@ -2,7 +2,7 @@
 
 This document defines how automation and contributors should add and operate "agents" in the uDocket stack. It covers the current transcription agent and lays down clear conventions for future agents such as summarization, timelines, and relationship/graph extraction.
 
-Note: This is the root guide. For area‑specific practices (UI, operations, jobs, artifacts, accounts, authorization, core libs, config, infra, tests), also read the AGENTS.md files colocated in those directories. When working in any area, you must follow the closest AGENTS.md in that subtree.
+Note: This is the root guide and the single source of truth. All other `AGENTS.md` files now point back here to avoid drift; add any new guidance to this file (with section anchors for specific areas) instead of duplicating it elsewhere.
 
 Quick index of AGENTS guides in this repo:
 

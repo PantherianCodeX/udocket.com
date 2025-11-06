@@ -5,6 +5,7 @@ from textwrap import dedent
 
 import pytest
 
+from doc_tools import doc_utils as du
 from doc_tools.build import api_error_codes as generator
 
 
@@ -140,6 +141,7 @@ def test_generator_populates_tables_and_appendix(tmp_path: Path, monkeypatch: py
     assert "Web Application" in appendix_text
     assert "#alpha-spec" in appendix_text
     assert "#web-application" in appendix_text
+    assert du.auto_generated_comment(refresh_command="python -m doc_tools.build.api_error_codes") in appendix_text
 
 
 def test_check_mode_detects_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

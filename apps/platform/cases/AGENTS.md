@@ -1,19 +1,3 @@
-# uDocket — Cases (Domain & Membership) Guide
+# uDocket — Platform Cases Agents Guide
 
-Scope: `apps/platform/cases/` (Case model, membership, case views/serializers).
-
-## Domain Model
-- `Case` captures matter metadata and ownership; history tracked via `simple_history`.
-- Memberships (`CaseMembership`) control access; roles gate capabilities (OWNER/CONTRIBUTOR/CLIENT/REVIEWER...).
-
-## Query Scoping
-- Use `Case.scoped().for_user(user)` (classmethod) which delegates to tenancy scoping.
-- Views must resolve `active_org` and restrict to it. See view helpers under `apps.platform.ui.views.contexts` and tenancy.
-
-## Mutations
-- For reviewer/client assignment or title updates, check `user_can_review_case` or `has_capability` before writes.
-- Prefer small, explicit view functions; push formatting to presenters in platform‑ui.
-
-## Artifacts Integration
-- Transcript and analysis artifacts link to `Case` via `case_id`. Do not write paths directly; use artifact helpers under UI or operations layer for promotion.
-
+Case-related agent rules are consolidated in the root [AGENTS.md](../../../AGENTS.md). Follow that document for storage layout, artifact naming, and approval workflows. Add case-specific clarifications directly to the root guide (linking to `apps/platform/cases/`) if needed.

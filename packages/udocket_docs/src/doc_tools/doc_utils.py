@@ -41,6 +41,7 @@ DOCUMENT_CONTROL_ALIAS_KEYS = {
 }
 
 AUTO_GENERATED_PREFIX = "AUTO-GENERATED"
+DEFAULT_AUTO_GENERATED_NOTE = "Managed automatically; do not edit manually."
 
 
 def slugify(value: str) -> str:
@@ -76,6 +77,41 @@ def replace_auto_generated_section(original: str, label: str, replacement: str) 
         end_auto_generated_marker(label),
         replacement,
     )
+
+
+def _format_command(command: Sequence[str] | str) -> str:
+    if isinstance(command, str):
+        return command.strip()
+    return " ".join(token.strip() for token in command if token.strip())
+
+
+def auto_generated_comment(
+    *,
+    refresh_command: Sequence[str] | str | None = None,
+    note: str | None = None,
+) -> str:
+    """Return a standard HTML comment for auto-generated sections."""
+
+    if note:
+        message = note.strip()
+    elif refresh_command:
+        command = _format_command(refresh_command)
+        message = f"Run `{command}` to refresh."
+    else:
+        message = DEFAULT_AUTO_GENERATED_NOTE
+    return f"<!-- {AUTO_GENERATED_PREFIX}: {message} -->"
+
+
+def auto_generated_header(
+    *,
+    refresh_command: Sequence[str] | str | None = None,
+    note: str | None = None,
+) -> list[str]:
+    """Return standard header lines (comment + blank line) for auto-generated blocks."""
+
+    header = [auto_generated_comment(refresh_command=refresh_command, note=note)]
+    header.append("")
+    return header
 
 
 def write_or_check(

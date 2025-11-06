@@ -33,7 +33,9 @@ from doc_tools import paths
 from doc_tools.doc_utils import (
     PREAMBLE_DIVIDER,
     YamlSchema,
+    begin_auto_generated_marker,
     build_yaml_schema,
+    end_auto_generated_marker,
     format_label,
     iter_markdown_tables,
     iter_yaml_blocks,
@@ -51,8 +53,9 @@ TEMPLATE_NAME = "_template.md"
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)")
 PREAMBLE_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
 DOCUMENT_CONTROLS_HEADER = "## Document Controls"
-DOCUMENT_CONTROLS_BEGIN = "<!-- BEGIN AUTO-GENERATED: document-controls -->"
-DOCUMENT_CONTROLS_END = "<!-- END AUTO-GENERATED: document-controls -->"
+DOCUMENT_CONTROLS_LABEL = "document-controls"
+DOCUMENT_CONTROLS_BEGIN = begin_auto_generated_marker(DOCUMENT_CONTROLS_LABEL)
+DOCUMENT_CONTROLS_END = end_auto_generated_marker(DOCUMENT_CONTROLS_LABEL)
 EXCLUDED_FRONT_MATTER_KEYS = {
     "title",
     "subtitle",

@@ -1,33 +1,3 @@
-# uDocket — Tests Guide
+# uDocket — Tests Agents Guide
 
-Scope: `tests/` covering the platform UI, APIs, and agents.
-
-## Philosophy
-- Start specific: unit tests for presenters, selectors, utils. Then integration tests for views and API endpoints. Avoid networked dependencies.
-
-## Patterns
-- Django: use `@pytest.mark.django_db` and DRF `APIClient` for API tests; use `Client` for UI views. Seed organizations and set active org in session where required.
-- Celery/tasks: call task functions directly; do not rely on Celery runtime within unit tests (see tests/test_platform_flow.py:87).
-- UI fragments: when exercising HTMX views, pass `HX-Request: true` and assert returned partials and `HX-Trigger` headers where applicable.
-- Realtime events: validate websocket payloads include required keys per the event schema (type, event, job_id/status). Prefer lightweight channel consumer tests using Channels' test client.
-- Typing discipline: follow `docs/typing-roadmap.md` when adding or modifying tests. Import fixture types (e.g., `MonkeyPatch`, `Client`, `SettingsWrapper`) and annotate parameters; convert helper lambdas into typed callables or `TypedDict` definitions.
-
-## E2E Transcription Tests
-- Location: `tests/e2e/test_transcribe_e2e.py`
-- Marker: `e2e_transcribe` (registered in `pytest.ini`). These tests are skipped by default.
-- Enable explicitly with: `E2E_TRANSCRIBE=1 pytest -m e2e_transcribe`
-- Requirements:
-  - `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` set to `canadacentral` or `canadaeast` (only needed for the Azure e2e tests).
-  - `ffmpeg` and `ffprobe` available in PATH (normalization depends on ffmpeg).
-- Fixtures:
-  - Curated short audio clips live in `tests/fixtures/audio/` and include compliant and non‑compliant formats: `*.wav`, `*.mp3`, `*.m4a`, `*.ogg`, `*.flac`.
-- Scope: exercises the agent’s audio normalization (format conversion) and on‑demand Azure STT end‑to‑end. Clips are only ~1–2s to minimize upload/processing time and cost.
-- Batch diarization: multi‑speaker dialogue fixtures are included; batch e2e tests require Azure Blob settings (`AZURE_BLOB_CONTAINER` and either `AZURE_BLOB_CONNECTION_STRING` or `AZURE_BLOB_ACCOUNT` + `AZURE_BLOB_KEY`).
-- Container workflow: start the stack with `make stack.up` (defaults to `PROJECT_NAME=udocket-dev`) and
-  run the suite with `make stack.exec SERVICE=platform CMD="E2E_TRANSCRIBE=1 pytest -q -m e2e_transcribe"`.
-  Use the raw compose invocation only when debugging container wiring.
-  Only set `E2E_TRANSCRIBE_ONDEMAND=1` if the container has the Azure Speech SDK patched for callback wiring; otherwise the on-demand tests skip.
-- Leave `UDOCKET_SKIP_RUNTIME_CHECKS` unset so runtime validation continues to guard stack health; only export it for short-lived maintenance commands (e.g., one-off `manage.py` operations that would otherwise be blocked by health checks).
-
-## Storage & Isolation
-- Use sqlite DBs under a temp storage root where possible; settings already fall back to repo `storage/` path for developer environments.
+Testing guidance for agents now lives in the root [AGENTS.md](../AGENTS.md). Align test fixtures, coverage goals, and QA gates with the root document, and record any future testing nuance there with a reference to `tests/`.

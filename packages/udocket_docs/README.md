@@ -77,3 +77,5 @@ uv run --project packages/udocket_docs python -m doc_tools.pytest_runner --cover
 ```
 
 Coverage runs emit a term report and fail if the configured threshold is not met. Integrate the `docs.test.coverage` target in CI to keep regressions from landing.
+
+> **Important:** the docs tests live in a different environment than the Django platform. Always invoke them via `doc_tools.pytest_runner` (or the `make docs.test*` targets). Running `pytest` from the repo root will try to import Django/DRF without their dependencies and can mask real failures.

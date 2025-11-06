@@ -1,0 +1,51 @@
+%% analyze-feedback-loops-v1.mmd
+%% Focused view of Analyze lane feedback and revision directives
+flowchart TD
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef lane fill:#ecf8ff,stroke:#2684ff,stroke-width:1.1px,color:#111;
+    classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
+    classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
+    classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
+
+    Input["AtomsIndex + transcript context"]:::artifact
+
+    subgraph Lanes["Analyze lanes"]
+        direction TB
+        Outline["Outline lane"]:::lane
+        Timeline["Timeline lane"]:::lane
+        Entities["Entities lane"]:::lane
+        Issues["Issues lane"]:::lane
+        Gaps["Gaps lane"]:::lane
+        Flags["Flags & alerts lane"]:::lane
+        Summary["Summary composer\n(summary_v1.json)"]:::stage
+        Staff["Staff report writer"]:::stage
+    end
+
+    QA["QA lane\n(schema + coverage)"]:::gate
+    Directive["Revision directives\n(lane-specific instructions)"]:::directive
+    Manifest["Write artifacts + ops manifests"]:::stage
+
+    Input --> Outline
+    Input --> Timeline
+    Input --> Entities
+    Input --> Issues
+    Input --> Gaps
+    Input --> Flags
+
+    Outline --> Summary
+    Timeline --> Summary
+    Entities --> Summary
+    Issues --> Summary
+    Gaps --> Summary
+    Flags --> Summary
+    Summary --> Staff --> QA --> Manifest
+
+    QA -->|issue| Directive
+    Directive -->|targeted edit| Outline
+    Directive -->|targeted edit| Timeline
+    Directive -->|targeted edit| Entities
+    Directive -->|targeted edit| Issues
+    Directive -->|targeted edit| Gaps
+    Directive -->|targeted edit| Flags
+    Directive -->|targeted edit| Summary
+*** End Patch

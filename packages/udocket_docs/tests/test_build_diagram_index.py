@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from doc_tools import doc_utils as du
 from doc_tools.build import diagram_index as bdi
 
 
@@ -105,6 +106,10 @@ def test_collect_diagrams_covers_orphans(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_render_groups_handles_empty() -> None:
     rendered = bdi.render_groups([])
+    lines = rendered.splitlines()
+    expected_header = du.auto_generated_comment(refresh_command="python -m doc_tools.build.diagram_index")
+    assert lines[0] == expected_header
+    assert lines[1] == ""
     assert "_No diagrams detected._" in rendered
 
 

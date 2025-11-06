@@ -13,6 +13,7 @@ from typing import Sequence
 
 from doc_tools import paths
 from doc_tools.doc_utils import (
+    auto_generated_header,
     begin_auto_generated_marker,
     derive_doc_label,
     end_auto_generated_marker,
@@ -104,8 +105,7 @@ def rel_from_appendix(target: Path) -> str:
 
 def render(entries: Sequence[SLOEntry]) -> str:
     lines: list[str] = []
-    lines.append("<!-- AUTO-GENERATED: Run `python -m doc_tools.build.slo_index` to refresh. -->")
-    lines.append("")
+    lines.extend(auto_generated_header(refresh_command="python -m doc_tools.build.slo_index"))
     if not entries:
         lines.append("_No SLO sections detected._")
         lines.append("")

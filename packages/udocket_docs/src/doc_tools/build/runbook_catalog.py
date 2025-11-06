@@ -12,6 +12,7 @@ from typing import Iterable, Sequence
 
 from doc_tools import paths
 from doc_tools.doc_utils import (
+    auto_generated_header,
     begin_auto_generated_marker,
     derive_doc_label,
     end_auto_generated_marker,
@@ -250,8 +251,7 @@ def render(catalog_lines: list[str]) -> str:
     lines.append("______________________________________________________________________")
     lines.append("")
     lines.append(BEGIN_MARKER)
-    lines.append("<!-- AUTO-GENERATED: Run `python -m docs.tools.build.runbook_catalog` to refresh. -->")
-    lines.append("")
+    lines.extend(auto_generated_header(refresh_command="python -m docs.tools.build.runbook_catalog"))
     if catalog_lines:
         lines.extend(catalog_lines)
     else:

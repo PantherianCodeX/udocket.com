@@ -41,6 +41,13 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
    make prompts.lint
    ```
 
+   **Testing reminders**
+
+   - Prefer `make all.test` to fan out across common/core/platform/docs with the correct interpreters.
+   - Platform/common/core suites share the `apps/platform` environment: `uv run --project apps/platform --extra dev pytest -n auto -q`.
+   - Docs tooling has its own environment: `uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner` (add `--coverage` or use `make docs.test.coverage` when needed).
+   - Avoid running `pytest` from the repo root; it mixes Django+docs tests and requires incompatible dependency sets.
+
    Prompt templates live under `packages/udocket_prompts`. Validate changes with `make prompts.lint`, or render a specific prompt via `make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json]` when iterating on copy.
 
 5) Build & run the stack:
@@ -153,7 +160,7 @@ Most targets accept optional variables so you can customize behaviour without ed
 - Application migrations were flattened into new `0001_initial.py` files for the local apps; run `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml down --volumes` after pulling to ensure your database is recreated before starting the stack.
 - Azure OpenAI providers now enforce Canada-only endpoints (canadacentral/canadaeast). Set the per-provider `allow_non_ca_region` flag only for temporary local testing; production deployments must stay in-region.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
-- Run tests inside the dev container directly: `pytest`. The devcontainer provides the runtime and services, so no local helper scripts are required.
+- Run platform/common/core tests from the dev container with `uv run --project apps/platform --extra dev pytest` (or `make platform.test`). Docs tests belong to `packages/udocket_docs` and should be invoked via `uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner`. Avoid calling `pytest` from the repo root to prevent dependency bleed.
 - Remote dev: open the repository in VS Code using **Dev Containers > Reopen in Container** to attach to the `platform-dev` service defined under `.devcontainer/` (starts alongside Postgres and Redis).
 - Permissions: Visit `/permissions/` for a read-only catalog of artifact fields, presets, and roles (edits still happen via Django admin for MVP).
 - Platform uploads let you choose `batch` (default) or `on-demand` transcription.

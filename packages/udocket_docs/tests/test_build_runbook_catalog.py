@@ -5,6 +5,7 @@ from textwrap import dedent
 
 import pytest
 
+from doc_tools import doc_utils as du
 from doc_tools.build import runbook_catalog as brc
 
 
@@ -58,6 +59,8 @@ def test_render_handles_empty_catalog() -> None:
     assert result.startswith("---")
     assert brc.BEGIN_MARKER in result
     assert brc.END_MARKER in result
+    comment = du.auto_generated_comment(refresh_command="python -m docs.tools.build.runbook_catalog")
+    assert comment in result
     assert "_No runbook sections detected._" in result
 
 
