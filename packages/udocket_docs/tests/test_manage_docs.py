@@ -14,8 +14,8 @@ class DummyResult:
         self.returncode = returncode
 
 
-def _ctx(*, dry_run: bool = False) -> md.RunContext:
-    return md.RunContext(dry_run=dry_run, targets=[])
+def _ctx(*, dry_run: bool = False, verbose: bool = False) -> md.RunContext:
+    return md.RunContext(dry_run=dry_run, targets=[], verbose=verbose)
 
 
 def test_run_task_success(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,6 +204,7 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     ctx = md.RunContext(dry_run=False, targets=[structure_dir])
     dry_ctx = md.RunContext(dry_run=True, targets=[structure_dir])
+    verbose_ctx = md.RunContext(dry_run=False, targets=[structure_dir], verbose=True)
 
     assert md.builder_runbook_check(ctx)[-1] == "--check"
     assert md.builder_diagram_check(ctx)[-1] == "--check"
@@ -246,6 +247,8 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert assets_cmd[-1] == "doc_tools.sync.doc_assets"
     assets_dry_cmd = md.builder_sync_doc_assets(dry_ctx)
     assert assets_dry_cmd[-1] == "--dry-run"
+    assets_verbose_cmd = md.builder_sync_doc_assets(verbose_ctx)
+    assert assets_verbose_cmd[-1] == "--verbose"
 
     adr_cmd = md.builder_sync_adr_nav(ctx)
     assert adr_cmd[-1] == "doc_tools.sync.adr_nav"

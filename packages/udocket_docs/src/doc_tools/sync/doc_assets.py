@@ -52,7 +52,7 @@ def _report_manifest(label: str, missing: Sequence[Path], zero: Sequence[Path]) 
     return False
 
 
-def _run_render(mode: str, diff_base: str, out_dir: Path) -> bool:
+def _run_render(mode: str, diff_base: str, out_dir: Path, verbose: bool) -> bool:
     argv: list[str] = ["--out-dir", str(out_dir)]
     if mode == "all":
         argv.insert(0, "--all")
@@ -60,6 +60,8 @@ def _run_render(mode: str, diff_base: str, out_dir: Path) -> bool:
         argv[:0] = ["--changed", "--diff-base", diff_base]
     else:
         raise ValueError(f"Unknown render mode '{mode}'")
+    if verbose:
+        argv.append("--verbose")
     return render_mermaid.main(argv) == 0
 
 
@@ -70,15 +72,18 @@ def _format_rel(path: Path) -> str:
         return str(path)
 
 
-def _log_render_plan(label: str, sources: Sequence[Path], *, limit: int | None = None) -> None:
+def _log_render_plan(label: str, sources: Sequence[Path], *, limit: int | None = None, verbose: bool = False) -> None:
     total = len(sources)
     print(f"[sync-doc-assets] {label}: {total} diagram(s)")
     if not sources:
         return
-    display = sources if limit is None else sources[:limit]
+    if verbose or limit is None:
+        display = sources
+    else:
+        display = sources[:limit]
     for path in display:
         print(f"  - {_format_rel(path)}")
-    if limit is not None and total > limit:
+    if not verbose and limit is not None and total > limit:
         print(f"  ... ({total - limit} more)")
 
 
@@ -117,9 +122,15 @@ def main(argv: list[str] | None = None) -> int:
         default=paths.DOCS_ROOT / "build" / "diagrams",
         help="Destination directory inside the docs tree",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print per-diagram render diagnostics",
+    )
     args = parser.parse_args(argv)
 
     render_dir = args.source
+    plan_limit = None if args.verbose else 20
     dest_dir = args.destination
     all_sources = render_mermaid.collect_sources("all", paths.REPO_ROOT, paths.DOCS_ROOT, args.diff_base, [])
     expected_render_all = _expected_outputs(all_sources, render_dir)
@@ -134,10 +145,15 @@ def main(argv: list[str] | None = None) -> int:
         print("[sync-doc-assets] dry-run mode")
         if bootstrap_needed:
             print("[sync-doc-assets] would run bootstrap render (--all)")
-            _log_render_plan("Bootstrap render targets", all_sources, limit=20)
+            _log_render_plan(
+                "Bootstrap render targets",
+                all_sources,
+                limit=plan_limit,
+                verbose=args.verbose,
+            )
         elif changed_sources:
             print(f"[sync-doc-assets] would render {len(changed_sources)} changed diagram(s) (--changed --diff-base {args.diff_base})")
-            _log_render_plan("Changed diagrams", changed_sources)
+            _log_render_plan("Changed diagrams", changed_sources, limit=plan_limit, verbose=args.verbose)
         else:
             print("[sync-doc-assets] no diagram sources changed; render skipped")
         _report_manifest("render cache", missing_render, zero_render)
@@ -150,13 +166,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if bootstrap_needed:
         print("[sync-doc-assets] Bootstrap render: generating full diagram set...")
-        _log_render_plan("Bootstrap render targets", all_sources, limit=20)
-        if not _run_render("all", args.diff_base, render_dir):
+        _log_render_plan("Bootstrap render targets", all_sources, limit=plan_limit, verbose=args.verbose)
+        if not _run_render("all", args.diff_base, render_dir, args.verbose):
             return 1
     elif changed_sources:
         print(f"[sync-doc-assets] Rendering {len(changed_sources)} changed diagram(s)...")
-        _log_render_plan("Changed diagrams", changed_sources)
-        if not _run_render("changed", args.diff_base, render_dir):
+        _log_render_plan("Changed diagrams", changed_sources, limit=plan_limit, verbose=args.verbose)
+        if not _run_render("changed", args.diff_base, render_dir, args.verbose):
             return 1
     else:
         print("[sync-doc-assets] No diagram sources changed; render skipped.")

@@ -68,15 +68,13 @@ def render_file(
     rel_source = _display_path(source)
     rel_destination = _display_path(destination)
     if verbose:
-        message = (
-            f"[render-mermaid] Rendering {rel_source} -> {rel_destination} (cmd: {' '.join(cmd)})"
-        )
+        message = f"[render-mermaid] Rendering {rel_source}\n-> {rel_destination}"
         print(message, flush=True)
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as exc:
         print(
-            f"[render-mermaid] Mermaid CLI failed while rendering {rel_source}. See command output above.",
+            f"[render-mermaid] Mermaid CLI failed while rendering {rel_source}.",
             file=sys.stderr,
         )
         raise exc
@@ -152,11 +150,11 @@ def _log_render_plan(sources: Sequence[Path], out_dir: Path, src_root: Path, fmt
     src_pattern = f"{src_root_display}/**/diagrams/*.mmd"
     dest_pattern = f"{out_dir_display}/**.{fmt}"
     print(
-        f"[render-mermaid] Rendering {len(sources)} diagram(s)",
-        f"   {src_pattern} -> {dest_pattern}",
+        f"[render-mermaid] Rendering {len(sources)} diagram(s)\n",
+        f" - {src_pattern} -> {dest_pattern}",
         flush=True,
     )
-    print("[render-mermaid]   pass --verbose for per-file output details", flush=True)
+    print("  - pass --verbose for per-file output details", flush=True)
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:

@@ -36,6 +36,7 @@ VALE_TARGETS = [
 class RunContext:
     dry_run: bool
     targets: list[Path]
+    verbose: bool = False
 
 
 CmdBuilder = Callable[[RunContext], list[str] | None]
@@ -168,6 +169,8 @@ def builder_sync_doc_assets(ctx: RunContext) -> list[str]:
     cmd = python_task("doc_tools.sync.doc_assets")
     if ctx.dry_run:
         cmd.append("--dry-run")
+    if ctx.verbose:
+        cmd.append("--verbose")
     return cmd
 
 
@@ -365,9 +368,7 @@ def run_task(task: Task, ctx: RunContext) -> bool:
         return False
     except subprocess.CalledProcessError as exc:
         if task.optional:
-            print(
-                f"⤷ Optional task '{task.name}' failed with exit code {exc.returncode}; continuing\n"
-            )
+            print(f"⤷ Optional task '{task.name}' failed with exit code {exc.returncode}; continuing\n")
             return True
         print(f"✗ {task.name} failed with exit code {exc.returncode}\n")
         return False
@@ -402,6 +403,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run in read-only mode (sync/build tasks verify without writing).",
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose task output.")
     parser.add_argument("--list", action="store_true", help="List configured tasks and exit.")
     return parser.parse_args(argv)
 
@@ -438,7 +440,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     categories = determine_categories(args)
     targets = resolve_targets(args.targets)
-    ctx = RunContext(dry_run=args.dry_run, targets=targets)
+    ctx = RunContext(dry_run=args.dry_run, targets=targets, verbose=args.verbose)
 
     if "lint" in categories:
         tdd_doc = DOCS_DIR / "overview" / "tdd.md"

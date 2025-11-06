@@ -316,7 +316,7 @@ docs.build: ## Render docs output (PDF/HTML as configured)
 docs.lint: ## Run docs linting pipeline inside the toolbox
 	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (fetch/update remote content)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --sync"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --sync --verbose"
 docs.preview: ## Open the docs site in your default browser
 	$(PYTHON) -c "import os, webbrowser; webbrowser.open(os.environ.get('DOCSITE_URL', 'http://localhost:8010'))"
 docs.verify: ## Validate docs build prerequisites without modifying artifacts
