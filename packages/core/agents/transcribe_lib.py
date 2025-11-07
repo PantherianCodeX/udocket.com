@@ -902,7 +902,7 @@ class TranscriptionAgent:
             meta_json=log_json_job,
             meta_log=log_txt_job,
             audit_jsonl=audit_jsonl,
-            region=cfg.azure_speech_region,  # Canada-only regions enforced via config validation
+            region=cfg.azure_speech_region,
             language=lang,
             attempts=attempts,
             duration_s=dur,

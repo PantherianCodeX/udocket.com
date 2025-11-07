@@ -158,7 +158,7 @@ Most targets accept optional variables so you can customize behaviour without ed
 - Default bootstrap values also live in `config/bootstrap_defaults.json`. Point `PLATFORM_BOOTSTRAP_CONFIG` at a custom file to tailor per-environment seeds without baking credentials into the image.
 - Django admin remains limited to superusers; seeded superusers can also sign in through `/login/` to access the tenant-scoped UI while staff/non-admin accounts rely solely on the UI.
 - Application migrations were flattened into new `0001_initial.py` files for the local apps; run `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml down --volumes` after pulling to ensure your database is recreated before starting the stack.
-- Azure OpenAI providers now enforce Canada-only endpoints (canadacentral/canadaeast). Set the per-provider `allow_non_ca_region` flag only for temporary local testing; production deployments must stay in-region.
+- Azure OpenAI providers must use the regions declared in your `packages.ai` settings. Set the per-provider `allow_non_primary_region` flag only for temporary local testing; production deployments must stay within the approved residency policy.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
 - Run platform/common/core tests from the dev container with `uv run --project apps/platform --extra dev pytest` (or `make platform.test`). Docs tests belong to `packages/docs_tooling` and should be invoked via `uv run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner`. Avoid calling `pytest` from the repo root to prevent dependency bleed.
 - Remote dev: open the repository in VS Code using **Dev Containers > Reopen in Container** to attach to the `platform-dev` service defined under `.devcontainer/` (starts alongside Postgres and Redis).
@@ -193,7 +193,7 @@ Most targets accept optional variables so you can customize behaviour without ed
    - Fallback raw command: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml build platform_worker`.
 3) Run `PROJECT_NAME=udocket-dev make stack.up`. The Celery worker in `apps.platform` uploads audio and passes a SAS URL to the agent.
    - Fallback raw command: `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.cache.yml up -d`.
-4) Create an Azure Speech resource in the same Canada region (canadacentral/canadaeast) with tier Standard (S0) and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
+4) Create an Azure Speech resource in the region approved for your deployment and set `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`.
 
 ## Roadmap
 - Platform migration and consolidation plan: see `docs/ROADMAP.md`.

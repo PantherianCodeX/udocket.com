@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
-from .types import AgentTask, LanguageCode, RegionCode
+from .types import AgentTask, LanguageCode, Region
 from .types.identifiers import ModelName, ProviderName
 from .utils import ensure_language
 
@@ -27,7 +27,7 @@ class ProviderAccount:
 
     name: ProviderName
     provider_type: str
-    region: RegionCode
+    region: Region
     endpoint: str | None = None
     default_model: ModelName | None = None
     api_key_env: str | None = None
@@ -65,11 +65,8 @@ class AISettings:
         """Construct settings from environment variables."""
 
         data = dict(env or os.environ)
-        region_value = data.get("AZURE_OPENAI_REGION", RegionCode.CANADA_CENTRAL.value)
-        try:
-            region = RegionCode(region_value)
-        except ValueError:
-            region = RegionCode.CANADA_CENTRAL
+        region_value = (data.get("AZURE_OPENAI_REGION") or "").strip()
+        region = Region(region_value or "default-region")
         provider_name = data.get("UDOCKET_AI_PROVIDER", "azure-openai")
         default_model_value = data.get("UDOCKET_AI_MODEL", "gpt-4o")
         model_name = ModelName(default_model_value)

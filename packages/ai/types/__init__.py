@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import NewType
 
 from .identifiers import (
     ArtifactID,
@@ -14,6 +15,9 @@ from .identifiers import (
     RouteName,
 )
 
+Region = NewType("Region", str)
+
+
 class LanguageCode(StrEnum):
     """Supported language identifiers for AI-powered flows."""
 
@@ -21,11 +25,12 @@ class LanguageCode(StrEnum):
     FR_CA = "fr-CA"
 
 
-class RegionCode(StrEnum):
-    """Azure Speech / OpenAI residency-compliant regions."""
+class DataClassification(StrEnum):
+    """Data sensitivity classifications that influence policy decisions."""
 
-    CANADA_CENTRAL = "canadacentral"
-    CANADA_EAST = "canadaeast"
+    GENERAL = "general"
+    CONFIDENTIAL = "confidential"
+    REGULATED = "regulated"
 
 
 class AgentTask(StrEnum):
@@ -49,6 +54,15 @@ class CaseContext:
     org_id: OrganizationID
     case_id: CaseID
     job_id: JobID | None = None
+    classification: DataClassification = DataClassification.GENERAL
+
+
+@dataclass(slots=True, frozen=True)
+class AllowedRegion:
+    """Typed region constraint passed from org-level settings."""
+
+    region: Region
+    provider: ProviderName | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -69,7 +83,9 @@ __all__ = [
     "CaseContext",
     "CapabilityName",
     "LanguageCode",
-    "RegionCode",
+    "Region",
+    "AllowedRegion",
+    "DataClassification",
     "ModelName",
     "OrganizationID",
     "ProviderCallMetrics",

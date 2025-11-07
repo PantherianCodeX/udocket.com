@@ -291,7 +291,7 @@ def index(request: HttpRequest) -> HttpResponse:
             {
                 "title": "Build reliable transcripts",
                 "description": (
-                    "Secure, Canada-only speech services generate structured transcripts "
+                    "Secure, residency-enforced speech services generate structured transcripts "
                     "and audit trails for every job."
                 ),
             },

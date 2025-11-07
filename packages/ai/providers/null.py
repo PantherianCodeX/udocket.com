@@ -21,7 +21,7 @@ from ..api import (
     TimelineExtractionRequest,
     TimelineExtractionResult,
 )
-from ..types import AgentTask, RegionCode
+from ..types import AgentTask, Region
 from ..types.identifiers import ModelName, ProviderName, RouteName
 from .interfaces import ProviderAdapter
 
@@ -31,14 +31,14 @@ class NullProvider(ProviderAdapter):
     """Provider that returns empty payloads for deterministic tests."""
 
     _name: ProviderName = field(default_factory=lambda: ProviderName("null-provider"))
-    _region: RegionCode = RegionCode.CANADA_CENTRAL
+    _region: Region = Region("test-region")
 
     @property
     def name(self) -> ProviderName:
         return self._name
 
     @property
-    def region(self) -> RegionCode:
+    def region(self) -> Region:
         return self._region
 
     @property

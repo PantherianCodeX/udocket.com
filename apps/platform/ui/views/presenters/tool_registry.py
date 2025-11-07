@@ -51,7 +51,7 @@ _REGISTRY: dict[str, ToolDefinition] = {
     "transcribe": ToolDefinition(
         key="transcribe",
         label="Transcribe",
-        description="Upload audio or provide a SAS URL to run Azure Speech in Canada-only regions.",
+        description="Upload audio or provide a SAS URL to run Azure Speech in org-approved regions.",
         body_template="platform_ui/tools/transcribe.html",
         notes_enabled=True,
         alerts_key="transcription",

@@ -27,7 +27,7 @@ from .errors import ProviderNotConfiguredError, RouteNotFoundError
 from .providers.interfaces import ProviderAdapter
 from .routing.registry import RouteBinding, RouteRegistry
 from .safety.egress import EgressPolicy
-from .safety.residency import ResidencyGuard
+from .safety.residency import AllowAllResidencyPolicy, ResidencyPolicy
 from .types import AgentTask
 from .types.identifiers import ModelName, ProviderName, RouteName
 
@@ -40,12 +40,12 @@ class DefaultAIClient(AIClient):
         *,
         settings: AISettings,
         providers: Mapping[ProviderName, ProviderAdapter],
-        residency_guard: ResidencyGuard | None = None,
+        residency_policy: ResidencyPolicy | None = None,
         egress_policy: EgressPolicy | None = None,
     ) -> None:
         self._settings = settings
         self._providers = providers
-        self._residency_guard = residency_guard or ResidencyGuard.canada_only()
+        self._residency_policy = residency_policy or AllowAllResidencyPolicy()
         allowed = egress_policy or EgressPolicy.from_list([str(name) for name in providers.keys()])
         self._egress_policy = allowed
         self._routes = self._build_registry(settings)
@@ -110,7 +110,11 @@ class DefaultAIClient(AIClient):
         adapter = self._providers.get(binding.provider)
         if adapter is None:
             raise ProviderNotConfiguredError(task=task)
-        self._residency_guard.assert_allowed(adapter.region)
+        self._residency_policy.assert_allowed(
+            provider=adapter.name,
+            region=adapter.region,
+            task=task,
+        )
         self._egress_policy.assert_allowed(adapter.name)
         return adapter
 

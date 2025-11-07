@@ -2,33 +2,69 @@ from __future__ import annotations
 
 # pyright: strict
 
-"""Residency guard helpers."""
+"""Residency policy interfaces."""
 
 from dataclasses import dataclass
-from typing import Collection
+from typing import Protocol
 
 from ..errors import ResidencyViolationError
-from ..types import RegionCode
+from ..types import AgentTask, AllowedRegion, Region
+from ..types.identifiers import OrganizationID, ProviderName
+
+
+class ResidencyPolicy(Protocol):
+    """Determines whether a provider/region combination is permitted."""
+
+    def assert_allowed(
+        self,
+        *,
+        provider: ProviderName,
+        region: Region,
+        task: AgentTask,
+        org_id: OrganizationID | None = None,
+    ) -> None: ...
 
 
 @dataclass(slots=True, frozen=True)
-class ResidencyGuard:
-    """Enforces allowed regions per tenant or deployment."""
+class AllowListResidencyPolicy(ResidencyPolicy):
+    """Residency policy backed by an allow list."""
 
-    allowed_regions: tuple[RegionCode, ...]
+    allowed_regions: tuple[AllowedRegion, ...]
 
-    def assert_allowed(self, region: RegionCode) -> None:
-        if region not in self.allowed_regions:
-            raise ResidencyViolationError(region=region)
+    def assert_allowed(
+        self,
+        *,
+        provider: ProviderName,
+        region: Region,
+        task: AgentTask,
+        org_id: OrganizationID | None = None,
+    ) -> None:
+        if not self.allowed_regions:
+            return
+        for rule in self.allowed_regions:
+            provider_matches = rule.provider is None or rule.provider == provider
+            if provider_matches and rule.region == region:
+                return
+        raise ResidencyViolationError(region=region)
 
-    @classmethod
-    def canada_only(cls) -> ResidencyGuard:
-        return cls(allowed_regions=(RegionCode.CANADA_CENTRAL, RegionCode.CANADA_EAST))
 
-    @classmethod
-    def from_config(cls, regions: Collection[str] | None) -> ResidencyGuard:
-        values = tuple(RegionCode(region) for region in (regions or []))
-        return cls(values or cls.canada_only().allowed_regions)
+@dataclass(slots=True, frozen=True)
+class AllowAllResidencyPolicy(ResidencyPolicy):
+    """Residency policy that permits every region (useful for tests/dev)."""
+
+    def assert_allowed(
+        self,
+        *,
+        provider: ProviderName,
+        region: Region,
+        task: AgentTask,
+        org_id: OrganizationID | None = None,
+    ) -> None:  # pragma: no cover - trivial
+        return None
 
 
-__all__ = ["ResidencyGuard"]
+__all__ = [
+    "ResidencyPolicy",
+    "AllowListResidencyPolicy",
+    "AllowAllResidencyPolicy",
+]

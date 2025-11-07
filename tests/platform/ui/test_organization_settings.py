@@ -6,6 +6,12 @@ from django.test import Client
 
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.operations.models import LLMConfiguration, LLMProviderCredential
+from packages.core.llm.config import (
+    LLMProvider,
+    LLMProviderModel,
+    LLMSettings,
+    LLMStageAssignment,
+)
 from tests._typing import SettingsFixture
 
 
@@ -36,8 +42,8 @@ def test_organization_settings_renders_and_manages_providers(settings: SettingsF
             "section": "providers",
             "action": "provider-upsert",
             "provider": "azure",
-            "display_name": "Azure Canada",
-            "endpoint": "https://example.canadacentral.azure.com",
+            "display_name": "Azure Primary",
+            "endpoint": "https://example.primaryregion.azure.com",
             "api_key": "secret",
             "models_payload": "",
             "metadata_json": "{\"azure_deployment\": \"gpt-4o\"}",
@@ -78,10 +84,10 @@ def test_general_settings_update_profile(settings: SettingsFixture):
             "contact_phone": "+1-555-0100",
             "address_line1": "123 Example Street",
             "address_line2": "Suite 200",
-            "city": "Toronto",
-            "province": "ON",
-            "postal_code": "M5V 2T6",
-            "country": "Canada",
+            "city": "Springfield",
+            "province": "NA",
+            "postal_code": "00000",
+            "country": "USA",
             "notes": "Updated via automated test.",
         },
         follow=True,
@@ -91,7 +97,7 @@ def test_general_settings_update_profile(settings: SettingsFixture):
     assert org.name == "General Org Updated"
     assert org.display_name == "General Org Display"
     assert org.contact_email == "admin@example.com"
-    assert org.city == "Toronto"
+    assert org.city == "Springfield"
     assert org.notes == "Updated via automated test."
 
 
@@ -116,7 +122,7 @@ def test_organization_settings_saves_configuration(settings: SettingsFixture):
             "action": "provider-upsert",
             "provider": "azure",
             "display_name": "Azure",
-            "endpoint": "https://example.canadacentral.azure.com",
+            "endpoint": "https://example.primaryregion.azure.com",
             "api_key": "secret",
             "metadata_json": "{\"azure_deployment\": \"gpt-4o\"}",
             "is_enabled": "on",
@@ -275,3 +281,34 @@ def test_provider_enable_blocked_when_not_configured(settings: SettingsFixture):
     )
     assert resp.status_code == 200
     assert b"API key is required" in resp.content
+@pytest.fixture(autouse=True)
+def _stub_llm_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = LLMProviderModel(
+        name="gpt-lite",
+        label="GPT Lite",
+        cost_tier="standard",
+    )
+    provider = LLMProvider(name="azure", display_name="Azure", models={"gpt-lite": model})
+    assignments = {
+        "analyze.context_builder": LLMStageAssignment(
+            stage_key="analyze.context_builder",
+            providers=["azure"],
+            model="gpt-lite",
+            target="analyze",
+        ),
+        "analyze.summary": LLMStageAssignment(
+            stage_key="analyze.summary",
+            providers=["azure"],
+            model="gpt-lite",
+            target="analyze",
+        ),
+    }
+    llm_settings = LLMSettings(
+        providers={"azure": provider},
+        assignments=assignments,
+    )
+    monkeypatch.setattr("apps.platform.ui.views.settings.load_llm_settings", lambda: llm_settings)
+    monkeypatch.setattr(
+        "apps.platform.ui.views.settings.ensure_provider_templates",
+        lambda **_: None,
+    )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..types import AgentTask, RegionCode
+from ..types import AgentTask, Region
 from ..types.identifiers import CapabilityName, ProviderName
 
 
@@ -49,11 +49,11 @@ class ProviderConfigurationError(AIError):
 class ResidencyViolationError(AIError):
     """Raised when a request attempts to use a disallowed region."""
 
-    region: RegionCode
+    region: Region
     detail: str = "Requested region is not allowed for this tenant."
 
     def __str__(self) -> str:
-        return f"{self.detail} (region={self.region.value})"
+        return f"{self.detail} (region={self.region})"
 
 
 @dataclass(eq=False)

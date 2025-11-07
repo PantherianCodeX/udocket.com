@@ -21,7 +21,7 @@ from ..api import (
     TimelineExtractionRequest,
     TimelineExtractionResult,
 )
-from ..types import AgentTask, RegionCode
+from ..types import AgentTask, Region
 from ..types.identifiers import ModelName, ProviderName, RouteName
 
 
@@ -33,7 +33,7 @@ class ProviderAdapter(Protocol):
     def name(self) -> ProviderName: ...
 
     @property
-    def region(self) -> RegionCode: ...
+    def region(self) -> Region: ...
 
     @property
     def supported_tasks(self) -> Collection[AgentTask]: ...

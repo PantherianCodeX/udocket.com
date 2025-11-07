@@ -6,9 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
-
-RegionLiteral = Literal["canadacentral", "canadaeast"]
+RegionLiteral = str
 
 
 def _default_sha_map() -> dict[str, str]:
@@ -24,7 +22,7 @@ class TranscriptionResult:
         meta_json: Structured metadata written by the agent (per-run JSON).
         meta_log: Human-readable log accompanying ``meta_json``.
         audit_jsonl: Append-only audit log for the case/job pair.
-        region: Azure region used for the transcription (Canada-only).
+        region: Cloud region used for the transcription.
         language: BCP-47 language code requested for the transcription.
         attempts: Number of attempts made before success.
         duration_s: Duration of the processed audio in seconds, when known.
