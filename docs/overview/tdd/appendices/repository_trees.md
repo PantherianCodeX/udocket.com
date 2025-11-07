@@ -142,6 +142,7 @@ automation/ — agent pipelines + orchestration; no provider SDKs inline
 │  ├─ compose/ — client/lawyer deliverables, QA gating via packages.ai.api.compose
 │  ├─ timeline/ — normalized events with speakers/offsets via packages.ai.api.extract_timeline
 │  └─ relationship/ — entity/edge extraction via packages.ai.api.extract_entities
+├─ task_modules/ — Celery task shims; forwards existing platform tasks until LangGraph-native orchestration lands
 ```
 
 ### C. Shared packages & SDKs
