@@ -450,7 +450,7 @@ ______________________________________________________________________
 **Contract:** On-call rotations, runbooks, and gating evidence must stay current; registry traffic pauses when residency, moderation, or FinOps alerts breach thresholds until remediation completes. **|**
 **State:** Runbooks under `ops/runbooks/llm/`, drill calendar `ops/change/llm_rotations.ics`, release checklists `ops/releases/llm_release_checklist.md`, waiver records in App.O. **|**
 **Failures & handling:** Stale runbooks, missed drills, or incomplete release evidence block deployment until refreshed. **|**
-**Observability:** Docs lint (`python -m doc_tools.build.runbook_catalog --check`), dashboards “LLM Residency & Failover” / “LLM Safety & Moderation” / “FinOps – LLM Cost & Circuit”, alerts `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_budget_hold_active_total`. **|**
+**Observability:** Docs lint (`make docs.check.runbooks`), dashboards “LLM Residency & Failover” / “LLM Safety & Moderation” / “FinOps – LLM Cost & Circuit”, alerts `alert_llm_circuit_open`, `llm_moderation_error_total`, `finops_budget_hold_active_total`. **|**
 **Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, automation scripts `ops/scripts/llm/*.py`, release tooling `scripts/finops/check_mom_guard.py`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 

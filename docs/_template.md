@@ -150,7 +150,7 @@ Use this section to orient readers before they dive into the specification. It s
 **Breadcrumbs:** Link to implementation modules, middleware, and test coverage enforcing the contract. **|**
 **References:** Always link to Platform Runtime §3.3 (canonical catalog) plus adjacent specs or ADRs.
 
-> Store the canonical definitions in `./<service-folder>/error_codes.yaml` (see `spec/schemas/api_error_codes.schema.yaml`) and run `python -m doc_tools.build.api_error_codes` to refresh the tables.
+> Store the canonical definitions in `./<service-folder>/error_codes.yaml` (see `spec/schemas/api_error_codes.schema.yaml`) and run `make docs.sync.api_codes` to refresh the tables.
 
 <!-- BEGIN AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 <!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
@@ -158,7 +158,7 @@ Use this section to orient readers before they dive into the specification. It s
 <!-- BEGIN AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-> Tables generated from `./<service-folder>/error_codes.yaml`. Edit that YAML and run `python -m doc_tools.build.api_error_codes`.
+> Tables generated from `./<service-folder>/error_codes.yaml`. Edit that YAML and run `make docs.sync.api_codes`.
 
 ## 4) State Management
 

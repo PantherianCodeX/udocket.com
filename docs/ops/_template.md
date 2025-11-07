@@ -20,6 +20,7 @@ approved_date:
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Template |
@@ -33,5 +34,6 @@ approved_date:
 | Approvers | Template |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ## Appendix Overview

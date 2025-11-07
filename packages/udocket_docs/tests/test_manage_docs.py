@@ -250,10 +250,10 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assets_verbose_cmd = md.builder_sync_doc_assets(verbose_ctx)
     assert assets_verbose_cmd[-1] == "--verbose"
 
-    adr_cmd = md.builder_sync_adr_nav(ctx)
-    assert adr_cmd[-1] == "doc_tools.sync.adr_nav"
-    adr_dry_cmd = md.builder_sync_adr_nav(dry_ctx)
-    assert adr_dry_cmd[-1] == "--dry-run"
+    nav_cmd = md.builder_sync_nav(ctx)
+    assert nav_cmd[-1] == "doc_tools.sync.nav"
+    nav_dry_cmd = md.builder_sync_nav(dry_ctx)
+    assert nav_dry_cmd[-1] == "--dry-run"
 
     assert md.builder_runbook_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.runbook_catalog"]
     assert md.builder_runbook_update(dry_ctx)[-1] == "--check"

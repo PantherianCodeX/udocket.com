@@ -22,6 +22,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 **<< AUTOMATED AREA >>** — This table syncs from the front matter. Update values above.
 
 | Field | Value |
@@ -37,6 +38,7 @@ ______________________________________________________________________
 | Approvers | <Approval authority> |
 | Approved by | |
 | Approved date | |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ______________________________________________________________________
 

@@ -191,7 +191,7 @@ def render_table_row(diagram: Diagram) -> str:
 
 def render_groups(groups: Sequence[OwnerGroup]) -> str:
     lines: list[str] = []
-    lines.extend(auto_generated_header(refresh_command="python -m doc_tools.build.diagram_index"))
+    lines.extend(auto_generated_header(refresh_command="make docs.sync.diagrams"))
     if not groups:
         lines.append("_No diagrams detected._")
         lines.append("")
@@ -230,7 +230,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         APPENDIX_FILE,
         updated_content,
         check=args.check,
-        stale_message="Diagrams index is stale. Run `python -m doc_tools.build.diagram_index` to refresh.",
+        stale_message="Diagrams index is stale. Run `make docs.sync.diagrams` to refresh.",
     )
     return 0 if ok else 1
 

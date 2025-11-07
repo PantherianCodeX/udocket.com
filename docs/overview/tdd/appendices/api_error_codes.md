@@ -22,6 +22,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Platform Documentation Team |
@@ -35,15 +36,16 @@ ______________________________________________________________________
 | Approvers | Architecture Steering Committee |
 | Approved by |  |
 | Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ______________________________________________________________________
 
 ## Appendix Overview
 
-This appendix aggregates the API error code sections from every service and app specification. Refresh it with `python -m doc_tools.build.api_error_codes` whenever those sections change.
+This appendix aggregates the API error code sections from every service and app specification. Refresh it with `make docs.sync.api_codes` whenever those sections change.
 
 <!-- BEGIN AUTO-GENERATED: api-error-index -->
-<!-- AUTO-GENERATED: Run `python -m doc_tools.build.api_error_codes` to refresh. -->
+<!-- AUTO-GENERATED: Run `make docs.sync.api_codes` to refresh. -->
 
 ### [Accounts & Tenants Service](../../../customer/accounts-tenants.md#3-3-webhooks-events-binding) {#accounts-tenants-service}
 

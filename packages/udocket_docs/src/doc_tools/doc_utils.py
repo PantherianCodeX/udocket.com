@@ -12,6 +12,7 @@ from typing import Any, Iterable, Mapping, Sequence, Tuple, cast
 import yaml
 
 from packages.udocket_common.text import slugify as _slugify
+
 TITLE_CLEAN_REPLACEMENTS = [
     "Technical Design",
     "Technical Architecture",
@@ -99,7 +100,7 @@ def auto_generated_comment(
         message = f"Run `{command}` to refresh."
     else:
         message = DEFAULT_AUTO_GENERATED_NOTE
-    return f"<!-- {AUTO_GENERATED_PREFIX}: {message} -->"
+    return f"<!-- {message} -->"
 
 
 def auto_generated_header(
@@ -258,7 +259,20 @@ def format_label(key: str) -> str:
         if not part:
             continue
         lower = part.lower()
-        if index > 0 and lower in {"and", "or", "the", "a", "an", "of", "in", "on", "for", "to", "with", "by"}:
+        if index > 0 and lower in {
+            "and",
+            "or",
+            "the",
+            "a",
+            "an",
+            "of",
+            "in",
+            "on",
+            "for",
+            "to",
+            "with",
+            "by",
+        }:
             words.append(lower)
         else:
             words.append(part.capitalize())
@@ -462,7 +476,10 @@ def parse_markdown_table(rows: Sequence[str]) -> list[dict[str, str]]:
         if not cells:
             continue
         normalized = cells + [""] * max(0, len(header) - len(cells))
-        record = {header[idx]: normalized[idx] if idx < len(normalized) else "" for idx in range(len(header))}
+        record = {
+            header[idx]: normalized[idx] if idx < len(normalized) else ""
+            for idx in range(len(header))
+        }
         records.append(record)
     return records
 
@@ -547,7 +564,7 @@ def validate_yaml_schema(schema: YamlSchema, data: Any, path: list[str], errors:
             if key not in data:
                 if child.optional:
                     continue
-                errors.append(f"{'.'.join(path+[key])}: missing key")
+                errors.append(f"{'.'.join(path + [key])}: missing key")
                 continue
             validate_yaml_schema(child, value, path + [key], errors)
         return

@@ -1389,3 +1389,5 @@ approved_date:
 
     with pytest.raises(RuntimeError):
         ensure_template_requirements(template)
+
+

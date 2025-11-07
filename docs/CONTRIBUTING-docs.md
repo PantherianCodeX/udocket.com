@@ -29,7 +29,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
   - Consumer docs must link to the owner’s section and reuse the rendered SVG (`/build/diagrams/<REL>.svg`); never duplicate the Mermaid source.
   - The source path pattern is `docs/<area>/<doc>/diagrams/<name>.mmd` (with optional subdirectories), and the build artifact lives at `docs/build/diagrams/<area>/<doc>/<name>.svg`.
 - Optional metadata: add `%% id: <slug>`, `%% version: v1`, or `%% owner: <owner-doc>` comments to encode diagram provenance for the index.
-- Keep the appendix up to date by running `python -m doc_tools.build.diagram_index` whenever diagrams are added, renamed, or removed.
+- Keep the appendix up to date by running `make docs.sync.diagrams` whenever diagrams are added, renamed, or removed.
 
 ## Add a runbook
 

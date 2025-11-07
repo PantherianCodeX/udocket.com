@@ -27,8 +27,8 @@ If you run the commands on the host, install the same Vale version so the lint s
 
 The aggregator runs:
 
-1. `python -m doc_tools.build.runbook_catalog --check` to ensure the ops catalog matches the latest runbook sections
-1. `python -m doc_tools.build.diagram_index --check` for Mermaid inventory freshness
+1. `make docs.check.runbooks` to ensure the ops catalog matches the latest runbook sections
+1. `make docs.check.diagrams` for Mermaid inventory freshness
 1. `python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer docs/experience docs/ops` to enforce template compliance
 1. `python -m doc_tools.check_appendices` for appendix numbering and references
 1. `npx markdownlint --config docs/config/.markdownlint.json 'docs/**/*.md'` plus an optional global `markdownlint-cli` invocation when available
@@ -43,7 +43,7 @@ All steps are wired into the `Docs Validation` GitHub workflow, so a clean run l
 Runbook sections live in individual service specifications but are aggregated into `docs/ops/runbooks.md` for responders. To refresh the catalog:
 
 ```bash
-python -m doc_tools.build.runbook_catalog
+make docs.sync.runbooks
 ```
 
 Authoring guidelines:

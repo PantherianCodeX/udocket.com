@@ -387,7 +387,7 @@ ______________________________________________________________________
 **Contract:** On-call rotations, runbooks, and release evidence must stay current; signing halts when FIPS, TSA/OCSP, or waiver gates fail until remediation completes. **|**
 **State:** Runbooks under `ops/runbooks/signer/`, key-rotation evidence in `ops/security/key_rotation/`, release checklists `ops/releases/signing_release_checklist.md`, waiver records in App.O. **|**
 **Failures & handling:** Stale playbooks, missing rotation artifacts, or failed release gates block deployment until remediation and evidence capture. **|**
-**Observability:** Docs lint (`python -m doc_tools.build.runbook_catalog --check`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
+**Observability:** Docs lint (`make docs.check.runbooks`), PagerDuty analytics, dashboards “Signer & TSA” / “Deliverable Signatures”, alert `signer_release_gate_blocked_total`. **|**
 **Breadcrumbs:** Runbooks `ops/runbooks/signer/`, automation `ops/scripts/security/rotate_signing_keys.py`, release tooling `ops/scripts/deploy/signing_release_gate.py`, drill tracker `ops/change/signer_rotations.ics`. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance, Ops runbooks `RB-SIGN-\*`.
 

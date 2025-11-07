@@ -576,7 +576,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover bundle rollback, harvest failure, waiver expiry, and feed outage; evidence lives in `ops/ref_manager/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
 - Compliance reviews reference drill evidence, waiver logs, and adoption metrics to demonstrate readiness.
 
 ### 8.4 Migrations & Backfills (binding)

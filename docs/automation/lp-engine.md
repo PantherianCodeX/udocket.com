@@ -634,7 +634,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover compiler regression, OPA rollback, waiver expiry, and localization gap scenarios; evidence stored in `ops/lpe/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
 - Compliance reviews reference drill artefacts, waiver ledgers, and compiler adoption metrics to demonstrate readiness.
 
 ### 8.4 Migrations & Backfills (binding)

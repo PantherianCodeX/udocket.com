@@ -69,6 +69,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | uDocket Platform Architecture Team |
@@ -82,6 +83,7 @@ ______________________________________________________________________
 | Approvers | Architecture Steering Committee; Security Review Board |
 | Approved by | |
 | Approved date | |
+<!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
@@ -290,7 +292,40 @@ ______________________________________________________________________
 
 - Audit linkage: DPIA/RoPA artifacts, CCPA notice ledgers, and HIPAA override activations are referenced in audit seals (`§14.2`, Appendix N); HIPAA activations require Compliance approval and manifest tagging.
 
-#### 2.3.1 Non-functional requirements (SLOs, latency budgets, availability)
+#### 2.3.1 Repository composition decision tree (binding) {#repo-composition-decision-tree}
+
+*Purpose: keep ownership clear so every module lands in the right home without orphan packages.*\
+*LLM hint:* read this tree top-to-bottom before writing code; link back to the relevant bullet in design docs or AGENTS when describing the change.
+
+##### Package placement rules {#package-placement-rules}
+
+1. **Does it depend on Django, tenancy, Guardian, LPE, or case storage?**\
+   → Keep it in the owning service (`apps/`, `services/…`) or `packages/udocket_core` (if it is reusable orchestration). Never move platform-bound logic into reusable packages.
+2. **Is it cross-service, policy-aware, and orchestrates agents or runtime flows?**\
+   → `packages/udocket_core` (LangGraph orchestration, Celery wrappers, ops logging, residency enforcement).
+3. **Is it cross-service, provider-neutral, and safe to reuse outside uDocket?**\
+   → `packages/udocket_ai` (prompt compilers, provider protocols, evaluation harnesses) or `client_sdks/*` for customer-facing APIs.
+4. **Is it a low-level helper with zero policy or framework coupling?**\
+   → `packages/udocket_common` (hashing, UUID derivation, JSON/path/time helpers).
+5. **Is it UI-specific or HTTP-facing?**\
+   → `apps/web`, `apps/assistants`, or the service directory under `services/…`—never inside agent packages.
+
+##### AI vs core boundary {#ai-vs-core-boundary}
+
+- `udocket_ai` owns provider-agnostic building blocks: typed protocols, prompt registries, localization-aware prompt compilers, evaluation datasets, and adapters gated by optional extras (e.g., `[azure]`).
+- `udocket_core` wires those building blocks into the platform runtime: LangGraph flows, Celery tasks, Guardian/LPE hooks, ops logging, storage layout, and region guardrails.
+- Provider prompts that require policy or tenancy context belong in `udocket_core`. Base prompt templates and evaluation harnesses live in `udocket_ai`.
+- When retiring legacy packages (for example, `packages/udocket_prompts`), migrate reusable assets into `udocket_ai` and platform-bound logic into `udocket_core` within the same patch.
+
+##### Do / Don’t
+
+- **Do** keep helpers tiny and type-safe; promote them only when at least two services will reuse them within one release cycle.
+- **Do** document every placement decision in the PR description (link back to this section) so reviewers can trace the reasoning.
+- **Don’t** create micro-packages for single functions or move Django/persistence code into reusable packages.
+- **Don’t** let `udocket_ai` import Django, Celery, Guardian, or case storage modules—tests must run without the platform stack.
+- **Don’t** add toggles for “old behavior.” Refactors are one-way; delete compatibility shims immediately.
+
+#### 2.3.2 Non-functional requirements (SLOs, latency budgets, availability)
 
 *Purpose: Capture performance and reliability expectations.*
 
@@ -1200,7 +1235,7 @@ Binding breadcrumbs:
 *Purpose: Keep service documentation aligned on a shared error envelope while delegating canonical code ownership to the Platform Runtime specification and per-service appendices.*
 
 - Envelope (binding): HTTP error payloads MUST validate against `spec/schemas/api_error.schema.json`. Runtime code in Django/FastAPI imports Pydantic models generated from that schema during the build pipeline so the schema remains the single source of truth. Servers echo the `Idempotency-Key` header (if present) in responses to aid callers with safe retries.
-- Code catalog: [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `python -m doc_tools.build.api_error_codes`.
+- Code catalog: [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) owns the authoritative `ApiError.code` enumeration and retry guidance. Service documents list any additional codes in their `§3.3 API error codes` subsection; the consolidated appendix (`overview/tdd/appendices/api_error_codes.md`) is rebuilt with `make docs.sync.api_codes`.
 - Headers: always emit `X-Request-ID`; add `Retry-After`, `Deprecation`, `Sunset`, and rate-limit headers when applicable. Error payloads are included in Spectral lint checks (§10.5).
 - Client guidance: follow the retry/stop rules documented in each service spec’s API error section; SDKs surface the same behaviour via typed exceptions.
 

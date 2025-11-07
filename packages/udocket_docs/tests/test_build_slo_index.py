@@ -80,7 +80,7 @@ def test_collects_slo_sections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     )
 
     content = bsi.build_content()
-    assert du.auto_generated_comment(refresh_command="python -m doc_tools.build.slo_index") in content
+    assert du.auto_generated_comment(refresh_command="make docs.sync.slo") in content
     assert "Alpha Spec" in content
     assert "Portal" in content
     assert "99.9%" in content

@@ -728,7 +728,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills rehearse SLO breach recovery, quarantine investigation, backlog management, and manual reconciliation; evidence stored in `ops/guardian/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to confirm coverage of Guardian runbooks.
 
 ### 8.4 Migrations & Backfills (binding)
@@ -737,7 +737,7 @@ ______________________________________________________________________
 **Contract:** Partition rotations, manifest replays, and policy cache backfills must run from tagged scripts with dry-run output captured before production execution. **|**
 **State:** Migration manifests live in `ops/guardian/migrations/` with SHA-256 digests recorded in `ops/guardian/migration_log.jsonl`. **|**
 **Failures & handling:** Failed rotations or partial replays lead to duplicate submissions or lost audit history; §8.3 Runbooks & drills require rollback checkpoints and post-migration validation. **|**
-**Observability:** Dashboards “Guardian Queue Health” and “Guardian Policy Sync” plus synthetic submissions verify migration success; `python -m doc_tools.build.runbook_catalog` ensures referenced scripts remain present. **|**
+**Observability:** Dashboards “Guardian Queue Health” and “Guardian Policy Sync” plus synthetic submissions verify migration success; `make docs.sync.runbooks` ensures referenced scripts remain present. **|**
 **Breadcrumbs:** Partition rotation script `ops/scripts/guardian/rotate_partitions.py`, policy sync `ops/scripts/guardian/sync_policy.py`, migration checklist `ops/guardian/migrations/README.md`. **|**
 **References:** §3 API contract, §4.3 Queue state, ADR-0001, ops README.
 

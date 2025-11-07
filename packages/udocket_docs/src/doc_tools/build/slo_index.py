@@ -105,7 +105,7 @@ def rel_from_appendix(target: Path) -> str:
 
 def render(entries: Sequence[SLOEntry]) -> str:
     lines: list[str] = []
-    lines.extend(auto_generated_header(refresh_command="python -m doc_tools.build.slo_index"))
+    lines.extend(auto_generated_header(refresh_command="make docs.sync.slo"))
     if not entries:
         lines.append("_No SLO sections detected._")
         lines.append("")
@@ -140,7 +140,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         APPENDIX_FILE,
         content,
         check=args.check,
-        stale_message="SLO index is stale; run `python -m doc_tools.build.slo_index`.",
+        stale_message="SLO index is stale; run `make docs.sync.slo`.",
     )
     return 0 if ok else 1
 

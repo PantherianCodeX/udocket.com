@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 - **Scope:** Celery workers, beat schedulers, and task modules that execute agent pipelines, storage operations, notifications, watchdogs, and backfills. Covers queue topology, retries, residency enforcement, settings snapshots, and observability.
 - **Structure:** Follows the standard 0–10 template. Responsibilities (§2) describe orchestration, queue management, watchdog automation, and provider integrations. APIs (§3) reference task entry points, job control RPC endpoints, and SSE updates. State, failure, observability, security, and ops guidance live in §§4–8.
-- **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/automation/worker-cluster.md docs/overview/tdd.md docs/tdd_modularization.md` plus `python -m doc_tools.build.runbook_catalog --check` before landing worker changes. Update task-module AGENTS guides when adding queues or long-running jobs.
+- **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/automation/worker-cluster.md docs/overview/tdd.md docs/tdd_modularization.md` plus `make docs.check.runbooks` before landing worker changes. Update task-module AGENTS guides when adding queues or long-running jobs.
 - **Change protocol:** Celery queue additions, watchdog changes, provider adapter updates, or retry semantics must reference this spec and note affected Settings keys. Provider failover logic requires Security + Architecture approval.
 - **References:** TDD §12 summary, Transcription agent spec, Communications spec, Guardian spec, Settings Registry keys (`jobs.*`, `watchdog.*`), Ops runbooks `RB-JOB-WATCHDOG`, `RB-LOCK-006`.
 - **Contacts:** Platform Engineering (queue topology), Operations Engineering (KEDA/scaling), Applied AI Programs (agent orchestration), `#worker-cluster` Slack, on-call `workers-oncall@`.
@@ -479,7 +479,7 @@ ______________________________________________________________________
 **Contract:** On-call rotations, runbooks, and drills must remain current; queues pause when automation gates fail until remediation completes. **|**
 **State:** Runbooks in `ops/runbooks/worker/`, drill evidence `ops/workers/drills/<date>/`, freeze calendars `ops/workers/freeze_windows.ics`. **|**
 **Failures & handling:** Stale playbooks, missed drills, or unstaffed rotations block change approvals and keep automation paused. **|**
-**Observability:** Docs lint (`python -m doc_tools.build.runbook_catalog --check`), dashboards “Worker Queues”/“Watchdog Runner”, alert `watchdog_runner_missed_total`. **|**
+**Observability:** Docs lint (`make docs.check.runbooks`), dashboards “Worker Queues”/“Watchdog Runner”, alert `watchdog_runner_missed_total`. **|**
 **Breadcrumbs:** Runbook catalog, drill scheduler `ops/scripts/worker/schedule_drills.py`, governance policies App.N. **|**
 **References:** §5 Failure modes, §6 Observability, §7 Security & compliance.
 
@@ -543,7 +543,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover watchdog recovery, drain rehearsal, residency enforcement, and backlog triage; evidence stored in `ops/worker/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills block release approvals.
 - Compliance reviews reference drill evidence, queue audits, and residency logs to demonstrate readiness.
 
 ### 8.4 Migrations & Backfills (normative)

@@ -428,7 +428,7 @@ ______________________________________________________________________
 **Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
 **State:** Runbook markdown lives under `docs/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runboo../data/agents/`. **|**
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
-**Observability:** Ops catalog build (`python -m doc_tools.build.runbook_catalog`), drill checklist dashboards, and on-call retros track preparedness. **|**
+**Observability:** Ops catalog build (`make docs.sync.runbooks`), drill checklist dashboards, and on-call retros track preparedness. **|**
 **Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, evidence store `ops/runboo../data/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
 **References:** This document.
 
@@ -438,7 +438,7 @@ ______________________________________________________________________
 
 #### 8.3.1 Runbook Index (informative)
 
-The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `python -m doc_tools.build.runbook_catalog`; stale ownership or verification dates fail the docs lint and block merges.
+The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `make docs.sync.runbooks`; stale ownership or verification dates fail the docs lint and block merges.
 
 - `RB-AGENT-ACTIVATION` — Applied AI Engineering (primary), Platform Operations (secondary), verified quarterly.
 - `RB-AGENT-SHADOW` — Platform Operations (primary), Applied AI Engineering (secondary), verified quarterly.
@@ -461,7 +461,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover SLO breach recovery, quarantine spikes, backlog management, and manual reconciliation; evidence stored in `ops/runboo../data/agents/<YYYY>/<MM>/` with retrospective notes.
-- `python -m doc_tools.build.runbook_catalog --check` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
+- `make docs.check.runbooks` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to demonstrate readiness for auditors.
 
 ### 8.4 Migrations & Backfills (normative)

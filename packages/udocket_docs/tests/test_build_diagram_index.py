@@ -107,7 +107,7 @@ def test_collect_diagrams_covers_orphans(tmp_path: Path, monkeypatch: pytest.Mon
 def test_render_groups_handles_empty() -> None:
     rendered = bdi.render_groups([])
     lines = rendered.splitlines()
-    expected_header = du.auto_generated_comment(refresh_command="python -m doc_tools.build.diagram_index")
+    expected_header = du.auto_generated_comment(refresh_command="make docs.sync.diagrams")
     assert lines[0] == expected_header
     assert lines[1] == ""
     assert "_No diagrams detected._" in rendered

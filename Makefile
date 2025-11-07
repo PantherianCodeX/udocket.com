@@ -47,11 +47,14 @@ SERVICE ?= platform
 CMD ?=
 DEV_SERVICE := platform-dev
 DOCS_SERVICE := docs
+DOCS_RUN := $(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc
+DOCS_PY := $(UV) run --project packages/udocket_docs --extra dev
 DOCSITE_CONTAINER ?= udocket-docs-site
 DOCSITE_ADDR ?= 0.0.0.0
 DOCSITE_HOST ?= localhost
 DOCSITE_PORT ?= 8010
 DOCSITE_URL ?= http://$(DOCSITE_HOST):$(DOCSITE_PORT)
+DOCSITE_PREVIEW ?= doc-builds/sites/dev/index.html
 PLATFORM_IMAGE := udocket-platform
 DOCS_IMAGE := udocket-docs-toolbox
 KEYCLOAK_IMAGE := udocket-keycloak
@@ -142,7 +145,9 @@ CONFIRM_CMD = @CONFIRM_TARGET="$@" $(PYTHON) scripts/confirm.py
   stack.prod.logs stack.prod.ps \
   platform.shell worker.shell beat.shell keycloak.shell \
   doctools.build doctools.up doctools.down doctools.shell \
-  docs.build docs.lint docs.sync docs.preview \
+  docs.build docs.lint docs.sync \
+  docs.sync.nav docs.sync.runbooks docs.sync.api_codes docs.sync.slo docs.sync.diagrams docs.sync.trees \
+  docs.check docs.check.nav docs.check.runbooks docs.check.api_codes docs.check.slo docs.check.diagrams docs.check.trees docs.check.build \
   dev.build dev.up dev.down dev.shell \
   psql.shell keycloak.psql.shell \
   redis.shell redis.ping \
@@ -312,21 +317,47 @@ doctools.shell: ## Open a shell inside the docs toolbox container
 
 ##@ Doctools • Tools
 docs.build: ## Render docs output (PDF/HTML as configured)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --build"
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --build"
 docs.lint: ## Run docs linting pipeline inside the toolbox
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --lint"
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (fetch/update remote content)
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.manage_docs --sync --verbose"
-docs.preview: ## Open the docs site in your default browser
-	$(PYTHON) -c "import os, webbrowser; webbrowser.open(os.environ.get('DOCSITE_URL', 'http://localhost:8010'))"
-docs.verify: ## Validate docs build prerequisites without modifying artifacts
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -euo pipefail; \
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --sync --verbose"
+docs.sync.nav: ## Ensure MkDocs navigation entries are up to date
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav"
+docs.check.nav: ## Verify MkDocs navigation entries without writing changes
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav --dry-run"
+docs.sync.runbooks: ## Refresh the Ops runbook catalog appendix
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.runbook_catalog"
+docs.check.runbooks: ## Verify the Ops runbook catalog appendix is current
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.runbook_catalog --check"
+docs.sync.api_codes: ## Refresh API error codes appendix aggregates
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.api_error_codes"
+docs.check.api_codes: ## Verify API error codes appendix aggregates are current
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.api_error_codes --check"
+docs.sync.slo: ## Refresh service SLO appendix aggregates
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.slo_index"
+docs.check.slo: ## Verify service SLO appendix aggregates are current
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.slo_index --check"
+docs.sync.diagrams: ## Refresh diagram appendix indexes
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.diagram_index"
+docs.check.diagrams: ## Verify diagram appendix indexes are current
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.diagram_index --check"
+docs.sync.trees: ## Refresh repository tree appendix (disabled until repo realignment completes)
+	@echo "docs.sync.trees is locked until the repository structure matches the appendix."
+	@echo "Skip this target for now; it will be re-enabled after the tree refactor."
+	@exit 1
+docs.check.trees: ## Verify repository tree appendix matches the current repo structure
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.check_repository_trees"
+docs.check: ## Run all docs checks (tree check excluded until refactor lands)
+	@$(MAKE) docs.check.nav docs.check.runbooks docs.check.api_codes docs.check.slo docs.check.diagrams docs.check.build
+docs.check.build: ## Validate docs build prerequisites without modifying artifacts
+	$(DOCS_RUN) "set -euo pipefail; \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf \$$TMP_DIR' EXIT; \
-	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.sync.doc_assets --dry-run; \
-	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.check_asset_paths docs; \
-	$(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.build.diagram_index --check; \
-	$(UV) run --project packages/udocket_docs --extra dev mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/udocket_docs/mkdocs.yml"
+	$(DOCS_PY) python -m doc_tools.sync.doc_assets --dry-run; \
+	$(DOCS_PY) python -m doc_tools.check_asset_paths docs; \
+	$(DOCS_PY) python -m doc_tools.build.diagram_index --check; \
+	$(DOCS_PY) mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/udocket_docs/mkdocs.yml"
 
 docs.clean: ## Remove rendered docs artifacts (diagrams + site outputs)
 	rm -rf docs/build
@@ -358,9 +389,26 @@ docsite.clean: ## Stop dev server and remove rendered docs artifacts
 docsite.build: ## Build docs output (alias for docs.build)
 	@$(MAKE) docs.build
 
+docsite.launch: ## Open the running docsite server in your default browser
+	$(PYTHON) -c "import os, webbrowser; webbrowser.open(os.environ.get('DOCSITE_URL', 'http://localhost:8010'))"
+
+docsite.preview: ## Preview the last built docs output from the filesystem
+	DOCSITE_PREVIEW_FILE="$(DOCSITE_PREVIEW)" $(PYTHON) - <<-'PY'
+		import os
+		import sys
+		import webbrowser
+		from pathlib import Path
+
+		target = Path(os.environ.get("DOCSITE_PREVIEW_FILE", "doc-builds/sites/dev/index.html")).expanduser()
+		if not target.exists():
+		    sys.stderr.write(f"[docsite.preview] missing built site at {target}\n")
+		    raise SystemExit(1)
+		webbrowser.open(target.resolve().as_uri())
+	PY
+
 escape_dquotes = $(subst ",\",$(1))
 
-.PHONY: docs.preview docs.verify docs.clean docsite.up docsite.down docsite.restart docsite.clean docsite.build docs.test docs.test.coverage
+.PHONY: docs.check docs.check.build docs.check.trees docs.clean docsite.up docsite.down docsite.restart docsite.clean docsite.build docsite.launch docsite.preview docs.test docs.test.coverage
 
 DOCS_ARGS ?= $(filter-out docs.test docs.test.coverage,$(MAKECMDGOALS))
 

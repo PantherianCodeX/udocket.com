@@ -101,6 +101,13 @@ def builder_check_structure(ctx: RunContext) -> list[str]:
     ]
 
 
+def builder_check_doc_control_markers(ctx: RunContext) -> list[str]:
+    cmd = python_task("doc_tools.check_document_controls_tags")
+    if ctx.targets:
+        cmd.extend(str(path) for path in ctx.targets)
+    return cmd
+
+
 def builder_check_appendices(_: RunContext) -> list[str]:
     return python_task("doc_tools.check_appendices")
 
@@ -174,8 +181,8 @@ def builder_sync_doc_assets(ctx: RunContext) -> list[str]:
     return cmd
 
 
-def builder_sync_adr_nav(ctx: RunContext) -> list[str]:
-    cmd = python_task("doc_tools.sync.adr_nav")
+def builder_sync_nav(ctx: RunContext) -> list[str]:
+    cmd = python_task("doc_tools.sync.nav")
     if ctx.dry_run:
         cmd.append("--dry-run")
     return cmd
@@ -254,6 +261,11 @@ TASKS: list[Task] = [
         builder=builder_check_structure,
     ),
     Task(
+        name="check_document_controls_tags.py",
+        category="lint",
+        builder=builder_check_doc_control_markers,
+    ),
+    Task(
         name="check_appendices.py",
         category="lint",
         builder=builder_check_appendices,
@@ -325,7 +337,7 @@ TASKS: list[Task] = [
     Task(
         name="sync ADR nav",
         category="sync",
-        builder=builder_sync_adr_nav,
+        builder=builder_sync_nav,
     ),
     Task(
         name="mkdocs build --strict",

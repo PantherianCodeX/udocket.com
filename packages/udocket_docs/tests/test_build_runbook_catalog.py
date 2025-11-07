@@ -59,7 +59,7 @@ def test_render_handles_empty_catalog() -> None:
     assert result.startswith("---")
     assert brc.BEGIN_MARKER in result
     assert brc.END_MARKER in result
-    comment = du.auto_generated_comment(refresh_command="python -m docs.tools.build.runbook_catalog")
+    comment = du.auto_generated_comment(refresh_command="make docs.sync.runbooks")
     assert comment in result
     assert "_No runbook sections detected._" in result
 

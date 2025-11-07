@@ -42,12 +42,12 @@ ______________________________________________________________________
 
 ## Appendix Overview
 
-This appendix consolidates runbook sections from service and application specifications. Refresh it with `python -m doc_tools.build.runbook_catalog`. The content between the markers below is generated automatically.
+This appendix consolidates runbook sections from service and application specifications. Refresh it with `make docs.sync.runbooks`. The content between the markers below is generated automatically.
 
 ______________________________________________________________________
 
 <!-- BEGIN AUTO-GENERATED: runbook-catalog -->
-<!-- AUTO-GENERATED: Run `python -m docs.tools.build.runbook_catalog` to refresh. -->
+<!-- AUTO-GENERATED: Run `make docs.sync.runbooks` to refresh. -->
 
 ## Guardian Service — 8.3 Runbooks & Drills (binding) {#guardian-8-3-runbooks-drills-binding} {#guardian-service-8-3-runbooks-drills-binding-guardian-8-3-runbooks-drills-binding}
 
@@ -85,7 +85,7 @@ ______________________________________________________________________
 ### Guardian Service — 8.3.3 Drill Cadence & Evidence (binding) {#guardian-service-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills rehearse SLO breach recovery, quarantine investigation, backlog management, and manual reconciliation; evidence stored in `ops/guardian/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics verify execution; missed drills block release sign-off until remediated.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to confirm coverage of Guardian runbooks.
 
 ## Identity & Access — 8.3 Runbooks & Drills (binding) {#identity-access-8-3-runbooks-drills-binding}
@@ -242,7 +242,7 @@ ______________________________________________________________________
 ### Settings Registry — 8.3.3 Drill Cadence & Evidence (binding) {#settings-registry-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills cover activation rollback, residency drift, governance toggle rollback, and waiver renewal; evidence stored in `ops/settings/drills/<date>/` with retrospectives.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block releases until mitigated.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills block releases until mitigated.
 - Compliance reviews reference drill artefacts, waiver logs, and activation evidence to demonstrate readiness.
 
 ## LangGraph Agent Orchestration — 8.3 Runbooks & Drills (binding) {#langgraph-agent-orchestration-8-3-runbooks-drills-binding}
@@ -251,7 +251,7 @@ ______________________________________________________________________
 **Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
 **State:** Runbook markdown lives under `docs/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runboo../data/agents/`. **|**
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
-**Observability:** Ops catalog build (`python -m doc_tools.build.runbook_catalog`), drill checklist dashboards, and on-call retros track preparedness. **|**
+**Observability:** Ops catalog build (`make docs.sync.runbooks`), drill checklist dashboards, and on-call retros track preparedness. **|**
 **Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, evidence store `ops/runboo../data/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
 **References:** Ops runbooks index, TDD Appendix B, Worker Cluster spec §3.5, QA governance §6.
 
@@ -261,7 +261,7 @@ ______________________________________________________________________
 
 ### LangGraph Agent Orchestration — 8.3.1 Runbook Index (informative) {#langgraph-agent-orchestration-8-3-1-runbook-index-informative}
 
-The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `python -m doc_tools.build.runbook_catalog`; stale ownership or verification dates fail the docs lint and block merges.
+The catalog enumerates each runbook with owner, verification cadence, and Ops catalog ID. Maintained via `make docs.sync.runbooks`; stale ownership or verification dates fail the docs lint and block merges.
 
 - `RB-AGENT-ACTIVATION` — Applied AI Engineering (primary), Platform Operations (secondary), verified quarterly.
 - `RB-AGENT-SHADOW` — Platform Operations (primary), Applied AI Engineering (secondary), verified quarterly.
@@ -284,7 +284,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 ### LangGraph Agent Orchestration — 8.3.3 Drill Cadence & Evidence (binding) {#langgraph-agent-orchestration-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills cover SLO breach recovery, quarantine spikes, backlog management, and manual reconciliation; evidence stored in `ops/runboo../data/agents/<YYYY>/<MM>/` with retrospective notes.
-- `python -m doc_tools.build.runbook_catalog --check` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
+- `make docs.check.runbooks` plus PagerDuty analytics verify execution; missed drills require catch-up within 30 days and block activation rollouts.
 - Compliance reviews reference drill evidence, incident logs, and manual review ledgers to demonstrate readiness for auditors.
 
 ## LLM Registry & Runtime Governance — 8.3 Runbooks & Drills (binding) {#llm-registry-runtime-governance-8-3-runbooks-drills-binding}
@@ -368,7 +368,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 ### Localization & Policy Engine — 8.3.3 Drill Cadence & Evidence (binding) {#localization-policy-engine-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills cover compiler regression, OPA rollback, waiver expiry, and localization gap scenarios; evidence stored in `ops/lpe/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills trigger remediation before releases proceed.
 - Compliance reviews reference drill artefacts, waiver ledgers, and compiler adoption metrics to demonstrate readiness.
 
 ## Worker Cluster — 8.3 Runbooks & Drills (binding) {#worker-cluster-8-3-runbooks-drills-binding}
@@ -411,7 +411,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 ### Worker Cluster — 8.3.3 Drill Cadence & Evidence (binding) {#worker-cluster-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills cover watchdog recovery, drain rehearsal, residency enforcement, and backlog triage; evidence stored in `ops/worker/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills block release approvals.
 - Compliance reviews reference drill evidence, queue audits, and residency logs to demonstrate readiness.
 
 ## Artifact Store Service — 8.3 Runbooks & Drills (binding) {#artifact-store-service-8-3-runbooks-drills-binding}
@@ -576,7 +576,7 @@ See Ops catalog and Appendix O decision log for templates and evidence requireme
 ### Reference Manager — 8.3.3 Drill Cadence & Evidence (binding) {#reference-manager-8-3-3-drill-cadence-evidence-binding}
 
 - Quarterly drills cover bundle rollback, harvest failure, waiver expiry, and feed outage; evidence lives in `ops/ref_manager/drills/<date>/` with retrospective notes.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills block release approvals until remedied.
 - Compliance reviews reference drill evidence, waiver logs, and adoption metrics to demonstrate readiness.
 
 ## Search & Indexing Service — 8.3 Runbooks & Drills (binding) {#search-indexing-service-8-3-runbooks-drills-binding}

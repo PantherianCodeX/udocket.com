@@ -67,7 +67,7 @@ DOCUMENT_CONTROLS_TABLE = """## Document Controls
 
 APPENDIX_OVERVIEW = """## Appendix Overview
 
-This appendix consolidates runbook sections from service and application specifications. Refresh it with `python -m doc_tools.build.runbook_catalog`. The content between the markers below is generated automatically."""
+This appendix consolidates runbook sections from service and application specifications. Refresh it with `make docs.sync.runbooks`. The content between the markers below is generated automatically."""
 
 RUNBOOK_HEADING_RE = re.compile(r"^(#{2,6})\s+.*runbook", re.IGNORECASE)
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)")
@@ -251,7 +251,7 @@ def render(catalog_lines: list[str]) -> str:
     lines.append("______________________________________________________________________")
     lines.append("")
     lines.append(BEGIN_MARKER)
-    lines.extend(auto_generated_header(refresh_command="python -m docs.tools.build.runbook_catalog"))
+    lines.extend(auto_generated_header(refresh_command="make docs.sync.runbooks"))
     if catalog_lines:
         lines.extend(catalog_lines)
     else:
@@ -278,7 +278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             OUTPUT_FILE,
             content,
             check=True,
-            stale_message="Runbook catalog is stale. Run `python -m docs.tools.build.runbook_catalog` to refresh.",
+            stale_message="Runbook catalog is stale. Run `make docs.sync.runbooks` to refresh.",
         )
         return 0 if ok else 1
 

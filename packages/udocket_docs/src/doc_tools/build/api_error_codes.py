@@ -326,7 +326,7 @@ def _rel_from_appendix(target: Path) -> str:
 
 def _render_appendix(components: list[Component]) -> str:
     lines: list[str] = []
-    lines.extend(auto_generated_header(refresh_command="python -m doc_tools.build.api_error_codes"))
+    lines.extend(auto_generated_header(refresh_command="make docs.sync.api_codes"))
     for component in components:
         doc_rel = _rel_from_appendix(component.doc_path)
         target = f"{doc_rel}#{component.section_anchor}" if component.section_anchor else doc_rel
@@ -398,7 +398,7 @@ def build_content(*, check: bool) -> bool:
         APPENDIX_FILE,
         new_appendix,
         check=check,
-        stale_message="API error codes tables are stale; run `python -m doc_tools.build.api_error_codes`.",
+        stale_message="API error codes tables are stale; run `make docs.sync.api_codes`.",
     ):
         stale = True
     return not stale
@@ -411,7 +411,7 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
     ok = build_content(check=args.check)
     if args.check and not ok:
-        print("API error codes tables are stale; run `python -m doc_tools.build.api_error_codes`.", file=sys.stderr)
+        print("API error codes tables are stale; run `make docs.sync.api_codes`.", file=sys.stderr)
         return 1
     return 0
 

@@ -94,7 +94,7 @@ PROJECT_NAME=udocket-dev make stack.smoke
 
   Use `make stack.up`, `make stack.down`, and `make stack.logs` to manage the dev stack. Override `PROJECT_NAME` when you want side-by-side stacks (e.g., `PROJECT_NAME=my-feature make stack.up`).
 
-- Docs tooling uses the same overlay. Copy `packages/udocket_docs/.env.example` to `packages/udocket_docs/.env` before running `make docs.build` or `make docs.preview`.
+- Docs tooling uses the same overlay. Copy `packages/udocket_docs/.env.example` to `packages/udocket_docs/.env` before running `make docs.build` or `make docsite.launch`.
 
 - **Production** — run the base compose file plus the production overlay after preparing a production `.env` (secrets, SSL, database, etc.) and copying `storage/` to persistent storage:
 

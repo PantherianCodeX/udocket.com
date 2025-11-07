@@ -22,6 +22,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Platform Documentation Team |
@@ -35,6 +36,7 @@ ______________________________________________________________________
 | Approvers | Architecture Steering Committee |
 | Approved by | |
 | Approved date | |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ______________________________________________________________________
 
@@ -43,7 +45,7 @@ ______________________________________________________________________
 Diagram authoring guidelines live in [Docs: How To](../../../CONTRIBUTING-docs.md#add-a-diagram). This appendix lists the current Mermaid sources and their rendered assets.
 
 <!-- BEGIN AUTO-GENERATED: diagram-index -->
-<!-- AUTO-GENERATED: Run `python -m doc_tools.build.diagram_index` to refresh. -->
+<!-- AUTO-GENERATED: Run `make docs.sync.diagrams` to refresh. -->
 
 ### [Digital Signer](../../../data/digital-signer.md)
 

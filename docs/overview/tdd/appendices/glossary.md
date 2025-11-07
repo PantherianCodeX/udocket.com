@@ -22,6 +22,7 @@ ______________________________________________________________________
 
 ## Document Controls
 
+<!-- BEGIN AUTO-GENERATED: document-controls -->
 | Field | Value |
 | --- | --- |
 | Authors | Platform Documentation Team |
@@ -35,6 +36,7 @@ ______________________________________________________________________
 | Approvers | Architecture Steering Committee |
 | Approved by | |
 | Approved date | |
+<!-- END AUTO-GENERATED: document-controls -->
 
 ______________________________________________________________________
 

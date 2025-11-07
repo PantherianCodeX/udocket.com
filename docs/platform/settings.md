@@ -630,7 +630,7 @@ ______________________________________________________________________
 #### 8.3.3 Drill Cadence & Evidence (binding)
 
 - Quarterly drills cover activation rollback, residency drift, governance toggle rollback, and waiver renewal; evidence stored in `ops/settings/drills/<date>/` with retrospectives.
-- Docs lint (`python -m doc_tools.build.runbook_catalog --check`) and PagerDuty analytics confirm drill execution; missed drills block releases until mitigated.
+- Docs lint (`make docs.check.runbooks`) and PagerDuty analytics confirm drill execution; missed drills block releases until mitigated.
 - Compliance reviews reference drill artefacts, waiver logs, and activation evidence to demonstrate readiness.
 
 ### 8.4 Migrations & Backfills (binding)
@@ -670,7 +670,7 @@ ______________________________________________________________________
 #### 8.5.2 Tooling & automation checks (normative)
 
 **Purpose:** Summarize supporting tooling that keeps SR governance consistent. **|**
-**Contract:** Teams run `python -m doc_tools.manage_docs --lint`, `python -m doc_tools.build.runbook_catalog`, `python -m doc_tools.check_settings_keys`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
+**Contract:** Teams run `python -m doc_tools.manage_docs --lint`, `make docs.sync.runbooks`, `python -m doc_tools.check_settings_keys`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
 **State:** CI workflows enforce linting, seed bundle validation, and OpenAPI drift detection; runbook catalog renders the runbook index. **|**
 **Failures & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks. **|**
 **Observability:** CI dashboards display job history; governance board reviews automation health monthly. **|**
