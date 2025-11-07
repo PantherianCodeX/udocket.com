@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
-from typing import TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from packages.common.json_utils import (
     coerce_json_object,
@@ -29,6 +29,9 @@ from .common import TranscriptParse, parse_transcript
 from .common.io import TranscriptSegment
 from .common.llm_health import ensure_llm_client_health
 from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard
+    from packages.ai import AIClient
 
 StageOptions = dict[str, object]
 StageMap = dict[str, StageOptions]
@@ -549,12 +552,17 @@ class AnalyzeResult:
 
 
 class AnalyzeAgent:
-    def __init__(self, config: AnalyzeConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: AnalyzeConfig | None = None,
+        ai_client: "AIClient | None" = None,
+    ) -> None:
         self.config = config or AnalyzeConfig.from_env()
         self.logger = logger
         self._log_enabled = False
         self._log_level = logging.INFO
         enable_langgraph_debug_logging(force=self.config.debug)
+        self.ai_client = ai_client
 
     def stage_catalog(self) -> dict[str, StageCatalogEntry]:
         settings = _load_llm_settings()

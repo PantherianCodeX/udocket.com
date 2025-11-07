@@ -43,7 +43,7 @@ from apps.platform.operations.utils import read_job_meta
 from packages.common.json_utils import JSONObject, coerce_json_object, read_json_object
 from packages.common.operations import ComposeStageMap, optional_json_object
 from packages.common.text import unique_title
-from automation.agents import AnalyzeAgent as _AnalyzeAgent
+from automation.agents import AnalyzeAgent as _AnalyzeAgent, get_ai_client
 from automation.agents import AnalyzeConfig
 from packages.core.llm.config import load_llm_settings as _load_llm_settings
 
@@ -364,7 +364,11 @@ def analyze_job(
             hint_payload[str(key)] = value
         transcript_hint_payload = hint_payload
 
-    agent = analyze_agent_cls(analyze_config)
+    ai_client = get_ai_client()
+    try:
+        agent = analyze_agent_cls(analyze_config, ai_client=ai_client)
+    except TypeError:
+        agent = analyze_agent_cls(analyze_config)
 
     def _sanitize_details(details: Mapping[str, object]) -> dict[str, object]:
         sanitized: dict[str, object] = {}

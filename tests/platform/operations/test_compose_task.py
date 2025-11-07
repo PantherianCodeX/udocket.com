@@ -73,8 +73,9 @@ def test_compose_job_uses_summary_outputs(monkeypatch: MonkeyPatch, settings: Se
     compose_calls: list[dict[str, object]] = []
 
     class DummyComposeAgent:
-        def __init__(self, config: object) -> None:
+        def __init__(self, config: object, ai_client: object | None = None) -> None:
             self.config = config
+            self.ai_client = ai_client
 
         def compose(
             self,

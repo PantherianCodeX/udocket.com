@@ -5,7 +5,7 @@ import asyncio
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from packages.common.json_utils import (
     JSONArray,
@@ -42,6 +42,9 @@ from .compose.state import (
     LaneRuntimeState,
     lane_history_payload,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - avoids runtime dependency
+    from packages.ai import AIClient
 
 
 class _QAReviewerStep(Protocol):
@@ -92,7 +95,11 @@ def _factuality_report(
 
 
 class ComposeAgent:
-    def __init__(self, config: ComposeConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: ComposeConfig | None = None,
+        ai_client: "AIClient | None" = None,
+    ) -> None:
         self.config = config or ComposeConfig.from_env()
         self.settings: LLMSettings = load_llm_settings()
         self.logger = logger
@@ -100,6 +107,7 @@ class ComposeAgent:
             self.config.prompt_config_path,
             locale=self.config.locale,
         )
+        self.ai_client = ai_client
 
     def _new_orchestrator(
         self,

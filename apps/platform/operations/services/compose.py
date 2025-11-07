@@ -35,7 +35,7 @@ from packages.common.operations import (
     optional_json_object,
 )
 from packages.common.text import unique_title
-from automation.agents import ComposeAgent, ComposeConfig
+from automation.agents import ComposeAgent, ComposeConfig, get_ai_client
 from packages.core.llm.config import LLMSettings, load_llm_settings
 from packages.core.logging.context import LogContext
 
@@ -366,7 +366,7 @@ def execute_compose_job(
             summary_json_file=summary_json_path.name if summary_json_path else None,
         ).to_json()
 
-        compose_agent = ComposeAgent(compose_config)
+        compose_agent = ComposeAgent(compose_config, ai_client=get_ai_client())
 
         def _progress(stage: str, stage_event: str, details: Mapping[str, JSONValue]) -> None:
             runtime.emit(

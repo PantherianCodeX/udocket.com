@@ -8,7 +8,6 @@ packages.core.agents surface so new imports resolve immediately.
 """
 
 # pyright: strict
-from packages.ai import DefaultAIClient, build_client
 from packages.core.agents import (
     AnalyzeAgent,
     AnalyzeConfig,
@@ -30,6 +29,7 @@ from packages.core.agents import (
     ensure_wav,
     normalize_audio,
 )
+from .ai_factory import get_ai_client
 
 __all__ = [
     "AudioNormalizationResult",
@@ -51,6 +51,5 @@ __all__ = [
     "build_analyze_graph",
     "ensure_wav",
     "normalize_audio",
-    "DefaultAIClient",
-    "build_client",
+    "get_ai_client",
 ]
