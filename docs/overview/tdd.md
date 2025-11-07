@@ -886,7 +886,7 @@ Example
   "provenance": {
     "compute_region": "na-us-1",
     "storage_region": "na-us-1",
-    "tool_versions": {"udocket_core": "0.9.0", "azure_speech": "1.38"},
+    "tool_versions": {"packages.core": "0.9.0", "azure_speech": "1.38"},
     "template_version": null
   },
   "hashes": {
@@ -1138,7 +1138,7 @@ Handler pattern
 
   | Binding | Implementation | Test | Observability |
   |---|---|---|---|
-  | Canonical scope constants | Implementation: `packages/core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
+  | Canonical scope constants | Implementation: `packages/core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
   | Response echo header | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header` | Observability: API metrics `idempotency_echo_missing_total` |
   | Replay semantics | Implementation: `packages/core/idem/service.py::upsert_key` | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT` |
 
@@ -2137,7 +2137,7 @@ Artifact table
 
 ### D.1 Chat assistant artifacts (binding)
 
-**Breadcrumbs:** Implementation `packages/core/assistants/artifacts/chat.py::ChatArtifactWriter`, Tests `tests/udocket_core/assistants/test_chat_artifacts.py::test_manifest_integrity`, Observability Grafana “Assistant Sessions” dashboard (metric `assistant_chat_artifact_total`).
+**Breadcrumbs:** Implementation `packages/core/assistants/artifacts/chat.py::ChatArtifactWriter`, Tests `tests/core/assistants/test_chat_artifacts.py::test_manifest_integrity`, Observability Grafana “Assistant Sessions” dashboard (metric `assistant_chat_artifact_total`).
 
 *Purpose: Enumerate chat assistant artifact types, manifests, and retention rules.*
 
@@ -2213,7 +2213,7 @@ Artifact table
 
 ### D.3 Timeline artifacts (binding)
 
-**Breadcrumbs:** Implementation `packages/core/analysis/timeline.py::TimelineArtifactWriter`, Tests `tests/udocket_core/analysis/test_timeline_artifact.py::test_uuid_stability`, Observability Grafana “Timeline” panel (metric `timeline_artifact_total`).
+**Breadcrumbs:** Implementation `packages/core/analysis/timeline.py::TimelineArtifactWriter`, Tests `tests/core/analysis/test_timeline_artifact.py::test_uuid_stability`, Observability Grafana “Timeline” panel (metric `timeline_artifact_total`).
 
 *Purpose: Describe timeline artifact structure, identity, and promotion rules.*
 
@@ -2315,7 +2315,7 @@ ______________________________________________________________________
 *Observability: Docs lint metric `docs_runbook_missing_total` and OnCall drill analytics monitor coverage.*
 
 - **Platform runbooks:** `../ops/runbooks.md`
-- **Settings Registry runbooks:** [`../platform/settings.md Appendix D`](../ops/runbooks.md#settings-registry-8-3-runbooks-drills-binding)
+- **Settings Registry runbooks:** [`../platform/settings.md Appendix D`](../ops/runbooks.md#settings-registry-83-runbooks-drills-binding)
 - **Guardian runbooks:** [`../platform/guardian.md Appendix B`](../platform/guardian.md#83-runbooks-drills-binding)
 
 ## Appendix I — Glossary & taxonomy
@@ -2568,13 +2568,13 @@ ______________________________________________________________________
 |---|---|---|---|
 | Guardian judgments deterministic & parent-aware (§7.1) | `tests/guardian/test_concurrent_parent_swap.py::test_child_blocks_on_parent_swap`; Guardian synthetic `guardian_slo.yaml` job | `guardian_cleared_ratio`, `guardian_judgment_latency_seconds`, `guardian_parent_block_total` | Appendix B.1, Appendix B.2 |
 | API versioning & Sunset policy enforced (§10.0, §10.5) | `make lint-openapi` (`npx spectral lint ops/openapi/**/*.yaml`), Spectral `sunset-header` rule, ADR-0002 change review checklist | `api_sunset_header_missing_total`, `api_deprecation_notice_age_seconds` | `../ops/runbooks.md` standard runbook template → API Sunset (`docs/runbooks/api/sunset.md`, draft) |
-| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/udocket_core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | [Runbook RB-LLM-003](../ops/runbooks.md#rb-llm-003) |
+| FinOps guardrails prevent runaway spend (§8.7, §12.9) | `scripts/finops/check_mom_guard.py`; `tests/core/finops/test_guard.py::test_regression_formula` | `finops_mom_regression_flag{org}`, `llm_cost_estimate_total` | [Runbook RB-LLM-003](../ops/runbooks.md#rb-llm-003) |
 | Logging pipeline retains structured records (§12.1) | `tests/logging/test_redaction.py::test_forbidden_headers_masked`; `diagram:diff` for log schema | `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `logging_spool_utilization_pct` | `../ops/runbooks.md (RB-LOG-007)` |
 | Advisory locks stay healthy during approvals (§5.4) | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`; `tests/platform/db/test_rls_guard.py::test_rls_context_asserts_missing_gucs` | `udlock_watchdog_stale_total`, `udlock_lock_age_seconds_p95` | [Runbook RB-LOCK-006](../ops/runbooks.md#rb-lock-006) |
 | Portal downloads honor ETag / If-Match (§10.6, `../ops/runbooks.md (RB-ETAG)`) | `tests/e2e/test_artifact_range_download.py::test_range_and_conditional_gets` | `portal_412_precondition_total`, `alert_portal_412_spike` | `../ops/runbooks.md (RB-ETAG)` |
 | Abuse-prevention detectors enforce throttles (§B.4, §6.13, §10.9) | `tests/security/test_abuse_checks.py::test_api_abuse_flagged`, `tests/security/test_portal_download_guard.py::test_anomaly_blocks`, shadow soak fixtures (`tests/platform/shadow/test_shadow_thresholds.py`) | `api_suspect_request_total`, `portal_download.anomaly_score`, `messaging_abuse_detected_total`, `abuse_shadow_threshold_expiring_total` | [Runbook RB-RES-BLOCK](../ops/runbooks.md#rb-res-block) (residency), `../ops/runbooks.md (RB-ETAG)`, `docs/runbooks/security/abuse_triage.md` |
 | Masking profiles map to FORCE RLS policies (§4.4.1) | `tests/platform/db/test_mask_profiles.py::test_mask_profile_matches_policy`, `tests/platform/db/test_secure_view_usage.py::test_no_base_table_queries` | `rls_context_missing_total`, `mask_profile_mismatch_total` | [Runbook RB-GOV-008](../ops/runbooks.md#rb-gov-008) (settings rollback), [Runbook RB-LOCK-006](../ops/runbooks.md#rb-lock-006) |
-| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/udocket_core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/udocket_core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | [Runbook RB-LLM-003](../ops/runbooks.md#rb-llm-003), [Runbook RB-RES-BLOCK](../ops/runbooks.md#rb-res-block) |
+| LLM/vector residency guard prevents out-of-region fallback (§8.1.1) | `tests/core/llm/test_residency_guard.py::test_block_disallowed_region`, `tests/core/vector/test_vector_residency.py::test_allowed_regions_only`, synthetic `synthetics/llm_residency.yaml` | `llm_region_fallback_total`, `vector_region_fallback_total` | [Runbook RB-LLM-003](../ops/runbooks.md#rb-llm-003), [Runbook RB-RES-BLOCK](../ops/runbooks.md#rb-res-block) |
 | CSP nonce & HIPAA cache enforcement (§11.5, §10.6) | `tests/ui/test_csp_nonced.py::test_nonce_roundtrip`, synthetic `synthetics/csp_nonce_failure.yaml`, `synthetics/portal_hipaa_cache.yaml`, `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` | `csp_nonce_mismatch_total`, `portal_cache_header_violation_total` | `../ops/runbooks.md (RB-PORTAL-005)`, Appendix H security headers checklist |
 
 ______________________________________________________________________

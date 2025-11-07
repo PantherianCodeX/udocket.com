@@ -6,6 +6,7 @@ from django.urls import reverse
 from apps.platform.accounts.models import Organization, OrganizationMembership, User
 from apps.platform.cases.models import Case
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.operations.storage import ensure_case_paths
 from tests._typing import ClientFixture
 
 
@@ -25,6 +26,8 @@ def test_artifacts_index_search_and_pagination(client: ClientFixture, django_use
 
     case = Case.objects.create(id="CASE-ART", title="Artifact Case", organization=org)
 
+    paths = ensure_case_paths(str(case.id), case.organization_id)
+
     for idx in range(25):
         CaseArtifact.objects.create(
             case_id=str(case.id),
@@ -33,7 +36,7 @@ def test_artifacts_index_search_and_pagination(client: ClientFixture, django_use
             job_id=f"JOB-{idx:02d}",
             type="TRANSCRIPT",
             title=f"Transcript {idx:02d}",
-            path=f"storage/{idx:02d}.txt",
+            path=str(paths.transcript / f"{idx:02d}.txt"),
         )
 
     for idx in range(5):
@@ -44,7 +47,7 @@ def test_artifacts_index_search_and_pagination(client: ClientFixture, django_use
             job_id=f"MISC-{idx:02d}",
             type="TIMELINE",
             title=f"Timeline {idx:02d}",
-            path=f"storage/timeline-{idx:02d}.json",
+            path=str(paths.analysis / f"timeline-{idx:02d}.json"),
         )
 
     client.force_login(user)

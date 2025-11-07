@@ -2,7 +2,7 @@
 
 This package separates **Pydantic v2 models** (validation) from **JSON data** (content).
 The **core models** live under `udocket_models/core/…`. All **reference catalogs** are JSON
-bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
+bundles under `core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 
 ## Why this design?
 - **Zero code-data coupling**: add or update any jurisdiction by editing JSON only.
@@ -19,7 +19,7 @@ bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 ---
 
 ## File conventions
-`udocket_core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json`
+`core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json`
 - Example: `CA/AB/court_catalog.json` (Alberta), `CA/FED/court_catalog.json` (Canada Federal),
   `US/NY/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
@@ -463,7 +463,7 @@ class Order(BaseModel):
 
 ---
 
-### `udocket_core/data/courts/CA/AB/court_catalog.json`
+### `core/data/courts/CA/AB/court_catalog.json`
 
 ```json
 {
@@ -725,7 +725,7 @@ class Order(BaseModel):
 
 ---
 
-### `udocket_core/data/courts/CA/FED/court_catalog.json`
+### `core/data/courts/CA/FED/court_catalog.json`
 
 ```json
 {
@@ -819,7 +819,7 @@ class Order(BaseModel):
 
 ---
 
-### `udocket_core/data/courts/US/NY/court_catalog.json`
+### `core/data/courts/US/NY/court_catalog.json`
 
 ```json
 {
@@ -888,7 +888,7 @@ class Order(BaseModel):
 
 This package separates **Pydantic v2 models** (validation) from **JSON data** (content).
 The **core models** live under `udocket_models/core/…`. All **reference catalogs** are JSON
-bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
+bundles under `core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 
 ## Why this design?
 - **Zero code-data coupling**: add or update any jurisdiction by editing JSON only.
@@ -907,7 +907,7 @@ bundles under `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 ## File conventions
 ```
 
-udocket_core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json
+core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json
 
 ````
 - Example: `CA/AB/court_catalog.json` (Alberta), `CA/FED/court_catalog.json` (Canada Federal),
@@ -942,7 +942,7 @@ payload = export_registry_json("/path/to/your/json/data")
 
 ## Expanding jurisdictions (Step-by-step)
 
-1. **Create a new JSON bundle**: `udocket_core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
+1. **Create a new JSON bundle**: `core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 2. Add a `CourtCatalog` with one or more `Court` objects:
    * Populate `locations` (`is_base_point` where applicable; set `admin_base_slug` for circuits
      *only if an official page says so*).

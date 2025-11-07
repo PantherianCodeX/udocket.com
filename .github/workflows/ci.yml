@@ -251,7 +251,7 @@ jobs:
               uv run --project apps/platform --extra dev pytest -n auto --cov=apps/platform --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests
               ;;
             core)
-              uv run --project packages/core --extra dev pytest -n auto --cov=packages/core --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests/udocket_core
+              uv run --project packages/core --extra dev pytest -n auto --cov=packages/core --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests/core
               ;;
             common)
               uv run --project packages/common --extra dev pytest -n auto --cov=packages/common --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml packages/common

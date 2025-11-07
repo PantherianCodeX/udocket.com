@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from packages.common.json_utils import coerce_json_object, write_json_object
 from packages.common.prompts import DEFAULT_LOCALE, PromptLogEntry
-from packages.core import __version__ as UDOCKET_CORE_VERSION
+from packages.core import __version__ as CORE_PACKAGE_VERSION
 
 from ..common import (
     AnalysisArtifact,
@@ -757,7 +757,7 @@ def finalize_outputs(
         "facts": len(facts_sequence) if facts_sequence is not None else 0,
         "timeline_events": len(timeline_result.events),
         "entity_count": len(entities_sequence) if entities_sequence is not None else 0,
-        "udocket_core_version": UDOCKET_CORE_VERSION,
+        "core_package_version": CORE_PACKAGE_VERSION,
         "sha_map": sha_map_json,
     }
     if provider_chain:
@@ -809,7 +809,7 @@ def finalize_outputs(
             "case_brief_file": str(case_brief_path),
             "words": words,
             "providers": list(provider_chain or []),
-            "udocket_core_version": UDOCKET_CORE_VERSION,
+            "core_package_version": CORE_PACKAGE_VERSION,
             "sha_map": sha_map_json,
         },
     )

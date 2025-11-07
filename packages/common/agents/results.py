@@ -31,7 +31,7 @@ class TranscriptionResult:
         sha_map: Mapping of artifact names to SHA-256 digests.
         status: Fixed success marker; errors raise exceptions upstream.
         artifact_hashes: Optional convenience alias for ``sha_map`` consumers.
-        udocket_core_version: Version string of ``packages.core`` that produced the result.
+        core_package_version: Version string of ``packages.core`` that produced the result.
     """
 
     transcript_file: Path
@@ -45,7 +45,7 @@ class TranscriptionResult:
     sha_map: dict[str, str] = field(default_factory=_default_sha_map)
     status: Literal["ok"] = "ok"
     artifact_hashes: dict[str, str] | None = None
-    udocket_core_version: str | None = None
+    core_package_version: str | None = None
 
     def with_core_version(self, version: str) -> TranscriptionResult:
         """Return a copy that includes the provided core version."""
@@ -62,7 +62,7 @@ class TranscriptionResult:
             sha_map=dict(self.sha_map),
             status=self.status,
             artifact_hashes=(dict(self.artifact_hashes) if self.artifact_hashes else None),
-            udocket_core_version=version,
+            core_package_version=version,
         )
 
 

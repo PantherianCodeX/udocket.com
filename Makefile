@@ -185,7 +185,7 @@ common.test: ## Run packages.common test suite
 	$(UV) run --project apps/platform --extra dev pytest -n auto -q packages/common
 
 core.test: ## Run packages.core test suite
-	$(UV) run --project apps/platform --extra dev pytest -n auto -q tests/udocket_core
+	$(UV) run --project apps/platform --extra dev pytest -n auto -q tests/core
 
 platform.test: ## Run platform test suite
 	$(UV) run --project apps/platform --extra dev pytest -n auto -q

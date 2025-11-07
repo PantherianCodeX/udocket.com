@@ -163,7 +163,7 @@ ______________________________________________________________________
 **State:** Capability cache, parity evidence hashes, Settings `llm.models[]`, `speech.providers[]`. **|**
 **Failures & handling:** Missing parity evidence blocks activation; drift triggers `PROVIDER_DATA_POLICY_DRIFT` and opens circuits. **|**
 **Observability:** Metrics `llm_region_fallback_total`, `speech_failover_attempt_total`, synthetic probes `synthetics/llm_residency.yaml`. **|**
-**Breadcrumbs:** Capability map `packages/core/llm/registry.py`, speech controller `packages/core/failover/speech.py`, tests `tests/udocket_core/llm/test_registry.py`, `tests/udocket_core/speech/test_failover.py`. **|**
+**Breadcrumbs:** Capability map `packages/core/llm/registry.py`, speech controller `packages/core/failover/speech.py`, tests `tests/core/llm/test_registry.py`, `tests/core/speech/test_failover.py`. **|**
 **References:** LLM registry spec §2.1–§2.3, Transcription agent spec.
 
 ______________________________________________________________________

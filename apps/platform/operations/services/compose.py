@@ -441,9 +441,9 @@ def execute_compose_job(
     artifact_sha_payload = optional_json_object(compose_meta_payload.get("artifact_sha256"))
     if artifact_sha_payload is not None:
         meta_updates["compose_artifact_sha256"] = artifact_sha_payload
-    version_value = coerce_str(compose_meta_payload.get("udocket_core_version"))
+    version_value = coerce_str(compose_meta_payload.get("core_package_version"))
     if version_value:
-        meta_updates["compose_udocket_core_version"] = version_value
+        meta_updates["compose_core_package_version"] = version_value
     if artifacts.timeline_file:
         meta_updates["timeline_v2_file"] = str(artifacts.timeline_file)
     if artifacts.graph_file:

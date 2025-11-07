@@ -39,7 +39,7 @@ from packages.common.json_utils import (
     read_json_object,
 )
 from packages.common.text import unique_title
-from packages.core import __version__ as UDOCKET_CORE_VERSION
+from packages.core import __version__ as CORE_PACKAGE_VERSION
 from packages.core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
 from packages.core.agents.transcribe_lib import ModeLiteral
 from packages.core.audio import probe_audio_metadata
@@ -149,7 +149,7 @@ def transcribe_job(
         drop_empty_keys=True,
         drop_nullish_values=True,
     )
-    base_meta.setdefault("udocket_core_version", UDOCKET_CORE_VERSION)
+    base_meta.setdefault("core_package_version", CORE_PACKAGE_VERSION)
     safe_job_meta(case_id, org_id, job_id, base_meta)
 
     runtime = JobRuntimeContext(
@@ -872,7 +872,7 @@ def transcribe_job(
 
     # If agent succeeded, persist results; notification errors won't flip status
     artifact_sha256 = dict(result.artifact_hashes or result.sha_map)
-    core_version = result.udocket_core_version or UDOCKET_CORE_VERSION
+    core_version = result.core_package_version or CORE_PACKAGE_VERSION
     payload: dict[str, object] = {
         "status": "SUCCEEDED",
         "job_id": job_id,
@@ -884,7 +884,7 @@ def transcribe_job(
         "progress_percent": None,
         "upload_progress": None,
         "artifact_sha256": artifact_sha256,
-        "udocket_core_version": core_version,
+        "core_package_version": core_version,
     }
     refresh_fn = getattr(job_obj, "refresh_from_db", None)
     if callable(refresh_fn):
@@ -1012,7 +1012,7 @@ def transcribe_job(
             "celery_task_finished_at": finished_ts.isoformat() if finished_ts else None,
             "celery_task_status": "succeeded" if celery_task_id else None,
             "artifact_sha256": artifact_sha256,
-            "udocket_core_version": core_version,
+            "core_package_version": core_version,
         },
     )
 

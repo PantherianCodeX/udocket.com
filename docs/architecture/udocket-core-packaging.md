@@ -1,10 +1,10 @@
 # Core Packaging Strategy (informative)
 
-**Purpose:** capture the current stance on packaging `udocket_core`, how it interacts with the monorepo, and outline a safe path to publish subsets without slowing rapid development.
+**Purpose:** capture the current stance on packaging `packages.core`, how it interacts with the monorepo, and outline a safe path to publish subsets without slowing rapid development.
 
 ## Current state
 
-- `udocket_core` and `udocket_common` ship as monorepo modules. They are imported directly by the Django platform, Celery workers, and docs tooling.
+- `packages.core` and `packages.common` ship as monorepo modules. They are imported directly by the Django platform, Celery workers, and docs tooling.
 - Shared helpers (`packages.common.*`) are the consolidation point for deterministic IDs, JSON utilities, time helpers, and title generation. New cross-cutting utilities should land here before appearing in app-specific code.
 - Distribution happens through the repository itself (container builds, uv projects). No packages are currently published to PyPI or an internal index.
 
@@ -13,9 +13,9 @@
 | Option | Pros | Cons |
 | --- | --- | --- |
 | Keep monorepo modules only | Single source of truth; instant refactors across services; minimal release overhead. | Consumers must use the repo or built images; harder for external tooling to reuse libraries. |
-| Publish `udocket_core` / `udocket_common` packages | Enables reuse in satellite services; allows independent semantic versioning. | Requires release automation, compatibility policy, and dependency syncing across repos; increases coordination overhead. |
+| Publish `packages.core` / `packages.common` packages | Enables reuse in satellite services; allows independent semantic versioning. | Requires release automation, compatibility policy, and dependency syncing across repos; increases coordination overhead. |
 
-**Recommendation:** stay monorepo-first until we have a real consumer outside this repository. When that happens, publish `udocket_common` first (small surface area, pure utilities), then evaluate whether `udocket_core` needs the same treatment or if a lighter “client” package suffices.
+**Recommendation:** stay monorepo-first until we have a real consumer outside this repository. When that happens, publish `packages.common` first (small surface area, pure utilities), then evaluate whether `packages.core` needs the same treatment or if a lighter “client” package suffices.
 
 ## Publishing playbook (when needed)
 

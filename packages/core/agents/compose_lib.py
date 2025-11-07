@@ -17,7 +17,7 @@ from packages.common.json_utils import (
     load_json_value,
     write_json_object,
 )
-from packages.core import __version__ as UDOCKET_CORE_VERSION
+from packages.core import __version__ as CORE_PACKAGE_VERSION
 
 from ..llm import LLMSettings, load_llm_settings
 from .common import append_jsonl, ensure_dir, sha256_file
@@ -454,7 +454,7 @@ class ComposeAgent:
             "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
             "status": "ok",
             "artifact_sha256": artifact_sha_payload,
-            "udocket_core_version": UDOCKET_CORE_VERSION,
+            "core_package_version": CORE_PACKAGE_VERSION,
         }
 
         meta_json = ops_dir / f"{job_id}__compose_log.json"
@@ -502,7 +502,7 @@ class ComposeAgent:
                 else None,
                 "staff_report": str(artifacts.staff_report) if artifacts.staff_report else None,
                 "artifact_sha256": artifact_sha_payload,
-                "udocket_core_version": UDOCKET_CORE_VERSION,
+                "core_package_version": CORE_PACKAGE_VERSION,
             },
         )
 

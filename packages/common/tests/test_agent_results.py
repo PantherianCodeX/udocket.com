@@ -41,6 +41,6 @@ def test_transcription_result_with_core_version() -> None:
     copy = base.with_core_version("1.2.3")
 
     assert copy is not base
-    assert copy.udocket_core_version == "1.2.3"
+    assert copy.core_package_version == "1.2.3"
     assert copy.sha_map == {"transcript": "ffff"}
     assert copy.artifact_hashes == {"transcript": "ffff"}

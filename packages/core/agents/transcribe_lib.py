@@ -25,7 +25,7 @@ from packages.common.json_utils import (
     write_json_object,
 )
 from packages.common.time import format_utc
-from packages.core import __version__ as UDOCKET_CORE_VERSION
+from packages.core import __version__ as CORE_PACKAGE_VERSION
 
 from ..audio import probe_audio_metadata
 from .common import append_jsonl
@@ -861,7 +861,7 @@ class TranscriptionAgent:
             timestamp_utc=_now_utc(),
             diarization_enabled=bool(diarization),
             status="succeeded",
-            udocket_core_version=UDOCKET_CORE_VERSION,
+            core_package_version=CORE_PACKAGE_VERSION,
             sha_map=sha_map,
         )
         if audio_meta:
@@ -908,5 +908,5 @@ class TranscriptionAgent:
             duration_s=dur,
             sha_map=sha_copy,
             artifact_hashes=sha_copy,
-            udocket_core_version=UDOCKET_CORE_VERSION,
+            core_package_version=CORE_PACKAGE_VERSION,
         )

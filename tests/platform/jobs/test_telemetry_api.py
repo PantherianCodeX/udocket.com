@@ -48,7 +48,7 @@ def _write_ops_payload(case: Case, job: Job, *, with_remote: bool = True) -> Non
         "avg_confidence": 0.9123,
         "diarization_enabled": job.diarization,
         "timestamp_utc": "2025-01-01T00:00:00Z",
-        "udocket_core_version": "test-version",
+        "core_package_version": "test-version",
         "artifact_sha256": {"transcript": "transcript-sha", "audio": "local-sha"},
     }
     if with_remote:
