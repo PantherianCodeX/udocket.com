@@ -77,15 +77,43 @@ def extract_blocks(content: str) -> list[TreeBlock]:
     return blocks
 
 
+_TREE_ART_PREFIX = set("│├┤└┘┌┐┴┬┼╰╯╭╮─")
+_COMMENT_SEPARATORS: tuple[str, ...] = (" - ", " — ")
+
+
+def _strip_tree_art(token: str) -> str:
+    cleaned = token
+    while cleaned and cleaned[0] in _TREE_ART_PREFIX:
+        cleaned = cleaned[1:]
+        cleaned = cleaned.lstrip()
+    return cleaned
+
+
+def _strip_trailing_comment(token: str) -> str:
+    for sep in _COMMENT_SEPARATORS:
+        if sep in token:
+            return token.split(sep, 1)[0].rstrip()
+    return token
+
+
+def _indent_count(line: str) -> int:
+    expanded = line.replace("\t", "    ")
+    indent_str = "".join(" " if ch in _TREE_ART_PREFIX else ch for ch in expanded)
+    return len(indent_str) - len(indent_str.lstrip(" "))
+
+
 def parse_tree_block(lines: Sequence[str]) -> list[TreeEntry]:
     raw_entries: list[tuple[int, str, bool, str]] = []
     for raw_line in lines:
         if not raw_line.strip():
             continue
-        expanded = raw_line.replace("\t", "    ")
-        indent = len(expanded) - len(expanded.lstrip(" "))
-        token = expanded.strip()
+        indent = _indent_count(raw_line)
+        token = raw_line.strip()
         if not token or token.startswith("#"):
+            continue
+        token = _strip_tree_art(token)
+        token = _strip_trailing_comment(token).strip()
+        if not token:
             continue
         explicit_dir = token.endswith("/")
         label = token.rstrip("/")
@@ -162,4 +190,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-

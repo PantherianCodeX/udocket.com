@@ -48,3 +48,13 @@ def test_type_mismatch_detected(tmp_path, capsys):
     assert exit_code == 1
     assert "expected directory for 'configs'" in captured.err
 
+
+def test_tree_art_and_comment_stripped(tmp_path):
+    (tmp_path / "apps" / "web").mkdir(parents=True)
+    appendix = write_appendix(
+        tmp_path,
+        "├─ apps/ - platform apps\n│  └─ web/ — UI\n",
+    )
+
+    exit_code = crt.main(["--appendix", str(appendix), "--repo-root", str(tmp_path)])
+    assert exit_code == 0
