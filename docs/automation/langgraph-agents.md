@@ -110,7 +110,7 @@ ______________________________________________________________________
   <figcaption style="font-size: 0.9em; color: #555;">Pipeline overview showing Transcribe → Analyze (Atoms) → Compose flow</figcaption>
 </figure>
 
-### 2.1 Transcription agent (binding) {#21-transcription-agent}
+### 2.1 Transcription agent (binding)
 
 - Modes: streaming (WebSocket) and batch (provider-hosted jobs). Diarisation is enabled for batch jobs only.
 - Inputs: local filesystem path or HTTPS SAS URL, language, diarisation flag (batch only), optional transcription overrides.
@@ -125,7 +125,7 @@ ______________________________________________________________________
   <figcaption style="font-size: 0.9em; color: #555;">Transcribe pipeline with normalization, Azure health checks, retry loops, and artifact emission</figcaption>
 </figure>
 
-### 2.2 Analyze agent (binding) {#22-analyze-agent}
+### 2.2 Analyze agent (binding)
 
 - Inputs: structured transcript JSON (`transcript/<job_id>__transcript_v1.json`, text fallback only when JSON is unavailable), intake/questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts, lane concurrency ceilings, token budgets, and deterministic idempotency keys (`uuid5(job_id, stage_fingerprint)`).
 - Parallel lanes: LangGraph fans out from `InputDiscovery` into outline, timeline, entities/relations, issues, gaps, and flags/alerts lanes. Lanes share the typed `AnalyzeState` mapping, emit deterministic UUIDs, and enforce JSON Schemas before merging into `SummaryDraft`, `StaffReport`, and `QAReview` nodes.
@@ -141,7 +141,7 @@ ______________________________________________________________________
   <figcaption style="font-size: 0.9em; color: #555;">Analyze LangGraph pipeline with atom-fed lanes, QA feedback loops, and artifact emission</figcaption>
 </figure>
 
-#### 2.2.1 Atom layer (binding) {#221-atom-layer}
+#### 2.2.1 Atom layer (binding)
 
 - Purpose: derive internal “Atoms” — normalised, evidence-backed statements with deterministic UUIDs — from transcript segments. Atoms remain internal to Analyze and power validation, conflict detection, and QA scoring.
 - Extraction flow: sentence heuristics plus (optional) LLM assists yield candidate claims; the pipeline canonicalises text, detects negation cues, attaches transcript evidence (`segment_id`, timestamps, speakers), assigns UUIDs, and merges corroborating statements into an `AtomsIndex`.
@@ -158,7 +158,7 @@ ______________________________________________________________________
   <figcaption style="font-size: 0.9em; color: #555;">Analyze lane feedback loop with targeted revision directives that preserve passing outputs</figcaption>
 </figure>
 
-#### 2.2.2 Lane QA & revision loops (binding) {#222-lane-qa-revision}
+#### 2.2.2 Lane QA & revision loops (binding)
 
 - Node catalog: Analyze reuses the Compose-style LangGraph idioms — `LaneDraft`, `LaneQA`, `LaneRevision`, and `LaneFinalize` nodes per artifact lane — so Compose and Analyze share operational semantics, cost controls, and observability. Nodes register under `packages.core.agents.analyze.graph` and expose typed signatures (`AnalyzeState -> AnalyzeState`).
 - Lane QA decisions: each `LaneQA` node executes schema validation, atom cross-checks, intake/questionnaire verification, and deterministic heuristics (e.g., minimum evidence count per issue). Outcomes map to `{"advance", "revise", "quarantine"}`; the node records a `LaneQAResult` payload plus structured findings for ops metadata.
@@ -178,7 +178,7 @@ Default acceptance thresholds (tunable later via configuration, but binding here
 
 Lane QA emits structured findings that include metric values, pass/fail checks, and remediation notes to guide revision directives.
 
-### 2.3 Compose agent (binding) {#23-compose-agent}
+### 2.3 Compose agent (binding)
 
 - Inputs: canonical Analyze artifacts (`summary_v1.json|.md`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`), intake data, deliverable templates (DOCX/Markdown), and lane concurrency budgets.
 - Lanes: parallel client and lawyer deliverable pipelines (draft → editor passes → lane QA), optional bundle excerpt, followed by cross-lane QA review and final packaging. Lanes share shared context (summary JSON + structured artifacts) but render voice-specific outputs.
@@ -199,7 +199,7 @@ Lane QA emits structured findings that include metric values, pass/fail checks, 
   <figcaption style="font-size: 0.9em; color: #555;">Client, lawyer, and bundle lanes share revision directives so only failing sections are redrafted</figcaption>
 </figure>
 
-### 2.4 Timeline & relationship agents (roadmap, informative) {#24-timeline-relationship-agents}
+### 2.4 Timeline & relationship agents (roadmap, informative)
 
 - Roadmap agents will consume Analyze timeline/events and entities JSON to produce richer chronological visualisations and relationship graphs with deterministic UUID lineage.
 - Responsibilities: maintain speaker attribution, event windows, entity linkage, and evidence references.
@@ -218,7 +218,7 @@ Lane QA emits structured findings that include metric values, pass/fail checks, 
 
 ______________________________________________________________________
 
-## 3) API Contract {#3-api-contract}
+## 3) API Contract
 
 **Purpose:** Govern the configurable LangGraph pipelines, tool catalog, concurrency rules, and agent interfaces that keep jobs deterministic and auditable. **|**
 **Contract:** Pipelines are defined in Settings (`agents.pipeline.*`), tools in `agents.tools.*`, and assistant graphs follow the same activation rules. GraphRunner enforces schema hashes, stage ordering, deterministic manifests, and single-writer finalize semantics. **|**
@@ -245,10 +245,10 @@ ______________________________________________________________________
 
 - Pipelines enumerate `{pipeline_id, graph_version, graph_schema_sha256, runner, stages[]}` with per-stage metadata `{stage_id, langgraph_node_id, llm_profile_id, prompt_template_id, tool_ids[], enabled, retry_budget, cost_ceiling, depends_on[]}`. Revision directives are structured `{stage_id, target_uuid[], failing_checks[], instructions, preserve_spans[]}` and attach to checkpoints for focused replays. Versioning is additive; prior versions remain callable for queued jobs & replays until archived.
 
-### 3.3 API Error Codes (binding) {#33-api-error-codes}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate LangGraph agent `ApiError.code` values so service clients, worker orchestration, and UI flows respond deterministically. **|**
-**Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
+**Contract:** Agent launch and management endpoints reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the scenarios below capture how those codes manifest for LangGraph pipelines. **|**
 **State:** Runtime emits error codes as part of agent responses; schema parity is enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail lint and trigger `agent_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards chart `agent_api_error_total{code}`; synthetic launches follow pause/resume flows. **|**
@@ -315,7 +315,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 4) State Management {#4-state-management}
+## 4) State Management
 
 **Purpose:** Describe how agents persist manifests, artifacts, and lineage to provide forensic traceability. **|**
 **Contract:** Every agent job produces manifests capturing input hashes, settings snapshot, pipeline + graph versions, tool usage, and resulting artifact paths. **|**
@@ -351,7 +351,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability {#6-observability}
+## 6) Observability
 
 **Purpose:** Define the metrics, QA harnesses, and continuous evaluation commitments for LangGraph agents. **|**
 **Contract:** All pipelines must emit metrics for job duration, retries, QA issue density, WER (transcription), review deltas (Analyze/Compose), and FinOps cost budgets. QA harnesses replay golden datasets per release. **|**
@@ -500,7 +500,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix A – Agent schemas & error taxonomy (binding) {#appendix-a-agent-schemas-error-taxonomy}
+## Appendix A – Agent schemas & error taxonomy (binding)
 
 **Purpose:** Provide typed schema examples and canonical error codes for agent outputs. **|**
 **Contract:** Schemas must remain in sync with implementation; error codes are authoritative and map to failure classes in §5. **|**

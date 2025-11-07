@@ -130,10 +130,10 @@ ______________________________________________________________________
 - Watchdog jobs (`ops/scripts/identity/watch_device_fingerprint.py`) reconcile device mismatch counts, break-glass expiries, and federation lint results, emitting SSE warnings to the UI.  
 - PgBouncer health probe `/healthz/pgbouncer-mode` asserts pooling remains `transaction` or approved `session` so per-request GUCs stay intact.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Record the `ApiError.code` values emitted by identity and session APIs so clients respond safely to authentication and governance failures. **|**
-**Contract:** Identity surfaces the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the table below maps those codes to identity-specific flows. **|**
+**Contract:** Identity surfaces the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the table below maps those codes to identity-specific flows. **|**
 **State:** Errors arise from token issuance (`/api/v1/auth/token`), break-glass workflows, device binding checks, and portal/staff session APIs; schemas align with `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/auth/test_api_errors.py`; runtime emissions trigger `identity_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Identity – API Errors” and “Session Integrity” chart `identity_api_error_total{code}`, `identity_device_fp_mismatch_total`; synthetic token flows validate MFA/clock skew guardrails. **|**
@@ -425,7 +425,7 @@ SELECT id,
 
 ______________________________________________________________________
 
-## Appendix A — SQL policy patterns (binding) {#appendix-a--sql-policy-patterns-binding}
+## Appendix A — SQL policy patterns (binding)
 
 _Purpose: Preserve authoritative SQL patterns for row-level security, masking, and operational guards used by identity-aware services._
 

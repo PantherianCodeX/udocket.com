@@ -122,10 +122,10 @@ ______________________________________________________________________
 - When `logging.immutable_sink.enabled=true`, Fluent Bit forks the stream to the immutable WORM bucket alongside metadata captured by Audit §4.
 - Seal runner `ops/audit/seal_runner.py` consumes immutable batches hourly; verification job `ops/audit/verify_seal_chain.py` feeds Audit §5.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate Observability `ApiError.code` values so teams updating alert rules, dashboards, or telemetry exports react consistently when operations fail. **|**
-**Contract:** Observability APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the table below maps those codes to observability-specific workflows. **|**
+**Contract:** Observability APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the table below maps those codes to observability-specific workflows. **|**
 **State:** Errors stem from alert CRUD APIs, dashboard export tooling, and telemetry ingestion guardrails; schema parity enforced via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/observability/test_api_errors.py`; runtime emissions raise `observability_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Observability – API Errors” and “Ingestion Health” track `observability_api_error_total{code}`, `telemetry_ingest_rate_limit_total`; synthetic alert CRUD flows run per deploy. **|**
@@ -153,7 +153,7 @@ ______________________________________________________________________
 | `VALIDATION_ERROR` | 400 | No | observability_api_error_total |
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-## 4) State Management (binding) {#4-state-management}
+## 4) State Management (binding)
 
 **Purpose:** Document how telemetry schemas, retention policies, and redaction rules persist across the observability stack. **|**
 **Contract:** Maintain schema versions, ILM policies, and immutable sinks aligned with Settings; redaction profiles must apply uniformly to every ingestion path. **|**
@@ -195,7 +195,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 6) Observability (binding) {#6-observability--quality}
+## 6) Observability (binding)
 
 **Purpose:** Ensure ingest, trace correlation, immutable mirroring, and cost posture stay measurable and alertable. **|**
 **Contract:** Prometheus rules, dashboards, synthetics, and alert routes enumerated here are mandatory; any removal triggers RB-LOG-007 until coverage is restored. **|**
@@ -224,7 +224,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & Compliance (binding) {#6-access-control--auditing}
+## 7) Security & Compliance (binding)
 
 **Purpose:** Prevent sensitive data leakage and enforce authorized access. **|**
 **Contract:** Apply “never log” scrubber, enforce WebAuthn + justification for log queries, respect immutable mirroring, and limit client telemetry to anonymized aggregates. **|**
@@ -244,7 +244,7 @@ ______________________________________________________________________
 - Scrubber removes auth headers, tokens, signed URLs, PHI, transcripts/exhibits.
 - LLM evidence logs confirm provider “no training/no logging” flags via LLM Registry §6.
 
-### 7.3 Client telemetry posture {#42-client--portal-telemetry}
+### 7.3 Client telemetry posture
 
 - Portal WebVitals capture anonymized aggregates; console capture disabled except for time-boxed incidents with ticket references cleared within 24h.
 

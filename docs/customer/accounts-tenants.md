@@ -166,7 +166,7 @@ ______________________________________________________________________
 - Error handling: `POLICY_BLOCK` when metadata validation fails; `PROVIDER_DEGRADED` when IdP unreachable. **|**
 - Breadcrumbs: `apps/platform/accounts/sso/views.py`, tests `tests/platform/accounts/test_sso.py`. **|**
 
-### 3.3 Webhooks & events (binding) {#3-3-webhooks-events-binding}
+### 3.3 Webhooks & events (binding)
 
 - Emits `TENANT_PROVISIONED`, `TENANT_SUSPENDED`, `TENANT_OFFBOARDING_STARTED`, `TENANT_DECOMMISSIONED` onto Jobs SSE for UI updates. **|**
 - Guardian/Settings watchers update caches when tenant state changes. **|**

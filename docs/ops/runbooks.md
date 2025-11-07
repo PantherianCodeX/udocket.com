@@ -49,7 +49,7 @@ ______________________________________________________________________
 <!-- BEGIN AUTO-GENERATED: runbook-catalog -->
 <!-- Run `make docs.sync.runbooks` to refresh. -->
 
-## Guardian Service — 8.3 Runbooks & Drills (binding) {#guardian-8-3-runbooks-drills-binding} {#guardian-service-8-3-runbooks-drills-binding-guardian-8-3-runbooks-drills-binding}
+## Guardian Service — 8.3 Runbooks & Drills (binding) {#guardian-service-8-3-runbooks-drills-binding}
 
 **Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures executed during incidents. **|**
 <a id="rb-guard"></a>

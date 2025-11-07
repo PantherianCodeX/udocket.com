@@ -194,7 +194,7 @@ Guardian respects downstream approval invariants (ExclusiveSwap) and ensures del
 - Reference Manager tracks proposal SLAs (triage ≤ 14 days, resolution ≤ 30 days) and publishes adoption status. Guardian blocks new enum enforcement until bundles propagate to the UI, API, and schema validators.
 - Downstream analytics consume the same enums to ensure dashboards, runbooks, and audits remain consistent.
 
-### 2.4 Review modes & risk overrides (binding) {#24-review-modes-risk-overrides-binding}
+### 2.4 Review modes & risk overrides (binding)
 
 **Purpose:** Document the deterministic review-mode contract Guardian enforces so workflow services and reviewers share the same expectations. **|**
 **Contract:** Settings `review.mode`, `review.approval_type.default`, and `review.risk_overrides[]` originate from the Settings Registry; Guardian evaluates them after a PASS/WARN judgment and records the outcome in manifests and audit logs. **|**
@@ -300,10 +300,10 @@ curl -sS -X POST \
 - Submissions must use HMAC-authenticated service tokens; Guardian records request metadata in `ops/guardian/batch_submit.jsonl` and Postgres `guardian_submission_audit`.
 - Replay tooling (`POST /guardian/judgments:enqueue`) shares the same queue path to guarantee identical side effects and audit history.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate Guardian-specific `ApiError.code` values so downstream services, UI surfaces, and monitoring dashboards can distinguish policy rejections from transient infrastructure issues. **|**
-**Contract:** Guardian inherits the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and layers detector/policy-specific codes listed below. **|**
+**Contract:** Guardian inherits the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding) and layers detector/policy-specific codes listed below. **|**
 **State:** Codes originate from submission validation (`apps/platform/guardian/views.py`), pipeline stages (`packages/core/guardian/pipeline.py`), and review endpoints. **|**
 **Failures & handling:** Unknown codes fail contract tests (`tests/platform/guardian/test_api_errors.py`) and trigger `guardian_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Metrics `guardian_api_error_total{code}`, SSE topics `guardian.judgment.failed`, and dashboards “Guardian Decisions”/“Policy Drift” highlight error rates; synthetic submissions replay canonical failures every deploy. **|**
@@ -693,7 +693,7 @@ ______________________________________________________________________
 - `guardian_policy_block_total` spikes or synthetic job failures (`guardian_slo.yaml`) escalate via §8.3 entries RB-GUARD-001 and RB-GUARD-QUAR, depending on whether latency or policy regression drives the alert.
 - `PHI_DETECTION_DRIFT` incidents originate from classifier sampling (§6.3); §8.3.3 RB-GUARD-QUAR covers containment and follow-up requirements.
 
-### 8.3 Runbooks & Drills (binding) {#guardian-8-3-runbooks-drills-binding}
+### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Maintain authoritative Guardian recovery guides, drills, and manual review procedures executed during incidents. **|**
 **Contract:** Alerts enumerated in §§5–8 map to RB-GUARD identifiers documented here; responders update these runbooks after every incident or drill. **|**

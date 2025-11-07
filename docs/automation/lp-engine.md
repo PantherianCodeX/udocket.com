@@ -315,10 +315,10 @@ ______________________________________________________________________
 - Policy Agent (OPA) deployments: sidecars colocated with Guardian, Portal, and workers for low latency; centralized cluster distributes discovery bundles. Metrics `opa_decision_latency_seconds`, `opa_bundle_status`, `opa_denied_total` feed the “OPA Policy Plane” dashboard.
 - Local hot-reload tooling (`scripts/dev/run_lpe_hot_reload.py`) compiles sandbox bundles, pushes to a developer OPA, and diffs PolicyContext digests without staging deploys; snapshots attach to PRs modifying policy or locale packs.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate LPE-specific `ApiError.code` values so downstream services and automation interpret failures consistently. **|**
-**Contract:** LPE APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below describe how those codes manifest during policy compilation and evaluation. **|**
+**Contract:** LPE APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the scenarios below describe how those codes manifest during policy compilation and evaluation. **|**
 **State:** Error envelopes originate from `/api/v1/lpe/policy-contexts`, `/api/v1/lpe/compile`, and `/api/v1/lpe/evaluate`; schema parity maintained via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/policy/test_api_errors.py`; runtime emissions trigger `lpe_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “LPE – Compilation” and “LPE – Policy Evaluation” track `lpe_api_error_total{code}`, `lpe_compiler_duration_seconds`; synthetic evaluations verify waivers/residency scenarios. **|**
@@ -509,7 +509,7 @@ ______________________________________________________________________
 ## 6) Observability
 
 **Purpose:** Summarize telemetry, logging, and SLO governance. **|**
-**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../platform/observability.md#4-state-management)) and maintains decision-log schema guarantees. **|**
+**Contract:** Metrics enumerated here must exist in production; removal requires Observability review and equivalent replacements. LPE honours the platform “never log” policy ([`Logging §4`](../platform/observability.md#4-state-management-binding)) and maintains decision-log schema guarantees. **|**
 **State:** Grafana dashboards (“LPE – Enforcement & Residency”, “LPE Compiler”, “Localization QA”, “FinOps – LPE”, “SDK Health”) alongside PagerDuty service “Localization & Policy Engine”. Decision logs stored ≥365 days. **|**
 **Failures & handling:** Missing metrics or runbook linkage trigger docs lint failures; SLO burn-rate alerts feed §8.2 triggers. **|**
 **Observability:** Metrics `lpe_lookup_latency_seconds`, `lpe_policy_context_version`, `lpe_cache_hit_ratio`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`, `lpe_bundle_signature_error_total`, `opa_bundle_status`, `lpe_privacy_framework_enabled_total`, `lpe_compiler_resource_seconds`, `lpe_sdk_cache_error_total`. **|**
@@ -520,7 +520,7 @@ ______________________________________________________________________
 - Synthetic monitors run after each deploy against HIPAA/PHIPA/PIPA contexts; failures block rollout.
 - Decision-log validator `scripts/opa/validate_decision_logs.py` runs in CI and after major releases.
 - Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks.md` and must meet Appendix L baselines before shipping.
-- Logs honour the never-log list ([`Logging §4`](../platform/observability.md#4-state-management)); sampling budgets follow dynamic controls in [`Logging §7`](../platform/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
+- Logs honour the never-log list ([`Logging §4`](../platform/observability.md#4-state-management-binding)); sampling budgets follow dynamic controls in [`Logging §7`](../platform/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
 
 ### 6.1 SLOs & Targets (binding)
 

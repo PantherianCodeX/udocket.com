@@ -165,7 +165,7 @@ ______________________________________________________________________
 - Signals from Guardian/Compose update artifact states and ops audit logs (`ArtifactPromotionSignal`, `ArtifactHashMismatchSignal`). **|**
 - Storage adapters (`packages/core/storage/`) abstract local vs. Azure Blob (batch). **|**
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Document Artifact Store specific `ApiError.code` usage so callers know when to retry versus escalate. **|**
 **Contract:** Artifact promotion/deletion piggyback on the platform catalog; Artifact Store introduces no new codes beyond the shared inventory documented here. **|**

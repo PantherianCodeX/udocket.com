@@ -192,10 +192,10 @@ ______________________________________________________________________
 - Workers communicate with provider controllers (LLM, speech) through `packages/core/*` registry facades for parity enforcement.
 - Internal publish/subscribe uses Redis streams (`worker.events`) for watchdog and audit fan-out.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate worker-control `ApiError.code` values so API clients and automation react consistently. **|**
-**Contract:** Worker Cluster reuses the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and applies the scenarios below for job control, upload finalize, and pipeline orchestration requests. **|**
+**Contract:** Worker Cluster reuses the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding) and applies the scenarios below for job control, upload finalize, and pipeline orchestration requests. **|**
 **State:** Error responses originate from `apps/platform/jobs/views.py`, upload finalize controller `apps/platform/files/views.py`, and worker orchestration services; enums align with `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/jobs/test_error_envelope.py`; runtime emissions trigger `job_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Worker Cluster – API” and “Upload Finalize” watch `job_api_error_total{code}`, `upload_finalize_total{status}`; synthetic controls exercise pause/resume/cancel paths. **|**
@@ -223,7 +223,7 @@ ______________________________________________________________________
 | `RATE_LIMIT` | 429 | No | job_api_error_total<br>job_rate_limit_total |
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-### 3.4 Idempotency store & replay headers (binding) {#34-idempotency-store-replay-headers}
+### 3.4 Idempotency store & replay headers (binding)
 
 **Purpose:** Capture the shared idempotency table and replay semantics so every worker-facing API behaves consistently. **|**
 **Contract:** Requests persist entries before side effects, reuse stored responses on replays, and raise explicit collisions when payload hashes drift. **|**

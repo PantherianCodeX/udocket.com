@@ -122,10 +122,10 @@ ______________________________________________________________________
 - Seal runner `ops/audit/seal_runner.py` and verifier `ops/audit/verify_seal_chain.py` operate hourly; results persisted under `AUDIT_SEAL` artifacts.
 - Retention jobs `ops/privacy/retention_runner.py` consume audit logs to build `ERASURE_JOURNAL`/`DESTRUCTION_CERT` artifacts.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Document Audit & Evidence `ApiError.code` emissions so downstream services and auditors can apply the correct remediation flow. **|**
-**Contract:** Audit APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes) and surface the codes below for domain-specific failures. **|**
+**Contract:** Audit APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding) and surface the codes below for domain-specific failures. **|**
 **State:** Codes originate from `apps/platform/audit/api.py` and ledger services, with matching audit events appended to `ops/audit/ops_audit.jsonl`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and contract tests; runtime emissions trigger `audit_api_error_total{code}` alerts. **|**
 **Observability:** Metrics `audit_api_error_total{code}` and dashboards “Audit Seal Integrity” / “Compliance Evidence” monitor error rates; synthetic DSAR drills confirm semantics. **|**
@@ -154,7 +154,7 @@ ______________________________________________________________________
 | `VALIDATION_ERROR` | 400 | No | audit_api_error_total |
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-## 4) State Management (binding) {#4-immutable-storage--replication}
+## 4) State Management (binding)
 
 **Purpose:** Preserve audit evidence, manifests, and immutable replicas so records remain admissible. **|**
 **Contract:** Keep manifests append-only, mirror audit events to WORM storage, and maintain waivers/DSAR logs in lockstep with production state. **|**

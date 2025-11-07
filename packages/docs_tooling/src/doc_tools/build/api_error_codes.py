@@ -66,6 +66,15 @@ class Component:
     entries: list[ErrorCodeEntry]
 
 
+def mkdocs_slug(text: str) -> str:
+    """Mirror MkDocs/Material slug generation (lowercase, strip punct, spaces->-)."""
+
+    lowered = text.lower()
+    cleaned = re.sub(r"[^\w\- ]+", "", lowered)
+    collapsed = re.sub(r"\s+", "-", cleaned)
+    return collapsed.strip("-")
+
+
 def _fail(message: str) -> None:
     raise RuntimeError(message)
 
@@ -191,7 +200,7 @@ def _find_section_anchor(doc_path: Path) -> str:
                 return anchor
             title = re.sub(r"{#.*}" , "", line).strip()
             base = re.sub(r"^#+\s+", "", title)
-            return slugify(base)
+            return mkdocs_slug(base)
     _fail(f"{doc_path}: missing '### 3.3' heading")
     return ""  # pragma: no cover
 
@@ -285,22 +294,6 @@ def _ensure_cross_link(lines: list[str], component: Component) -> None:
     lines.insert(insert_idx + 1, "")
 
 
-def _ensure_heading_anchor(lines: list[str], component: Component) -> None:
-    target_anchor = component.section_anchor
-    if not target_anchor:
-        return
-    for idx, line in enumerate(lines):
-        stripped = line.strip()
-        if not stripped.lower().startswith("### 3.3"):
-            continue
-        if "{#" in stripped:
-            return
-        prefix = line.rstrip()
-        suffix = f" {{#{target_anchor}}}"
-        lines[idx] = prefix + suffix
-        return
-
-
 def _update_document(component: Component, *, check: bool) -> bool:
     original = component.doc_path.read_text(encoding="utf-8")
     summary_body = _render_summary_table(component.entries)
@@ -311,7 +304,6 @@ def _update_document(component: Component, *, check: bool) -> bool:
     updated = _replace_block(updated, catalog_begin, catalog_end, catalog_body)
     updated_lines = updated.splitlines()
     _remove_legacy_notes(updated_lines)
-    _ensure_heading_anchor(updated_lines, component)
     _ensure_cross_link(updated_lines, component)
     final = "\n".join(updated_lines).rstrip() + "\n"
     if check:
@@ -330,8 +322,10 @@ def _render_appendix(components: list[Component]) -> str:
     for component in components:
         doc_rel = _rel_from_appendix(component.doc_path)
         target = f"{doc_rel}#{component.section_anchor}" if component.section_anchor else doc_rel
-        heading = f"### [{component.display_name}]({target}) {{#{component.index_anchor}}}"
+        heading = f"### {component.display_name}"
         lines.append(heading)
+        lines.append("")
+        lines.append(f"Spec: [{component.display_name}]({target})")
         lines.append("")
         lines.extend(_render_summary_table(component.entries))
         lines.append("")
@@ -370,7 +364,7 @@ def _collect_components() -> list[Component]:
         entries = _load_entries(yaml_path)
         display_name = _derive_display_name(doc)
         section_anchor = _find_section_anchor(doc)
-        index_anchor = slugify(display_name)
+        index_anchor = mkdocs_slug(display_name)
         components.append(
             Component(
                 doc_path=doc,

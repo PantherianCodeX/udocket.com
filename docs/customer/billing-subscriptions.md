@@ -173,7 +173,7 @@ ______________________________________________________________________
 - Webhook failures retried with exponential backoff; security logs capture attempts. **|**
 - **Breadcrumbs:** `apps/platform/billing/providers/stripe/webhooks.py`, tests `tests/platform/billing/test_stripe_webhooks.py`. **|**
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Capture Billing-specific error codes beyond the platform catalog. **|**
 **Contract:** Current APIs emit only shared platform codes; this catalog stays empty until billing introduces dedicated codes. **|**

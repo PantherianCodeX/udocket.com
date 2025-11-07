@@ -196,7 +196,7 @@ ______________________________________________________________________
 
 <a id="digital-signer-external-interfaces"></a>
 
-### 3.1 External Interfaces (binding) {#digital-signer-external-interfaces}
+### 3.1 External Interfaces (binding)
 
 | Endpoint / Stream | Purpose | Contract notes |
 | --- | --- | --- |
@@ -225,7 +225,7 @@ curl -X POST https://platform.local/api/v1/sign \
 - Settings activation (`sign.*`) pushes trust-root, TSA/OCSP, and waiver configuration; activation lints invoke signer contract tests before enabling changes.
 - Evidence store writers, manifest generators, and ack processors share the internal API layer `packages/core/signer/*`, ensuring deterministic manifests and audit append-only logs.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate signer-specific `ApiError.code` values so service consumers and monitoring can distinguish signing failures from upstream transport issues. **|**
 **Contract:** Digital Signer emits the platform baseline codes (`POLICY_BLOCK`, `PROVIDER_DEGRADED`, etc.) plus the scenarios below when signature policy, manifest integrity, or replay rules fail. **|**

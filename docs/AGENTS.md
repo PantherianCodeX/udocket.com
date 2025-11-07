@@ -4,7 +4,7 @@ This document defines how automation and contributors should add and operate "ag
 
 **Single source:** This is the only AGENTS guide. All area-specific copies have been removed; reference this file (and the TDD’s engineering standards in §2.3) whenever you need binding guidance.
 
-## Engineering standards (binding) {#agent-engineering-standards}
+## Engineering standards (binding)
 
 - **Type-first development.** Before editing logic, introduce the strongly typed primitives the file needs (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers, or helper classes). Provider payloads must be represented by precise types or local stubs—never raw dicts. Missing third-party stubs are added alongside the change (no TODOs).
 - **Zero tolerance for `Any`.** New code may not add `typing.Any`. When touching legacy code, remove Any annotations as part of the change. Casts are a last resort: keep them in helper functions with a short comment explaining the invariant they protect. Never add `# type: ignore` or lint ignores; fix the root cause instead.

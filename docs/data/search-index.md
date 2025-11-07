@@ -163,7 +163,7 @@ ______________________________________________________________________
 - Embedding pipeline integrates with LLM Registry; deterministic UUID seeds stored in `search_embedding`. **|**
 - Tombstone processor applies DSAR deletions within 24 h using `search.tombstone` queue. **|**
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Track search-specific error codes once defined. **|**
 **Contract:** Currently no search-specific codes exist; the catalog remains empty until GA. **|**

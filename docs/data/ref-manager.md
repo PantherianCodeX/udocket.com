@@ -252,10 +252,10 @@ ______________________________________________________________________
 - Adoption statuses: `pending`, `in_progress`, `acknowledged`, `stale`.
 - Adoption reports join LPE compile results, Settings activation diffs, and Guardian acknowledgements.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate Reference Manager (`RM`) `ApiError.code` values so downstream automation and reviewers respond deterministically. **|**
-**Contract:** RM APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below cover harvest, publish, and adoption flows. **|**
+**Contract:** RM APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the scenarios below cover harvest, publish, and adoption flows. **|**
 **State:** Error envelopes originate from `/api/v1/reference/bundles`, `/api/v1/reference/templates`, and adoption acknowledgment endpoints; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/reference/test_api_errors.py`; runtime emissions trigger `reference_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Reference Manager – Publish” and “Reference Manager – Adoption” track `reference_api_error_total{code}`, `reference_manager_publish_guard_failure`; synthetic publishes exercise hotfix + rollback paths. **|**

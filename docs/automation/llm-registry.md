@@ -269,10 +269,10 @@ ______________________________________________________________________
 - Decision traces persist to evidence store and `ops/llm/decision_trace.jsonl`; replay tooling consumes the same format.
 - Workers expose `job.update` SSE payloads with `provider_progress` fields derived from adapter snapshots and warnings (`BUDGET_HELD`, `REGION_DRIFT`).
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Document the `ApiError.code` values emitted by the LLM Registry so calling services handle retries, fallbacks, and throttling consistently. **|**
-**Contract:** Registry APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the table below maps those codes to registry-specific scenarios. **|**
+**Contract:** Registry APIs reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the table below maps those codes to registry-specific scenarios. **|**
 **State:** Errors surface from `/api/v1/providers/*` endpoints, Settings activation hooks, and moderation/health orchestration; schema parity maintained via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/llm/test_registry_api.py`; runtime emissions trigger `llm_registry_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “LLM Registry – API” and “LLM Health” chart `llm_registry_api_error_total{code}`, `llm_circuit_state`; synthetic registry polls run per deploy. **|**

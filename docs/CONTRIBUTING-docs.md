@@ -8,7 +8,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Keep deep technical content here; keep `docs/overview/tdd.md` high‑level and link to the service spec.
 - Use consistent headings (Sentence case). Vale guides tone and terms.
 
-## Add a diagram (Mermaid) {#add-a-diagram}
+## Add a diagram (Mermaid)
 
 - Save `.mmd` beside the owning document inside a `diagrams/` directory (for example, `docs/platform/guardian/diagrams/guardian-judgment-flow-v1.mmd`).
 - In Markdown, prefer a live Mermaid block for the site and an image fallback for PDF using the build path mapping:

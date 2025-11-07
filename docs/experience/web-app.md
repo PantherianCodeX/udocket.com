@@ -250,10 +250,10 @@ Portal downloads exchange signed tokens issued by the Communications service; `I
 
 The UI coordinates with internal controllers for portal messaging, edit manifests, and assistant orchestration. SSE publishers in `apps/platform/events/*.py` broadcast state transitions to the front-end, while background jobs in the worker cluster hydrate downloads, regenerate manifests, and backfill presence events. Layout builders in `apps/platform/ui/views/*.py` assemble React component payloads from secure views (`*_secure`) governed by the Settings registry.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Document the `ApiError.code` values that the web application surfaces so UX flows handle retries and blocking states consistently. **|**
-**Contract:** Staff and portal clients reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the UI introduces the cases below for assistant and portal interactions. **|**
+**Contract:** Staff and portal clients reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the UI introduces the cases below for assistant and portal interactions. **|**
 **State:** Codes originate from REST responses (`/api/v1/chat/*`, `/api/v1/portal/*`) and SSE events; enum definitions live alongside the platform schema (`spec/schemas/api_error.schema.json`) with UI adapters in `apps/platform/ui/errors.py`. **|**
 **Failures & handling:** Unknown codes fail UI Spectral lint and unit tests; runtime emissions trigger `ui_api_error_unknown_total` alerts. **|**
 **Observability:** Dashboards “Web App – API Errors” and “Portal Integrity” watch `ui_api_error_total{code}`; synthetic probes cover chat availability and portal download flows. **|**
@@ -553,7 +553,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix A — Real-time payloads & components (binding) {#appendix-a-real-time-payloads-components}
+## Appendix A — Real-time payloads & components (binding)
 
 **Purpose:** Capture canonical SSE payloads and UI implementations the web app must honour. **|**
 **Contract:** SSE publishers emit these shapes; UI components consume them without divergence. **|**

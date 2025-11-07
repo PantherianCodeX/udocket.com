@@ -214,10 +214,10 @@ ______________________________________________________________________
 - SSE publisher `apps/platform/events/notifications.py` broadcasts in-app and portal invalidation events. Channel topics namespaced `notifications.org.{org_id}` and `notifications.case.{case_id}`.
 - Guardian/Compose integrations call `notifications.outbox.enqueue_review_timeout` to alert reviewers and escalate timeouts.
 
-### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Enumerate Notifications `ApiError.code` values so producers, webhooks, and portal clients handle throttling and policy blocks consistently. **|**
-**Contract:** Notifications reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes); the scenarios below map those codes to messaging semantics. **|**
+**Contract:** Notifications reuse the platform catalog in [`Platform Runtime §3.3`](../platform/runtime.md#33-api-error-codes-binding); the scenarios below map those codes to messaging semantics. **|**
 **State:** Error envelopes originate from outbox APIs, download token issuance, and webhook ingestion; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/notifications/test_api_errors.py`; runtime emissions trigger `notifications_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Notifications – API Errors” and “Notifications – Webhooks” monitor `notifications_api_error_total{code}`, `notify_rate_limit_total`; synthetic sends validate throttling and masking flows. **|**
@@ -552,7 +552,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix A — Event catalog & streaming contract (binding) {#appendix-a-event-catalog-streaming-contract}
+## Appendix A — Event catalog & streaming contract (binding)
 
 **Purpose:** Keep the authoritative catalog of notification and portal SSE events in one place. **|**
 **Contract:** Publishers emit events that validate against the shared schemas; consumers implement the envelope contract and respect replay/SLO requirements. **|**
@@ -593,7 +593,7 @@ Each payload includes `schema_version` and `emitted_at` (RFC3339 with timezone) 
 
 ______________________________________________________________________
 
-## Appendix B — Database enforcement patterns (binding) {#appendix-b--database-enforcement-patterns}
+## Appendix B — Database enforcement patterns (binding)
 
 **Purpose:** Capture authoritative SQL for portal messaging row-level security, delivery receipt partitioning, and download token enforcement.
 

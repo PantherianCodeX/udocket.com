@@ -107,7 +107,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 3) API Contract (binding) {#3-deployment-guardrails--environment-policy}
+## 3) API Contract (binding)
 
 **Purpose:** Capture the shared runtime “interfaces” that other services consume—cluster topology, mesh/TLS requirements, and residency-aware egress controls. **|**
 **Contract:** All services must deploy behind these guardrails; Settings and automation enforce compliance before traffic flows. **|**
@@ -117,7 +117,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Mesh renderers, `infra/kubernetes/`, Settings bundles, residency scanners. **|**
 **References:** TDD §3 summary, Settings spec §2.4, LPE spec §2.6.
 
-### 3.1 External Interfaces (binding) {#31-environment-topology}
+### 3.1 External Interfaces (binding)
 
 - Kubernetes namespaces per environment (`dev`, `staging`, `prod`, `audit`) host deployments for `web`, `channels`, `workers`, `guardian`, `signer`, `llm-registry`, `reference`, `notifications`, `settings`, ingress controllers, Redis broker/cache, and object-storage sidecars.
 - Service mesh (SPIFFE/SPIRE) issues workload identities; certificates rotate with TTL ≤ 24 h and SLO of 99.9 % renewals within five minutes of expiry. Certificates that overrun `security.tls.cert_ttl_minutes + 5` minutes trigger deny-by-default behaviour and page on-call; soft warnings fire 30 minutes before expiry.
@@ -282,7 +282,7 @@ Example error payload:
 
 - Mutations emit audit events, append to `ops_<agent>.jsonl`, and trigger Guardian or Signer workflows as appropriate.
 
-### 3.2 Internal Interfaces (binding) {#32-reference-manifests}
+### 3.2 Internal Interfaces (binding)
 
 #### 3.2.1 Mesh egress allowlist (illustrative)
 
@@ -343,7 +343,7 @@ metadata:
 
 All namespaces must declare the restricted baseline; violations are blocked by admission controllers and surfaced via `pod_security_violation_total`.
 
-### 3.3 API Error Codes (binding) {#33-api-error-codes}
+### 3.3 API Error Codes (binding)
 
 **Purpose:** Keep API consumers, SDKs, and monitoring dashboards aligned on the standardized `ApiError.code` values. **|**
 **Contract:** All REST and GraphQL surfaces emit one of the enumerated codes below; additions require schema (`spec/schemas/api_error.schema.json`) and Spectral rule (`ops/openapi/rules/apierror-enum.yaml`) updates before deployment. **|**
@@ -386,7 +386,7 @@ All namespaces must declare the restricted baseline; violations are blocked by a
 | `VALIDATION_ERROR` | 400 | No | api_error_total |
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 
-### 3.4 TLS posture (binding) {#34-tls-posture}
+### 3.4 TLS posture (binding)
 
 - TLS 1.3 is the platform default (`security.tls.min_version=TLSv1.3`). TLS 1.2 appears only when `security.tls.legacy_exceptions[]` entries specify endpoint, justification, and expiry ≤ 30 days. Settings activation rejects longer windows and alerts seven days before expiry to force review.
 - FIPS mode (`security.tls.fips_mode=true`) restricts cipher suites to AES-GCM (`TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`). Performance mode (`security.tls.performance_mode=true`) may enable `TLS_CHACHA20_POLY1305_SHA256` but must record the exception in release checklists. Synthetic handshake job `scripts/security/check_tls_ciphers.py` runs per deploy and nightly to enforce the profile.
@@ -405,7 +405,7 @@ metadata:
 
 Mesh and ingress templates consume the same Settings bundles so routing surfaces stay consistent across services.
 
-### 3.5 Service-to-service request signing (binding) {#35-service-to-service-request-signing}
+### 3.5 Service-to-service request signing (binding)
 
 **Purpose:** Authenticate privileged inter-service calls that traverse trust boundaries. **|**
 **Contract:** All mutating requests between platform services (Guardian, Signer, Settings activation, worker control APIs, etc.) MUST include the HMAC headers defined here; receivers validate the signature, enforce timestamp skew, and pair the request with an `Idempotency-Key` when present. **|**
@@ -434,7 +434,7 @@ canonical = [
 
 Receivers recompute the digest with the secret referenced by `X-Signature-Key-Id`, compare using constant-time equality, and record signature metrics. Replay protection combines the `Idempotency-Key` with a short-lived cache (default TTL 24 hours) so identical requests return cached responses.
 
-#### 3.5.1 Key rotation flows (binding) {#351-hmac-key-rotation}
+#### 3.5.1 Key rotation flows (binding)
 
 **Purpose:** Rotate HMAC credentials without interrupting signed traffic. **|**
 **Contract:** Rotations follow a dual-publish → cutover → revoke pattern; evidence lands in `ops/security/key_rotation/` alongside Grafana snapshots. **|**
@@ -453,7 +453,7 @@ Cadence: API HMAC keys rotate quarterly, Guardian/Signer service keys rotate sem
 
 ______________________________________________________________________
 
-## 4) State Management (binding) {#4-service-catalog}
+## 4) State Management (binding)
 
 **Purpose:** Maintain the authoritative service inventory and provider metadata that other docs and onboarding workflows consume. **|**
 **Contract:** The inventory must stay in sync with service specifications; updates require corresponding changes to owners’ docs and dashboards. **|**
