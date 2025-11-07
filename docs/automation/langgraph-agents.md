@@ -259,9 +259,9 @@ ______________________________________________________________________
 | Code | Scenario | Client guidance |
 | --- | --- | --- |
 | `CONFLICT` | Idempotency key replay with a different payload or stale manifest version. | Read the latest manifest, regenerate the payload, and retry with a fresh Idempotency-Key. |
-| `POLICY_BLOCK` | Policy guard rejected a pipeline launch or artifact promotion. | Present reason codes, remediate inputs, or seek approval before retrying. |
+| `POLICY_BLOCK` | Guardian or residency guard rejected a pipeline launch or artifact promotion. | Present Guardian reason codes, remediate policy inputs, or seek waiver approval before retrying. |
 | `PROVIDER_DEGRADED` | LLM provider or speech service unavailable and fallback chain exhausted. | Record degraded status, halt automatic retries, and resume once health probes report recovery. |
-| `QUARANTINED` | Generated artifact or intermediate output quarantined pending review. | Route to reviewer workflow, capture remediation notes, and relaunch only after clearance. |
+| `QUARANTINED` | Generated artifact or intermediate output quarantined pending Guardian review. | Route to reviewer workflow, capture remediation notes, and relaunch only after clearance. |
 | `RATE_LIMIT` | Org or agent exceeded concurrency or FinOps budgets. | Honour Retry-After, shed background runs, and reschedule once the budget resets. |
 <!-- END AUTO-GENERATED: api-error-codes:summary (error_codes.yaml) -->
 
@@ -269,9 +269,9 @@ ______________________________________________________________________
 | Code | HTTP Status | Audit Required | Metrics |
 | --- | --- | --- | --- |
 | `CONFLICT` | 409 | No | agent_api_error_total |
-| `POLICY_BLOCK` | 403 | Yes | agent_api_error_total |
+| `POLICY_BLOCK` | 403 | Yes | agent_guardian_block_total<br>agent_api_error_total |
 | `PROVIDER_DEGRADED` | 503 | Yes | agent_api_error_total |
-| `QUARANTINED` | 423 | Yes | agent_api_error_total |
+| `QUARANTINED` | 423 | Yes | agent_guardian_block_total |
 | `RATE_LIMIT` | 429 | No | agent_api_error_total<br>agent_rate_limit_total |
 <!-- END AUTO-GENERATED: api-error-codes:catalog (error_codes.yaml) -->
 

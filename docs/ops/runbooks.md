@@ -47,7 +47,7 @@ This appendix consolidates runbook sections from service and application specifi
 ______________________________________________________________________
 
 <!-- BEGIN AUTO-GENERATED: runbook-catalog -->
-<!-- AUTO-GENERATED: Run `make docs.sync.runbooks` to refresh. -->
+<!-- Run `make docs.sync.runbooks` to refresh. -->
 
 ## Guardian Service — 8.3 Runbooks & Drills (binding) {#guardian-8-3-runbooks-drills-binding} {#guardian-service-8-3-runbooks-drills-binding-guardian-8-3-runbooks-drills-binding}
 
@@ -253,9 +253,9 @@ ______________________________________________________________________
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
 **Observability:** Ops catalog build (`make docs.sync.runbooks`), drill checklist dashboards, and on-call retros track preparedness. **|**
 **Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, evidence store `ops/runboo../data/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
-**References:** Ops runbooks index, TDD Appendix B, Worker Cluster spec §3.5, QA governance §6.
+**References:** This document.
 
-- Runbooks must cover activation rollback, shadow divergence, Guardian quarantine escalation, and QA defect surge.
+- Runbooks must cover activation rollback, shadow divergence, and QA defect surge.
 - <a id="rb-agent-timeout"></a><a id="rb-agent-retry"></a><a id="rb-agent-activation"></a><a id="rb-agent-shadow"></a><a id="rb-agent-qa"></a>On-call rotation uses `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`, `RB-AGENT-ACTIVATION`, `RB-AGENT-SHADOW`, and `RB-AGENT-QA`.
 - Drill cadence and evidence capture feed quarterly readiness reviews and SOC2/SOCPA audits.
 
@@ -265,7 +265,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 
 - `RB-AGENT-ACTIVATION` — Applied AI Engineering (primary), Platform Operations (secondary), verified quarterly.
 - `RB-AGENT-SHADOW` — Platform Operations (primary), Applied AI Engineering (secondary), verified quarterly.
-- `RB-AGENT-TIMEOUT` — Worker Cluster owners, verified monthly.
+- `RB-AGENT-TIMEOUT` — Verified monthly.
 
 ### LangGraph Agent Orchestration — 8.3.2 Primary Runbooks (binding) {#langgraph-agent-orchestration-8-3-2-primary-runbooks-binding}
 
@@ -275,11 +275,11 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **Failures & handling:** Missing steps or outdated escalations prompt remediation tickets before launch readiness sign-off. **|**
 **Observability:** Ops QA reviews, incident postmortems, and audit sampling confirm runbook quality. **|**
 **Breadcrumbs:** `docs/ops/runbooks/agents/agent_activation.md`, `docs/ops/runbooks/agents/agent_shadow.md`, `docs/ops/runbooks/agents/agent_retry.md`. **|**
-**References:** Ops QA policy, TDD §12 (observability/DR), Worker Cluster spec §3.5.
+**References:** Ops QA policy.
 
 - Activation rollback: capture commands to revert settings activation, disable pipelines, and restore prior manifests.
 - Shadow divergence: enumerate alert thresholds, disable steps, data capture for analysis, and communications checklist.
-- QA defect surge: describe Guardian quarantine coordination, manual QA staffing, and follow-up tasks.
+- QA defect surge: describe manual QA staffing and follow-up tasks.
 
 ### LangGraph Agent Orchestration — 8.3.3 Drill Cadence & Evidence (binding) {#langgraph-agent-orchestration-8-3-3-drill-cadence-evidence-binding}
 

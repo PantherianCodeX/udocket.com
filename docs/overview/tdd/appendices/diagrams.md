@@ -45,7 +45,7 @@ ______________________________________________________________________
 Diagram authoring guidelines live in [Docs: How To](../../../CONTRIBUTING-docs.md#add-a-diagram). This appendix lists the current Mermaid sources and their rendered assets.
 
 <!-- BEGIN AUTO-GENERATED: diagram-index -->
-<!-- AUTO-GENERATED: Run `make docs.sync.diagrams` to refresh. -->
+<!-- Run `make docs.sync.diagrams` to refresh. -->
 
 ### [Digital Signer](../../../data/digital-signer.md)
 

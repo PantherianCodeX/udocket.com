@@ -45,7 +45,7 @@ ______________________________________________________________________
 This appendix aggregates the API error code sections from every service and app specification. Refresh it with `make docs.sync.api_codes` whenever those sections change.
 
 <!-- BEGIN AUTO-GENERATED: api-error-index -->
-<!-- AUTO-GENERATED: Run `make docs.sync.api_codes` to refresh. -->
+<!-- Run `make docs.sync.api_codes` to refresh. -->
 
 ### [Accounts & Tenants Service](../../../customer/accounts-tenants.md#3-3-webhooks-events-binding) {#accounts-tenants-service}
 

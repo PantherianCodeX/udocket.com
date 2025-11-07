@@ -70,13 +70,13 @@ nav:
   - Blueprint Overview: overview/tdd/index.md
   - High-Level Design: overview/tdd.md
 - Architecture Appendices:
-  - Glossary: overview/tdd/appendices/glossary.md
-  - Status Mapping: overview/tdd/appendices/status-mapping.md
-  - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
-  - SLO Index: overview/tdd/appendices/slo_index.md
-  - Diagrams: overview/tdd/appendices/diagrams.md
-  - Repository Trees: overview/tdd/appendices/repository_trees.md
-  - Core Packaging Strategy: architecture/udocket-core-packaging.md
+    - Glossary: overview/tdd/appendices/glossary.md
+    - Status Mapping: overview/tdd/appendices/status-mapping.md
+    - API Error Codes Index: overview/tdd/appendices/api_error_codes.md
+    - SLO Index: overview/tdd/appendices/slo_index.md
+    - Diagrams: overview/tdd/appendices/diagrams.md
+    - Repository Trees: overview/tdd/appendices/repository_trees.md
+    - Core Packaging Strategy: architecture/udocket-core-packaging.md
 - Experience:
   - Web App: experience/web-app.md
 - Platform Control Plane:

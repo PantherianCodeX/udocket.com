@@ -45,7 +45,7 @@ ______________________________________________________________________
 This appendix lists the SLOs defined in each service and app specification. Refresh it with `make docs.sync.slo` when SLO sections change.
 
 <!-- BEGIN AUTO-GENERATED: slo-index -->
-<!-- AUTO-GENERATED: Run `make docs.sync.slo` to refresh. -->
+<!-- Run `make docs.sync.slo` to refresh. -->
 
 ### [Accounts & Tenants Service](../../../customer/accounts-tenants.md)
 
@@ -168,7 +168,7 @@ ______________________________________________________________________
 **Failures & handling:** Breaches invoke RB-AGENT-PIPELINE, RB-AGENT-QA, or RB-FINOPS-LANGGRAPH before enabling new activations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, QA harness reports, and shadow run comparisons provide evidence. **|**
 **Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/udocket_core/agents/logging.py`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
-**References:** TDD §6, Worker Cluster spec §3.5, Guardian spec §7.
+**References:** This document.
 
 - **Pipeline availability:** ≥99.5% of LangGraph runs complete without manual retry, measured via `agent_job_completion_ratio`; breaches trigger RB-AGENT-PIPELINE before promotions proceed.
 - **QA acceptance:** Automated QA issue density stays ≤0.2 blocking defects per artifact; exceedances invoke RB-AGENT-QA and pause affected pipelines.
