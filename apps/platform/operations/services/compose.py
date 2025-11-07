@@ -35,7 +35,7 @@ from packages.common.operations import (
     optional_json_object,
 )
 from packages.common.text import unique_title
-from packages.core.agents import ComposeAgent, ComposeConfig
+from automation.agents import ComposeAgent, ComposeConfig
 from packages.core.llm.config import LLMSettings, load_llm_settings
 from packages.core.logging.context import LogContext
 

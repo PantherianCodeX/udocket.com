@@ -79,7 +79,7 @@ from apps.platform.tenancy import scope_jobs
 from packages.common.json_utils import read_json_object, stringify_json
 from packages.common.operations import ComposeStageMap, optional_json_object
 from packages.common.text import unique_title
-from packages.core.agents.analyze_lib import AnalyzeConfig
+from automation.agents import AnalyzeConfig
 from packages.core.audio import probe_audio_metadata
 
 

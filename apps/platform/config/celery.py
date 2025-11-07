@@ -29,8 +29,7 @@ try:
     recovery_interval_s = max(recovery_interval_s, 10)
     app.conf.beat_schedule = getattr(app.conf, "beat_schedule", {}) | {
         "recover-stale-jobs": {
-            # Use the maintenance module path so the worker registers the task correctly.
-            "task": "apps.platform.operations.task_modules.recover_maintenance.recover_stale_jobs",
+            "task": "automation.task_modules.recover_stale_jobs",
             "schedule": recovery_interval_s,
             "options": {"queue": "maintenance"},
         }

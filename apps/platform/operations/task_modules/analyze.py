@@ -43,8 +43,8 @@ from apps.platform.operations.utils import read_job_meta
 from packages.common.json_utils import JSONObject, coerce_json_object, read_json_object
 from packages.common.operations import ComposeStageMap, optional_json_object
 from packages.common.text import unique_title
-from packages.core.agents import AnalyzeAgent as _AnalyzeAgent
-from packages.core.agents import AnalyzeConfig
+from automation.agents import AnalyzeAgent as _AnalyzeAgent
+from automation.agents import AnalyzeConfig
 from packages.core.llm.config import load_llm_settings as _load_llm_settings
 
 log = logging.getLogger("apps.platform.operations.tasks.analyze")

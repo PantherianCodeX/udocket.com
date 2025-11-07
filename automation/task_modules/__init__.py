@@ -15,6 +15,7 @@ __all__ = [
     "analyze_job",
     "compose_job",
     "guardian_review_artifact",
+    "recover_stale_jobs",
     "transcribe_job",
 ]
 
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
         analyze_job,
         compose_job,
         guardian_review_artifact,
+        recover_stale_jobs,
         transcribe_job,
     )
 

@@ -40,7 +40,7 @@ from packages.common.json_utils import (
 )
 from packages.common.text import unique_title
 from packages.core import __version__ as CORE_PACKAGE_VERSION
-from packages.core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
+from automation.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
 from packages.core.agents.transcribe_lib import ModeLiteral
 from packages.core.audio import probe_audio_metadata
 

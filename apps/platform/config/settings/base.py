@@ -188,9 +188,7 @@ except Exception:
     pass
 CELERY_BEAT_SCHEDULE_FILENAME = str(celery_runtime_dir / "celerybeat-schedule")
 CELERY_TASK_ROUTES = {
-    "apps.platform.operations.task_modules.recover_maintenance.recover_stale_jobs": {
-        "queue": "maintenance"
-    }
+    "automation.task_modules.recover_stale_jobs": {"queue": "maintenance"}
 }
 
 # Logging configuration: rely on propagation so modules inherit handler wiring

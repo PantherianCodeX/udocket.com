@@ -34,7 +34,7 @@ from packages.common.json_utils import (
     parse_json_value,
     read_json_object,
 )
-from packages.core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
+from automation.agents import GuardianAgent, GuardianConfig, GuardianVerdict
 from packages.core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
 from packages.core.logging.context import LogContext, build_extra
 

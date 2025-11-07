@@ -32,7 +32,7 @@ from apps.platform.operations.runtime import (
 )
 from apps.platform.operations.utils import read_job_meta
 from packages.common.json_utils import JSONObject, normalize_json_object
-from packages.core.agents.guardian_lib import GuardianVerdict
+from automation.agents import GuardianVerdict
 from packages.core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.tasks.guardian")

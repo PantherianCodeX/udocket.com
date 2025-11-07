@@ -14,13 +14,15 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.runtime import emit_job_update
 from apps.platform.operations.services import collect_requested_providers
-from apps.platform.operations.task_modules.analyze import analyze_job
-from apps.platform.operations.task_modules.compose import compose_job
-from apps.platform.operations.task_modules.guardian import guardian_review_artifact
-from apps.platform.operations.task_modules.recover_maintenance import recover_stale_jobs
-from apps.platform.operations.task_modules.transcribe import transcribe_job
+from automation.task_modules import (
+    analyze_job,
+    compose_job,
+    guardian_review_artifact,
+    recover_stale_jobs,
+    transcribe_job,
+)
 from apps.platform.operations.utils import update_job_meta
-from packages.core.agents import AnalyzeAgent
+from automation.agents import AnalyzeAgent
 from packages.core.llm.config import load_llm_settings
 
 __all__ = [
