@@ -3,7 +3,7 @@
 This plan captures the responsibilities, data contracts, and LangGraph orchestration strategy for the Compose agent. It reflects the current implementation in `packages/core/agents/compose_lib.py` and should stay in sync with the root [`AGENTS.md`](../AGENTS.md) guide and the operations service.
 
 ## Objectives
-- Assemble client- and lawyer-facing deliverables from Analyze outputs without leaving Canadian Azure regions.
+- Assemble client- and lawyer-facing deliverables from Analyze outputs while staying inside the tenant’s approved Azure regions.
 - Provide deterministic guard rails (structure, compliance, factuality, QA) that loop until documents meet release criteria.
 - Emit rich telemetry (LLM usage, guard results, QA directives) for ops JSON and audit JSONL consumers.
 - Render Markdown and DOCX artifacts using per-organization templates while retaining additive `_vN` versioning.

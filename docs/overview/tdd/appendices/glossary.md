@@ -53,7 +53,7 @@ Authoritative definitions used across TDD, services, and UI. Keep terms concise 
 - Reference Manager (RM): Editorial/catalog service for jurisdictional data, questionnaires, and localization strings; publishes signed bundles to LPE.
 - Settings Registry: Central configuration and activation workflow for org/case policies, roles, and enforcement profiles.
 - LLM Registry: Registry of model providers/versions and allowed profiles per organization.
-- Transcribe Agent: Azure Speech–backed agent that produces case transcripts and ops metadata (Canada regions only).
+- Transcribe Agent: Azure Speech–backed agent that produces case transcripts and ops metadata (runs only in allowlisted regions).
 - Analyze Agent: Consumes transcripts to produce summaries, outlines, timeline seeds, entity hints, and staff reports.
 - Compose Agent: Produces client/lawyer deliverables and QA artifacts via LangGraph with guard rails.
 - Case: Top‑level container for jobs, artifacts, and operations; storage under `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`.

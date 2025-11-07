@@ -485,7 +485,7 @@ ______________________________________________________________________
 | Notification providers | Email/SMS gateways | Email, SMS, and webhook delivery | Configured per organization; throttled per provider contracts | `notification_provider_latency_seconds`, `notifications_rate_limit_total` |
 | Localization & Policy Engine sources | Reference Manager connectors | Localization packs, policy frameworks, residency bundles | Ingest workers autoscale on catalog backlog | `lpe_compiler_duration_seconds`, `reference_manager_pending_reviews` |
 
-- Speech fallback providers must expose REST APIs with parity guarantees (WER/diarisation deltas within policy thresholds) and residency attestations equivalent to Azure Speech Canada regions; workers consume them through the shared `TranscriptionAgent` interface so jobs remain provider-agnostic.
+- Speech fallback providers must expose REST APIs with parity guarantees (WER/diarisation deltas within policy thresholds) and residency attestations equivalent to the organization’s approved Azure Speech regions; workers consume them through the shared `TranscriptionAgent` interface so jobs remain provider-agnostic.
 - LLM provider selection honours organization allowlists and fallback chains; the capability registry records evaluation hashes and residency metadata for every switchover.
 - Digital trust services (`sign.trust_roots[]`) enforce OCSP/TSA drift ≤ ±5 s and cache responses ≤ 12 h; incidents anchor to Signer runbooks.
 - Notification channels mirror org-specific provider choices; webhook adapters mask PII in request/response payloads while retaining receipts.

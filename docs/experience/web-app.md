@@ -686,7 +686,7 @@ ______________________________________________________________________
     "data": {
       "schema_version": "1",
       "provider": "azure_speech",
-      "region": "canadacentral",
+      "region": "westeurope",
       "status": "HEALTHY",
       "latency_ms_p95": 2100,
       "last_heartbeat": "2025-10-19T21:13:00Z"

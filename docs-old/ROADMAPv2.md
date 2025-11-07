@@ -1,13 +1,13 @@
 # uDocket Platform Roadmap v2
 
-This roadmap consolidates every planning artefact in `docs/`, the agents guides, and recent strategy updates. It provides a phased, end-to-end build sequence for a solo developer to deliver the full uDocket experience while maintaining strong typing, auditability, and Canadian data residency guarantees.
+This roadmap consolidates every planning artefact in `docs/`, the agents guides, and recent strategy updates. It provides a phased, end-to-end build sequence for a solo developer to deliver the full uDocket experience while maintaining strong typing, auditability, and region-specific data residency guarantees aligned to each organization’s policy.
 
 ## Guiding Principles
-- **North star** (docs/AGENTS_LANGGRAPH.md): generate accurate, auditable legal artifacts from transcripts to accelerate court form preparation without sending PII outside Canada.
-- **Agent contract** (root `AGENTS.md`): deterministic outputs, versioned artifacts, per-run ops JSON, append-only audit JSONL, SHA-256 hashing, Canada-only Azure by default.
+- **North star** (docs/AGENTS_LANGGRAPH.md): generate accurate, auditable legal artifacts from transcripts to accelerate court form preparation without sending PII outside approved regions.
+- **Agent contract** (root `AGENTS.md`): deterministic outputs, versioned artifacts, per-run ops JSON, append-only audit JSONL, SHA-256 hashing, region-allowlisted Azure by default.
 - **Typing discipline** (`docs/typing_refactor_plan.md` & `docs/typing_debt_assessment.md`): no regression in mypy/pyright counts, prioritize high-churn modules, define TypedDict/Protocol for shared payloads, track hotspots.
 - **Architecture option 3** (docs/ROADMAP.md): single Django project with DRF, Channels, Celery, Postgres (RLS), OIDC (Keycloak), and Oso policies for authorization.
-- **LLM execution**: provider-agnostic but fully Canadian-compliant; never fall back to offline heuristics for content; expose configuration via stage maps and per-org policies.
+- **LLM execution**: provider-agnostic but fully compliant with tenant residency policies; never fall back to offline heuristics for content; expose configuration via stage maps and per-org policies.
 
 ## Current Baseline & Dependencies
 1. **Repository preparation** (docs/ROADMAP.md §1)
@@ -51,7 +51,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 - **Org settings portal**: manage DOCX templates, reviewer policies, LLM configs per target, alert thresholds, data retention, questionnaire seeds, branding/theme, provider region policy. Defaults seeded via configuration files.
 - **Data retention & deletion certificates**: default 90-day policy with overrides; two-party confirmation for early deletion; generate deletion certificates for all removals (routine, early, maintenance); purge backups per config; determine anonymisation vs deletion for metrics (TODO).
 - **Audit log retention**: independent controls with deletion certificates.
-- **Region policy design**: extend Canada-only guard to per-org allowlists across providers with fail-fast behaviour.
+- **Region policy design**: extend the current guard to per-org allowlists across providers with fail-fast behaviour.
 - **Alert behaviour configuration**: thresholds and notification rules per org.
 - **Artifact provenance**: ensure SHA-256 stored and metadata aligned for telemetry, approvals, retention.
 
@@ -72,7 +72,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 ## Agents & LangGraph Alignment
 - Maintain LangGraph personas and node design (docs/AGENTS_LANGGRAPH.md) for Analyze/Compose orchestration; optional dependency via `packages/core/agents/langgraph_orchestrator.py`.
 - Shared state should capture all artifacts (summary, staff report, timeline, graph, compose outputs) plus intake, alerts, approvals.
-- Prompts must enforce Canadian residency, schema compliance, and deterministic outputs; JSON stages leverage response-format schemas.
+- Prompts must enforce residency guardrails, schema compliance, and deterministic outputs; JSON stages leverage response-format schemas.
 - Legacy LangGraph spec mentions offline summarisation fallback; per current policy we run LLM-only in production and reserve local fallback strictly for developer environments if ever enabled.
 
 ## Cross-Cutting Workstreams

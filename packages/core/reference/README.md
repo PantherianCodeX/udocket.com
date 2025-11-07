@@ -20,8 +20,8 @@ bundles under `core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 
 ## File conventions
 `core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json`
-- Example: `CA/AB/court_catalog.json` (Alberta), `CA/FED/court_catalog.json` (Canada Federal),
-  `US/NY/court_catalog.json` (New York State).
+- Example: `ca/ab/court_catalog.json` (Alberta), `ca/fed/court_catalog.json` (federal),
+  `us/ny/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
   ```json
   { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ CourtCatalog... ], "meta":{...} }
@@ -43,7 +43,7 @@ Below is a **wrap‑up, cohesive update** that:
 * Moves the **writer/compose model** to `./agents/compose/model.py`.
 * Keeps your **global taxonomy** (portable enums) and **local, namespaced codes** (jurisdiction‑scoped).
 * Provides **fully populated Alberta ACJ locations (all 72 points)** + confirmed circuit→base rules where the Court says “**Continue to send all court documents to …**”.
-* Includes **Canada‑Federal** and **US‑NY** minimal JSON bundles to prove multi‑jurisdiction growth.
+* Includes **CA‑Federal** and **US‑NY** minimal JSON bundles to prove multi‑jurisdiction growth.
 * Ships a **clear expansion guide**.
 
 > Load‑bearing facts (with sources):
@@ -53,7 +53,7 @@ Below is a **wrap‑up, cohesive update** that:
 > • **ABCA registry routing**: north of Red Deer → **Edmonton**; Red Deer & south → **Calgary**. ([Alberta Courts][4])
 > • **Specialized courts** (DAC, DTC, Mental Health, Indigenous) exist in ACJ. ([Alberta Courts][5])
 > • **NY Supreme Court – Commercial Division (NY County)** at **60 Centre St**; Support Office Room **119/119A**; Preliminary/Compliance conference and submission practices. ([New York State Unified Court System][6])
-> • **Canada‑Federal** registry network via **CAS**; Ottawa & Toronto registry offices referenced. ([fct-cf.ca][7])
+> • **CA‑Federal** registry network via **CAS**; Ottawa & Toronto registry offices referenced. ([fct-cf.ca][7])
 
 ---
 
@@ -789,7 +789,7 @@ class Order(BaseModel):
           "country": "CA",
           "subnational": "FED",
           "level": "TRIAL_SUPERIOR",
-          "formal_name": "Tax Court of Canada",
+          "formal_name": "Tax Court (TCC)",
           "short_name": "TCC",
           "divisions": ["CIVIL"],
           "locations": [
@@ -910,8 +910,8 @@ bundles under `core/data/courts/<COUNTRY>/<REGION>/court_catalog.json`.
 core/data/courts/<COUNTRY-ISO2>/<REGION>/court_catalog.json
 
 ````
-- Example: `CA/AB/court_catalog.json` (Alberta), `CA/FED/court_catalog.json` (Canada Federal),
-  `US/NY/court_catalog.json` (New York State).
+- Example: `ca/ab/court_catalog.json` (Alberta), `ca/fed/court_catalog.json` (federal),
+  `us/ny/court_catalog.json` (New York State).
 - Each file is a **CatalogBundle**:
   ```json
   { "schema":"udocket.reference.catalog.bundle.v1", "db":{...}, "data":[ CourtCatalog... ], "meta":{...} }
@@ -1010,4 +1010,3 @@ assert len(acj["locations"]) == 72  # ACJ locations
 
 **Data lineage tracking** - ✅ Partial, needs normalization
 - Add `source_urls`, `last_updated`, and `version` metadata per JSON
-

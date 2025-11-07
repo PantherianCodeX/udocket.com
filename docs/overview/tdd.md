@@ -249,7 +249,7 @@ ______________________________________________________________________
 
 - SOC 2 / ISO controls: change management, incident response, and logging mapped to specific sections (`§12`, `§12`, [`../platform/settings.md Appendix A`](../platform/settings.md#appendix-a-settings-key-map-traceability-index)); mappings extend to PCI DSS logging, FedRAMP Moderate, and audit retention requirements surfaced in Appendix K.
 
-- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (Canada). Reference Manager curates policy catalogues (`../data/ref-manager.md §1.2`); Localization & Policy Engine (LPE) compiles them for enforcement (see `../automation/lp-engine.md §2.1`).
+- Privacy frameworks in scope: GDPR/UK GDPR, CCPA/CPRA, HIPAA (US/BAA-backed workloads), PHIPA, PIPEDA, APP (Australia), LGPD (Brazil), and CPPA (federal). Reference Manager curates policy catalogues (`../data/ref-manager.md §1.2`); Localization & Policy Engine (LPE) compiles them for enforcement (see `../automation/lp-engine.md §2.1`).
 
 - Sensitive Personal Information (SPI): covers CPRA “sensitive personal information”, GDPR Article 9 special categories, and analogous provincial/federal classifications (for example: biometric identifiers, precise geolocation, racial or ethnic origin, religious beliefs, sexual orientation, union membership, genetic data, immigration status, and government identifiers). SPI inherits the platform’s high-security baseline (encryption, residency controls, reviewer accountability). Guardian enforces SPI gating, detection, and waiver flows; see `../platform/guardian.md` for enforcement mechanics.
 
@@ -2506,7 +2506,7 @@ ______________________________________________________________________
 | Entrust TSA / OCSP | Timestamping & revocation | Global (per org trust bundle) | Hashes, certificate metadata | No content retention; logs retained 90 days for audits; trust roots mapped to Platform Runtime §3.4 |
 | Twilio SendGrid (optional) | Email delivery | Org-selected sub-account region (NA/EU/APAC) | Notification metadata, recipient email | Data residency restriction via regional sub-account; logs 30 days |
 | Telnyx | SMS delivery | Org-selected region (NA/EU/APAC) | Phone numbers, message metadata | Opt-out enforcement, no content mining; residency documented in waiver ledger |
-| Speechmatics Canada (fallback) | Automated transcription fallback | ca-central-1 (org allowlisted) | Audio uploads, transcript text | DPA mirrors Azure terms; retention ≤ 24 h; audited equivalence harness ensures WER/diarization parity with primary |
+| Speechmatics regional fallback | Automated transcription fallback | ca-central-1 (org allowlisted) | Audio uploads, transcript text | DPA mirrors Azure terms; retention ≤ 24 h; audited equivalence harness ensures WER/diarization parity with primary |
 
 All sub-processors contractually commit to “no training on customer prompts/outputs” clauses. Annual review ensures residency alignment; updates trigger customer notification per §12.3.
 

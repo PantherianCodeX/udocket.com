@@ -27,7 +27,7 @@ This document consolidates the current uDocket platform description, clarifies m
 ## Platform Foundation
 - **Technology stack**: Django 5.2, Channels, Celery, LangGraph agents, Python 3.12.
 - **Multi-tenancy**: Organization-scoped data segregation with per-org settings, roles, and retention policies.
-- **Deployment**: Containerized services orchestrated through Docker Compose; Azure Canada regions for AI workloads and storage.
+- **Deployment**: Containerized services orchestrated through Docker Compose; Azure regions selected per-organization for AI workloads and storage.
 - **Storage root**: `storage/media/cases/<CASE_ID>/` with `audio/`, `transcript/`, `analysis/`, `docs/`, and `ops/` directories.
 - **Version control for files**: Immutable artifact history with SHA-256 hashing and quarantine enforcement.
 - **Observability**: Structured logs, metrics, and audit trails across all services.
@@ -90,7 +90,7 @@ This document consolidates the current uDocket platform description, clarifies m
 - **Audit Sub-System**: Append-only audit of all actions (including superusers), configurable retention aligned with destruction policies; integrates Guardian tamper detection and optional watchdogs.
 - **Logging Module**: Central logging pipeline with structured events, correlation IDs, and reporting; feeds observability stack.
 - **Settings Module**: Unified configuration surface spanning Django, LangGraph, UI, and per-organization overrides.
-- **Security & Compliance**: RBAC/ABAC authorization, multi-tenant isolation, secret management, encryption at rest/in transit, jurisdictional residency (Canada regions), and policy engines for Guardian.
+- **Security & Compliance**: RBAC/ABAC authorization, multi-tenant isolation, secret management, encryption at rest/in transit, jurisdictional residency (region allowlists), and policy engines for Guardian.
 - **Authentication & Identity**: Supports staff SSO, MFA, session management, and service accounts; ties into organization onboarding.
 - **Case Management & Workflow Orchestration**: Tracks job states, Celery tasks, dependency chains, and exposes APIs for UI and automation.
 - **Notifications & Communications**: Email, in-app, and webhook notifications for job status, reviews, Guardian alerts, and client deliveries; respects org-level preferences.
@@ -111,7 +111,6 @@ This document consolidates the current uDocket platform description, clarifies m
 - Align future work with the roadmap to complete missing document types in Analyze, client portal integration, full automation of reviewer roles, and Django 5.2 migration.
 - Ensure every module exports validation helpers and APIs necessary for orchestration and third-party integrations.
 - Guardian and Audit subsystems are non-optional gatekeepers; all new modules must register events, hashes, and policy decisions with them.
-
 
 
 

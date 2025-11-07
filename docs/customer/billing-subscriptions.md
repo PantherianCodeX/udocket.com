@@ -168,7 +168,7 @@ ______________________________________________________________________
 
 ### 3.2 Internal Interfaces (binding)
 
-- `/webhooks/billing/payment_succeeded` and `/webhooks/billing/payment_failed` accept Stripe events (Canada region). Requests validated via signing secret; mismatches return 400. **|**
+- `/webhooks/billing/payment_succeeded` and `/webhooks/billing/payment_failed` accept Stripe events (region pinned per-organization policy). Requests validated via signing secret; mismatches return 400. **|**
 - `/webhooks/billing/customer_updated` refreshes billing contact details. **|**
 - Webhook failures retried with exponential backoff; security logs capture attempts. **|**
 - **Breadcrumbs:** `apps/platform/billing/providers/stripe/webhooks.py`, tests `tests/platform/billing/test_stripe_webhooks.py`. **|**
@@ -221,7 +221,7 @@ ______________________________________________________________________
 **Breadcrumbs:** ORM models `apps/platform/billing/models.py`, migrations `apps/platform/migrations/`, warehouse export scripts `ops/finops/export_usage.py`. **|**
 **References:** TDD §3.9, §14.4, Accounts & Tenants §4.2.
 
-- All billing tables use Canadian-region Postgres cluster with row-level security tied to Finance/Platform roles. **|**
+- All billing tables use a residency-aligned Postgres cluster with row-level security tied to Finance/Platform roles. **|**
 - Sensitive payment metadata stored via provider tokens; no raw card data persisted. **|**
 - Audit tables `billing_event`, `billing_invoice_audit` append-only with signature checks. **|**
 - Usage meter uses partitioned tables by month, retention per Finance policy (7 years). **|**
@@ -285,7 +285,7 @@ ______________________________________________________________________
 **References:** Settings keys `billing.*`, Accounts & Tenants §7, [RFC 8594](https://www.rfc-editor.org/rfc/rfc8594).
 
 - PCI scope: Stripe handles card data; platform stores only tokens. Annual PCI-DSS SAQ documented in Appendix P. **|**
-- Residency: Billing data stored in Canada region; exports sanitized for cross-border data warehouse with Finance approval. **|**
+- Residency: Billing data stored in the organization’s approved region; exports sanitized for cross-border data warehouse with Finance approval. **|**
 - Access: Finance roles gated by Identity spec; actions require dual approval for plan changes. **|**
 - Audit: Invoices and subscription changes hashed and stored in Artifact Store `docs/` with appended metadata. **|**
 - Compliance: Supports deprecation headers per [RFC 8594](https://www.rfc-editor.org/rfc/rfc8594) when APIs change. **|**
@@ -405,7 +405,7 @@ ______________________________________________________________________
 | Accounts & Tenants | Tenant status, suspension propagation | Subscription state drives tenant holds |
 | Settings Registry | Plan availability, quotas, billing toggles | Keys `billing.*`, `tenancy.*` |
 | Artifact Store | Stores invoices, statements, exports | Deliverables hashed + referenced |
-| Stripe (or successor) | Payment processing, invoice delivery | Canada data residency enforced |
+| Stripe (or successor) | Payment processing, invoice delivery | Residency enforced per-organization |
 | FinOps data warehouse | Usage analytics, revenue reporting | Nightly exports with hashed batches |
 | Ops runbook catalog | Operational readiness | RB entries for billing incidents |
 

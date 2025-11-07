@@ -192,7 +192,7 @@ Org & User UX Improvements
 
 LLM Execution Policy & Regions
 - LLM-only generation: remove local/offline fallbacks for content; fail fast with descriptive errors on missing credentials or capacity.
-- Region policy: keep Canada-only Azure default for now; add TODO to design cross-provider region enforcement that’s adjustable per org.
+- Region policy: keep the current Azure default locked to the tenant allowlist for now; add TODO to design cross-provider region enforcement that’s adjustable per org.
 
 
 Data Retention & Deletion Certificates

@@ -117,7 +117,7 @@ ______________________________________________________________________
 
 ### 2.2 Vector enrichment (binding once GA)
 
-- **Contract:** Selected artifacts/transcripts receive embeddings using LLM Registry embedding profiles (`embedding.profile_id`). Shifts require deterministic UUIDv5 seeded by artifact+profile to maintain stable references. Residency enforced (Canada models only). **|**
+- **Contract:** Selected artifacts/transcripts receive embeddings using LLM Registry embedding profiles (`embedding.profile_id`). Shifts require deterministic UUIDv5 seeded by artifact+profile to maintain stable references. Residency enforced (models must live within each tenant’s approved regions). **|**
 - **State:** `search_embedding` table referencing `search_document`. **|**
 - **Observability:** `search_embedding_staleness_minutes`, queue depth metrics. **|**
 - **Failures & handling:** Embedding service degradation triggers fallback to lexical search. **|**
@@ -208,7 +208,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Design doc `docs/product/search/indexing.md`, migrations draft `apps/platform/search/migrations/`. **|**
 **References:** TDD §6.5, Appendix J SQL policies, Settings keys `search.*`.
 
-- Index storage expected to use OpenSearch (Canada cluster) with alias per tenant; lexical index shards align with residency requirements. **|**
+- Index storage expected to use OpenSearch (deployed in the tenant’s approved regions) with alias per tenant; lexical index shards align with residency requirements. **|**
 - Vector store options under evaluation (pgvector vs. managed). Decision tracked via ADR backlog. **|**
 - Metadata tables in Postgres hold canonical mapping from artifact to index document to manage reindex and erasure. **|**
 
@@ -260,14 +260,14 @@ ______________________________________________________________________
 ## 7) Security & Compliance (binding)
 
 **Purpose:** Capture security posture and privacy obligations for search. **|**
-**Contract:** Enforce Canadian residency, tenant-level isolation, Guardian filtering, and DSAR propagation across indexes and logs. **|**
+**Contract:** Enforce tenant-defined residency, tenant-level isolation, Guardian filtering, and DSAR propagation across indexes and logs. **|**
 **State:** Planned IAM policies, residency configurations, hashed query logs, waiver ledgers. **|**
 **Failures & handling:** Cross-tenant access or residency drift triggers RB-SEARCH-ISOLATION; DSAR failures escalate to Compliance. **|**
 **Observability:** Security alerts `search_residency_violation_total`, `search_acl_violation_total`; audit logs hashed for tamper evidence. **|**
 **Breadcrumbs:** Security design `docs/product/search/security.md`, compliance checklist `ops/search/checklists/compliance.md`. **|**
 **References:** Settings keys `search.*`, Guardian §5, Accounts & Tenants §7.
 
-- Residency: Index & embeddings stored in Canada regions only. **|**
+- Residency: Index & embeddings stored only in approved regions. **|**
 - Access: Enforce Identity service RBAC + Guardian decisions; vector queries masked to avoid leaking sensitive text. **|**
 - Privacy: Queries hashed, stored for 30 days max; DSAR removal cascades to logs. **|**
 - Compliance: Search features behind approvals; new release requires Privacy review. **|**

@@ -268,7 +268,7 @@ ______________________________________________________________________
 **Breadcrumbs:** IAM configs `infra/terraform/storage`, policy scripts `scripts/security/artifact_residency_check.py`, audits `ops/compliance/artifacts/*.md`. **|**
 **References:** Settings Appendix A keys `artifacts.*`, Guardian §5, TDD §14.2.
 
-- Residency: Files stored in region-specific buckets; Azure SAS usage gated to Canada regions per settings `storage.region`. **|**
+- Residency: Files stored in region-specific buckets; Azure SAS usage gated to the organization’s approved regions per settings `storage.region`. **|**
 - Access: RLS policies enforce per-org + per-case access; Guard rails validated via Appendix J queries. **|**
 - Encryption: Rest encryption via platform storage config; key rotation tracked in Appendix Q (sub-processors). **|**
 - Audit: Ops logs retained for ≥7 years; append-only, with tamper-evident hashing pipeline. **|**

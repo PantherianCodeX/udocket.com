@@ -23,7 +23,7 @@ This document defines how automation and contributors should add and operate "ag
 
 - Services:
   - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
-- Core agent implementation lives in `packages/core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
+- Core agent implementation lives in `packages/core/agents/transcribe_lib.py` (Azure Speech, region policy enforced).
   - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL).
   - Diarization: supported in `batch` mode only.
   - Outputs: timestamped transcript `.txt`, per-job JSON metadata, append-only ops audit JSONL.
@@ -49,7 +49,7 @@ To make agents composable and observable when executed inside Celery workers, fo
   - Write a human log and a structured JSON metadata file for each run under `ops/` (see examples below).
   - Append an audit line to an ops JSON Lines file for later analytics.
 - Security & locality:
-  - Canada-only Azure regions (`canadacentral` or `canadaeast`). Do not send PII to non-Canadian services by default.
+  - AI workloads must run in the organization’s approved regions. Do not send PII outside the configured residency policy.
 
 Reference patterns exist in `packages/core/agents/transcribe_lib.py`.
 
@@ -64,7 +64,7 @@ Reference patterns exist in `packages/core/agents/transcribe_lib.py`.
   - Job meta (per job): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/<job_id>_transcription_log.json`
   - Human log (per job): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/<job_id>_transcription.log`
   - Case ops audit: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/ops_transcription.jsonl`
-- One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"${STORAGE_ROOT}/media/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
+- One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"${STORAGE_ROOT}/media/.../transcript/<job>__transcript.txt", "region":"westeurope", "language":"en-US", "attempts":1, "duration_s":732.5 }`
 
 ## Analysis Agents
 
@@ -137,7 +137,7 @@ General guidelines:
 ## Configuration & Environment
 
 - Required (see `.env.example`):
-  - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (`canadacentral` or `canadaeast`)
+- `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (must be one of the tenant’s approved speech regions)
   - `LANGUAGE`, `STORAGE_ROOT`, `DATABASE_URL`
   - Batch mode storage: `AZURE_BLOB_*` settings for SAS uploads
 - Diagnostics and provenance:
@@ -178,7 +178,7 @@ General guidelines:
   - When editing other modules, remove `Any` usage, add precise types, and reduce pyright warnings in that scope. Never add `# type: ignore` without an accompanying TODO referencing the typing roadmap.
   - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
 - Stub dependencies: run `uv sync --frozen --group dev --project apps/platform` to ensure Pyright and Django/DRF stubs are installed before editing. Activation isn’t required—invoke tools with `uv run --project apps/platform …` so the right interpreter is picked automatically.
-- Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
+- Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services that align with the organization’s residency policy.
 - Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging. Never introduce provider/model fallback logic—jobs must use the exact configured provider chain and raise actionable errors if initialization fails.
 - Refactors spanning many files should rely on helper scripts (add them under `scripts/` when reusable) instead of manual editing. Always run `pyright` to surface import/function issues across the tree before finishing a refactor.
 - Version control: keep diffs minimal and focused; avoid unrelated refactors.
@@ -202,7 +202,7 @@ General guidelines:
       case_id="<CASE>",
       case_dir=Path(STORAGE_ROOT) / "media" / "cases" / "<CASE>",
       job_id="<JOB>",
-      language="en-CA",
+      language="en-US",
       mode="batch",
       diarization=True,
   )

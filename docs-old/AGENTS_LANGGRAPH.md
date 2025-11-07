@@ -1,11 +1,11 @@
 # uDocket — Agent Team (LangGraph) Plan
 
-Scope: entire agentic stack across transcription, summary, timeline, and entities/graph. This plan defines roles, goals, backstories, LangGraph node design, shared state, prompts, and integration points so we can implement a reliable, Canadian‑region compliant agent graph.
+Scope: entire agentic stack across transcription, summary, timeline, and entities/graph. This plan defines roles, goals, backstories, LangGraph node design, shared state, prompts, and integration points so we can implement a reliable, residency-compliant agent graph.
 LangGraph is a core dependency for Analyze and Compose orchestration; all environments must install and wire LangGraph before developing agent features.
 
 
 ## North Star
-- Generate accurate, auditable legal artifacts from transcripts to accelerate court form preparation — without sending PII outside Canada.
+- Generate accurate, auditable legal artifacts from transcripts to accelerate court form preparation — without sending PII outside approved regions.
 - Deterministic files, structured outputs per stage, additive versioning, and clear ops logs per the root AGENTS.md.
 
 
@@ -13,15 +13,15 @@ LangGraph is a core dependency for Analyze and Compose orchestration; all enviro
 Use these as system prompts/personas in LangGraph nodes.
 
 - Orchestrator — "Case Supervisor"
-  - Goal: coordinate all stages; enforce guardrails (Canadian regions, file naming, versioning), and make recovery decisions on failure without silent fallbacks.
-  - Backstory: a meticulous paralegal supervisor in Canada, trained on uDocket conventions, responsible for deadlines and compliance.
+  - Goal: coordinate all stages; enforce guardrails (region allowlists, file naming, versioning), and make recovery decisions on failure without silent fallbacks.
+  - Backstory: a meticulous paralegal supervisor who enforces residency policy, trained on uDocket conventions, responsible for deadlines and compliance.
 
 - Input Steward — "Records Clerk"
   - Goal: discover latest transcript (or provided path), parse header/body, detect diarization, collect case intake data.
   - Backstory: a clerk who prepares clean inputs for downstream agents and flags missing context early.
 
 - Transcriber — "Court Reporter" (implemented)
-  - Goal: produce timestamped transcripts from audio using Azure Speech (Canada), diarization in batch mode.
+  - Goal: produce timestamped transcripts from audio using Azure Speech within the tenant’s approved region, diarization in batch mode.
   - Backstory: a court reporter who stamps time and speakers consistently.
 
 - Context Builder — "Analysis Intake Lead"
@@ -42,7 +42,7 @@ Use these as system prompts/personas in LangGraph nodes.
 
 - Drafter — "Brief Writer"
   - Goal: produce a layered Markdown summary (exec summary, detailed narrative by issue, claims/remedies, posture, risks, next steps) referencing timestamps.
-  - Backstory: a Canadian paralegal who writes for practitioners preparing forms.
+  - Backstory: a region-savvy paralegal who writes for practitioners preparing forms.
 
 - QA Auditor — "Compliance Officer"
   - Goal: verify required sections exist, cross‑check counts, apply style conventions, redact obvious PII in ops logs, and compute SHA‑256 for artifacts.
@@ -94,7 +94,7 @@ attempts: dict[str, int]
 ```
 
 - Guardrails
-  - Azure OpenAI endpoint must be `canadacentral` or `canadaeast`.
+  - Azure OpenAI endpoint must be on the organization’s allowlist.
   - Never send audio; only transcripts + minimal intake context.
   - Versioned files with `_vN` suffix using `_next_versioned`.
 
@@ -138,13 +138,13 @@ attempts: dict[str, int]
 
 
 ## Prompt Principles
-- Shared system prompt: Canadian paralegal assistant. Use only provided info. Do not fabricate. Return exact schema/Markdown requested.
+- Shared system prompt: Residency-aware paralegal assistant. Use only provided info. Do not fabricate. Return exact schema/Markdown requested.
 - JSON stages use response_format: json_schema with schemas defined in the root `AGENTS.md` Analyze section.
 - Include compact context: intake brief + a bounded window of diarized segments (chunk and slide if needed; keep token limits configurable).
 
 
 ## Security & Locality
-- Validate endpoint hostnames; deny non‑Canadian regions.
+- Validate endpoint hostnames; deny non-allowlisted regions.
 - Mask PII in ops logs; do not log raw prompts unless `DEBUG=1`.
 - Respect upstream duration limits; analyzer should process text only.
 
@@ -216,7 +216,7 @@ def build_analyze_graph(impl):
   10. `compose.release_gate` — final deterministic gate ensuring both lanes passed all guards and QA status is acceptable.
 - All lanes share reducers (`_latest_lane_state`, `_merge_lane_outcomes`, `_merge_stage_usage`) to avoid concurrent write collisions. Nodes return updates instead of mutating state in place.
 - Progress is surfaced by emitting envelopes via `_emit(stage, event, payload)`. The compose service streams these into ops JSON (`<job_id>__compose_log.json`) and audit JSONL (`ops_compose.jsonl`).
-- Provider configuration defaults to Azure Canadian deployments; overrides use `LLMConfiguration` records and `config/llm_assignments.json`. Compose must fail loudly if assignments target unsupported regions or models.
+- Provider configuration defaults to Azure deployments that satisfy residency requirements; overrides use `LLMConfiguration` records and `config/llm_assignments.json`. Compose must fail loudly if assignments target unsupported regions or models.
 - Outputs are limited to client/lawyer Markdown + DOCX deliverables, QA reports, staff report, and telemetry. Timeline/graph generation now lives in Analyze; Compose consumes seeds for factuality checks rather than emitting `timeline_v2`/`graph_v2`.
 
 

@@ -18,7 +18,7 @@ The `Settings` object exposes strongly typed sections that consolidate related c
 - `settings.database` produces Django-ready configurations and performs availability checks before falling back to SQLite.
 - `settings.django`, `settings.celery`, `settings.redis`, `settings.logging`, `settings.jobs_ui`, and `settings.oidc` each provide view objects that the Django runtime imports directly, eliminating duplicated parsing logic.
 
-During initialization, the loader performs basic misconfiguration checks—such as enforcing Canadian Azure regions and refusing to boot with the development Django secret key when `DJANGO_DEBUG` is disabled—so failures surface early.
+During initialization, the loader performs basic misconfiguration checks—such as enforcing the organization’s Azure region allowlist and refusing to boot with the development Django secret key when `DJANGO_DEBUG` is disabled—so failures surface early.
 
 ## Security considerations: environment variables vs. secret files
 
