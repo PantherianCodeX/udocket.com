@@ -108,7 +108,7 @@ ______________________________________________________________________
 **Failures & handling:** Schema validation failures, manifest gaps, or seal errors block promotions and trigger RB-AUDIT-004; waiver APIs enforce expiry; DSAR endpoints fail closed per RB-PRIV-DSAR. **|**
 **Observability:** Dashboards “Evidence Chain”, “Audit Seal Integrity”, metrics `audit_manifest_missing_total`, `audit_event_backlog_seconds`, `audit_seal_errors_total`. **|**
 **Breadcrumbs:** Audit store `packages/core/audit/store.py`, manifest models `packages/core/manifests/`, waiver APIs `packages/core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
-**References:** TDD §5, Logging §3, Guardian §7, Settings §7.3.
+**References:** TDD §5, Observability §3, Guardian §7, Settings §7.3.
 
 ### 3.1 External Interfaces
 
@@ -162,7 +162,7 @@ ______________________________________________________________________
 **Failures & handling:** Seal gaps, replication lag, or ledger drift trigger RB-AUDIT-004 or RB-WAIVER-GOV before approvals resume. **|**
 **Observability:** Dashboards “Audit Seal Integrity”, “Immutable Sink”, metrics `audit_worm_lag_seconds`, `audit_seal_errors_total`, `waiver_expiring_total`. **|**
 **Breadcrumbs:** Schema definitions `spec/schemas/audit_manifest.schema.json`, rotation tooling `ops/audit/rotate_partitions.py`, replication jobs `ops/audit/verify_seal_chain.py`, tests `tests/audit/test_state_management.py`. **|**
-**References:** Logging §4, Settings §7.3, Observability §4.
+**References:** Observability §4, Settings §7.3, Observability §4.
 
 ### 4.1 Manifest & event storage
 
@@ -184,7 +184,7 @@ ______________________________________________________________________
 **Failures & handling:** See scenario list below. **|**
 **Observability:** Incident metrics `audit_incident_total`, `audit_incident_mttr_minutes`. **|**
 **Breadcrumbs:** Runbook catalog `../ops/runbooks.md`. **|**
-**References:** Logging §5, Settings §7.3.
+**References:** Observability §5, Settings §7.3.
 
 - Seal chain gap (`audit_seal_errors_total`) → pause approvals, run RB-AUDIT-004, regenerate seals.
 - Immutable lag (`audit_worm_lag_seconds`) → enforce hold on approvals, coordinate with Logging RB-LOG-007.
@@ -202,7 +202,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing dashboard or failing synthetic blocks releases until restored; escalate via RB-AUDIT-004 or RB-WAIVER-GOV. **|**
 **Observability:** Metrics `audit_worm_lag_seconds`, `audit_seal_errors_total`, `audit_manifest_missing_total`, `waiver_expiring_total`, `dsar_journal_pending_total`. **|**
 **Breadcrumbs:** Monitoring configs `infra/monitoring/`, synthetic definitions `synthetics/`. **|**
-**References:** Logging §6, Settings §7.3, Compliance reporting.
+**References:** Observability §6, Settings §7.3, Compliance reporting.
 
 ### 6.1 SLOs & Targets (binding)
 
@@ -250,7 +250,7 @@ ______________________________________________________________________
 **Failures & handling:** Missed reviews or drills block compliance sign-off and raise tickets. **|**
 **Observability:** Execution tracker dashboard, metrics `audit_drill_overdue_total`, `waiver_review_overdue_total`. **|**
 **Breadcrumbs:** Runbooks RB-AUDIT-004, RB-WAIVER-GOV, RB-PRIV-DSAR, RB-AUDIT-MANIFEST. **|**
-**References:** Logging §8, Compliance policy.
+**References:** Observability §8, Compliance policy.
 
 ### 8.1 Operational Posture (binding)
 

@@ -892,13 +892,13 @@ class SettingDefinition(BaseModel):
 | `storage.remote_hash.enabled` | ORG\|CASE   | false | Record remote hashes for batch inputs; §5.3. |
 | `storage.remote_hash.max_mb` | ORG\|CASE   | 50 | Max remote bytes to hash; §5.3. |
 | `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
-| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Logging §4`](../platform/observability.md#4-state-management-binding). |
-| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Logging §7.1`](../platform/observability.md# 71-access-control). |
-| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
-| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
-| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
-| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Logging §7`](../platform/observability.md#7-cost-management--budgets). |
-| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Logging §4`](../platform/observability.md#4-state-management-binding). |
+| `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Observability §4`](../platform/observability.md#4-state-management-binding). |
+| `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Observability §7.1`](../platform/observability.md#71-access-control). |
+| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
+| `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Observability §4`](../platform/observability.md#4-state-management-binding). |
 | `evidence_store.redacted_excerpts.enabled` | ORG | true | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2. |
 | `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, [`Audit §4`](../data/audit.md#4-state-management-binding)). |
 | `llm.finops.guard.threshold_pct` | SYSTEM\|ORG | 10 | MoM regression ceiling for deploy gate; §8.7, §13.5. |
