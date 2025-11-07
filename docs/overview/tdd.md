@@ -893,8 +893,10 @@ Example
 ### 6.1 LangGraph orchestration (summary)
 
 - *Primary spec:* [`LangGraph agents §3`](../automation/langgraph-agents.md#3-api-contract).
-- GraphRunner compiles the Transcribe → Analyze → Compose DAG with explicit fan-out/fan-in nodes: Analyze runs timeline, entities, issues, gaps, and flags/alerts lanes in parallel before converging into summary, staff, and QA stages; Compose retains dual deliverable lanes with QA gating. Finalize nodes remain the sole writers for deterministic artifacts.
+- GraphRunner (LangGraph `>=0.2,<0.3`) compiles the Transcribe → Analyze → Compose DAG with explicit fan-out/fan-in nodes: Analyze runs outline, timeline, entities, issues, gaps, and flags lanes in parallel before converging into summary, staff, and QA stages; Compose retains client/lawyer/bundle lanes with QA gating. Finalize nodes remain the sole writers for deterministic artifacts and share the same `StateGraph` idioms.
 - Settings (`agents.pipeline.*`, `agents.tools.*`) declare pipelines, lane concurrency, region allowlists, and idempotency keys; activation lints enforce schema hashes and contract tests prior to rollout.
+- LangGraph checkpoints persist in Postgres (shared DB) with per-node `idempotency_key = sha256(job_id || pipeline_id || node_id || graph_version || input_hash)` so retries + resumes stay deterministic. Resumes require matching settings snapshots and manifest hashes; divergences raise `E_INTEGRITY_MISMATCH`.
+- Execution boundary: `packages/udocket_core` owns the LangGraph runtime, schemas, and job services; `apps/platform` invokes those services via Celery for orchestration + UX, preserving core/service separation for future deployment targets.
 - Assistant pipelines reuse the same activation pathway, ensuring retrieval, moderation, and responder lanes inherit identical policy controls and manifest discipline.
 
 ### 6.2 Transcription pipeline (summary)
@@ -909,6 +911,7 @@ Example
 - *Primary spec:* [`LangGraph agents §2.2`](../automation/langgraph-agents.md#22-analyze-agent).
 - Inputs: structured transcript JSON (text fallback only when JSON is unavailable), intake questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts and lane concurrency.
 - Parallel lanes emit discrete artifacts: `analysis/<job_id>__outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, summary JSON (`summary_v1.json`), staff report Markdown (`staff_report_v1.md`), QA report JSON (`qa_report_v1.json`). All records carry deterministic UUIDs (`uuid5` signatures) and schema_version headers.
+- Lane QA & revisions: each lane produces an `AnalyzeLaneResult` payload consumed by `LaneQA`. Outcomes are `advance`, `revise`, or `quarantine`. Revision requests emit `AnalyzeRevisionDirective` schemas (targets + preserve spans) so reruns only rewrite failing slices; good data stays byte-identical across passes.
 - Atom layer: transcript segments flow through an internal extraction pipeline that canonicalises statements, detects negation cues, assigns deterministic UUIDs, aggregates evidence, and produces an `AtomsIndex`. Downstream lanes consume the index to attach citations, detect conflicts, and populate `SummaryCheck` verdicts surfaced in `qa_report_v1.json`. Optional debug dumps (`analysis/<job_id>__atoms_v1.json`) remain feature-flagged (`ANALYZE_SAVE_ATOMS`).
 - QA gates validate JSON Schema compliance, atom-backed evidence linking, and questionnaire coverage before finalize persists artifacts; reruns create `_v{n}` versions while preserving manifests and audit history (`ops/ops_summary.jsonl`).
 
