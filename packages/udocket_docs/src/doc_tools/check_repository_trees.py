@@ -137,11 +137,20 @@ def parse_tree_block(lines: Sequence[str]) -> list[TreeEntry]:
     return entries
 
 
+def _resolve_entry_path(repo_root: Path, rel_path: PurePosixPath) -> Path:
+    parts = list(rel_path.parts)
+    if parts and parts[0] == repo_root.name:
+        parts = parts[1:]
+    if not parts:
+        return repo_root
+    return repo_root.joinpath(*parts)
+
+
 def validate_blocks(blocks: Sequence[TreeBlock], repo_root: Path) -> list[str]:
     issues: list[str] = []
     for block in blocks:
         for entry in block.entries:
-            target = repo_root.joinpath(*entry.rel_path.parts)
+            target = _resolve_entry_path(repo_root, entry.rel_path)
             if not target.exists():
                 issues.append(
                     f"[repository-trees] missing path '{entry.rel_path}' in section '{block.section}'"
