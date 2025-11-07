@@ -76,24 +76,26 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
     existing = _collect_existing(lines, start, end)
 
     managed_targets = {path.relative_to(paths.DOCS_ROOT).as_posix(): path for path in appendix_paths}
+    managed_scope = set(managed_targets)
     managed_lines: list[str] = []
+    remaining_targets = dict(managed_targets)
 
     # Preserve existing order for items already in the nav.
     for label, target in existing:
-        if target in managed_targets:
+        if target in remaining_targets:
             managed_lines.append(f"{ITEM_INDENT}- {label}: {target}")
-            managed_targets.pop(target, None)
+            remaining_targets.pop(target, None)
 
     # Append new files alphabetically.
-    for rel in sorted(managed_targets):
-        path = managed_targets[rel]
+    for rel in sorted(remaining_targets):
+        path = remaining_targets[rel]
         label = _parse_label(path)
         managed_lines.append(f"{ITEM_INDENT}- {label}: {rel}")
 
     static_lines = [
         f"{ITEM_INDENT}- {label}: {target}"
         for label, target in existing
-        if target not in managed_targets
+        if target not in managed_scope
     ]
 
     new_block = [SECTION_HEADER, *managed_lines, *static_lines]
