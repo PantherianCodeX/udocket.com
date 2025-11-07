@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
-from .types import AgentTask, LanguageCode, Region
+from .types import AgentTask, AllowedRegion, LanguageCode, Region
 from .types.identifiers import ModelName, ProviderName
 from .utils import ensure_language
 
@@ -31,6 +31,7 @@ class ProviderAccount:
     endpoint: str | None = None
     default_model: ModelName | None = None
     api_key_env: str | None = None
+    allowed_regions: tuple[AllowedRegion, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class AISettings:
             endpoint=data.get("AZURE_OPENAI_ENDPOINT"),
             default_model=model_name,
             api_key_env=data.get("UDOCKET_AI_KEY_ENV", "AZURE_OPENAI_KEY"),
+            allowed_regions=(AllowedRegion(region=region),),
         )
         routes = tuple(
             ModelRoute(task=task, provider=provider.name, model=model_name)
