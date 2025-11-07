@@ -7,7 +7,8 @@ from __future__ import annotations
 from functools import lru_cache
 
 from packages.ai import DefaultAIClient, build_client
-from packages.ai.config import load_settings
+from packages.ai.config_translator import ai_settings_from_llm
+from packages.core.llm.config import load_llm_settings
 from packages.ai.providers.registry import adapters_from_settings
 from packages.ai.safety.egress import EgressPolicy
 from packages.ai.safety.residency import AllowAllResidencyPolicy, ResidencyPolicy
@@ -18,7 +19,8 @@ from packages.ai.secret import EnvSecretSource
 def get_ai_client() -> DefaultAIClient:
     """Return a cached DefaultAIClient wired with the default adapter registry."""
 
-    settings = load_settings()
+    llm_settings = load_llm_settings()
+    settings = ai_settings_from_llm(llm_settings)
     residency_policy: ResidencyPolicy = AllowAllResidencyPolicy()
     egress_policy = EgressPolicy.from_list(None)
     secret_source = EnvSecretSource()
