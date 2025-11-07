@@ -31,4 +31,4 @@ Introduce a formal control/data plane split:
 - LPE scales independently (compiler workers vs lookup API) and enforces strict SLOs (lookup P95 ≤ 50 ms).
 - Guardian, workers, UI, and database RLS consume the same `PolicyContext`, reducing drift and simplifying audits.
 - Bundled CLDR/ICU data and MessageFormat 2 metadata centralize localization logic; frontend/compose agents no longer hard-code locale rules.
-- Additional operational work: bundle signing/rotation, compiler monitoring, and cache health alerts. The split also mandates migration work for legacy modules (`packages.udocket_core.reference` → `reference_manager`/`lpe`) and temporary compatibility shims.
+- Additional operational work: bundle signing/rotation, compiler monitoring, and cache health alerts. The split also mandates migration work for legacy modules (`packages.core.reference` → `reference_manager`/`lpe`) and temporary compatibility shims.

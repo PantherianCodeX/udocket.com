@@ -38,13 +38,13 @@
     {
       "label": "typecheck: mypy (core logging)",
       "type": "shell",
-      "command": "mypy packages/udocket_core/logging",
+      "command": "mypy packages/core/logging",
       "problemMatcher": []
     },
     {
       "label": "typecheck: pyright (core logging)",
       "type": "shell",
-      "command": "pyright packages/udocket_core/logging",
+      "command": "pyright packages/core/logging",
       "problemMatcher": []
     },
     {

@@ -200,7 +200,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "context": {
-            "()": "packages.udocket_core.logging.context_formatter.ContextualFormatter",
+            "()": "packages.core.logging.context_formatter.ContextualFormatter",
             "fmt": ("%(asctime)s %(levelname)s %(name)s: %(message)s%(context_suffix)s"),
             "defaults": {
                 "event": "-",

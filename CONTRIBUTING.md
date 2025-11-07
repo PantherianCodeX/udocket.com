@@ -4,8 +4,8 @@ This project treats contributor experience and code quality as first-class requi
 
 ## Imports & shared packages
 
-- Shared utilities live under `packages.udocket_common.*`. Import helpers from that package rather than re-implementing them in app-specific modules.
-- When a helper becomes broadly useful (e.g., identifier generation, time formatting), promote it into `packages.udocket_common` together with tests.
+- Shared utilities live under `packages.common.*`. Import helpers from that package rather than re-implementing them in app-specific modules.
+- When a helper becomes broadly useful (e.g., identifier generation, time formatting), promote it into `packages.common` together with tests.
 
 ## Dependency hygiene
 
@@ -20,7 +20,7 @@ This project treats contributor experience and code quality as first-class requi
   make typing.run          # pyright + mypy + strict enforcement scripts
   uv run --project apps/platform --extra dev typewiz audit \
     --mode current \
-    --manifest reports/typing/typing_audit.json \
+    --manifest out/test-reports/typing/typing_audit.json \
     --readiness \
     --readiness-status blocked \
     --readiness-status ready  # optional detailed report
@@ -39,8 +39,8 @@ This project treats contributor experience and code quality as first-class requi
   make docs.test.coverage   # enforces ≥90% coverage for doc tooling
   ```
 
-- Mermaid sources live inside a `diagrams/` folder beside the owning document (for example, `docs/platform/guardian/diagrams/guardian-judgment-flow-v1.mmd`). Rendered assets are produced via `packages/udocket_docs/src/doc_tools/render_mermaid.py` and published under `build/diagrams/...`.
-- Theme overrides (CSS/JS) live in `docs/assets/`; build artefacts belong in `packages/udocket_docs/build/`.
+- Mermaid sources live inside a `diagrams/` folder beside the owning document (for example, `docs/platform/guardian/diagrams/guardian-judgment-flow-v1.mmd`). Rendered assets are produced via `packages/docs_tooling/src/doc_tools/render_mermaid.py` and published under `build/diagrams/...`.
+- Theme overrides (CSS/JS) live in `docs/assets/`; build artefacts belong in `packages/docs_tooling/build/`.
 
 ## Tests & coverage
 
@@ -51,4 +51,4 @@ This project treats contributor experience and code quality as first-class requi
   make pytest.cov
   ```
 
-- Target ≥90 % coverage per module. Critical shared packages (e.g., `packages.udocket_common`) must meet or exceed this target before changes are merged.
+- Target ≥90 % coverage per module. Critical shared packages (e.g., `packages.common`) must meet or exceed this target before changes are merged.

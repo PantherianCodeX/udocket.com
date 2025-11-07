@@ -23,19 +23,19 @@ For day-to-day execution status, see `docs/typing/typing_progress_log.md`, which
    - Introduce `TypedDict` classes for the nested dictionaries used in presenter tests (`tests/ui/test_llm_presenters.py`, `tests/ui/test_organization_settings.py`) so Pyright understands the expected keys and removes `object` index errors.
 
 5. **Tighten runtime APIs gradually**
-   - Start with leaf modules (e.g., anything under `packages/udocket_core/`) by adding return types and generics while running Pyright in `--warnings` mode; once they pass, raise their directories to `strict` via per-module config.
+   - Start with leaf modules (e.g., anything under `packages/core/`) by adding return types and generics while running Pyright in `--warnings` mode; once they pass, raise their directories to `strict` via per-module config.
 
 6. **Gate strict mode**
    - Update CI to fail on Pyright errors only after the above buckets are cleared. Until then, keep strict mode locally but allow warnings so contributors can chip away iteratively.
 
 ## March 2025 Progress & New Guidance
-- `packages/udocket_core/agents/common` now runs clean under `pyright` thanks to explicit JSON aliases and payload guards. Reuse the new helpers (`JSONValue`, `_ensure_json_object`, `_content_from_*`) when wiring additional agents so downstream code never handles `Any` payloads from Azure.
+- `packages/core/agents/common` now runs clean under `pyright` thanks to explicit JSON aliases and payload guards. Reuse the new helpers (`JSONValue`, `_ensure_json_object`, `_content_from_*`) when wiring additional agents so downstream code never handles `Any` payloads from Azure.
 - When normalizing third-party responses, prefer the pattern used in `common/azure_client.py`: convert unknown mappings into concrete `dict[str, object]`, gate every branch with `_is_json_structure`, and coerce payloads via `_coerce_json_value`. This keeps telemetry dictionaries JSON-serialisable without sprinkling `cast` calls across consumers.
 - For append-only storage helpers (`append_jsonl`, audit writers, etc.), accept `Mapping[str, JSONValue]` rather than wide `Dict[str, Any]`. If a caller passes a mutable mapping, materialise it once before serialisation as shown in `common/io.py` to keep write paths deterministic.
-- When updating typing in other agent folders, start by hoisting shared aliases into `packages/udocket_core/agents/common/io.py` (or adding new ones there) so that follow-on modules inherit consistent types without redefining local `TypedDict`s.
+- When updating typing in other agent folders, start by hoisting shared aliases into `packages/core/agents/common/io.py` (or adding new ones there) so that follow-on modules inherit consistent types without redefining local `TypedDict`s.
 - Manual retries and request fallbacks should stay in the runtime wrapper (`AzureChatClient._chat`). Avoid folding error handling into per-agent code; instead expose structured exceptions with typed payloads so Celery tasks can log without `Any` casts.
-- `packages/udocket_core/agents/analyze_lib.py` now uses shared helpers (`coerce_object_dict`, `_normalize_providers`) and typed `StageModelInfo`/`StageCatalogEntry` structures. Stage configuration inputs are normalised to `dict[str, object]`, so future contributors should preserve that pattern when adding new stage options or provider overrides.
-- Core JSON helpers now expose `coerce_object_dict` in `packages/udocket_core/utils.json.py`; prefer this when normalising metadata or provider payloads so every consumer shares the same str-key conversion instead of duplicating casts.
+- `packages/core/agents/analyze_lib.py` now uses shared helpers (`coerce_object_dict`, `_normalize_providers`) and typed `StageModelInfo`/`StageCatalogEntry` structures. Stage configuration inputs are normalised to `dict[str, object]`, so future contributors should preserve that pattern when adding new stage options or provider overrides.
+- Core JSON helpers now expose `coerce_object_dict` in `packages/core/utils.json.py`; prefer this when normalising metadata or provider payloads so every consumer shares the same str-key conversion instead of duplicating casts.
 - Use `normalize_json_object` when you need stricter key/value hygiene (trim blanks, drop nullish entries) without hand-written loops. LLM admin metadata normalisation relies on it, so mirror the helper instead of rolling bespoke filters.
 - When reading organization defaults (`config/analyze_defaults.json`), call `_coerce_int`/`_coerce_float` rather than sprinkling `int(...)`/`float(...)` coercions. This keeps environment overrides predictable and Pyright-friendly.
 

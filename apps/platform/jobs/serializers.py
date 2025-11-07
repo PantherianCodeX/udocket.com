@@ -11,7 +11,7 @@ from rest_framework.fields import CharField, SerializerMethodField
 from apps.platform.authorization.capabilities import has_capability
 from apps.platform.jobs.models import Job
 from apps.platform.jobs.telemetry import JobTelemetry, job_telemetry
-from packages.udocket_common.json_utils import stringify_pretty
+from packages.common.json_utils import stringify_pretty
 
 AGENT_LABELS = {
     "transcription": "Transcribe",

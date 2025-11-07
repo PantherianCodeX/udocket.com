@@ -6,10 +6,10 @@ from typing import Any, Dict, List
 
 import pytest
 
-import packages.udocket_core.agents.analyze_lib as analyze_lib
+import packages.core.agents.analyze_lib as analyze_lib
 
-from packages.udocket_core.agents import build_analyze_graph, langgraph_orchestrator
-from packages.udocket_core.agents.analyze_lib import (
+from packages.core.agents import build_analyze_graph, langgraph_orchestrator
+from packages.core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
     ANALYZE_STAGE_PROFILES,
     StageRuntime,
@@ -22,21 +22,21 @@ from packages.udocket_core.agents.analyze_lib import (
     parse_transcript,
     _normalize_stage_map,
 )
-from packages.udocket_core.agents.analyze.stages import (
+from packages.core.agents.analyze.stages import (
     EntityStageResult,
     OutlineStageResult,
     SummaryStageResult,
     TimelineStageResult,
     generate_summary_payload,
 )
-from packages.udocket_core.agents.analyze.stages.outline_stage import generate_outline as outline_generate
-from packages.udocket_core.llm.config import (
+from packages.core.agents.analyze.stages.outline_stage import generate_outline as outline_generate
+from packages.core.llm.config import (
     LLMProvider,
     LLMProviderModel,
     LLMSettings,
     LLMStageAssignment,
 )
-from packages.udocket_core.llm.runtime import ChatClientError
+from packages.core.llm.runtime import ChatClientError
 from tests._typing import MonkeyPatch
 
 
@@ -234,19 +234,19 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
         )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_outline",
+        "packages.core.agents.analyze.utils.generate_outline",
         fake_outline,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_timeline",
+        "packages.core.agents.analyze.utils.generate_timeline",
         fake_timeline,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_entities",
+        "packages.core.agents.analyze.utils.generate_entities",
         fake_entities,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_summary_payload",
+        "packages.core.agents.analyze.utils.generate_summary_payload",
         fake_summary,
     )
 
@@ -474,7 +474,7 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch: MonkeyPatch, tmp
         )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_summary_payload",
+        "packages.core.agents.analyze.utils.generate_summary_payload",
         capture_summary,
     )
 
@@ -723,7 +723,7 @@ def test_analyze_agent_raises_on_stage_failure(monkeypatch: MonkeyPatch, tmp_pat
         raise RuntimeError("outline failure")
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_outline",
+        "packages.core.agents.analyze.utils.generate_outline",
         boom,
     )
 

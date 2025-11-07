@@ -92,7 +92,7 @@ ______________________________________________________________________
 **State:** Owns on-disk layout (`audio/`, `transcript/`, `analysis/`, `docs/`, `ops/`), artifact metadata tables, and ops audit streams. Version suffixes (`_v2`, `_v3`) ensure replays never overwrite prior outputs. **|**
 **Failures & handling:** Hash drift, missing artifacts, or retention violations trigger Guardian/Records holds and Ops runbooks (`RB-ARTIFACT-CORRUPTION`, `RB-RETENTION-DRIFT`). **|**
 **Observability:** Metrics `artifact_store_hash_mismatch_total`, `artifact_store_missing_file_total`, `artifact_retention_violation_total`; Grafana dashboard “Artifact Store Health”; Append-only logs aggregated under `ops/ops_artifacts.jsonl`. **|**
-**Breadcrumbs:** Implementation `apps/platform/artifacts/store.py`, hashing utilities `packages/udocket_core/artifacts/hash.py`, retention workers `apps/platform/operations/task_modules/artifacts.py`, tests `tests/platform/artifacts/test_store.py`. **|**
+**Breadcrumbs:** Implementation `apps/platform/artifacts/store.py`, hashing utilities `packages/core/artifacts/hash.py`, retention workers `apps/platform/operations/task_modules/artifacts.py`, tests `tests/platform/artifacts/test_store.py`. **|**
 **References:** TDD §5.2–§5.4, Appendix J (SQL policies), Appendix L (environment baselines).
 
 ______________________________________________________________________
@@ -121,7 +121,7 @@ ______________________________________________________________________
 - **State:** Hash catalog stored in `artifact_hash` table and JSON metadata under `ops/<job_id>__artifact_log.json`. **|**
 - **Observability:** Metrics `artifact_store_hash_mismatch_total`, dashboards “Artifact Hash Integrity”. **|**
 - **Failures & handling:** Recompute hash, compare with remote storage, escalate via `RB-ARTIFACT-CORRUPTION`. **|**
-- **Breadcrumbs:** Hashing utilities `packages/udocket_core/artifacts/hash.py`, Celery task `apps/platform/operations/tasks/hash_artifacts.py`, tests `tests/platform/artifacts/test_hash_integrity.py`. **|**
+- **Breadcrumbs:** Hashing utilities `packages/core/artifacts/hash.py`, Celery task `apps/platform/operations/tasks/hash_artifacts.py`, tests `tests/platform/artifacts/test_hash_integrity.py`. **|**
 
 ### 2.3 Promotion & ExclusiveSwap (binding)
 
@@ -129,7 +129,7 @@ ______________________________________________________________________
 - **State:** Database views `artifact_secure`, `deliverable_latest`, plus ops audit `ops/ops_artifacts.jsonl`. **|**
 - **Observability:** Metrics `artifact_exclusive_swap_total`, audit check `ExclusiveSwapConsistencyCheck`. **|**
 - **Failures & handling:** Swap conflicts roll back transaction, flag `artifact_promotion_conflict_total`, and require reviewer intervention. **|**
-- **Breadcrumbs:** Promotion APIs `apps/platform/artifacts/service.py::promote_deliverable`, Compose integration `packages/udocket_core/agents/compose/*.py`, tests `tests/platform/artifacts/test_exclusive_swap.py`. **|**
+- **Breadcrumbs:** Promotion APIs `apps/platform/artifacts/service.py::promote_deliverable`, Compose integration `packages/core/agents/compose/*.py`, tests `tests/platform/artifacts/test_exclusive_swap.py`. **|**
 
 ### 2.4 Retention & erasure (binding)
 
@@ -163,7 +163,7 @@ ______________________________________________________________________
 
 - Celery topic `artifacts.retention` enforces retention windows; tasks idempotently operate via manifest snapshots. **|**
 - Signals from Guardian/Compose update artifact states and ops audit logs (`ArtifactPromotionSignal`, `ArtifactHashMismatchSignal`). **|**
-- Storage adapters (`packages/udocket_core/storage/`) abstract local vs. Azure Blob (batch). **|**
+- Storage adapters (`packages/core/storage/`) abstract local vs. Azure Blob (batch). **|**
 
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
@@ -237,7 +237,7 @@ ______________________________________________________________________
 **State:** Prometheus metrics, Grafana dashboards, audit logs, traces. **|**
 **Failures & handling:** Alert fatigue mitigated via tuned burn rates; unknown metric gaps block releases. **|**
 **Observability:** Dashboards “Artifact Store Health”, “Retention & DSAR”, `artifact_store_*` metrics. **|**
-**Breadcrumbs:** Metrics module `apps/platform/artifacts/metrics.py`, tracing instrumentation `packages/udocket_core/telemetry/artifacts.py`. **|**
+**Breadcrumbs:** Metrics module `apps/platform/artifacts/metrics.py`, tracing instrumentation `packages/core/telemetry/artifacts.py`. **|**
 **References:** Observability spec §4, Appendix B metrics.
 
 - Metrics: `artifact_store_hash_mismatch_total`, `artifact_store_missing_file_total`, `artifact_promotion_conflict_total`, `artifact_retention_overdue_total`, `artifact_storage_capacity_pct`. **|**
@@ -391,7 +391,7 @@ ______________________________________________________________________
 | Settings Registry | Retention windows, residency toggles, hash requirements | Keys `artifacts.retention.*`, `artifacts.residency.region` |
 | Guardian | Quarantine decisions, hash validation, blocklist enforcement | Guardian PASS/WARN gating promotions |
 | Compose service | Deliverable promotion inputs/outputs, signature pipelines | Requires stable file manifests |
-| Storage subsystem | Object storage backend (local path/Azure Blob) | Abstraction `packages/udocket_core/storage` ensures deterministic writes |
+| Storage subsystem | Object storage backend (local path/Azure Blob) | Abstraction `packages/core/storage` ensures deterministic writes |
 | Worker Cluster | Retention sweeps, hash reconciliation tasks | Celery queue `artifacts.retention` |
 | Ops runbook catalog | Incident handling and drills | Docs lint ensures RB-ARTIFACT entries updated |
 

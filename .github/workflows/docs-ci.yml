@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compute lock digest
         id: meta
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: compute lock digest" >> "$GITHUB_STEP_SUMMARY"
@@ -34,8 +34,8 @@ jobs:
       - name: Build and push docs toolbox image
         uses: docker/build-push-action@v5
         with:
-          context: packages/udocket_docs
-          file: packages/udocket_docs/Dockerfile
+          context: packages/docs_tooling
+          file: packages/docs_tooling/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.lock_sha }}
@@ -72,7 +72,7 @@ jobs:
           sudo apt-get install -y chromium pandoc
           printf '%s\n' "Finished: install system dependencies" >> "$GITHUB_STEP_SUMMARY"
       - name: Install docs dependencies
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: install docs dependencies" >> "$GITHUB_STEP_SUMMARY"
@@ -83,45 +83,45 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: add local node binaries to PATH" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$PWD/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
+          printf '%s\n' "$PWD/packages/docs_tooling/node_modules/.bin" >> "$GITHUB_PATH"
           printf '%s\n' "Finished: add local node binaries to PATH" >> "$GITHUB_STEP_SUMMARY"
       - name: Markdownlint
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: markdownlint" >> "$GITHUB_STEP_SUMMARY"
           npx markdownlint-cli2 'docs/**/*.md' '!docs/build/**' '!site/**'
           printf '%s\n' "Finished: markdownlint" >> "$GITHUB_STEP_SUMMARY"
       - name: Vale
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: vale lint" >> "$GITHUB_STEP_SUMMARY"
           vale --config config/vale.ini docs/
           printf '%s\n' "Finished: vale lint" >> "$GITHUB_STEP_SUMMARY"
       - name: Mermaid render (all)
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: render mermaid diagrams" >> "$GITHUB_STEP_SUMMARY"
           bash tools/render_mermaid.sh --all --verbose
           printf '%s\n' "Finished: render mermaid diagrams" >> "$GITHUB_STEP_SUMMARY"
       - name: MkDocs build (HTML)
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: mkdocs build" >> "$GITHUB_STEP_SUMMARY"
           uv run mkdocs build --config-file mkdocs.yml --site-dir site --clean
           printf '%s\n' "Finished: mkdocs build" >> "$GITHUB_STEP_SUMMARY"
       - name: PDF build (TDD + PRD)
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: pdf build" >> "$GITHUB_STEP_SUMMARY"
           uv run python tools/pdf_build.py --skip-build
           printf '%s\n' "Finished: pdf build" >> "$GITHUB_STEP_SUMMARY"
       - name: Lint docs suite
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Starting: lint docs suite" >> "$GITHUB_STEP_SUMMARY"

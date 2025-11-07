@@ -17,8 +17,8 @@ from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.operations.utils import update_job_meta
-from packages.udocket_common.json_utils import read_json_object
-from packages.udocket_common.text import unique_title
+from packages.common.json_utils import read_json_object
+from packages.common.text import unique_title
 
 from ..auth import ensure_authenticated
 from ..cases.helpers import render_case_panel_with_refresh

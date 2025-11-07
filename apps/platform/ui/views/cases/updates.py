@@ -20,8 +20,8 @@ from apps.platform.operations.llm import (
     upsert_llm_configuration,
     upsert_org_provider_credential,
 )
-from packages.udocket_common.json_utils import parse_json_value
-from packages.udocket_core.llm import load_llm_settings
+from packages.common.json_utils import parse_json_value
+from packages.core.llm import load_llm_settings
 
 from ..auth import ensure_authenticated
 from ..contexts import compute_case_tool_state, get_case_and_org

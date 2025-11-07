@@ -150,7 +150,7 @@ ______________________________________________________________________
 **State:** Localization assets live in Settings (`i18n.*`) and LP Engine bundles; accessibility evidence stored in Ops appendices. **|**
 **Failures & handling:** Missing translations or accessibility regressions trigger runbook `RB-LPE-LOCALE-GAP` and block releases until evidence restored. **|**
 **Observability:** Nightly axe snapshots, Playwright RTL runs, localization audit scripts (`ops/scripts/lpe/audit_locales.py`). **|**
-**Breadcrumbs:** Component library `packages/udocket_ui/`, localization pipeline `packages/udocket_core/lpe/*`, tests `tests/e2e/test_accessibility.py`. **|**
+**Breadcrumbs:** Component library `packages/udocket_ui/`, localization pipeline `packages/core/lpe/*`, tests `tests/e2e/test_accessibility.py`. **|**
 **References:** LP Engine spec §2, Ops runbook index (LPE locale gap).
 
 - Pseudolocale builds run pre-merge; Vale lint enforces accessibility wording.
@@ -195,7 +195,7 @@ ______________________________________________________________________
 **State:** Edit manifests track `{edit_type, editor_id, diff_fingerprint_sha256, model_id?, prompt_id?, moderation_outcome}` with logs in `ops/<job_id>__edit_log.jsonl`. **|**
 **Failures & handling:** Policy violations (`EDIT_POLICY_BLOCK`) quarantine artifacts; repeated rejects page engineering. **|**
 **Observability:** Metrics `edit_sessions_total{type}`, `edit_policy_block_total`, SSE events `edit.started|edit.updated|edit.ready_for_review`. **|**
-**Breadcrumbs:** Edit controllers `apps/platform/ui/views/edit_flow.py`, LangGraph edit lanes `packages/udocket_core/agents/edit/*`, tests `tests/platform/ui/test_edit_workflow.py`. **|**
+**Breadcrumbs:** Edit controllers `apps/platform/ui/views/edit_flow.py`, LangGraph edit lanes `packages/core/agents/edit/*`, tests `tests/platform/ui/test_edit_workflow.py`. **|**
 **References:** Guardian spec §5, LLM registry spec §2.3 (safety harness).
 
 - SSE events inform collaborators of edit lifecycle stages, and Communications service issues actionable toasts/email when reviewer attention is required.
@@ -220,7 +220,7 @@ ______________________________________________________________________
 **State:** Chat sessions stored under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/<session_id>__chat_{audience}.jsonl`; manifests record `{model_id, prompt_version, retrieval_sources[], token_usage, latency_ms}`. **|**
 **Failures & handling:** Policy violations (`CHAT_POLICY_BLOCK`, `CHAT_GUARDIAN_QUARANTINED`) disable access pending review; rate-limit exhaustion surfaces UI banners. **|**
 **Observability:** Metrics `chat_sessions_total{audience}`, `chat_token_usage_total`, `chat_rate_limit_block_total`, dashboards “Assistant Usage” and “Assistant API”. **|**
-**Breadcrumbs:** Assistant orchestrator `apps/platform/ui/assistants.py`, LangGraph pipelines `packages/udocket_core/agents/assistants/*`, tests `tests/e2e/test_chat_assistant.py`, API spec `ops/openapi/chat_assistants.yaml`. **|**
+**Breadcrumbs:** Assistant orchestrator `apps/platform/ui/assistants.py`, LangGraph pipelines `packages/core/agents/assistants/*`, tests `tests/e2e/test_chat_assistant.py`, API spec `ops/openapi/chat_assistants.yaml`. **|**
 **References:** TDD §10.12 (capability APIs), LLM registry spec §2.3 (moderation), Communications spec §2.6 (alerting).
 
 - Staff Copilot sessions access approved artifacts, Guardian manifests, Settings snapshots, and portal messages with redaction. Outputs include citations and never mutate artifacts directly.
@@ -369,7 +369,7 @@ ______________________________________________________________________
 **State:** Grafana dashboards, Prometheus metrics, structured logs, synthetic job artifacts. **|**
 **Failures & handling:** Missing metrics or failing synthetic checks page SRE and block releases until remediation. **|**
 **Observability:** Dashboards “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”; metrics `review_queue_backlog_total`, `portal_link_invalidated_total`, `chat_sessions_total{audience}`, etc.; logs `UI_EVENT`, `PORTAL_EVENT`, `CHAT_SESSION`, `EDIT_EVENT`. **|**
-**Breadcrumbs:** Dashboard configs `infra/observability/dashboards/*.json`, synthetic scripts `synthetics/*.yaml`, logging adapters `packages/udocket_core/logging/*`. **|**
+**Breadcrumbs:** Dashboard configs `infra/observability/dashboards/*.json`, synthetic scripts `synthetics/*.yaml`, logging adapters `packages/core/logging/*`. **|**
 **References:** Communications spec §6, LLM Registry spec §6, Settings spec §6.
 
 - Dashboards: “Operator Workspace”, “Portal Integrity”, “Notifications Delivery”, “Assistant Usage”, “Accessibility & Localization”.
@@ -557,7 +557,7 @@ ______________________________________________________________________
 
 **Purpose:** Capture canonical SSE payloads and UI implementations the web app must honour. **|**
 **Contract:** SSE publishers emit these shapes; UI components consume them without divergence. **|**
-**State:** Schemas live in `packages/udocket_core/events/schemas.py`, fixtures under `tests/platform/events/fixtures/`. **|**
+**State:** Schemas live in `packages/core/events/schemas.py`, fixtures under `tests/platform/events/fixtures/`. **|**
 **Failures & handling:** Schema drift fails UI contract tests; mismatched payloads trigger `UI_SSE_SCHEMA_MISMATCH` alerts. **|**
 **Observability:** SSE schema version dashboards, Playwright SSE contract tests, UI telemetry `ui_event_sse_payload_validation_total`. **|**
 **Breadcrumbs:** Publishers `apps/platform/events/*.py`, UI widget `packages/udocket_ui/components/job_status_ticker.tsx`, tests `tests/e2e/test_job_status_widget.py`.

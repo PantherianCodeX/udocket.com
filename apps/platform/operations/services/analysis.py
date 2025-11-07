@@ -9,14 +9,14 @@ from typing import TypedDict, cast
 from apps.platform.cases.models import Case
 from apps.platform.operations.storage import ensure_case_paths
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
-from packages.udocket_common.json_utils import (
+from packages.common.json_utils import (
     JSONObject,
     coerce_json_object,
     coerce_object_list,
     coerce_str_list,
     read_json_value,
 )
-from packages.udocket_common.operations import (
+from packages.common.operations import (
     CaseIntakeBuilder,
     ComposeStageMap,
 )

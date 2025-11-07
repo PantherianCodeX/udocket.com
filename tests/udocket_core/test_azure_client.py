@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 import pytest
 
-from packages.udocket_core.agents.common.azure_client import (
+from packages.core.agents.common.azure_client import (
     AzureChatClient,
     AzureClientConfig,
 )

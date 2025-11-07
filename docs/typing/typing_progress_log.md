@@ -9,7 +9,7 @@ This log tracks the multi-wave typing rollout so work can resume from any contex
 | Wave | Focus | Status | Notes |
 | --- | --- | --- | --- |
 | Wave 0 | Environment bootstrap, pyright snapshots, automation manifest hygiene | In progress | Bootstrap helper `ok`; vendored stub helper copies pip stubs (now includes docstring-rich `mozilla_django_oidc-stubs`); latest checks: `mypy .` (1185 errors) and `pyright --stats` (982 errors / 2051 warnings) flagged remaining third-party + project debt |
-| Wave 1 | Shared core libs (`packages/udocket_core` JSON/time/audio/llm, storage helpers) | Planned | Define shared typing aliases module; target strict promotion per module |
+| Wave 1 | Shared core libs (`packages/core` JSON/time/audio/llm, storage helpers) | Planned | Define shared typing aliases module; target strict promotion per module |
 | Wave 2 | Agent orchestration (`agents/analyze`, `compose`, `guardian`, `langgraph`) | Planned | Replace ad-hoc dict payloads with frozen dataclasses/TypedDicts |
 | Wave 3 | Operations runtime/tasks/payload protocols | Planned | Introduce `apps/platform/operations/typing.py` and typed websocket payloads |
 | Wave 4 | UI views & presenters consumption of typed payloads | Planned | Migrate presenters to shared protocols; roll strict markers gradually |
@@ -18,7 +18,7 @@ This log tracks the multi-wave typing rollout so work can resume from any contex
 ## Immediate Next Steps
 
 1. Decide on long-term pytest typing strategy (vend local stubs vs keep optional skip) ahead of Wave 5 test cleanup.
-2. Draft shared typing alias modules (`packages/udocket_core/typing.py`, `apps/platform/typing.py`).
+2. Draft shared typing alias modules (`packages/core/typing.py`, `apps/platform/typing.py`).
 3. Cull vendor stub diagnostics (setuptools/DRF) or carve them out of type runs so Wave 1 strictify work can focus on first-party modules.
 
 ## Blockers & Risks

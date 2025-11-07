@@ -1,6 +1,6 @@
 # Compose Agent LangGraph Plan
 
-This plan captures the responsibilities, data contracts, and LangGraph orchestration strategy for the Compose agent. It reflects the current implementation in `packages/udocket_core/agents/compose_lib.py` and should stay in sync with the root [`AGENTS.md`](../AGENTS.md) guide and the operations service.
+This plan captures the responsibilities, data contracts, and LangGraph orchestration strategy for the Compose agent. It reflects the current implementation in `packages/core/agents/compose_lib.py` and should stay in sync with the root [`AGENTS.md`](../AGENTS.md) guide and the operations service.
 
 ## Objectives
 - Assemble client- and lawyer-facing deliverables from Analyze outputs without leaving Canadian Azure regions.
@@ -50,7 +50,7 @@ Reducers: `_latest_lane_state` ensures the most recent lane runtime state wins; 
 
 ## Model & Token Defaults
 - Default provider chain: `["azure"]` (overrideable via `COMPOSE_PROVIDER_CHAIN` or `LLMConfiguration` records).
-- Stage-to-model defaults live in `packages/udocket_core/agents/compose/llm_profiles.py` and `config/llm_assignments.json` (e.g., `compose.client.draft` → `gpt-4o`).
+- Stage-to-model defaults live in `packages/core/agents/compose/llm_profiles.py` and `config/llm_assignments.json` (e.g., `compose.client.draft` → `gpt-4o`).
 - Temperature: client drafts use `COMPOSE_TEMPERATURE` (0.6 default), lawyer drafts use `COMPOSE_LAWYER_TEMPERATURE` (0.4 default). Revisions and QA use cooler temperatures for determinism.
 - Editors run at temperature `0.0` and must return JSON with `document` and `change_log`.
 

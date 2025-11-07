@@ -43,7 +43,7 @@ fi
 popd >/dev/null
 
 printf '[devcontainer] Syncing docs toolbox environment…\n'
-pushd packages/udocket_docs >/dev/null
+pushd packages/docs_tooling >/dev/null
 uv sync --frozen --group dev
 popd >/dev/null
 

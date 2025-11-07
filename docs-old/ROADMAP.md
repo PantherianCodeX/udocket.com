@@ -137,7 +137,7 @@ Progress To Date
   - IAM wiring (Keycloak OIDC + API JWT validation) and role mapping on login.
   - Admin guardrails: allow-listed capability choices; read-only API for effective capabilities.
   - Agents/LLM: extend shared chat client runtime as new providers are onboarded (ensure tests cover non-Azure adapters).
-    - TODO: implement first-class chat clients for AWS Bedrock and Google Gemini providers in `packages/udocket_core/llm/runtime.py` so organization configs can activate them without Azure-specific fallbacks.
+    - TODO: implement first-class chat clients for AWS Bedrock and Google Gemini providers in `packages/core/llm/runtime.py` so organization configs can activate them without Azure-specific fallbacks.
 
 
 Compose + Review & Edit Program (New)

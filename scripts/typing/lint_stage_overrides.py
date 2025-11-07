@@ -5,7 +5,7 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
-from packages.udocket_core.agents.analyze_lib import (
+from packages.core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
     StageOverride,
     _normalize_stage_map,

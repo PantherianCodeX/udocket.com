@@ -9,7 +9,7 @@ from django.conf import settings
 from django.db import models
 from simple_history.models import HistoricalRecords
 
-from packages.udocket_common.django.typing import TypedManager, get_typed_manager
+from packages.common.django.typing import TypedManager, get_typed_manager
 
 if TYPE_CHECKING:
     from apps.platform.accounts.models import Organization, User

@@ -8,8 +8,8 @@ from typing import Protocol, cast
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from packages.udocket_common.json_utils import JSONValue
-from packages.udocket_common.operations import CaseUpdatePayload, JobUpdatePayload
+from packages.common.json_utils import JSONValue
+from packages.common.operations import CaseUpdatePayload, JobUpdatePayload
 
 
 class ChannelLayerProtocol(Protocol):

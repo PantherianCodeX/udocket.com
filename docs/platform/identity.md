@@ -80,7 +80,7 @@ ______________________________________________________________________
 **State:** Keycloak realm configs, Settings bundles (`security.*`, `identity.*`), database functions (`udocket_can`, `udocket_mask`), secure views, audit trails, masking vault entries, break-glass ledger. **|**
 **Failures & handling:** IdP outages, federation drift, device-binding mismatches, RLS GUC gaps, or masking violations trigger automated guards and runbooks in §8. **|**
 **Observability:** Dashboards “Identity Posture”, “RLS Context Guards”, “Masking Vault & Profiles”, metrics `auth_layer_violation_total`, `rls_context_missing_total`, `device_fp_mismatch_total`, `break_glass_event_missing_retrospective_total`. **|**
-**Breadcrumbs:** Implementation `apps/platform/auth/`, `apps/platform/db/guards.py`, `packages/udocket_core/masking/`, Keycloak exporters `infra/keycloak/`, tests `tests/platform/auth/`, `tests/platform/db/`, `tests/security/`. **|**
+**Breadcrumbs:** Implementation `apps/platform/auth/`, `apps/platform/db/guards.py`, `packages/core/masking/`, Keycloak exporters `infra/keycloak/`, tests `tests/platform/auth/`, `tests/platform/db/`, `tests/security/`. **|**
 **References:** Settings spec (`security.*`, `identity.org_switch.*`), Guardian spec (policy enforcement), TDD §4 summary.
 
 ______________________________________________________________________
@@ -169,7 +169,7 @@ ______________________________________________________________________
 **State:** Authorization lattice tables (`case_member`, `effective_permission`), secure views, masking configuration, break-glass ledger, and cache entries. **|**
 **Failures & handling:** Policy or masking drift triggers RB-RLS-CONTEXT or RB-BREAK-GLASS; break-glass sessions require post-hoc approvals before re-enabling automation. **|**
 **Observability:** Dashboards “Identity – RLS Health”, metrics `rls_context_missing_total`, `masking_transformation_total`, `break_glass_event_total`. **|**
-**Breadcrumbs:** Permission services `packages/udocket_core/permissions/`, masking utilities `packages/udocket_core/masking/`, Settings activation `apps/platform/settings/platform/identity.py`, tests `tests/identity/test_state_management.py`. **|**
+**Breadcrumbs:** Permission services `packages/core/permissions/`, masking utilities `packages/core/masking/`, Settings activation `apps/platform/settings/platform/identity.py`, tests `tests/identity/test_state_management.py`. **|**
 **References:** Settings §7, Observability §4, Audit §4.
 
 ### 4.1 Authorization lattice & data access (binding)
@@ -272,7 +272,7 @@ SELECT id,
 **State:** Metrics `identity_token_flow`, `auth_layer_violation_total`, `rls_context_missing_total`, `logging_neverlog_violation_total`, `break_glass_event_missing_retrospective_total`; dashboards “Identity Posture” and “RLS Context Guards”; synthetic probes `synthetics/identity_*`. **|**
 **Failures & handling:** Breaches trigger RB-IDP-FAILOVER, RB-RLS-CONTEXT, RB-MASK, or RB-BREAK-GLASS prior to resuming automation. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, and synthetic runs ensure compliance. **|**
-**Breadcrumbs:** Telemetry modules `apps/platform/logging/access.py`, `packages/udocket_core/permissions`, runbooks `docs/ops/runbooks/identity/*.md`. **|**
+**Breadcrumbs:** Telemetry modules `apps/platform/logging/access.py`, `packages/core/permissions`, runbooks `docs/ops/runbooks/identity/*.md`. **|**
 **References:** Settings spec §7, TDD §12, Guardian spec §7.
 
 - **Authentication availability:** ≥99.9% success for token issuance and session validation, measured via synthetic `identity_token_flow` and `auth_layer_violation_total`; breaches page RB-IDP-FAILOVER and require RCA prior to release.
@@ -482,12 +482,12 @@ BEGIN
   END IF;
 
   -- Default deny
-  r := packages.udocket_core.permissions.can_route(p_resource, p_action);
+  r := packages.core.permissions.can_route(p_resource, p_action);
   IF r IS NULL THEN
     RETURN FALSE;
   END IF;
 
-  RETURN packages.udocket_core.permissions.can_enforce(
+  RETURN packages.core.permissions.can_enforce(
     route          => r,
     case_id        => p_case,
     artifact_id    => p_artifact,

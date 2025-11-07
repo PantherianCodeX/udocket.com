@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from packages.udocket_core.agents.common.llm_health import ensure_llm_client_health
+from packages.core.agents.common.llm_health import ensure_llm_client_health
 
 
 class _HealthyClient:

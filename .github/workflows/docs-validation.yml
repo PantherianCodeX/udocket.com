@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y chromium
       - name: Install Node deps
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         env:
           PUPPETEER_SKIP_DOWNLOAD: "1"
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
@@ -31,9 +31,9 @@ jobs:
       - name: Add local node binaries to PATH
         run: |
           set -euo pipefail
-          printf '%s\n' "$PWD/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
+          printf '%s\n' "$PWD/packages/docs_tooling/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Render Mermaid diagrams
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: bash tools/render_mermaid.sh --all
 
   docs-lint:
@@ -52,7 +52,7 @@ jobs:
           sudo apt-get install -y chromium
           printf '%s\n' "System dependencies installed." >> "$GITHUB_STEP_SUMMARY"
       - name: Install documentation Python tooling
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Installing documentation dependencies..." >> "$GITHUB_STEP_SUMMARY"
@@ -63,7 +63,7 @@ jobs:
           node-version: '20'
           check-latest: true
       - name: Install Node deps
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         env:
           PUPPETEER_SKIP_DOWNLOAD: "1"
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' "Adding local Node binaries to PATH..." >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$PWD/packages/udocket_docs/node_modules/.bin" >> "$GITHUB_PATH"
+          printf '%s\n' "$PWD/packages/docs_tooling/node_modules/.bin" >> "$GITHUB_PATH"
           printf '%s\n' "Local Node binaries added to PATH." >> "$GITHUB_STEP_SUMMARY"
       - name: Install Vale CLI
         env:
@@ -90,7 +90,7 @@ jobs:
           rm -f vale.tar.gz
           printf '%s\n' "Vale CLI installed." >> "$GITHUB_STEP_SUMMARY"
       - name: Run documentation lint suite
-        working-directory: packages/udocket_docs
+        working-directory: packages/docs_tooling
         run: |
           set -euo pipefail
           printf '%s\n' "Running documentation lint suite..." >> "$GITHUB_STEP_SUMMARY"

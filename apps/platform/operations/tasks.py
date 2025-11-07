@@ -20,8 +20,8 @@ from apps.platform.operations.task_modules.guardian import guardian_review_artif
 from apps.platform.operations.task_modules.recover_maintenance import recover_stale_jobs
 from apps.platform.operations.task_modules.transcribe import transcribe_job
 from apps.platform.operations.utils import update_job_meta
-from packages.udocket_core.agents import AnalyzeAgent
-from packages.udocket_core.llm.config import load_llm_settings
+from packages.core.agents import AnalyzeAgent
+from packages.core.llm.config import load_llm_settings
 
 __all__ = [
     "transcribe_job",

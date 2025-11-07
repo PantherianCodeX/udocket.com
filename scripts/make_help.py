@@ -20,7 +20,7 @@ REPO_ROOT = THIS_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from packages.udocket_common.text import slugify
+from packages.common.text import slugify
 
 
 def decode_from_make(lines: Sequence[str], name: str) -> str:

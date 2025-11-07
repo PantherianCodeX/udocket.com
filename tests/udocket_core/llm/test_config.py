@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from packages.udocket_core.llm.config import (
+from packages.core.llm.config import (
     LLMConfigError,
     LLMProvider,
     LLMSettings,

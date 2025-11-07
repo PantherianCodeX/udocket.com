@@ -20,7 +20,7 @@ target "platform" {
 target "docs" {
   inherits   = ["common"]
   context    = "."
-  dockerfile = "packages/udocket_docs/Dockerfile"
+  dockerfile = "packages/docs_tooling/Dockerfile"
   cache-from = ["type=local,src=.docker/buildx-cache/docs"]
   cache-to   = ["type=local,dest=.docker/buildx-cache/docs,mode=max"]
 }

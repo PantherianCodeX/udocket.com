@@ -9,7 +9,7 @@ The recommended workflow is to run everything through the toolbox container (`ma
 need to run tooling directly on your machine.
 
 ```bash
-cd packages/udocket_docs
+cd packages/docs_tooling
 
 # Install the Python utilities (mkdocs, mdformat, WeasyPrint, etc.)
 uv sync --frozen --extra dev
@@ -55,14 +55,14 @@ Authoring guidelines:
 
 ## Rendering Mermaid diagrams
 
-Source `.mmd` files live beside their owning documents inside a local `diagrams/` directory (for example, `docs/platform/settings/diagrams/settings-activation-v1.mmd`). Cross‑cutting areas such as the TDD keep their diagrams under the same document subtree (for example, `docs/overview/tdd/diagrams/`). To render them locally (outputs to `packages/udocket_docs/build/diagrams/` and makes them available to MkDocs via the build-assets plugin):
+Source `.mmd` files live beside their owning documents inside a local `diagrams/` directory (for example, `docs/platform/settings/diagrams/settings-activation-v1.mmd`). Cross‑cutting areas such as the TDD keep their diagrams under the same document subtree (for example, `docs/overview/tdd/diagrams/`). To render them locally (outputs to `packages/docs_tooling/build/diagrams/` and makes them available to MkDocs via the build-assets plugin):
 
 ```bash
-cd packages/udocket_docs
-uv run --project packages/udocket_docs python -m doc_tools.render_mermaid
+cd packages/docs_tooling
+uv run --project packages/docs_tooling python -m doc_tools.render_mermaid
 ```
 
-Use `--all` to force a full rebuild. Rendered SVGs land in `packages/udocket_docs/build/diagrams/` (canonical store) and are copied into the published site as `build/diagrams/...`. Reference them in Markdown/HTML using `build/diagrams/...` so paths remain correct when the site is published. The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
+Use `--all` to force a full rebuild. Rendered SVGs land in `packages/docs_tooling/build/diagrams/` (canonical store) and are copied into the published site as `build/diagrams/...`. Reference them in Markdown/HTML using `build/diagrams/...` so paths remain correct when the site is published. The CI job `Docs CI` performs the same action so broken diagrams are caught automatically.
 
 ## VS Code setup
 

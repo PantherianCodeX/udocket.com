@@ -4,18 +4,18 @@ config_version = 0
 # Keep explicit paths for deterministic CI runs
 full_paths = [
     "apps/platform/operations",
-    "packages/udocket_core/agents",
-    "packages/udocket_core/logging",
-    "packages/udocket_common",
+    "packages/core/agents",
+    "packages/core/logging",
+    "packages/common",
     "config"
 ]
 runners = ["pyright", "mypy"]
 fail_on = "warnings"
 skip_full = true
 # Also emit dashboards when running `typewiz audit`
-dashboard_json = "reports/typing/dashboard.json"
-dashboard_markdown = "reports/typing/dashboard.md"
-dashboard_html = "reports/typing/dashboard.html"
+dashboard_json = "out/test-reports/typing/dashboard.json"
+dashboard_markdown = "out/test-reports/typing/dashboard.md"
+dashboard_html = "out/test-reports/typing/dashboard.html"
 
 [audit.active_profiles]
 # Baseline across the repo; stricter profiles applied via folder overrides
@@ -27,9 +27,9 @@ config_file = "pyrightconfig.json"
 plugin_args = ["--pythonversion", "3.12"]
 include = [
     "apps/platform/operations",
-    "packages/udocket_core/agents",
-    "packages/udocket_core/logging",
-    "packages/udocket_common",
+    "packages/core/agents",
+    "packages/core/logging",
+    "packages/common",
     "config"
 ]
 
@@ -45,9 +45,9 @@ plugin_args = ["--strict"]
 config_file = "mypy.ini"
 include = [
     "apps/platform/operations",
-    "packages/udocket_core/agents",
-    "packages/udocket_core/logging",
-    "packages/udocket_common",
+    "packages/core/agents",
+    "packages/core/logging",
+    "packages/common",
     "config"
 ]
 env = { PYTHONWARNINGS = "ignore::UserWarning" }

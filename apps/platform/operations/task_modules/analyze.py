@@ -40,12 +40,12 @@ from apps.platform.operations.services import (
 )
 from apps.platform.operations.services.files import sha256_file
 from apps.platform.operations.utils import read_job_meta
-from packages.udocket_common.json_utils import JSONObject, coerce_json_object, read_json_object
-from packages.udocket_common.operations import ComposeStageMap, optional_json_object
-from packages.udocket_common.text import unique_title
-from packages.udocket_core.agents import AnalyzeAgent as _AnalyzeAgent
-from packages.udocket_core.agents import AnalyzeConfig
-from packages.udocket_core.llm.config import load_llm_settings as _load_llm_settings
+from packages.common.json_utils import JSONObject, coerce_json_object, read_json_object
+from packages.common.operations import ComposeStageMap, optional_json_object
+from packages.common.text import unique_title
+from packages.core.agents import AnalyzeAgent as _AnalyzeAgent
+from packages.core.agents import AnalyzeConfig
+from packages.core.llm.config import load_llm_settings as _load_llm_settings
 
 log = logging.getLogger("apps.platform.operations.tasks.analyze")
 

@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Mapping
 
 import pytest
 
-from packages.udocket_core.agents.common import azure_client
-from packages.udocket_core.agents.common.azure_client import AzureChatClient, AzureClientConfig
+from packages.core.agents.common import azure_client
+from packages.core.agents.common.azure_client import AzureChatClient, AzureClientConfig
 
 
 class _FakeRequestsModule:

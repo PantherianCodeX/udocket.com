@@ -114,7 +114,7 @@ ______________________________________________________________________
 **State:** Artifacts, manifests, `job_checkpoint.progress_meta`, ops logs (`ops/<job_id>__*.jsonl`). **|**
 **Failures & handling:** Capability mismatches or provider failures trigger parity-aware failover (`ModelFailoverOrchestrator`, `SpeechFailoverController`); exhausted fallback chain pauses jobs (`PAUSED_AWAITING_PROVIDER`) via `RB-LLM-003`. **|**
 **Observability:** Metrics `job_duration_seconds{lane}`, `provider_progress_percent_complete`, `job_retry_total`; SSE `job.update` events include `provider_progress`. **|**
-**Breadcrumbs:** Task modules `apps/platform/operations/task_modules/analyze.py`, `compose.py`, `transcribe.py`; capability map `packages/udocket_core/llm/registry.py`, speech failover `packages/udocket_core/failover/speech.py`; tests `tests/platform/jobs/test_provider_progress_adapter.py`. **|**
+**Breadcrumbs:** Task modules `apps/platform/operations/task_modules/analyze.py`, `compose.py`, `transcribe.py`; capability map `packages/core/llm/registry.py`, speech failover `packages/core/failover/speech.py`; tests `tests/platform/jobs/test_provider_progress_adapter.py`. **|**
 **References:** LLM registry spec §2.1–§2.3, Transcription agent doc, Communications spec §2.1.
 
 - Workers run prefork Celery pools with dedicated queues per agent class; queue names encode priority (`analyze-high`, `compose-default`, `backfill-low`).
@@ -163,7 +163,7 @@ ______________________________________________________________________
 **State:** Capability cache, parity evidence hashes, Settings `llm.models[]`, `speech.providers[]`. **|**
 **Failures & handling:** Missing parity evidence blocks activation; drift triggers `PROVIDER_DATA_POLICY_DRIFT` and opens circuits. **|**
 **Observability:** Metrics `llm_region_fallback_total`, `speech_failover_attempt_total`, synthetic probes `synthetics/llm_residency.yaml`. **|**
-**Breadcrumbs:** Capability map `packages/udocket_core/llm/registry.py`, speech controller `packages/udocket_core/failover/speech.py`, tests `tests/udocket_core/llm/test_registry.py`, `tests/udocket_core/speech/test_failover.py`. **|**
+**Breadcrumbs:** Capability map `packages/core/llm/registry.py`, speech controller `packages/core/failover/speech.py`, tests `tests/udocket_core/llm/test_registry.py`, `tests/udocket_core/speech/test_failover.py`. **|**
 **References:** LLM registry spec §2.1–§2.3, Transcription agent spec.
 
 ______________________________________________________________________
@@ -189,7 +189,7 @@ ______________________________________________________________________
 
 - Primary task modules live in `apps/platform/operations/task_modules/*.py`; each declares queue bindings, retry budgets, and capability requirements.
 - Beat schedules defined in `apps/platform/operations/bootstrap.py`; scheduling changes require documentation updates and runbook references.
-- Workers communicate with provider controllers (LLM, speech) through `packages/udocket_core/*` registry facades for parity enforcement.
+- Workers communicate with provider controllers (LLM, speech) through `packages/core/*` registry facades for parity enforcement.
 - Internal publish/subscribe uses Redis streams (`worker.events`) for watchdog and audit fan-out.
 
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
@@ -199,7 +199,7 @@ ______________________________________________________________________
 **State:** Error responses originate from `apps/platform/jobs/views.py`, upload finalize controller `apps/platform/files/views.py`, and worker orchestration services; enums align with `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/jobs/test_error_envelope.py`; runtime emissions trigger `job_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Worker Cluster – API” and “Upload Finalize” watch `job_api_error_total{code}`, `upload_finalize_total{status}`; synthetic controls exercise pause/resume/cancel paths. **|**
-**Breadcrumbs:** Controllers `apps/platform/jobs/views.py`, upload guard `apps/platform/files/views.py::finalize_upload`, idempotency helpers `packages/udocket_core/idem/store.py`, tests `tests/platform/jobs/test_job_controls.py`, `tests/platform/files/test_upload_finalize.py`. **|**
+**Breadcrumbs:** Controllers `apps/platform/jobs/views.py`, upload guard `apps/platform/files/views.py::finalize_upload`, idempotency helpers `packages/core/idem/store.py`, tests `tests/platform/jobs/test_job_controls.py`, `tests/platform/files/test_upload_finalize.py`. **|**
 **References:** Platform Runtime §3.3, Settings keys `api.idempotency.*`, Ops runbooks `RB-JOB-WATCHDOG`, `RB-UPLOAD-SCAN`.
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#worker-cluster)
 
@@ -227,10 +227,10 @@ ______________________________________________________________________
 
 **Purpose:** Capture the shared idempotency table and replay semantics so every worker-facing API behaves consistently. **|**
 **Contract:** Requests persist entries before side effects, reuse stored responses on replays, and raise explicit collisions when payload hashes drift. **|**
-**State:** Postgres table `idempotency_keys` plus supporting indices store canonical hashes, status, and replay metadata; helpers live in `packages.udocket_core.idem.*`. **|**
+**State:** Postgres table `idempotency_keys` plus supporting indices store canonical hashes, status, and replay metadata; helpers live in `packages.core.idem.*`. **|**
 **Failures & handling:** Mismatched payload hashes return `409 CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"` and do not mutate downstream state. **|**
 **Observability:** Metrics `idempotency_replay_total`, `idempotency_conflict_total`, and structured logs include `idempotency_status`; dashboards pair with Alertmanager burn-rate alerts. **|**
-**Breadcrumbs:** Store helpers `packages/udocket_core/idem/store.py`, API mixins `apps/platform/api/mixins/idempotency.py`, tests `tests/platform/operations/test_guardian_enqueue.py::test_idempotent_submit`. **|**
+**Breadcrumbs:** Store helpers `packages/core/idem/store.py`, API mixins `apps/platform/api/mixins/idempotency.py`, tests `tests/platform/operations/test_guardian_enqueue.py::test_idempotent_submit`. **|**
 **References:** TDD §10 (job APIs), Settings Registry keys `api.idempotency.*`.
 
 Schema excerpt:
@@ -263,7 +263,7 @@ Scope dimensions:
 
 | Column | Description |
 | --- | --- |
-| `scope` | Logical action bucket (for example `job:create`, `artifact:approve`, `upload:finalize`); constants live in `packages.udocket_core.idem.constants`. |
+| `scope` | Logical action bucket (for example `job:create`, `artifact:approve`, `upload:finalize`); constants live in `packages.core.idem.constants`. |
 | `endpoint` | Canonical `METHOD:/api/...` string preventing cross-route collisions. |
 | `case_id` | Optional discriminator for case-scoped flows (null for global jobs). |
 | `request_hash` | `sha256` of the canonical payload (body + sorted query + idempotency key). |
@@ -369,7 +369,7 @@ paths:
 **State:** Job rows (`apps/platform/jobs/models.py`), control handlers (`apps/platform/jobs/views.py`), SSE publisher `apps/platform/events/jobs.py`, audit events `JOB_*`. **|**
 **Failures & handling:** Missing idempotency headers return `400`; stale versions raise `409`; provider abort failures emit warnings and retry until the watchdog intervenes. **|**
 **Observability:** Metrics `job_control_request_total{action}`, `job_cancel_latency_seconds`, `job_retry_total`, SSE monitors; runbooks `RB-JOB-WATCHDOG`, `RB-LOCK-006`. **|**
-**Breadcrumbs:** API tests `tests/platform/jobs/test_job_controls.py`, provider adapters `packages/udocket_core/agents/*`, cancellation helpers `apps/platform/jobs/service.py`.
+**Breadcrumbs:** API tests `tests/platform/jobs/test_job_controls.py`, provider adapters `packages/core/agents/*`, cancellation helpers `apps/platform/jobs/service.py`.
 
 - `POST /api/v1/cases/{case_id}/jobs/{kind}` — requires `Idempotency-Key`; returns `{id, retry_token, version}`. Replays with the same payload reuse the existing job; mismatches raise `IDEMPOTENCY_SIGNATURE_MISMATCH`.
 - `GET /api/v1/jobs/{id}` — reads job state plus manifest/checkpoint digests.
@@ -599,6 +599,6 @@ ______________________________________________________________________
 - TDD overview summary — `../overview/tdd.md §12`.
 - LLM Registry specification — `../automation/llm-registry.md`.
 - Communications service specification — `../customer/communications.md`.
-- Transcription agent implementation — `packages/udocket_core/agents/transcribe_lib.py`.
+- Transcription agent implementation — `packages/core/agents/transcribe_lib.py`.
 - Ops runbook catalog — `../ops/runbooks.md`.
 - Settings Registry specification — `../platform/settings.md`.

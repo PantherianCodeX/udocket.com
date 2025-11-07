@@ -31,9 +31,9 @@ from apps.platform.operations.runtime import (
     safe_job_meta,
 )
 from apps.platform.operations.utils import read_job_meta
-from packages.udocket_common.json_utils import JSONObject, normalize_json_object
-from packages.udocket_core.agents.guardian_lib import GuardianVerdict
-from packages.udocket_core.logging.context import LogContext
+from packages.common.json_utils import JSONObject, normalize_json_object
+from packages.core.agents.guardian_lib import GuardianVerdict
+from packages.core.logging.context import LogContext
 
 log = logging.getLogger("apps.platform.operations.tasks.guardian")
 

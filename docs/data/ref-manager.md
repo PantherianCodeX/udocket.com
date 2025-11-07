@@ -91,7 +91,7 @@ ______________________________________________________________________
 **State:** Curated data resides in Postgres across raw, staging, curated, and published schemas; signed bundles live in object storage with manifests; adoption telemetry tracks service acknowledgements. **|**
 **Failures & handling:** Validation guard failures or adoption lag freeze new publishes and trigger runbooks until bundles validate or roll back. **|**
 **Observability:** Dashboards “Reference Manager – Availability”, “Harvest”, “Publish”, and “Adoption” monitor request volume, error rates, and adoption lag; events feed SIEM and audit sinks. **|**
-**Breadcrumbs:** Service entry `packages/udocket_core/reference_manager/service.py`, tests `tests/reference/test_charter.py`, telemetry `packages/udocket_core/reference_manager/telemetry.py`. **|**
+**Breadcrumbs:** Service entry `packages/core/reference_manager/service.py`, tests `tests/reference/test_charter.py`, telemetry `packages/core/reference_manager/telemetry.py`. **|**
 **References:** TDD §6 Reference Data, ADR-0003, §8.3.2–§8.3.6 RB-RM-\* runbooks.
 
 - RM governs acquisition, normalization, review, publishing, and downstream adoption tracking.
@@ -118,7 +118,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing or stale records block publishes and raise `reference_manager_catalog_coverage_total{status="missing"}`; incidents route to Content Ops and Legal Ops. **|**
 **Observability:** “Reference Manager – Catalog Coverage” dashboards track locale/domain completeness and freshness. **|**
 **References:** §2.6 Bundles, §4 State management.
-**Breadcrumbs:** Models `packages/udocket_core/reference_manager/models.py`, tests `tests/reference/test_asset_registry.py`.
+**Breadcrumbs:** Models `packages/core/reference_manager/models.py`, tests `tests/reference/test_asset_registry.py`.
 
 - Courts/jurisdictions include hierarchical metadata, filing fees, addresses, and codes.
 - Forms/questionnaires capture localized prompts, scoring rubrics, conditional logic, and accessibility metadata.
@@ -133,7 +133,7 @@ ______________________________________________________________________
 **Failures & handling:** Source errors trigger exponential backoff, alert `reference_manager_harvest_error_total`, and invoke §8.3.3 RB-RM-HARVEST when SLAs breach. **|**
 **Observability:** “Reference Manager – Harvest” dashboard tracks success/error counts by source; stale-source monitors highlight overdue runs. **|**
 **References:** §4.1 Pipelines, §8.3.3 RB-RM-HARVEST.
-**Breadcrumbs:** Connectors `packages/udocket_core/reference_manager/connectors.py`, tests `tests/reference/test_source_connectors.py`.
+**Breadcrumbs:** Connectors `packages/core/reference_manager/connectors.py`, tests `tests/reference/test_source_connectors.py`.
 
 - Connectors sanitize HTML/JSON, enforce TLS 1.2+, and verify remote checksums and licenses.
 - Manual uploads support emergency updates with dual approval and checksum validation.
@@ -147,7 +147,7 @@ ______________________________________________________________________
 **Failures & handling:** Schema drift or parsing failures raise alerts and enqueue manual review; persistent failures escalate via RB-RM-HARVEST. **|**
 **Observability:** “Reference Manager – ETL” dashboard monitors `reference_manager_etl_duration_seconds`, error counts, and diff sizes. **|**
 **References:** §4.2 Bundle registry, §8.3.4 RB-RM-PUBLISH.
-**Breadcrumbs:** ETL pipeline `packages/udocket_core/reference_manager/etl.py`, tests `tests/reference/test_etl_pipeline.py`.
+**Breadcrumbs:** ETL pipeline `packages/core/reference_manager/etl.py`, tests `tests/reference/test_etl_pipeline.py`.
 
 - Entity resolution merges duplicates using canonical IDs and deterministic matching.
 - Normalization enforces casing/diacritics and maps to internal taxonomies with provenance hashes.
@@ -161,7 +161,7 @@ ______________________________________________________________________
 **Failures & handling:** Constraint violations block publishes and open incidents; schema migrations coordinate via `ops/reference/migrate.py`. **|**
 **Observability:** “Reference Manager – Schema Health” dashboard tracks `reference_manager_schema_violation_total` and migration status. **|**
 **References:** §4 State management, Appendix C seed bundles.
-**Breadcrumbs:** Schema definitions `packages/udocket_core/reference_manager/models.py`, tests `tests/reference/test_schema_layering.py`.
+**Breadcrumbs:** Schema definitions `packages/core/reference_manager/models.py`, tests `tests/reference/test_schema_layering.py`.
 
 ### 2.5 Editorial workflows & approvals (binding)
 
@@ -171,7 +171,7 @@ ______________________________________________________________________
 **Failures & handling:** Queue latency beyond SLA pages editors and invokes RB-RM-PUBLISH; emergency changes follow hotfix policy with retrospective review. **|**
 **Observability:** “Reference Manager – Review Queue” dashboard monitors `reference_manager_review_latency_seconds`, backlog counts, and diff aging. **|**
 **References:** §2.6 Bundles, §8.3.4 RB-RM-PUBLISH.
-**Breadcrumbs:** Review workflow `packages/udocket_core/reference_manager/review.py`, tests `tests/reference/test_review_workflow.py`.
+**Breadcrumbs:** Review workflow `packages/core/reference_manager/review.py`, tests `tests/reference/test_review_workflow.py`.
 
 - Diff triage categorizes changes (regulated, customer commitment, internal improvement) with SLA and reviewer rules defined in `reference_review_policy.yaml`.
 - Editorial UI provides diff context, dependency impact, and expedited workflows for court closures and emergency notices.
@@ -184,7 +184,7 @@ ______________________________________________________________________
 **Failures & handling:** Validation failures block signing and alert `reference_manager_publish_guard_failure`; adoption lag triggers RB-RM-ROLLBACK or RB-RM-PUBLISH. **|**
 **Observability:** “Reference Manager – Review & Publishing” dashboard tracks publish totals, bundle diff sizes, and adoption lag histograms. **|**
 **References:** §4.2 Bundle registry, §5.5 Adoption lag, §8.3.2 RB-RM-ROLLBACK.
-**Breadcrumbs:** Publisher `packages/udocket_core/reference_manager/publish.py`, tests `tests/reference/test_publish_pipeline.py`.
+**Breadcrumbs:** Publisher `packages/core/reference_manager/publish.py`, tests `tests/reference/test_publish_pipeline.py`.
 
 - Bundles (for example `courts@1.4.0`) ship deterministic JSON/Parquet assets with manifests containing SHA-256 digests, effective timestamps, license notes, and rollback metadata.
 - Snapshot archives accompany deltas to support fast-forward and rollback workflows.
@@ -197,7 +197,7 @@ ______________________________________________________________________
 **Failures & handling:** Locale coverage or checksum drift blocks publish; resource monitors raise `reference_resource_unavailable` for stale endpoints. **|**
 **Observability:** Dashboards “Reference Manager – Resource Coverage” and “Deliverable Catalog & Templates” monitor coverage gaps, invalidation retries, and template staleness. **|**
 **References:** §4.3 Template repository, §5.3 Licensing incidents.
-**Breadcrumbs:** Resource handlers `packages/udocket_core/reference_manager/resources.py` and `templates.py`, tests `tests/reference/test_questionnaires.py`, `tests/reference/test_templates.py`.
+**Breadcrumbs:** Resource handlers `packages/core/reference_manager/resources.py` and `templates.py`, tests `tests/reference/test_questionnaires.py`, `tests/reference/test_templates.py`.
 
 ### 2.8 Security, licensing & compliance (binding)
 
@@ -207,7 +207,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing license metadata or sanitation failures block publishes and trigger RB-RM-LICENSE; repeated violations escalate to Legal Ops and Security. **|**
 **Observability:** “Reference Manager – Compliance” dashboard tracks `reference_manager_license_violation_total`, sanitation errors, and sensitive-change audits. **|**
 **References:** §5.3 Licensing incidents, §8.3.5 RB-RM-LICENSE.
-**Breadcrumbs:** Security module `packages/udocket_core/reference_manager/security.py`, tests `tests/reference/test_license_ledger.py`.
+**Breadcrumbs:** Security module `packages/core/reference_manager/security.py`, tests `tests/reference/test_license_ledger.py`.
 
 ### 2.9 Testing & safeguards (binding)
 
@@ -217,7 +217,7 @@ ______________________________________________________________________
 **Failures & handling:** Guard failures halt the pipeline and invoke RB-RM-PUBLISH; adoption drills failing reopen incidents until resolved. **|**
 **Observability:** CI job “reference-manager-validate” and adoption drills surface readiness metrics. **|**
 **References:** §5.2 Publish guard failure, §8.3.4 RB-RM-PUBLISH / §8.3.2 RB-RM-ROLLBACK.
-**Breadcrumbs:** Validation suite `packages/udocket_core/reference_manager/tests.py`, tests `tests/reference/test_bundle_validation.py`.
+**Breadcrumbs:** Validation suite `packages/core/reference_manager/tests.py`, tests `tests/reference/test_bundle_validation.py`.
 
 ### 2.10 Risks & mitigations (normative)
 
@@ -259,7 +259,7 @@ ______________________________________________________________________
 **State:** Error envelopes originate from `/api/v1/reference/bundles`, `/api/v1/reference/templates`, and adoption acknowledgment endpoints; schema parity enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/reference/test_api_errors.py`; runtime emissions trigger `reference_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “Reference Manager – Publish” and “Reference Manager – Adoption” track `reference_api_error_total{code}`, `reference_manager_publish_guard_failure`; synthetic publishes exercise hotfix + rollback paths. **|**
-**Breadcrumbs:** API handlers `apps/platform/reference_manager/views.py`, publisher `packages/udocket_core/reference_manager/publish.py`, adoption service `packages/udocket_core/reference_manager/adoption.py`, tests `tests/reference/test_publish_api.py`. **|**
+**Breadcrumbs:** API handlers `apps/platform/reference_manager/views.py`, publisher `packages/core/reference_manager/publish.py`, adoption service `packages/core/reference_manager/adoption.py`, tests `tests/reference/test_publish_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §3.3, LPE spec §3.5, Guardian spec §2.2.
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#reference-manager)
 
@@ -291,7 +291,7 @@ ______________________________________________________________________
 **Failures & handling:** Alignment violations raise incidents and freeze dependent operations until resolved. **|**
 **Observability:** “Reference Manager – Downstream Alignment” dashboard monitors `reference_manager_alignment_violation_total` and Settings activation replays. **|**
 **References:** §2.4 Storage, §9 Dependencies.
-**Breadcrumbs:** Integration helpers `packages/udocket_core/reference_manager/integration.py`, tests `tests/reference/test_settings_guardian_alignment.py`.
+**Breadcrumbs:** Integration helpers `packages/core/reference_manager/integration.py`, tests `tests/reference/test_settings_guardian_alignment.py`.
 
 ______________________________________________________________________
 
@@ -313,7 +313,7 @@ ______________________________________________________________________
 **Failures & handling:** Scheduler delays raise alerts and allow manual failover; extended delays invoke RB-RM-HARVEST. **|**
 **Observability:** “Reference Manager – Scheduler” dashboard tracks `reference_manager_scheduler_delay_seconds`, job success/failure counts, and run history. **|**
 **References:** §2.2 ETL, §6.1 Metrics.
-**Breadcrumbs:** Scheduler `packages/udocket_core/reference_manager/scheduler.py`, tests `tests/reference/test_scheduler.py`.
+**Breadcrumbs:** Scheduler `packages/core/reference_manager/scheduler.py`, tests `tests/reference/test_scheduler.py`.
 
 ### 4.2 Bundle registry & manifests (binding)
 
@@ -323,7 +323,7 @@ ______________________________________________________________________
 **Failures & handling:** Registry inconsistencies block publishes; rollback automation restores previous bundle and records `BUNDLE_ROLLBACK_REPORT`. **|**
 **Observability:** Publish dashboards show bundle history, diff sizes, and rollback events. **|**
 **References:** §2.6 Bundles, §8.3.2 RB-RM-ROLLBACK.
-**Breadcrumbs:** Registry implementation `packages/udocket_core/reference_manager/publish.py`, tests `tests/reference/test_publish_pipeline.py`.
+**Breadcrumbs:** Registry implementation `packages/core/reference_manager/publish.py`, tests `tests/reference/test_publish_pipeline.py`.
 
 ### 4.3 Template & localization repository (binding)
 
@@ -333,7 +333,7 @@ ______________________________________________________________________
 **Failures & handling:** Checksum drift or missing approvals block publishes; cache reconciliation failures alert RB-RM-PUBLISH. **|**
 **Observability:** “Deliverable Catalog & Templates” dashboard tracks template staleness and invalidation retries. **|**
 **References:** §2.7 Templates, §8.3.4 RB-RM-PUBLISH.
-**Breadcrumbs:** Template management `packages/udocket_core/reference_manager/templates.py`, tests `tests/reference/test_templates.py`.
+**Breadcrumbs:** Template management `packages/core/reference_manager/templates.py`, tests `tests/reference/test_templates.py`.
 
 ### 4.4 Residency & infrastructure catalogue (binding)
 
@@ -343,7 +343,7 @@ ______________________________________________________________________
 **Failures & handling:** Attestation drift raises `reference_manager_provider_endpoint_violation_total` and invokes RB-RM-RESIDENCY; publishes freeze until catalog updates propagate. **|**
 **Observability:** “Residency & Endpoint Posture” dashboard tracks attestation age, violations, and Settings activation replays. **|**
 **References:** §2.8 Security, §5.4 Residency incidents.
-**Breadcrumbs:** Residency catalogue `packages/udocket_core/reference_manager/residency.py`, tests `tests/reference/test_residency_catalogue.py`.
+**Breadcrumbs:** Residency catalogue `packages/core/reference_manager/residency.py`, tests `tests/reference/test_residency_catalogue.py`.
 
 ### 4.5 Rollout sequencing (binding)
 
@@ -353,7 +353,7 @@ ______________________________________________________________________
 **Failures & handling:** Wave delays or failed smoke tests trigger rollback; RM coordinates with Settings/Compose teams to pause adoption. **|**
 **Observability:** “Reference Manager – Rollout” dashboard monitors wave progress, adoption percentages, and open issues. **|**
 **References:** §2.6 Bundles, §8.3.2 RB-RM-ROLLBACK.
-**Breadcrumbs:** Rollout planner `packages/udocket_core/reference_manager/rollout.py`, tests `tests/reference/test_rollout.py`.
+**Breadcrumbs:** Rollout planner `packages/core/reference_manager/rollout.py`, tests `tests/reference/test_rollout.py`.
 
 ______________________________________________________________________
 
@@ -426,7 +426,7 @@ ______________________________________________________________________
 **State:** Metrics emit via OpenTelemetry; logs stream to immutable sinks; synthetic jobs exercise publish/adoption flows; audit trails persist in JSONL files. **|**
 **Failures & handling:** Missing metrics or stale thresholds block release checklists and trigger on-call follow-ups. **|**
 **Observability:** Dashboards for Availability, Harvest, Review, Publish, Adoption, Compliance, and Residency monitor SLOs; Alertmanager routes incidents to RM on-call. **|**
-**Breadcrumbs:** Telemetry module `packages/udocket_core/reference_manager/telemetry.py`, dashboards `infra/grafana/reference_manager_*.json`. **|**
+**Breadcrumbs:** Telemetry module `packages/core/reference_manager/telemetry.py`, dashboards `infra/grafana/reference_manager_*.json`. **|**
 **References:** §5 Failure modes, Appendix B metrics, §8.3 Runbooks & drills.
 
 ### 6.1 SLOs & Targets (binding)
@@ -436,7 +436,7 @@ ______________________________________________________________________
 **State:** Metrics `reference_manager_harvest_total`, `reference_manager_publish_latency_seconds`, `reference_bundle_adoption_latency_seconds`, `reference_manager_license_violation_total`; dashboards “Reference Manager – Harvest”, “Publish Pipeline”, “Adoption”, “Compliance”. **|**
 **Failures & handling:** Breaches invoke RB-RM-HARVEST, RB-RM-PUBLISH, RB-RM-ADOPTION, or RB-RM-LICENSE before resuming operations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic harvest/publish jobs, and adoption drills provide evidence. **|**
-**Breadcrumbs:** Telemetry `packages/udocket_core/reference_manager/telemetry.py`, synthetic definitions `ops/reference/synthetics/*.yaml`, runbooks `docs/ops/runbooks/reference/*.md`. **|**
+**Breadcrumbs:** Telemetry `packages/core/reference_manager/telemetry.py`, synthetic definitions `ops/reference/synthetics/*.yaml`, runbooks `docs/ops/runbooks/reference/*.md`. **|**
 **References:** TDD §6, Settings spec §7.3, Audit spec §4.
 
 - **Harvest availability:** ≥99.5% availability for provider harvest runs, measured via `reference_manager_harvest_total` success rate and synthetic connector checks; breaches trigger RB-RM-HARVEST.
@@ -452,7 +452,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing metrics or inaccurate thresholds trigger observability retrofits before releases proceed. **|**
 **Observability:** Dashboards visualize trends and SLO burn; runbook RB-RM-PUBLISH references specific metrics. **|**
 **References:** Appendix B metrics tables.
-**Breadcrumbs:** Metric exporters `packages/udocket_core/reference_manager/telemetry.py`, tests `tests/reference/test_metrics.py`.
+**Breadcrumbs:** Metric exporters `packages/core/reference_manager/telemetry.py`, tests `tests/reference/test_metrics.py`.
 
 ### 6.3 Logs & audits
 
@@ -462,7 +462,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing audit entries block publishes; fallback sinks engage while triggering incidents. **|**
 **Observability:** Audit completeness monitors verify ingestion; alerts fire when events lag beyond five minutes. **|**
 **References:** §2.8 Security, §8.3.5 RB-RM-LICENSE.
-**Breadcrumbs:** Audit writer `packages/udocket_core/reference_manager/audit.py`, tests `tests/reference/test_audit_log.py`.
+**Breadcrumbs:** Audit writer `packages/core/reference_manager/audit.py`, tests `tests/reference/test_audit_log.py`.
 
 ### 6.4 Synthetic monitoring & adoption drills
 
@@ -493,7 +493,7 @@ ______________________________________________________________________
 **State:** Access policies define roles and RLS rules; sanitation policies stored alongside connectors; license ledger tracks obligations; audit sinks capture sensitive changes. **|**
 **Failures & handling:** Security or licensing violations trigger RB-RM-LICENSE or RB-RM-RESIDENCY; remediations recorded with legal approvals. **|**
 **Observability:** Compliance dashboards track license violations, sensitive change audits, and residency drift; SIEM correlates audit events. **|**
-**Breadcrumbs:** Security module `packages/udocket_core/reference_manager/security.py`, IAM config `infra/iam/reference_manager/`, tests `tests/reference/test_license_ledger.py`. **|**
+**Breadcrumbs:** Security module `packages/core/reference_manager/security.py`, IAM config `infra/iam/reference_manager/`, tests `tests/reference/test_license_ledger.py`. **|**
 **References:** §2.8 Security, §5.3 Licensing incidents, §8.3.5 RB-RM-LICENSE / §8.3.6 RB-RM-RESIDENCY.
 
 - Sanitization strips risky markup and enforces TLS-only downloads.
@@ -642,7 +642,7 @@ ______________________________________________________________________
 **State:** Dependency metadata lives in connector configs, adoption tables, and alignment manifests. **|**
 **Failures & handling:** Source outages, adoption lag, or alignment violations trigger runbooks outlined in §5 and §8.3. **|**
 **Observability:** Dashboards “Reference Manager – Adoption”, “Downstream Alignment”, and “Residency & Endpoint Posture” highlight dependency health. **|**
-**Breadcrumbs:** Integration code `packages/udocket_core/reference_manager/integration.py`, adoption tables `reference_bundle_adoption`. **|**
+**Breadcrumbs:** Integration code `packages/core/reference_manager/integration.py`, adoption tables `reference_bundle_adoption`. **|**
 **References:** §2 Responsibilities, §3 API contract, §4 State management.
 
 - Upstream: official court/government portals, licensing agreements, provider attestations.

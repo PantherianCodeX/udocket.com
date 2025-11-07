@@ -84,7 +84,7 @@ def test_audio_normalization_exercises_conversion(tmp_path):
     _ensure_ffmpeg()
     variants = _make_test_variants()
 
-    from packages.udocket_core.agents import normalize_audio
+    from packages.core.agents import normalize_audio
 
     # Already target format should not convert
     ok_local = _copy_to_tmp(variants["wav_ok"], tmp_path)
@@ -118,7 +118,7 @@ def test_transcription_agent_on_demand_e2e(tmp_path):
     case_dir = tmp_path / "storage" / "media" / "cases" / "CASE-E2E"
     case_dir.mkdir(parents=True, exist_ok=True)
 
-    from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig
+    from packages.core.agents import TranscriptionAgent, TranscriptionConfig
 
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)

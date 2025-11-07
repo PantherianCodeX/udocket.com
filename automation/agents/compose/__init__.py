@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-"""Compose agent placeholder. Will call udocket_ai.api.compose.
+"""Compose agent placeholder. Will call packages.ai.api.compose.
 
 Actual implementations arrive in later phases of the refactor."""

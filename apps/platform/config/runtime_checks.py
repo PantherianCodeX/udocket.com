@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 
 from config.paths import ensure_storage_root
-from packages.udocket_core.config.paths import (
+from packages.core.config.paths import (
     resolve_analyze_defaults_path,
     resolve_llm_assignments_path,
     resolve_llm_providers_path,
 )
-from packages.udocket_core.llm.config import LLMConfigError, load_llm_settings
+from packages.core.llm.config import LLMConfigError, load_llm_settings
 
 
 class RuntimeConfigurationError(RuntimeError):

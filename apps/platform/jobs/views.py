@@ -76,11 +76,11 @@ from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.operations.tasks import analyze_job, compose_job, transcribe_job
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
 from apps.platform.tenancy import scope_jobs
-from packages.udocket_common.json_utils import read_json_object, stringify_json
-from packages.udocket_common.operations import ComposeStageMap, optional_json_object
-from packages.udocket_common.text import unique_title
-from packages.udocket_core.agents.analyze_lib import AnalyzeConfig
-from packages.udocket_core.audio import probe_audio_metadata
+from packages.common.json_utils import read_json_object, stringify_json
+from packages.common.operations import ComposeStageMap, optional_json_object
+from packages.common.text import unique_title
+from packages.core.agents.analyze_lib import AnalyzeConfig
+from packages.core.audio import probe_audio_metadata
 
 
 def _derive_audio_filename(path_obj: Path | None, meta: dict[str, Any], fallback: str) -> str:

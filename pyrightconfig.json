@@ -53,8 +53,8 @@
     "apps/platform/jobs",
     "apps/platform/tenancy.py",
     "apps/platform/ui",
-    "packages/udocket_docs/src/doc_tools",
-    "packages/udocket_docs/tests",
+    "packages/docs_tooling/src/doc_tools",
+    "packages/docs_tooling/tests",
     "typings/vendor",
     "typings/external_stubs",
     "scripts"

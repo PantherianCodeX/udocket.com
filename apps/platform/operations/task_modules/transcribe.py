@@ -29,7 +29,7 @@ from apps.platform.operations.services.files import sha256_file
 from apps.platform.operations.storage import ensure_case_paths
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
 from apps.platform.operations.utils import append_job_log, read_job_meta
-from packages.udocket_common.json_utils import (
+from packages.common.json_utils import (
     JSONObject,
     coerce_json_object,
     coerce_json_value,
@@ -38,11 +38,11 @@ from packages.udocket_common.json_utils import (
     normalize_json_object,
     read_json_object,
 )
-from packages.udocket_common.text import unique_title
-from packages.udocket_core import __version__ as UDOCKET_CORE_VERSION
-from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
-from packages.udocket_core.agents.transcribe_lib import ModeLiteral
-from packages.udocket_core.audio import probe_audio_metadata
+from packages.common.text import unique_title
+from packages.core import __version__ as UDOCKET_CORE_VERSION
+from packages.core.agents import TranscriptionAgent, TranscriptionConfig, normalize_audio
+from packages.core.agents.transcribe_lib import ModeLiteral
+from packages.core.audio import probe_audio_metadata
 
 log = logging.getLogger("apps.platform.operations.tasks.transcribe")
 

@@ -8,7 +8,7 @@ from uuid import UUID
 from django.conf import settings
 
 from apps.platform.cases.models import Case
-from packages.udocket_common.paths import CasePaths, build_case_paths
+from packages.common.paths import CasePaths, build_case_paths
 
 _DEFAULT_ORG_SLUG = "unassigned"
 

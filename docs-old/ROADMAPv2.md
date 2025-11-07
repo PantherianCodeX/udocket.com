@@ -70,7 +70,7 @@ This roadmap consolidates every planning artefact in `docs/`, the agents guides,
 - **Future enhancements**: additional Compose variants, guardian policy wizards, pipeline health telemetry.
 
 ## Agents & LangGraph Alignment
-- Maintain LangGraph personas and node design (docs/AGENTS_LANGGRAPH.md) for Analyze/Compose orchestration; optional dependency via `packages/udocket_core/agents/langgraph_orchestrator.py`.
+- Maintain LangGraph personas and node design (docs/AGENTS_LANGGRAPH.md) for Analyze/Compose orchestration; optional dependency via `packages/core/agents/langgraph_orchestrator.py`.
 - Shared state should capture all artifacts (summary, staff report, timeline, graph, compose outputs) plus intake, alerts, approvals.
 - Prompts must enforce Canadian residency, schema compliance, and deterministic outputs; JSON stages leverage response-format schemas.
 - Legacy LangGraph spec mentions offline summarisation fallback; per current policy we run LLM-only in production and reserve local fallback strictly for developer environments if ever enabled.

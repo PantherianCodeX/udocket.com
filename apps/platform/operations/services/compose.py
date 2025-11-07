@@ -18,7 +18,7 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.runtime import JobRuntimeContext
 from apps.platform.operations.utils import append_job_log, read_job_meta, update_job_meta
-from packages.udocket_common.json_utils import (
+from packages.common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_json_object,
@@ -28,16 +28,16 @@ from packages.udocket_common.json_utils import (
     read_json_object,
     write_json_object,
 )
-from packages.udocket_common.operations import (
+from packages.common.operations import (
     ComposeCaseMetadata,
     ComposeProviderCredentials,
     ComposeStageMap,
     optional_json_object,
 )
-from packages.udocket_common.text import unique_title
-from packages.udocket_core.agents import ComposeAgent, ComposeConfig
-from packages.udocket_core.llm.config import LLMSettings, load_llm_settings
-from packages.udocket_core.logging.context import LogContext
+from packages.common.text import unique_title
+from packages.core.agents import ComposeAgent, ComposeConfig
+from packages.core.llm.config import LLMSettings, load_llm_settings
+from packages.core.logging.context import LogContext
 
 from .analysis import (
     case_intake_payload,

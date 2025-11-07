@@ -71,7 +71,7 @@ ______________________________________________________________________
 
 - **Scope:** Captures the shared runtime footprint for all platform services: Kubernetes environments, service mesh guardrails, ingress/egress policy, TLS posture, pod security, and the authoritative service catalog used for capacity planning. The detailed mechanics that individual services implement remain within their dedicated specifications.
 - **Structure:** Sections follow the standard 0–10 template. Responsibilities (§2) summarise environment guardrails; §3 documents binding deployment policies and reference manifests; §4 inventories first-party services. Operations, observability, and dependencies surface the runbooks and systems that keep the runtime compliant.
-- **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/platform/runtime.md docs/overview/tdd.md docs/tdd_modularization.md` plus `make docs.check.runbooks` before landing infra changes. Update diagrams via `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid` whenever topology shifts.
+- **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/platform/runtime.md docs/overview/tdd.md docs/tdd_modularization.md` plus `make docs.check.runbooks` before landing infra changes. Update diagrams via `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid` whenever topology shifts.
 - **Change protocol:** Alterations to TLS policy, pod security baselines, mesh egress allowlists, or the service catalog require Architecture + Security review. Any change that widens residency exposure must also update LPE contexts and App.O waiver entries.
 - **References:** TDD §3 (summary), Settings Registry (`security.tls.*`, `network.egress.allowed_hosts`), Worker Cluster spec (§2), LPE spec (§2.6), Reference Manager spec (§2.1), Ops runbooks `RB-TLS-LEGACY`, `RB-RES-BLOCK`, `RB-K8S-FENCE`.
 - **Contacts:** Platform Engineering (cluster operations), Site Reliability Engineering (mesh & observability), Security Engineering (TLS/FIPS posture), `#platform-runtime` Slack, on-call alias `platform-runtime@`.
@@ -273,7 +273,7 @@ Example error payload:
 **State:** Controller `apps/platform/artifacts/views.py`, serializers `apps/platform/artifacts/serializers.py`, OpenAPI components `ops/openapi/components/artifacts.yaml`. **|**
 **Failures & handling:** Integrity failures raise `INTEGRITY_ERROR`; Guardian blocks raise `POLICY_BLOCK`; SSE `artifact.status` broadcasts keep UI in sync. **|**
 **Observability:** Metrics `artifact_request_total{action}`, `artifact_download_total{cache_state}`, audit events `ARTIFACT_CREATED`, `ARTIFACT_STATUS_CHANGED`. **|**
-**Breadcrumbs:** Tests `tests/platform/artifacts/test_artifact_api.py`, download guard `apps/platform/portal/downloads.py`, manifest helpers `packages/udocket_core/artifacts/service.py`.
+**Breadcrumbs:** Tests `tests/platform/artifacts/test_artifact_api.py`, download guard `apps/platform/portal/downloads.py`, manifest helpers `packages/core/artifacts/service.py`.
 
 - `GET /api/v1/artifacts?case_id=&type=&class=&status=&archived=&page=&page_size=` — lists artifacts with RLS; `scope=org` query leverages `active_org_id`.
 - `POST /api/v1/cases/{case_id}/artifacts` — creates artifacts from uploads or generated content; derived artifacts start in `status='PROCESSING'` until workers complete content writes.
@@ -412,7 +412,7 @@ Mesh and ingress templates consume the same Settings bundles so routing surfaces
 **State:** Shared secrets reside in managed stores (Key Vault/Vault) and mirror Settings keys under `security.hmac.*`; Settings activation distributes key IDs to clients and services. Canonicalization uses `{method, path, timestamp, body_sha256}` scoped to the requesting service/tenant. **|**
 **Failures & handling:** Timestamp drift greater than `security.hmac.max_clock_skew_seconds` returns `401 AUTH_CLOCK_SKEW`; digest mismatches raise `401 AUTH_SIGNATURE_INVALID`; missing headers fail closed. Clients retry after syncing clocks and recomputing the signature; repeated violations escalate via Security runbook `RB-HMAC-ROTATE`. **|**
 **Observability:** Metrics `auth_request_signed_total`, `auth_signature_invalid_total`, and `auth_clock_skew_total` feed the “API Gateway – Auth” dashboard; audit events `AUTH_SIGNATURE_INVALID` include the offending key ID for forensics. **|**
-**Breadcrumbs:** Signature middleware `apps/platform/api/middleware/hmac_signature.py`, helpers `packages/udocket_core/security/hmac.py`, tests `tests/platform/api/test_hmac_signature.py`, Settings schema `packages/udocket_core/settings/security.py`.
+**Breadcrumbs:** Signature middleware `apps/platform/api/middleware/hmac_signature.py`, helpers `packages/core/security/hmac.py`, tests `tests/platform/api/test_hmac_signature.py`, Settings schema `packages/core/settings/security.py`.
 
 Required headers for signed requests:
 

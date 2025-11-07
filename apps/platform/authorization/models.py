@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import models
 
-from packages.udocket_common.django.typing import TypedManager, get_typed_manager
+from packages.common.django.typing import TypedManager, get_typed_manager
 
 if TYPE_CHECKING:
     from apps.platform.accounts.models import Organization

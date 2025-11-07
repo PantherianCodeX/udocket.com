@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover - use typing_extensions when stdlib lack
 
 from django.db import transaction
 
-from packages.udocket_common.json_utils import (
+from packages.common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,
@@ -28,15 +28,15 @@ from packages.udocket_common.json_utils import (
     coerce_str_list,
     normalize_json_object,
 )
-from packages.udocket_core.agents.common.llm_health import ensure_llm_client_health
-from packages.udocket_core.llm.config import (
+from packages.core.agents.common.llm_health import ensure_llm_client_health
+from packages.core.llm.config import (
     LLMConfigError,
     LLMProvider,
     LLMProviderModel,
     LLMSettings,
     load_llm_settings,
 )
-from packages.udocket_core.llm.runtime import (
+from packages.core.llm.runtime import (
     ChatClientError,
     build_chat_client,
     build_provider_runtime_config,
@@ -44,7 +44,7 @@ from packages.udocket_core.llm.runtime import (
 
 _analyze_src: Iterable[str]
 try:
-    _mod = importlib.import_module("packages.udocket_core.agents.analyze_lib")
+    _mod = importlib.import_module("packages.core.agents.analyze_lib")
     _analyze_src = getattr(_mod, "DISALLOWED_PROVIDERS", ())
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
     _analyze_src = ()

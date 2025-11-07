@@ -16,9 +16,9 @@ from apps.platform.operations.guardian import (
     build_guardian_context,
 )
 from apps.platform.artifacts.models import CaseArtifact
-from packages.udocket_core.agents import guardian_lib
-from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig
-from packages.udocket_core.llm.config import (
+from packages.core.agents import guardian_lib
+from packages.core.agents.guardian_lib import GuardianAgent, GuardianConfig
+from packages.core.llm.config import (
     LLMProvider,
     LLMProviderModel,
     LLMSettings,

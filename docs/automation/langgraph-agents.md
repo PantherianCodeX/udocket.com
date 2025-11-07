@@ -92,7 +92,7 @@ ______________________________________________________________________
 **State:** Manifests persist per job under `storage/media/tenants/<ORG_ID>/cases/<case>/analysis|docs|ops`. **|**
 **Failures & handling:** Graph activation rejects invalid schemas; runtime failures follow the taxonomy in §5. **|**
 **Observability:** Metrics for pipeline/job/lane execution and ops JSONL streams (`ops_transcription.jsonl`, `ops_summary.jsonl`, `ops_compose.jsonl`) record pipeline versions, node usage, and retry history. **|**
-**Breadcrumbs:** Orchestration runtime and graph builders live under `packages/udocket_core/agents/*`; acceptance tests under `tests/*`.
+**Breadcrumbs:** Orchestration runtime and graph builders live under `packages/core/agents/*`; acceptance tests under `tests/*`.
 
 ______________________________________________________________________
 
@@ -103,7 +103,7 @@ ______________________________________________________________________
 **State:** Each agent manages job manifests, derived artifact manifests, envelope hashes, QA logs, and Ops JSON per run; Analyze maintains an internal `AtomsIndex` leveraged by validation. **|**
 **Failures & handling:** Runtime failures map to the taxonomy in §5. **|**
 **Observability:** Metrics `agent_job_duration_seconds{agent=}`, `agent_retry_total`, `atoms_extracted_total`, QA issue density, and pipeline dashboards. **|**
-**Breadcrumbs:** Transcription `packages/udocket_core/agents/transcribe_lib.py`, Analyze `packages/udocket_core/agents/analyze_lib.py` + stages `packages/udocket_core/agents/analyze/stages/`, Compose `packages/udocket_core/agents/compose_lib.py` + orchestrator `packages/udocket_core/agents/compose/orchestrator.py`, manifests `packages/udocket_core/agents/manifests.py`. **|**
+**Breadcrumbs:** Transcription `packages/core/agents/transcribe_lib.py`, Analyze `packages/core/agents/analyze_lib.py` + stages `packages/core/agents/analyze/stages/`, Compose `packages/core/agents/compose_lib.py` + orchestrator `packages/core/agents/compose/orchestrator.py`, manifests `packages/core/agents/manifests.py`. **|**
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/diagrams/automation/langgraph-agents/pipeline-overview-v1.svg" alt="LangGraph pipeline overview">
@@ -160,7 +160,7 @@ ______________________________________________________________________
 
 #### 2.2.2 Lane QA & revision loops (binding) {#222-lane-qa-revision}
 
-- Node catalog: Analyze reuses the Compose-style LangGraph idioms — `LaneDraft`, `LaneQA`, `LaneRevision`, and `LaneFinalize` nodes per artifact lane — so Compose and Analyze share operational semantics, cost controls, and observability. Nodes register under `packages.udocket_core.agents.analyze.graph` and expose typed signatures (`AnalyzeState -> AnalyzeState`).
+- Node catalog: Analyze reuses the Compose-style LangGraph idioms — `LaneDraft`, `LaneQA`, `LaneRevision`, and `LaneFinalize` nodes per artifact lane — so Compose and Analyze share operational semantics, cost controls, and observability. Nodes register under `packages.core.agents.analyze.graph` and expose typed signatures (`AnalyzeState -> AnalyzeState`).
 - Lane QA decisions: each `LaneQA` node executes schema validation, atom cross-checks, intake/questionnaire verification, and deterministic heuristics (e.g., minimum evidence count per issue). Outcomes map to `{"advance", "revise", "quarantine"}`; the node records a `LaneQAResult` payload plus structured findings for ops metadata.
 - Revision directives: when `revise`, QA constructs an `AnalyzeRevisionDirective` describing failing UUIDs, acceptance criteria, prompts, and `preserve_spans[]`. LangGraph routes back to the same lane’s `LaneRevision` node, which swaps the instruction set, clamps temperature/length, and merges the new slice into the existing artifact while keeping preserved spans byte-identical.
 - Freeze & merge rules: preserved spans enforce hash equality; revised spans carry deterministic UUIDv5 derived from `(job_id, lane_id, canonical_content)` so retries remain idempotent. If QA escalates to `quarantine`, the lane halts, emits `status="blocked"`, and records findings for review.
@@ -225,7 +225,7 @@ ______________________________________________________________________
 **State:** Activation metadata captures `graph_version`, `graph_schema_sha256`, `settings_snapshot_sha256`, lane concurrency budgets, and idempotency keys; compiled graphs are cached for reuse alongside per-job checkpoints. Tool registry cache stores schema-validated bindings. **|**
 **Failures & handling:** Invalid activations fail closed with actionable errors (`E_INPUT_INVALID`, `E_SCHEMA_MISMATCH`); runtime mismatches raise `E_INTEGRITY_MISMATCH`; missing tools block activation. **|**
 **Observability:** Activation dashboards, CI contract tests, tool registry validation logs, prompts provenance, and ops manifests capture pipeline changes and drifting configurations. **|**
-**Breadcrumbs:** Settings integration `apps/platform/settings/agents_pipeline.py`, pipeline catalog `packages/udocket_core/agents/pipeline_catalog.py`, LangGraph orchestrator `packages/udocket_core/agents/langgraph_orchestrator.py`, analyze stages `packages/udocket_core/agents/analyze/stages/`, compose orchestrator `packages/udocket_core/agents/compose/orchestrator.py`, activation tests `tests/agents/test_pipeline_catalog.py`. **|**
+**Breadcrumbs:** Settings integration `apps/platform/settings/agents_pipeline.py`, pipeline catalog `packages/core/agents/pipeline_catalog.py`, LangGraph orchestrator `packages/core/agents/langgraph_orchestrator.py`, analyze stages `packages/core/agents/analyze/stages/`, compose orchestrator `packages/core/agents/compose/orchestrator.py`, activation tests `tests/agents/test_pipeline_catalog.py`. **|**
 **References:** This section focuses on LangGraph contracts; platform activation specifics are covered elsewhere.
 
 <figure class="full-width-diagram">
@@ -240,7 +240,7 @@ ______________________________________________________________________
 ### 3.2 Internal Interfaces (binding)
 
 - Pipeline catalog, tool registry, and LangGraph orchestrator form the internal contract that manages stage ordering, lane concurrency, retries, and checkpoint management.
-- Analyze stage implementations (`packages/udocket_core/agents/analyze/stages/*`) expose typed callables that operate on transcript JSON, intake data, and lane-specific context, returning structured payloads that comply with exported JSON Schemas.
+- Analyze stage implementations (`packages/core/agents/analyze/stages/*`) expose typed callables that operate on transcript JSON, intake data, and lane-specific context, returning structured payloads that comply with exported JSON Schemas.
 - Compose orchestrator merges shared context (summary JSON + analysis artifacts) into role-specific lanes, ensuring that only finalize nodes write deliverables.
 
 - Pipelines enumerate `{pipeline_id, graph_version, graph_schema_sha256, runner, stages[]}` with per-stage metadata `{stage_id, langgraph_node_id, llm_profile_id, prompt_template_id, tool_ids[], enabled, retry_budget, cost_ceiling, depends_on[]}`. Revision directives are structured `{stage_id, target_uuid[], failing_checks[], instructions, preserve_spans[]}` and attach to checkpoints for focused replays. Versioning is additive; prior versions remain callable for queued jobs & replays until archived.
@@ -278,7 +278,7 @@ ______________________________________________________________________
 ### 3.4 LangGraph runtime & checkpointing (binding)
 
 - Runtime floor & ceiling: agents pin `langgraph>=0.2,<0.3` so we stay on the current major until we plan for breaking API changes. Compose and Analyze share the same runtime feature set, enabling consistent debugging/tools.
-- GraphRunner + StateGraph: pipelines compile into `StateGraph` objects with named nodes per lane. `packages.udocket_core.agents.langgraph_runtime` hosts the orchestrator, `AnalyzeGraph`, and `ComposeGraph` builders plus shared middlewares (telemetry, tool dispatch).
+- GraphRunner + StateGraph: pipelines compile into `StateGraph` objects with named nodes per lane. `packages.core.agents.langgraph_runtime` hosts the orchestrator, `AnalyzeGraph`, and `ComposeGraph` builders plus shared middlewares (telemetry, tool dispatch).
 - Checkpointer backend: the canonical LangGraph checkpointer runs against Postgres (`agents_graph_checkpoint` table) in the primary application database. Every node write stores `{job_id, pipeline_id, graph_version, node_id, state_jsonb, input_hash, output_hash, created_at}`; RLS + future OPA policies ensure per-tenant isolation without duplicating storage engines.
 - Retention & pruning: checkpoints retain for 30 days or until job artefacts graduate to Deliverable status, whichever is longer. A nightly task prunes expired checkpoints after verifying manifests reference the final digests.
 - Resume semantics: resumable jobs must present the original settings snapshot SHA and manifest hash. GraphRunner loads the latest checkpoint, verifies `input_hash` parity, and replays pending nodes only. Divergent definitions raise `E_INTEGRITY_MISMATCH` and require a fresh run.
@@ -322,7 +322,7 @@ ______________________________________________________________________
 **State:** Manifests stored under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/<job_id>__<agent>_manifest.json`; audit JSONL streams append to `ops/ops_<agent>.jsonl`; QA logs and acceptance verdicts live alongside artifacts. **|**
 **Failures & handling:** Missing or corrupt manifests trigger `E_INTEGRITY_MISMATCH` and quarantine outputs; pipeline activation blocks if manifests fail schema validation. **|**
 **Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `python -m doc_tools.manage_docs --lint --check-manifests` ensures schema parity during CI. **|**
-**Breadcrumbs:** Manifest models `packages/udocket_core/agents/manifests.py`, ops logging `packages/udocket_core/agents/logging.py`, lineage tooling `packages/udocket_core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**
+**Breadcrumbs:** Manifest models `packages/core/agents/manifests.py`, ops logging `packages/core/agents/logging.py`, lineage tooling `packages/core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**
 **References:** This document.
 
 - Filesystem layout: transcripts (text + JSON) under `transcript/`; analysis artifacts (`outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json`) under `analysis/`; compose deliverables and QA/staff artifacts under `docs/`; ops metadata/logs under `ops/`.
@@ -340,7 +340,7 @@ ______________________________________________________________________
 **State:** Ops metadata JSON records `{code, class, attempt, final, retry_after}`; manifests flag partial outputs; QA logs capture verification failures. **|**
 **Failures & handling:** Transient provider errors retry with exponential backoff; policy violations quarantine; input errors surface; integrity mismatches halt and trigger audit; concurrency conflicts short-retry before manual intervention. **|**
 **Observability:** Metrics `agent_retry_total{class=}`, `agent_job_duration_seconds{outcome=}` and synthetic jobs monitor reliability. **|**
-**Breadcrumbs:** Failure taxonomy `packages/udocket_core/agents/errors.py`, retry logic `packages/udocket_core/agents/retry.py`, tests `tests/agents/test_failure_modes.py`. **|**
+**Breadcrumbs:** Failure taxonomy `packages/core/agents/errors.py`, retry logic `packages/core/agents/retry.py`, tests `tests/agents/test_failure_modes.py`. **|**
 **References:** LangGraph runtime and this spec.
 
 - Cancellation semantics: GraphRunner issues cancellation tokens to active nodes; nodes honour cooperative cancellation and persist progress for partial outputs.
@@ -374,7 +374,7 @@ ______________________________________________________________________
 **State:** Metrics `agent_job_completion_ratio`, `agent_lane_duration_seconds`, `agent_queue_latency_seconds`, `agent_token_budget_violation_total`; dashboards “Agent Pipelines – Activation”, “Agent QA Acceptance”, FinOps monitors `ops/finops/agents_cost_dashboard.json`. **|**
 **Failures & handling:** Breaches invoke RB-AGENT-PIPELINE, RB-AGENT-QA, or RB-FINOPS-LANGGRAPH before enabling new activations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, QA harness reports, and shadow run comparisons provide evidence. **|**
-**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/udocket_core/agents/logging.py`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
+**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/core/agents/logging.py`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
 **References:** This document.
 
 - **Pipeline availability:** ≥99.5% of LangGraph runs complete without manual retry, measured via `agent_job_completion_ratio`; breaches trigger RB-AGENT-PIPELINE before promotions proceed.
@@ -504,15 +504,15 @@ ______________________________________________________________________
 
 **Purpose:** Provide typed schema examples and canonical error codes for agent outputs. **|**
 **Contract:** Schemas must remain in sync with implementation; error codes are authoritative and map to failure classes in §5. **|**
-**State:** Pydantic models live in `packages/udocket_core/agents/schemas.py`; schema snapshots export to `spec/schemas/agents/*.schema.json`; lane validators and QA harnesses use these schemas for runtime validation. **|**
+**State:** Pydantic models live in `packages/core/agents/schemas.py`; schema snapshots export to `spec/schemas/agents/*.schema.json`; lane validators and QA harnesses use these schemas for runtime validation. **|**
 **Failures & handling:** Schema drift fails CI; unknown error codes block merges via lint; manifests lacking schema versions trigger `E_INTEGRITY_MISMATCH`. **|**
 **Observability:** Schema lints in CI, error code coverage dashboards, QA harness logs. **|**
-**Breadcrumbs:** Models `packages/udocket_core/agents/schemas.py`, schemas `spec/schemas/agents/`, tests `tests/agents/test_schema_consistency.py`. **|**
+**Breadcrumbs:** Models `packages/core/agents/schemas.py`, schemas `spec/schemas/agents/`, tests `tests/agents/test_schema_consistency.py`. **|**
 **References:** Compose spec Appendix B, Analyze spec Appendix A, Platform TDD §6.
 
 ### A.1 Analyze agent schema (binding)
 
-- Pydantic models: `packages.udocket_core.agents.schemas.analyze` (new module) defines `AnalyzeState`, `AnalyzeLaneResult`, `AnalyzeRevisionDirective`, `SummaryJSON`, `TimelineEvent`, `EntityRecord`, and supporting value objects (`EvidencePointer`, `QuestionnaireFinding`). Classes are frozen dataclasses or `BaseModel` subclasses with `ConfigDict(frozen=True)` to enforce immutability per LangGraph node.
+- Pydantic models: `packages.core.agents.schemas.analyze` (new module) defines `AnalyzeState`, `AnalyzeLaneResult`, `AnalyzeRevisionDirective`, `SummaryJSON`, `TimelineEvent`, `EntityRecord`, and supporting value objects (`EvidencePointer`, `QuestionnaireFinding`). Classes are frozen dataclasses or `BaseModel` subclasses with `ConfigDict(frozen=True)` to enforce immutability per LangGraph node.
 - Exported JSON Schemas (all under `spec/schemas/agents/`):
   - `transcript_v1.schema.json` — TranscriptJSON (segment UUIDs, speakers, hashes, diarisation flag).
   - `analyze_outline_v1.schema.json` — OutlineJSON derived from DOCX/template headings.

@@ -83,7 +83,7 @@ ______________________________________________________________________
 **State:** `audit_event` table, immutable object store, `ops_<agent>.jsonl` streams, Guardian judgment history, seal manifests, waiver ledger, DSAR journals. **|**
 **Failures & handling:** Seal failures, immutable sink lag, schema drift, or missing manifests block releases until remediated with RB-AUDIT-004 and RB-RES-BLOCK/DSAR runbooks. **|**
 **Observability:** Dashboards “Audit Seal Integrity”, “Waiver Ledger”, metrics `audit_worm_lag_seconds`, `audit_seal_errors_total`, `audit_manifest_missing_total`, `waiver_expiring_total`. **|**
-**Breadcrumbs:** Audit store implementation `packages/udocket_core/audit/store.py`, seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/udocket_core/waiver/ledger.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
+**Breadcrumbs:** Audit store implementation `packages/core/audit/store.py`, seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/core/waiver/ledger.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
 **References:** TDD §5 summary, Logging spec §3, Guardian §7, Settings §7.3.
 
 ______________________________________________________________________
@@ -95,7 +95,7 @@ ______________________________________________________________________
 **State:** Audit schemas, manifest definitions, seal artifacts, waiver ledger, DSAR journal, retention tombstones. **|**
 **Failures & handling:** Missing manifest or seal triggers deploy gate; waiver expiry without review escalates to Compliance; DSAR journal gaps raise `dsar_journal_missing_total`. **|**
 **Observability:** Dashboards “Evidence Chain” and “Waiver Governance”, metrics `audit_manifest_version_total`, `waiver_expiring_total`, `dsar_journal_pending_total`. **|**
-**Breadcrumbs:** Manifest models `packages/udocket_core/manifests/`, ops streams `ops/<agent>__*.json`, schema migrations `db/migrations/audit/`. **|**
+**Breadcrumbs:** Manifest models `packages/core/manifests/`, ops streams `ops/<agent>__*.json`, schema migrations `db/migrations/audit/`. **|**
 **References:** §3 API contract, §4 State management, §5 Failure modes, §6 Observability, §7 Security & Compliance.
 
 ______________________________________________________________________
@@ -107,7 +107,7 @@ ______________________________________________________________________
 **State:** Manifest files on case storage, `ops_<agent>.jsonl` streams, Postgres `audit_event` partitions, seal artifacts, waiver ledger entries, DSAR journals. **|**
 **Failures & handling:** Schema validation failures, manifest gaps, or seal errors block promotions and trigger RB-AUDIT-004; waiver APIs enforce expiry; DSAR endpoints fail closed per RB-PRIV-DSAR. **|**
 **Observability:** Dashboards “Evidence Chain”, “Audit Seal Integrity”, metrics `audit_manifest_missing_total`, `audit_event_backlog_seconds`, `audit_seal_errors_total`. **|**
-**Breadcrumbs:** Audit store `packages/udocket_core/audit/store.py`, manifest models `packages/udocket_core/manifests/`, waiver APIs `packages/udocket_core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
+**Breadcrumbs:** Audit store `packages/core/audit/store.py`, manifest models `packages/core/manifests/`, waiver APIs `packages/core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
 **References:** TDD §5, Logging §3, Guardian §7, Settings §7.3.
 
 ### 3.1 External Interfaces
@@ -211,7 +211,7 @@ ______________________________________________________________________
 **State:** Metrics `audit_seal_errors_total`, `audit_worm_lag_seconds`, `waiver_expiring_total`, `dsar_journal_pending_total`; stored seal artifacts, waiver ledger entries, and DSAR journals provide evidence. **|**
 **Failures & handling:** Breaches invoke RB-AUDIT-004, RB-WAIVER-GOV, or RB-PRIV-DSAR prior to resuming promotions. **|**
 **Observability:** Dashboards “Audit Seal Integrity”, “Waiver Ledger”, and synthetic `audit_verify` runs monitor compliance. **|**
-**Breadcrumbs:** Seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/udocket_core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
+**Breadcrumbs:** Seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
 **References:** Logging spec §6, Settings spec §7.3, TDD §12.
 
 - **Seal continuity:** Hourly seal verification succeeds with ≤1 failed interval per quarter; tracked via `audit_seal_errors_total` and synthetic `audit_verify` job, escalating through RB-AUDIT-004 on breach.

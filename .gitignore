@@ -1,9 +1,9 @@
-# uDocket
+# uDocket workspace artifacts
 /storage/
 /apps/storage/
+/out/
 /typings/external_stubs/
 /typings/vendor/
-/reports/
 
 # typewiz cache
 .typewiz_cache/
@@ -79,9 +79,6 @@ instance/
 
 # Scrapy stuff:
 .scrapy
-
-# Sphinx documentation
-doc-builds/
 
 # PyBuilder
 .pybuilder/
@@ -168,8 +165,8 @@ __azurite_db_*.json
 .ropeproject
 
 # mkdocs documentation
-packages/udocket_docs/build/
-!packages/udocket_docs/src/doc_tools/build/
+packages/docs_tooling/build/
+!packages/docs_tooling/src/doc_tools/build/
 
 # mypy
 .mypy_cache/

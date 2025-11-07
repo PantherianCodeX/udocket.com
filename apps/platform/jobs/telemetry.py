@@ -14,7 +14,7 @@ from django.utils.functional import cached_property
 
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
-from packages.udocket_common.json_utils import read_json_object
+from packages.common.json_utils import read_json_object
 
 
 def _ops_json_path(job: Job) -> Path:
@@ -75,7 +75,7 @@ def _needs_probe(meta: dict[str, Any]) -> bool:
 def _probe_audio_metadata_cached(path_str: str) -> dict[str, Any]:
     """Call the audio probe helper with basic caching to avoid repeated ffprobe calls."""
     try:
-        from packages.udocket_core.audio import (
+        from packages.core.audio import (
             probe_audio_metadata as _probe,
         )  # local import to avoid heavy dependency at module load
     except Exception:

@@ -83,7 +83,7 @@ ______________________________________________________________________
 **State:** Telemetry collectors, Fluent Bit buffers, pipeline configuration, log schemas, sampling policies, Settings keys, cost budgets, and synthetic monitors. **|**
 **Failures & handling:** Pipelines degrade by dropping logs, exceeding budget, or losing correlation; fail-close behaviors page on-call via RB-LOG-007 and enforce immutable sink mirroring. **|**
 **Observability:** Dashboards “Logging Pipeline”, “Trace Correlation”, “Logging Cost”, metrics `logging_ingest_lag_seconds`, `logging_drop_rate_pct`, `trace_sampling_rate`, `logging_volume_budget_violation_total`. **|**
-**Breadcrumbs:** Helm values `infra/logging/helm/values.yaml`, collector configs `infra/logging/fluentbit/`, structured formatter `packages/udocket_core/logging/jsonlog.py`, cost controller `apps/platform/logging/cost_controller.py`, tests `tests/logging/*`. **|**
+**Breadcrumbs:** Helm values `infra/logging/helm/values.yaml`, collector configs `infra/logging/fluentbit/`, structured formatter `packages/core/logging/jsonlog.py`, cost controller `apps/platform/logging/cost_controller.py`, tests `tests/logging/*`. **|**
 **References:** TDD §12.1 summary, Settings §7.2, Audit spec §4.
 
 ______________________________________________________________________
@@ -95,7 +95,7 @@ ______________________________________________________________________
 **State:** Log schemas (`spec/schemas/log_record.schema.json`, `spec/schemas/judgment_event.schema.json`), registration catalog, sampling policies, cost budgets, redaction rules. **|**
 **Failures & handling:** Schema drift, missing registration, redaction violations, or budget overruns block deploys (`lint-logging`) and trigger RB-LOG-007; violations escalate to Sev-1 when PII is detected. **|**
 **Observability:** `logging_service_registered_total`, `logging_redaction_dropped_total`, `logging_neverlog_violation_total`, `logging_registration_missing_total`. **|**
-**Breadcrumbs:** Registration script `ops/logging/register_service.py`, redaction rules `packages/udocket_core/logging/redaction.py`, schema tests `tests/logging/test_registration.py`, cost controller tests `tests/logging/test_cost_controls.py`. **|**
+**Breadcrumbs:** Registration script `ops/logging/register_service.py`, redaction rules `packages/core/logging/redaction.py`, schema tests `tests/logging/test_registration.py`, cost controller tests `tests/logging/test_cost_controls.py`. **|**
 **References:** §3 Pipeline, §4 Schema, §6 Access Control, §7 Cost Management.
 
 ______________________________________________________________________
@@ -112,7 +112,7 @@ ______________________________________________________________________
 
 ### 3.1 External Interfaces
 
-- Services emit structured logs to stdout via `packages.udocket_core.logging.jsonlog.StructuredJSONFormatter`; stderr reserved for `ERROR+` duplicates only.
+- Services emit structured logs to stdout via `packages.core.logging.jsonlog.StructuredJSONFormatter`; stderr reserved for `ERROR+` duplicates only.
 - Schema registration uses `ops/logging/register_service.py --service <name> --schema log_record@1` and is enforced by CI (`lint-logging`).
 - APIs that expose log access do so through `apps/platform/logging/access.py` with WebAuthn step-up; details in Security §7.
 
@@ -166,7 +166,7 @@ ______________________________________________________________________
 ### 4.1 Schema & redaction assets
 
 - `log_record@1` and `judgment_event@1` define canonical fields (`ts`, `service`, `trace_id`, etc.).
-- Redaction denylist lives in `packages/udocket_core/logging/redaction.py`; CI fuzz tests enforce coverage.
+- Redaction denylist lives in `packages/core/logging/redaction.py`; CI fuzz tests enforce coverage.
 
 ### 4.2 Retention policies
 

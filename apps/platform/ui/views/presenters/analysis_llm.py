@@ -15,10 +15,10 @@ from apps.platform.operations.llm import (
     get_org_provider_credentials,
     load_provider_catalog,
 )
-from packages.udocket_common.json_utils import stringify_json
-from packages.udocket_core.agents.analyze_lib import ANALYZE_STAGE_PROFILES, AnalyzeConfig
-from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
-from packages.udocket_core.llm import load_llm_settings
+from packages.common.json_utils import stringify_json
+from packages.core.agents.analyze_lib import ANALYZE_STAGE_PROFILES, AnalyzeConfig
+from packages.core.agents.compose import COMPOSE_STAGE_PROFILES
+from packages.core.llm import load_llm_settings
 
 
 def collect_provider_chain(

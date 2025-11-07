@@ -14,7 +14,7 @@ from apps.platform.accounts.models import User as AppUser
 from apps.platform.cases.models import CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
-from packages.udocket_common.json_utils import coerce_str
+from packages.common.json_utils import coerce_str
 
 GroupName = str
 JsonPayload = Mapping[str, object]

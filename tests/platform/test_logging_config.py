@@ -1,7 +1,7 @@
 import logging
 
 from apps.platform.config.settings.base import LOGGING
-from packages.udocket_core.agents import langgraph_orchestrator
+from packages.core.agents import langgraph_orchestrator
 from tests._typing import MonkeyPatch
 
 

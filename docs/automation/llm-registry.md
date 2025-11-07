@@ -93,7 +93,7 @@ ______________________________________________________________________
 **State:** Provider metadata resides in Settings bundles; runtime decisions and evidence store envelopes capture per-call provenance; FinOps metrics and circuit state drive dashboards. **|**
 **Failures & handling:** Provider drift, safety violations, or cost overruns trigger circuit breakers, moderation quarantines, or deploy gates per §5. **|**
 **Observability:** Grafana dashboards (“LLM Residency & Failover”, “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”) track health, safety, and spend; alerts map to RB-LLM-003 and RB-LLM-JB. **|**
-**Breadcrumbs:** Implementation `packages/udocket_core/llm/*`, Settings bundles `apps/platform/settings/services/llm.py`, moderation `packages/udocket_core/llm/moderation.py`, failover orchestrator `packages/udocket_core/failover/model.py`, tests `tests/udocket_core/llm/*`, `tests/platform/settings/test_llm_*`. **|**
+**Breadcrumbs:** Implementation `packages/core/llm/*`, Settings bundles `apps/platform/settings/services/llm.py`, moderation `packages/core/llm/moderation.py`, failover orchestrator `packages/core/failover/model.py`, tests `tests/udocket_core/llm/*`, `tests/platform/settings/test_llm_*`. **|**
 **References:** §2 Responsibilities, §4 State management, §6 Observability, Ops runbooks RB-LLM-003/RB-LLM-JB.
 
 ______________________________________________________________________
@@ -105,7 +105,7 @@ ______________________________________________________________________
 **State:** Settings bundles, decision traces, evidence store envelopes, and FinOps reports record ownership of provider metadata and runtime outputs. **|**
 **Failures & handling:** Gaps in any responsibility open registry circuits, block workloads, and trigger runbooks summarized in §5. **|**
 **Observability:** Dashboards in §6 monitor residency, moderation, and cost signals; alerts map directly to RB-LLM-\* runbooks. **|**
-**Breadcrumbs:** Core modules `packages/udocket_core/llm/*`, evidence writers, decision trace logs, and tests cited throughout §2. **|**
+**Breadcrumbs:** Core modules `packages/core/llm/*`, evidence writers, decision trace logs, and tests cited throughout §2. **|**
 **References:** §1 Purpose, §4 State management, §7 Security & compliance.
 
 ### 2.1 Provider registry, health, and selection (binding)
@@ -116,7 +116,7 @@ ______________________________________________________________________
 **Failures & handling:** Provider degradation, residency drift, or missing parity evidence open circuits (`ModelFailoverOrchestrator`), pause jobs, and route responders to RB-LLM-003. **|**
 **Observability:** Dashboards “LLM Residency & Failover” and “FinOps – LLM Cost & Circuit” track `llm_region_fallback_total`, `llm_circuit_state`, `llm_cost_estimate_total`; alerts `alert_llm_circuit_open` and `provider_data_policy_drift_total` page on-call. **|**
 **References:** Settings spec §2 (activation), LPE spec §2 (PolicyContext residency hints), §2.1.2 of this document (Failover orchestrator).
-**Breadcrumbs:** Implementation `packages/udocket_core/llm/registry.py`, `packages/udocket_core/llm/catalog.py`, `packages/udocket_core/llm/decision_trace.py`; tests `tests/udocket_core/llm/test_registry.py`, `tests/platform/settings/test_llm_catalog.py`.
+**Breadcrumbs:** Implementation `packages/core/llm/registry.py`, `packages/core/llm/catalog.py`, `packages/core/llm/decision_trace.py`; tests `tests/udocket_core/llm/test_registry.py`, `tests/platform/settings/test_llm_catalog.py`.
 
 - Settings catalog entries capture endpoints, credentials, supported locales, regions, rate limits, pricing, moderation posture, and fallback priorities.
 - Health polling maintains rolling latency/error windows; circuits flip OPEN when thresholds exceed policy. Half-open probes run every 60 seconds to validate recovery.
@@ -134,7 +134,7 @@ ______________________________________________________________________
 **State:** Residency metadata lives in LPE PolicyContext, Settings allowlists, and vector provider configs; runtime events record `vector_region` and waiver usage. **|**
 **Failures & handling:** Region drift triggers `LLM_REGION_FALLBACK`, opens circuits, and pauses jobs via RB-LLM-003; waivers tracked in `ops/security/waivers/llm_residency.yaml`. **|**
 **Observability:** Dashboard “LLM Residency & Failover”, metrics `llm_region_fallback_total`, synthetic `synthetics/llm_residency.yaml`. **|**
-**Breadcrumbs:** Residency guard `packages/udocket_core/llm/residency_guard.py`, vector enforcement `packages/udocket_core/vector/residency.py`, tests `tests/udocket_core/llm/test_residency_guard.py`, `tests/udocket_core/vector/test_vector_residency.py`.
+**Breadcrumbs:** Residency guard `packages/core/llm/residency_guard.py`, vector enforcement `packages/core/vector/residency.py`, tests `tests/udocket_core/llm/test_residency_guard.py`, `tests/udocket_core/vector/test_vector_residency.py`.
 
 - Residency enforcement combines:
   1. Activation linting—reject providers/models outside allowlists; vector stores list shard regions and fail activation on drift.
@@ -151,7 +151,7 @@ ______________________________________________________________________
 **State:** Orchestrator records counters (`llm_failover_attempt_total{provider,reason}`, `llm_failover_pause_total`), parity hashes, and event logs consumed by dashboards and audit pipelines. **|**
 **Failures & handling:** Missing parity evidence or repeated failover attempts escalate via RB-LLM-003; circuits remain OPEN until three consecutive green probes succeed. **|**
 **Observability:** Grafana “LLM Failover” dashboard, metrics `llm_circuit_state`, `llm_failover_attempt_total`; synthetic `synthetics/llm_failover.yaml`. **|**
-**Breadcrumbs:** Implementation `packages/udocket_core/failover/model.py::ModelFailoverOrchestrator`, adapter registry `packages/udocket_core/failover/adapters.py`, tests `tests/udocket_core/failover/test_model_orchestrator.py`.
+**Breadcrumbs:** Implementation `packages/core/failover/model.py::ModelFailoverOrchestrator`, adapter registry `packages/core/failover/adapters.py`, tests `tests/udocket_core/failover/test_model_orchestrator.py`.
 
 - Orchestrator emits standardized events (`LLM_FALLBACK_TRIGGERED`, `LLM_FAILOVER_PAUSED`, `LLM_FAILOVER_RESUMED`) with parity hashes and cost deltas.
 - New providers register adapters implementing the `FailoverAdapter` protocol; missing health probes, parity metadata, or residency attestations fail activation.
@@ -161,11 +161,11 @@ ______________________________________________________________________
 
 **Purpose:** Control prompt content, redaction, and audit-friendly evidence for all LLM calls. **|**
 **Contract:** Prompt templates, directives, and guardrails are defined via Settings `agents.prompts.*`; runtimes must use masked working copies, enforce moderation, and persist reproducibility envelopes. **|**
-**State:** Prompt assets materialize under `packages/udocket_core/config/`, evidence store entries record `{prompt_template_id, template_version, model_id, model_version, redaction_ruleset_id, token_ceiling, hashes}`; moderation verdicts and QA outcomes append to manifests. **|**
+**State:** Prompt assets materialize under `packages/core/config/`, evidence store entries record `{prompt_template_id, template_version, model_id, model_version, redaction_ruleset_id, token_ceiling, hashes}`; moderation verdicts and QA outcomes append to manifests. **|**
 **Failures & handling:** Prompt drift, redaction failures, or moderation violations trigger QA holds, Guardian quarantine, or RB-LLM-JB responses. **|**
 **Observability:** Dashboard “LLM Safety & Moderation” tracks `llm_content_flagged_total{reason}`, `llm_moderation_latency_seconds`, `redaction_stats{kind}`; alerts `llm_moderation_failure_total` and `llm_policy_block_total` page Security + Applied AI. **|**
 **References:** Guardian spec §5 (judgment), Settings spec §2.5 (prompt activation), Ops runbooks RB-LLM-JB (jailbreak) and RB-LLM-PROMPT.
-**Breadcrumbs:** Prompt tooling `packages/udocket_core/llm/prompt_registry.py`, redaction `packages/udocket_core/redaction/masking.py`, moderation `packages/udocket_core/llm/moderation.py`, evidence store `packages/udocket_core/llm/evidence_store.py`, tests `tests/udocket_core/llm/test_prompt_registry.py`, `tests/udocket_core/llm/test_evidence_store.py`.
+**Breadcrumbs:** Prompt tooling `packages/core/llm/prompt_registry.py`, redaction `packages/core/redaction/masking.py`, moderation `packages/core/llm/moderation.py`, evidence store `packages/core/llm/evidence_store.py`, tests `tests/udocket_core/llm/test_prompt_registry.py`, `tests/udocket_core/llm/test_evidence_store.py`.
 
 - Prompt templates, lane directives, and guardrails reside in Settings `agents.prompts.*` (SYSTEM with ORG/CASE overrides) and lint via Pydantic validators for explicit version IDs, LangGraph-compatible placeholders, and deterministic variable ordering.
 - Prompt activations inherit `change_class="system"` and flow through the blue/green rollout in §14.5; manifests stamp `{prompt_version, rollout_wave, org_id}` for audit.
@@ -181,8 +181,8 @@ Binding checkpoints (sample)
 
 | Binding | Implementation | Test | Observability |
 | --- | --- | --- | --- |
-| HIPAA excerpt suppression | `packages/udocket_core/llm/evidence_store.py::store_excerpt` | `tests/udocket_core/llm/test_evidence_store.py::test_hipaa_mode_blocks_excerpts` | Audit event `HIPAA_EXCERPT_BLOCK` (Privacy dashboard) |
-| Prompt masking contract | `packages/udocket_core/redaction/masking.py::mask_prompt_payload` | `tests/udocket_core/llm/test_prompt_registry.py::test_prompts_use_masked_payloads` | Metric `redaction_stats{kind="prompt"}` |
+| HIPAA excerpt suppression | `packages/core/llm/evidence_store.py::store_excerpt` | `tests/udocket_core/llm/test_evidence_store.py::test_hipaa_mode_blocks_excerpts` | Audit event `HIPAA_EXCERPT_BLOCK` (Privacy dashboard) |
+| Prompt masking contract | `packages/core/redaction/masking.py::mask_prompt_payload` | `tests/udocket_core/llm/test_prompt_registry.py::test_prompts_use_masked_payloads` | Metric `redaction_stats{kind="prompt"}` |
 | Prompt activation rollout | `apps/platform/settings/services/llm.py::activate_prompts` | `tests/platform/settings/test_llm_prompts.py::test_activation_rolls_forward_versions` | Audit log `PROMPT_VERSION_ACTIVATED`; dashboard “LLM Prompt Rollout” |
 
 #### 2.2.1 PII posture (binding)
@@ -199,7 +199,7 @@ Binding checkpoints (sample)
 **Failures & handling:** Moderation outages or QA regressions block promotion, escalate via RB-LLM-JB, and require documented mitigation. **|**
 **Observability:** Dashboard “LLM Safety & Moderation”, metrics `llm_content_flagged_total`, `llm_moderation_error_total`, `qa_confidence_distribution`, SSE `llm.policy_block`. **|**
 **References:** Guardian spec §5, Ops runbook RB-LLM-JB, QA guidelines App.T.
-**Breadcrumbs:** Moderation stack `packages/udocket_core/llm/moderation.py`, QA evaluators `packages/udocket_core/qa/evaluator.py`, tests `tests/udocket_core/llm/test_moderation.py`, `tests/udocket_core/qa/test_evaluator.py`.
+**Breadcrumbs:** Moderation stack `packages/core/llm/moderation.py`, QA evaluators `packages/core/qa/evaluator.py`, tests `tests/udocket_core/llm/test_moderation.py`, `tests/udocket_core/qa/test_evaluator.py`.
 
 - Pre-call filters sanitize prompts, enforce instruction allowlists, and ensure locale/region compatibility.
 - Moderation stack (provider APIs + in-house classifiers for `toxicity`, `self_harm`, `sexual_content`, `pii_reintroduction`) runs before and after inference. Violations emit `LLM_CONTENT_FLAGGED`, mark artifacts `QUARANTINED`, and require remediation plus Guardian resubmission.
@@ -217,7 +217,7 @@ Binding checkpoints (sample)
 **Failures & handling:** Budget breaches set jobs to `PAUSED_AWAITING_BUDGET`, emit `FINOPS_BUDGET_HELD`, and require override or cap adjustment; MoM guard failures block deploys until mitigated (§2.4.1). **|**
 **Observability:** Dashboard “FinOps – LLM Cost & Circuit” tracks `llm_cost_estimate_total`, `finops_budget_hold_active_total`, `finops_budget_hold_duration_seconds`; deploy gate reports live in `ops/finops/mom_guard/`. **|**
 **References:** Ops runbook RB-LLM-FINOPS, TDD §8.7 FinOps guard.
-**Breadcrumbs:** Budget controller `packages/udocket_core/finops/guard.py`, management command `apps/platform/operations/management/commands/set_finops_override.py`, tests `tests/udocket_core/finops/test_guard.py`, `tests/platform/finops/test_override_roles.py`.
+**Breadcrumbs:** Budget controller `packages/core/finops/guard.py`, management command `apps/platform/operations/management/commands/set_finops_override.py`, tests `tests/udocket_core/finops/test_guard.py`, `tests/platform/finops/test_override_roles.py`.
 
 - Pre-call guards enforce tokens-in ≤ configured ceilings and verify projected spend + month-to-date ≤ cap; violations return `429 RATE_LIMIT` with reasons `TOKEN_CEILING` or `BUDGET_EXCEEDED`.
 - Metrics exported: `llm_call_count`, `llm_tokens_in/out`, `llm_cost_estimate_total{org,case,job,model}` and FinOps reports `FINOPS_REPORT` per org.
@@ -233,7 +233,7 @@ Binding checkpoints (sample)
 **Failures & handling:** Gate failure blocks release until mitigation or approved override; results documented in App.O decision log. **|**
 **Observability:** Metric `finops_mom_regression_flag{org}`, dashboard “FinOps Guard”, alert `finops_deploy_gate_failed_total`. **|**
 **References:** TDD §8.7 FinOps guard, Ops runbook RB-LLM-FINOPS.
-**Breadcrumbs:** Guard implementation `packages/udocket_core/finops/guard.py::projected_regression_pct`, override tooling `apps/platform/operations/management/commands/set_finops_override.py`, tests `tests/udocket_core/finops/test_guard.py`.
+**Breadcrumbs:** Guard implementation `packages/core/finops/guard.py::projected_regression_pct`, override tooling `apps/platform/operations/management/commands/set_finops_override.py`, tests `tests/udocket_core/finops/test_guard.py`.
 
 - Regression formula: `(projected_month_end - prior_month_actual) / prior_month_actual ≥ llm.finops.guard.threshold_pct` after smoothing.
 - Trailing 7-day guard ensures spend stays ≤ `llm.finops.guard.trailing7d_pct` of cap; overrides bounded between 10 % and 40 %.
@@ -248,7 +248,7 @@ ______________________________________________________________________
 **State:** `llm.providers[]`/`llm.models[]` Settings bundles, decision trace JSONL (`ops/llm/decision_trace.jsonl`), SSE topics (`provider.health`, `job.update` warnings), and audit events capture API outputs. **|**
 **Failures & handling:** Health endpoint drift or event schema incompatibilities trigger RB-LLM-API and block downstream consumers until resolved. **|**
 **Observability:** API metrics `provider_health_request_total`, `provider_health_latency_seconds`, audit `LLM_CIRCUIT_STATE_CHANGE`, SSE schema version checks in CI. **|**
-**Breadcrumbs:** Health endpoint `apps/platform/api/providers.py::get_health`, decision trace writer `packages/udocket_core/llm/decision_trace.py`, SSE publisher `apps/platform/events/llm.py`, tests `tests/platform/api/test_provider_health.py`. **|**
+**Breadcrumbs:** Health endpoint `apps/platform/api/providers.py::get_health`, decision trace writer `packages/core/llm/decision_trace.py`, SSE publisher `apps/platform/events/llm.py`, tests `tests/platform/api/test_provider_health.py`. **|**
 **References:** Settings spec §2, Jobs API §10 (TDD), Guardian spec §3, Compose/Analyze agents.
 
 ### 3.1 External Interfaces
@@ -261,7 +261,7 @@ ______________________________________________________________________
 
 - Celery task modules `operations.task_modules.llm.*` invoke `RegistrySelector` helpers and emit decision traces to evidence store queues.
 - Background job `llm_health_poll` writes probe results and flips circuit states; results persisted in `ops/llm/health_poll/<date>.jsonl`.
-- Moderation pipeline integrates via `packages/udocket_core/llm/moderation.py::ModerationClient`, enforcing policy verdicts before Compose/Analyze continue.
+- Moderation pipeline integrates via `packages/core/llm/moderation.py::ModerationClient`, enforcing policy verdicts before Compose/Analyze continue.
 
 - Settings activation (system scope) is the only way to add/edit providers or models; runtime code treats catalog metadata as immutable snapshots.
 - Health endpoint `GET /api/v1/providers/health` aggregates adapter heartbeats, responds with cacheable 10 s payloads `{provider, region, status, latency_ms_p95, error_rate, last_heartbeat}`.
@@ -276,7 +276,7 @@ ______________________________________________________________________
 **State:** Errors surface from `/api/v1/providers/*` endpoints, Settings activation hooks, and moderation/health orchestration; schema parity maintained via `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail Spectral lint and `tests/platform/llm/test_registry_api.py`; runtime emissions trigger `llm_registry_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards “LLM Registry – API” and “LLM Health” chart `llm_registry_api_error_total{code}`, `llm_circuit_state`; synthetic registry polls run per deploy. **|**
-**Breadcrumbs:** Controllers `apps/platform/llm/views.py`, Settings activation `apps/platform/settings/services/llm.py`, moderation adapter `packages/udocket_core/llm/moderation.py`, tests `tests/platform/llm/test_registry_api.py`. **|**
+**Breadcrumbs:** Controllers `apps/platform/llm/views.py`, Settings activation `apps/platform/settings/services/llm.py`, moderation adapter `packages/core/llm/moderation.py`, tests `tests/platform/llm/test_registry_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §2, Worker Cluster spec §3.4, Guardian spec §2.2, Ops runbooks `RB-LLM-CIRCUIT`, `RB-LLM-MODERATION`.
 
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#llm-registry-runtime-governance)
@@ -308,7 +308,7 @@ ______________________________________________________________________
 **State:** Provider records, circuit state tables, reproducibility envelopes, health poll logs, waiver ledger, and Settings snapshots. **|**
 **Failures & handling:** Catalog hash drift, replay mismatches, or circuit state desync raise `LLM_REPLAY_MISMATCH`/`PROVIDER_DEGRADED` alerts and trigger RB-LLM-* runbooks. **|**
 **Observability:** Dashboards “LLM Registry – API”, “LLM Health”, metrics `llm_registry_api_error_total`, `llm_circuit_state`, `llm_replay_total`, `llm_cost_estimate_total`. **|**
-**Breadcrumbs:** Evidence store helpers `packages/udocket_core/llm/evidence_store.py`, health pollers `operations/task_modules/llm_health_poll.py`, Settings activation `apps/platform/settings/services/llm.py`, tests `tests/platform/llm/test_registry_state.py`. **|**
+**Breadcrumbs:** Evidence store helpers `packages/core/llm/evidence_store.py`, health pollers `operations/task_modules/llm_health_poll.py`, Settings activation `apps/platform/settings/services/llm.py`, tests `tests/platform/llm/test_registry_state.py`. **|**
 **References:** Settings §2, Worker Cluster §3.4, Observability §4, Audit §4.
 
 ### 4.1 Reproducibility envelopes & replay strategy (binding)
@@ -319,7 +319,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing envelopes or hash mismatches trigger `LLM_REPLAY_MISMATCH` alerts and block replays until resolved. **|**
 **Observability:** Audit event `LLM_REPLAY_EXECUTED`, metrics `llm_replay_total`, replay harness logs `ops/llm/replays/<date>/`. **|**
 **References:** Evidence store §2.2, Deterministic fingerprints §6.7.1 (TDD), Ops runbook RB-LLM-REPLAY.
-**Breadcrumbs:** Envelope writer `packages/udocket_core/llm/evidence_store.py::store_envelope`, replay harness `ops/scripts/llm/replay.py`, tests `tests/udocket_core/llm/test_envelope.py`.
+**Breadcrumbs:** Envelope writer `packages/core/llm/evidence_store.py::store_envelope`, replay harness `ops/scripts/llm/replay.py`, tests `tests/udocket_core/llm/test_envelope.py`.
 
 - Envelopes record `{prompt_template_id, template_version, model_id, model_version, provider, provider_region, stop_sequences, truncation_policy_version, temperature, top_p, penalties, redaction_ruleset_id, token_ceiling, settings_snapshot_sha256, input_hashes, output_hashes}`.
 - Replay enforces `llm.enforce_model_version=true` to require exact model snapshots; otherwise, warnings logged and waivers link to upgraded versions.
@@ -434,7 +434,7 @@ ______________________________________________________________________
 **State:** Settings capture provider toggles (`log_retention=false`, `train_on_data=false`), residency allowlists, HIPAA prompt retention modes; waivers stored in `ops/security/waivers/`. **|**
 **Failures & handling:** Provider policy drift, HIPAA violations, or prompt retention misconfigurations trigger Security incidents and RB-LLM-COMPLIANCE. **|**
 **Observability:** Alerts `provider_data_policy_drift_total`, `llm_policy_block_total`, `hipaa_prompt_retention_violation_total`; audit events `LLM_POLICY_BLOCK`, `HIPAA_EXCERPT_BLOCK`. **|**
-**Breadcrumbs:** Security guard `packages/udocket_core/llm/policy_guard.py`, HIPAA purge script `scripts/privacy/purge_evidence_store.py`, tests `tests/udocket_core/llm/test_policy_guard.py`. **|**
+**Breadcrumbs:** Security guard `packages/core/llm/policy_guard.py`, HIPAA purge script `scripts/privacy/purge_evidence_store.py`, tests `tests/udocket_core/llm/test_policy_guard.py`. **|**
 **References:** TDD §12 (security policies), Guardian spec §5, Appendix O (waivers).
 
 - Providers must operate in residency-approved regions (enforced via §2.1.1) and disable prompt retention/training per contract.
@@ -560,7 +560,7 @@ ______________________________________________________________________
 **State:** Adoption telemetry (`llm_provider_adoption_seconds`), PolicyContext digests, Guardian manifests, FinOps reports, and evidence envelopes prove alignment. **|**
 **Failures & handling:** Settings drift or Guardian integration failures trigger RB-LLM-003 and Guardian runbooks; FinOps overrides require documented App.O approval. **|**
 **Observability:** Dashboards “LLM Residency & Failover”, “Guardian Residency Enforcement”, “FinOps – LLM Cost & Circuit”. **|**
-**Breadcrumbs:** Integration code `packages/udocket_core/llm/interfaces.py`, LPE PolicyContext `packages/udocket_core/lpe/policy_context.py`, Guardian bridge `packages/udocket_core/guardian/llm_bridge.py`. **|**
+**Breadcrumbs:** Integration code `packages/core/llm/interfaces.py`, LPE PolicyContext `packages/core/lpe/policy_context.py`, Guardian bridge `packages/core/guardian/llm_bridge.py`. **|**
 **References:** Link to other service docs or appendices.
 
 | Dependency | Interface / artifact | Responsibilities | Notes |
@@ -581,5 +581,5 @@ ______________________________________________________________________
 - Replay divergence runbook — `ops/runbooks/llm/replay_divergence.md` (RB-LLM-REPLAY).
 - Golden-set jailbreak pipeline — `scripts/ci/golden_set_jailbreak.sh`.
 - FinOps deploy guard — `scripts/finops/check_mom_guard.py`.
-- Evidence store tooling — `ops/scripts/llm/replay.py`, `packages/udocket_core/llm/evidence_store.py`.
+- Evidence store tooling — `ops/scripts/llm/replay.py`, `packages/core/llm/evidence_store.py`.
 - Monitoring dashboards — `infra/observability/dashboards/llm_residency.json`, `llm_safety.json`, `finops_llm.json`.

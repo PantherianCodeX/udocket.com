@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
-from packages.udocket_common.jobs.meta import JobRecordPatch, merge_job_meta
-from packages.udocket_common.json_utils import (
+from packages.common.jobs.meta import JobRecordPatch, merge_job_meta
+from packages.common.json_utils import (
     JSONObject,
     read_json_object,
     write_json_object,

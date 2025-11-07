@@ -21,7 +21,7 @@ from apps.platform.tenancy import scope_jobs
 
 # pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
-from packages.udocket_common.json_utils import stringify_pretty
+from packages.common.json_utils import stringify_pretty
 
 from .common import JobTelemetryPayload, as_dict
 from .job_tables import build_job_table_state

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.udocket_core.agents.common.azure_speech import _iso8601_to_seconds
+from packages.core.agents.common.azure_speech import _iso8601_to_seconds
 
 
 def test_iso8601_parses_batch_fractional_seconds() -> None:

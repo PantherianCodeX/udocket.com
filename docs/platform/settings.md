@@ -109,7 +109,7 @@ ______________________________________________________________________
 **Failures & handling:** Unsafe activations drop SR into read-only mode until validators pass; existing jobs continue with embedded snapshots. **|**
 **Observability:** Request/error counters, activation metrics, and traces capture throughput and failure reasons. **|**
 **References:** §2 Responsibilities, §4 State management, Appendix A.
-**Breadcrumbs:** Service bootstrap `apps/platform/settings/service.py`, schema `packages/udocket_core/settings/schema.py`, tests `tests/platform/settings/test_charter.py`.
+**Breadcrumbs:** Service bootstrap `apps/platform/settings/service.py`, schema `packages/core/settings/schema.py`, tests `tests/platform/settings/test_charter.py`.
 
 - Governs inheritance rules, scope guardrails, and immutable keys (for example residency) that lower scopes cannot relax.
 - Maintains dual-track lifecycle (draft → reviewed → activated) mirrored in ADR status.
@@ -149,7 +149,7 @@ ______________________________________________________________________
 **State:** Definitions, bundles, and effective values live in Postgres (`setting_definition_schema`, `setting_bundle`, `setting_effective`) with companion JSON artifacts under `config/` and `ops/settings/`. **|**
 **Failures & handling:** Invalid overrides, unknown keys, or failed validators reject activations and block dependent workflows until corrected (see §5). **|**
 **Observability:** Scope mix, validation failure, and bundle adoption metrics feed “Settings – Scope Mix” and “Settings – Validation” dashboards. **|**
-**Breadcrumbs:** Models `apps/platform/settings/models.py`, schema `packages/udocket_core/settings/schema.py`, governance services `apps/platform/settings/services/`. **|**
+**Breadcrumbs:** Models `apps/platform/settings/models.py`, schema `packages/core/settings/schema.py`, governance services `apps/platform/settings/services/`. **|**
 **References:** §3 API contract, §4 State management, Appendix A, Appendix C.
 
 ### 2.1 Hierarchical scopes & precedence (binding)
@@ -174,7 +174,7 @@ ______________________________________________________________________
 **Failures & handling:** Missing or malformed definitions fail `python -m doc_tools.check_settings_keys` and production activations; authors must update schema before merging. **|**
 **Observability:** Metric `settings_validation_failure_total` categorizes error reasons; audit logs attach schema version IDs. **|**
 **References:** Appendix A key catalog, Appendix C seed bundles.
-**Breadcrumbs:** Schema implementation `packages/udocket_core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
+**Breadcrumbs:** Schema implementation `packages/core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
 
 - Case-scoped keys include agent prompt overrides, retry ceilings, visibility toggles, and portal expiry limits.
 - System/org keys cover residency allowlists, quotas, notifications, TLS policy, encryption posture, FinOps thresholds, and enumerations for cases and artifacts.
@@ -188,7 +188,7 @@ ______________________________________________________________________
 **Failures & handling:** Snapshot mismatches trigger drift incidents; workers block new jobs until refreshed snapshots arrive or incidents are resolved. **|**
 **Observability:** Dashboard “Settings – Snapshot Integrity” tracks `settings_snapshot_mismatch_total` and `settings_snapshot_stale_total`. **|**
 **References:** §4 State management, Appendix B metrics.
-**Breadcrumbs:** Implementation `packages/udocket_core/settings/snapshot.py`, tests `tests/platform/settings/test_snapshot_contract.py`.
+**Breadcrumbs:** Implementation `packages/core/settings/snapshot.py`, tests `tests/platform/settings/test_snapshot_contract.py`.
 
 - Every job manifest includes `settings_snapshot_sha256` and `settings_version_id` for replay.
 - Guardian, Portal, and Workers log snapshot digests within structured events for traceability.
@@ -260,7 +260,7 @@ ______________________________________________________________________
 **State:** OpenAPI definitions live in `ops/openapi/settings.openapi.yaml`; SDKs wrap REST endpoints with caching and snapshot persistence. **|**
 **Failures & handling:** Signature mismatches, stale caches, or idempotency conflicts return explicit errors and require client remediation. **|**
 **Observability:** “Settings API”, “Settings Client Cache”, and “Settings Auth” dashboards monitor traffic, cache hit ratio, and auth errors. **|**
-**Breadcrumbs:** API implementation `apps/platform/settings/api.py`, client `packages/udocket_core/settings/client.py`, security helpers `apps/platform/settings/security.py`. **|**
+**Breadcrumbs:** API implementation `apps/platform/settings/api.py`, client `packages/core/settings/client.py`, security helpers `apps/platform/settings/security.py`. **|**
 **References:** §2 Responsibilities, §4 State management, Appendix A key catalog.
 
 ### 3.1 External Interfaces (binding)
@@ -654,7 +654,7 @@ ______________________________________________________________________
 **State:** Checklists and automations live in `ops/guardian/checklists/` and docs lint scripts; outputs append to `ops/settings/workflow_log.jsonl`. **|**
 **Failures & handling:** Missed cadences surface in quarterly audits; owners must backfill evidence and update processes. **|**
 **Observability:** Staffing dashboards, workflow logs, and CI history provide signals. **|**
-**Breadcrumbs:** Workflow docs `ops/settings/workflows/*.md`, automation scripts `packages/udocket_docs/src/doc_tools/*.py`, staffing roster `ops/guardian/roster.yaml`. **|**
+**Breadcrumbs:** Workflow docs `ops/settings/workflows/*.md`, automation scripts `packages/docs_tooling/src/doc_tools/*.py`, staffing roster `ops/guardian/roster.yaml`. **|**
 **References:** §8.3 Runbooks & drills, §6 Observability, Appendix B metrics.
 
 #### 8.5.1 Release cadence & change control (binding)
@@ -675,7 +675,7 @@ ______________________________________________________________________
 **Failures & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks. **|**
 **Observability:** CI dashboards display job history; governance board reviews automation health monthly. **|**
 **References:** §2 Responsibilities, Appendix C seed inventory, §8.3 Runbooks & drills.
-**Breadcrumbs:** Scripts under `packages/udocket_docs/src/doc_tools/`, CI definitions `.github/workflows/docs-ci.yml`.
+**Breadcrumbs:** Scripts under `packages/docs_tooling/src/doc_tools/`, CI definitions `.github/workflows/docs-ci.yml`.
 
 ______________________________________________________________________
 
@@ -788,7 +788,7 @@ class SettingDefinition(BaseModel):
 **Failures & handling:** Divergence between documentation and schema blocks CI; activations referencing undocumented keys are rejected. **|**
 **Observability:** Validators emit `settings_definition_gap_total`; lint dashboards flag omissions. **|**
 **References:** §2 Responsibilities, §4 State management.
-**Breadcrumbs:** Schema `packages/udocket_core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
+**Breadcrumbs:** Schema `packages/core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
 
 | Key | Scope | Default | Description / Enforcement |
 | --- | --- | --- | --- |

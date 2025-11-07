@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from packages.udocket_common.json_utils import JSONObject, JSONValue, coerce_json_value
+from packages.common.json_utils import JSONObject, JSONValue, coerce_json_value
 
 
 class DiagnosticsViewSet(viewsets.ViewSet):

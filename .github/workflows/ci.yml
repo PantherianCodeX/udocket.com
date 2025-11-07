@@ -34,10 +34,10 @@ jobs:
               uv sync --frozen --group dev --project apps/platform
               ;;
             core)
-              uv sync --frozen --group dev --project packages/udocket_core
+              uv sync --frozen --group dev --project packages/core
               ;;
             common)
-              uv sync --frozen --group dev --project packages/udocket_common
+              uv sync --frozen --group dev --project packages/common
               ;;
           esac
       - name: Ruff check
@@ -48,10 +48,10 @@ jobs:
               uv run --project apps/platform --extra dev ruff check apps/platform
               ;;
             core)
-              uv run --project packages/udocket_core --extra dev ruff check packages/udocket_core
+              uv run --project packages/core --extra dev ruff check packages/core
               ;;
             common)
-              uv run --project packages/udocket_common --extra dev ruff check packages/udocket_common
+              uv run --project packages/common --extra dev ruff check packages/common
               ;;
           esac
 
@@ -78,10 +78,10 @@ jobs:
               uv sync --frozen --group dev --project apps/platform
               ;;
             core)
-              uv sync --frozen --group dev --project packages/udocket_core
+              uv sync --frozen --group dev --project packages/core
               ;;
             common)
-              uv sync --frozen --group dev --project packages/udocket_common
+              uv sync --frozen --group dev --project packages/common
               ;;
           esac
       - name: Pyright
@@ -92,10 +92,10 @@ jobs:
               uv run --project apps/platform --extra dev pyright apps/platform
               ;;
             core)
-              uv run --project packages/udocket_core --extra dev pyright packages/udocket_core
+              uv run --project packages/core --extra dev pyright packages/core
               ;;
             common)
-              uv run --project packages/udocket_common --extra dev pyright packages/udocket_common
+              uv run --project packages/common --extra dev pyright packages/common
               ;;
           esac
 
@@ -122,10 +122,10 @@ jobs:
               uv sync --frozen --group dev --project apps/platform
               ;;
             core)
-              uv sync --frozen --group dev --project packages/udocket_core
+              uv sync --frozen --group dev --project packages/core
               ;;
             common)
-              uv sync --frozen --group dev --project packages/udocket_common
+              uv sync --frozen --group dev --project packages/common
               ;;
           esac
       - name: Mypy
@@ -138,10 +138,10 @@ jobs:
               uv run --project apps/platform --extra dev mypy apps/platform
               ;;
             core)
-              uv run --project packages/udocket_core --extra dev mypy packages/udocket_core
+              uv run --project packages/core --extra dev mypy packages/core
               ;;
             common)
-              uv run --project packages/udocket_common --extra dev mypy packages/udocket_common
+              uv run --project packages/common --extra dev mypy packages/common
               ;;
           esac
 
@@ -187,22 +187,22 @@ jobs:
       - name: Typewiz audit
         run: |
           set -euo pipefail
-          mkdir -p reports/typing
-          uv run --project apps/platform --extra dev typewiz audit --mode current --manifest reports/typing/typing_audit.json
-          uv run --project apps/platform --extra dev typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
-          uv run --project apps/platform --extra dev typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
+          mkdir -p out/test-reports/typing
+          uv run --project apps/platform --extra dev typewiz audit --mode current --manifest out/test-reports/typing/typing_audit.json
+          uv run --project apps/platform --extra dev typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md || true
+          uv run --project apps/platform --extra dev typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html || true
           printf '%s\n' "Typewiz blocked folders (top 20):" >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          uv run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level folder --status blocked --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           printf '\nTypewiz ready folders (top 20):\n' >> "$GITHUB_STEP_SUMMARY"
-          uv run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          uv run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level folder --status ready --limit 20 >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
       - name: Upload typewiz artifacts
         uses: actions/upload-artifact@v4
         with:
           name: typewiz-reports
           path: |
-            reports/typing/typing_audit.json
-            reports/typing/dashboard.md
-            reports/typing/dashboard.html
+            out/test-reports/typing/typing_audit.json
+            out/test-reports/typing/dashboard.md
+            out/test-reports/typing/dashboard.html
 
   tests:
     needs: lint-workflows
@@ -227,13 +227,13 @@ jobs:
               uv sync --frozen --group dev --project apps/platform
               ;;
             core)
-              uv sync --frozen --group dev --project packages/udocket_core
+              uv sync --frozen --group dev --project packages/core
               ;;
             common)
-              uv sync --frozen --group dev --project packages/udocket_common
+              uv sync --frozen --group dev --project packages/common
               ;;
             docs)
-              uv sync --frozen --extra dev --project packages/udocket_docs
+              uv sync --frozen --extra dev --project packages/docs_tooling
               ;;
           esac
       - name: Run tests
@@ -251,13 +251,13 @@ jobs:
               uv run --project apps/platform --extra dev pytest -n auto --cov=apps/platform --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests
               ;;
             core)
-              uv run --project packages/udocket_core --extra dev pytest -n auto --cov=packages/udocket_core --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests/udocket_core
+              uv run --project packages/core --extra dev pytest -n auto --cov=packages/core --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml tests/udocket_core
               ;;
             common)
-              uv run --project packages/udocket_common --extra dev pytest -n auto --cov=packages/udocket_common --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml packages/udocket_common
+              uv run --project packages/common --extra dev pytest -n auto --cov=packages/common --cov-report=term --cov-report=xml:coverage-${{ matrix.package }}.xml packages/common
               ;;
             docs)
-              uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage
+              uv run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner --coverage
               if [ -f coverage.xml ]; then mv coverage.xml coverage-${{ matrix.package }}.xml; fi
               ;;
           esac

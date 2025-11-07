@@ -16,7 +16,7 @@ from apps.platform.operations.task_modules.analyze import analyze_job as _analyz
 from apps.platform.operations.task_modules.compose import compose_job as _compose_job
 from apps.platform.operations.task_modules.transcribe import transcribe_job as _transcribe_job
 from apps.platform.operations.utils import read_job_meta
-from packages.udocket_common.json_utils import coerce_json_value
+from packages.common.json_utils import coerce_json_value
 
 
 class TaskProtocol(Protocol):

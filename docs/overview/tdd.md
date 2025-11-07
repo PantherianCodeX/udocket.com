@@ -89,7 +89,7 @@ ______________________________________________________________________
 
 ## Canonical vocabulary (binding)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
+**Breadcrumbs:** Implementation `packages/core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
 
 *Purpose: Provide single-source wording for artifact classes, statuses, and Guardian mappings so specs, code, and UI stay aligned.* *Contract: Any change to artifact classes, statuses, or Guardian judgment mappings MUST update §5.2.1–§5.2.3 and this section in the same patch; other sections link back instead of restating tables. See Appendices: Glossary and Status Mapping for single‑source definitions.* *State transitions: Defined exclusively in §5.2.2 (statuses) and §5.2.3 (Guardian mapping).* *Failure modes & retries: `python -m doc_tools.check_structure docs/overview docs/platform docs/automation docs/data docs/customer docs/experience` now fails when a normative section lacks Purpose/Breadcrumbs scaffolding; `scripts/db/lint_status_column.py` blocks unknown status strings; CI job `lint-artifact-vocabulary` scans diffs for stray status/judgment terms.* *Observability: Docs lint metrics (`docs_template_missing_total`, `docs_vocabulary_drift_total`) feed the Docs Quality dashboard; Guardian and approval metrics remain unchanged.* *References: §5.2, §5.4.1, §7.1, §10.3.2, App.A, App.I.*
 
@@ -158,7 +158,7 @@ To keep visuals helpful and consistent:
 - Use **ER diagrams** when we describe shared persistence contracts or artifacts that other teams must extend (for example, §9 core domain entities).
 - Produce **class diagrams** when detailing important service classes or agent orchestration objects whose inheritance/composition relationships benefit from a visual (limit to high-signal surfaces such as Guardian, Settings activation engine, or core agents).
 - Reserve diagrams for bounded topics—avoid trying to capture the entire platform in a single chart; favor appendix references for deep dives (App.A/App.G).
-- When behavior changes, update the `.mmd` source under `overview/tdd/diagrams/`, regenerate SVGs via `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid`, and ensure the affected TDD section still references the correct image.
+- When behavior changes, update the `.mmd` source under `overview/tdd/diagrams/`, regenerate SVGs via `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid`, and ensure the affected TDD section still references the correct image.
 
 ## 1) Executive summary
 
@@ -276,7 +276,7 @@ ______________________________________________________________________
 - **Type-first development.** When editing a module, define the strongly typed primitives upfront (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers, helpers, stub packages). Provider payloads never travel as untyped dicts; add typed facades or stubs in the same patch.
 - **Typing rules.** `typing.Any` is banned in new code and must be removed when touched. Casts are acceptable only to narrow third-party responses and must live inside helper functions with short invariant comments. `# type: ignore` (and lint ignores) are prohibited—fix the root cause or add a typed wrapper. Pyright and mypy run in `--strict` mode for touched packages; CI fails when they fail.
 - **Language level.** The repository targets Python ≥3.12 exclusively. Delete compatibility shims, version guards, and legacy syntax when encountered. Prefer modern constructs (`match/case`, `contextlib.asynccontextmanager`, `zoneinfo`, `StrEnum`) and structural pattern matching.
-- **Separation of concerns & helper placement.** Entry-point modules validate inputs, snapshot settings, and delegate to typed helpers. Business logic lives in dedicated helpers/models—not Django views or Celery tasks. Framework-agnostic helpers live in `packages/udocket_common`; package-scoped helpers live in `utils.py`; inline helpers stay under ten lines. Never mix HTTP, database, and LangGraph orchestration concerns inside one function.
+- **Separation of concerns & helper placement.** Entry-point modules validate inputs, snapshot settings, and delegate to typed helpers. Business logic lives in dedicated helpers/models—not Django views or Celery tasks. Framework-agnostic helpers live in `packages/common`; package-scoped helpers live in `utils.py`; inline helpers stay under ten lines. Never mix HTTP, database, and LangGraph orchestration concerns inside one function.
 - **Testing & coverage.** Every module maintains ≥90% line coverage (unit + property tests). Deterministic behaviors (UUIDs, manifests, approvals) require property-based tests. Integration suites cover Celery orchestration, Guardian/Signer flows, and settings activation. CI enforces coverage via `make common.test`, `make core.test`, `make platform.test`, `make docs.test.coverage`, and companion jobs.
 - **Execution environment.** Run commands via the curated containers/venvs (`make …`, `uv run --project …`). Avoid ad-hoc `pip install`. Docs/spec changes must pass `doc_tools.check_links --strict` and MkDocs builds before merge.
 - **Quality over speed.** Restructure when it reduces complexity. Keep functions <40 LOC, keep files cohesive, and remove dead code. No back-compat toggles or “temporary” fallbacks; migrations move forward only.
@@ -300,29 +300,29 @@ ______________________________________________________________________
 ##### Package placement rules {#package-placement-rules}
 
 1. **Does it depend on Django, tenancy, Guardian, LPE, or case storage?**\
-   → Keep it in the owning service (`apps/`, `services/…`) or `packages/udocket_core` (if it is reusable orchestration). Never move platform-bound logic into reusable packages.
+   → Keep it in the owning service (`apps/`, `services/…`) or `packages/core` (if it is reusable orchestration). Never move platform-bound logic into reusable packages.
 2. **Is it cross-service, policy-aware, and orchestrates agents or runtime flows?**\
-   → `packages/udocket_core` (LangGraph orchestration, Celery wrappers, ops logging, residency enforcement).
+   → `packages/core` (LangGraph orchestration, Celery wrappers, ops logging, residency enforcement).
 3. **Is it cross-service, provider-neutral, and safe to reuse outside uDocket?**\
-   → `packages/udocket_ai` (prompt compilers, provider protocols, evaluation harnesses) or `client_sdks/*` for customer-facing APIs.
+   → `packages/ai` (prompt compilers, provider protocols, evaluation harnesses) or `client_sdks/*` for customer-facing APIs.
 4. **Is it a low-level helper with zero policy or framework coupling?**\
-   → `packages/udocket_common` (hashing, UUID derivation, JSON/path/time helpers).
+   → `packages/common` (hashing, UUID derivation, JSON/path/time helpers).
 5. **Is it UI-specific or HTTP-facing?**\
    → `apps/web`, `apps/assistants`, or the service directory under `services/…`—never inside agent packages.
 
 ##### AI vs core boundary {#ai-vs-core-boundary}
 
-- `udocket_ai` owns provider-agnostic building blocks: typed protocols, prompt registries, localization-aware prompt compilers, evaluation datasets, and adapters gated by optional extras (e.g., `[azure]`).
-- `udocket_core` wires those building blocks into the platform runtime: LangGraph flows, Celery tasks, Guardian/LPE hooks, ops logging, storage layout, and region guardrails.
-- Provider prompts that require policy or tenancy context belong in `udocket_core`. Base prompt templates and evaluation harnesses live in `udocket_ai`.
-- When retiring legacy packages (for example, `packages/udocket_prompts`), migrate reusable assets into `udocket_ai` and platform-bound logic into `udocket_core` within the same patch.
+- `packages.ai` owns provider-agnostic building blocks: typed protocols, prompt registries, localization-aware prompt compilers, evaluation datasets, and adapters gated by optional extras (e.g., `[azure]`).
+- `packages.core` wires those building blocks into the platform runtime: LangGraph flows, Celery tasks, Guardian/LPE hooks, ops logging, storage layout, and region guardrails.
+- Provider prompts that require policy or tenancy context belong in `packages.core`. Base prompt templates and evaluation harnesses live in `packages.ai`.
+- When retiring legacy packages (for example, `packages/ai/promptsets`), migrate reusable assets into `packages.ai` and platform-bound logic into `packages.core` within the same patch.
 
 ##### Do / Don’t
 
 - **Do** keep helpers tiny and type-safe; promote them only when at least two services will reuse them within one release cycle.
 - **Do** document every placement decision in the PR description (link back to this section) so reviewers can trace the reasoning.
 - **Don’t** create micro-packages for single functions or move Django/persistence code into reusable packages.
-- **Don’t** let `udocket_ai` import Django, Celery, Guardian, or case storage modules—tests must run without the platform stack.
+- **Don’t** let `packages.ai` import Django, Celery, Guardian, or case storage modules—tests must run without the platform stack.
 - **Don’t** add toggles for “old behavior.” Refactors are one-way; delete compatibility shims immediately.
 
 #### 2.3.2 Non-functional requirements (SLOs, latency budgets, availability)
@@ -461,7 +461,7 @@ ______________________________________________________________________
 
 ### 3.9 C4 containers & STRIDE dataflows (binding)
 
-**Breadcrumbs:** Implementation `overview/tdd/diagrams/c4/container-platform-v1.mmd` + `overview/tdd/diagrams/threat/dfd-platform-stride-v1.mmd`, Tests `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid` (CI job `docs-diagram-render`), Observability CI stage “docs-validate” with artifact drift alerts.
+**Breadcrumbs:** Implementation `overview/tdd/diagrams/c4/container-platform-v1.mmd` + `overview/tdd/diagrams/threat/dfd-platform-stride-v1.mmd`, Tests `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid` (CI job `docs-diagram-render`), Observability CI stage “docs-validate” with artifact drift alerts.
 
 *Purpose: Provide an explicit container-level view with threat annotations that build on the context diagram.*
 
@@ -559,7 +559,7 @@ ______________________________________________________________________
 **State transitions:** Governed by §5.2.2 (statuses), §5.2.3 (Guardian mapping), and §5.4.1 (ExclusiveSwap invariant); App.A.2 diagrams the same state machine.\
 **Failure modes & retries:** Guardian `BLOCK` or reviewer quarantine follow remediation/waiver loops in §5.2.3–§5.2.5; watchdogs and approval conflicts escalate via RB-APPROVAL-001 and [Runbook RB-JOB-WATCHDOG](../ops/runbooks.md#rb-job-watchdog).\
 **Observability:** `artifact.status`, `guardian_judgment_latency_seconds`, `approval_swap_conflict_total`, `portal_link_invalidated`, and `docs_template_missing_total`.\
-**Breadcrumbs:** Implementation `packages/udocket_core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Artifact Lifecycle” dashboard.\
+**Breadcrumbs:** Implementation `packages/core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Artifact Lifecycle” dashboard.\
 **References:** §5.2.1–§5.2.8, §5.4.1, §7.1, §10.3.2, App.A, App.I.
 
 **Invariants:**\
@@ -734,7 +734,7 @@ enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 **State transitions:** Applies when moving a CD from `QUEUED_FOR_REVIEW` to `APPROVED` and when promoting the corresponding DL to `RELEASED`; App.A.2 visualizes the swap.\
 **Failure modes & retries:** OCC mismatches surface `409` conflicts, advisory locks prevent duplicate winners, and signer timeouts trigger retryable errors before any DL is promoted.\
 **Observability:** `approval_swap_conflict_total`, `deliverable_release_retries_total`, `portal_link_invalidated`, audit events `APPROVAL_SWAP_APPLIED`.\
-**Breadcrumbs:** Implementation `packages/udocket_core/approvals/service.py::approve_artifact`, Tests `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`, Observability Grafana “Approvals” panel.\
+**Breadcrumbs:** Implementation `packages/core/approvals/service.py::approve_artifact`, Tests `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner`, Observability Grafana “Approvals” panel.\
 **References:** §5.2.6, §5.2.8, §10.3.2, App.A.2.
 
 This invariant is authoritative; downstream APIs (for example, §10.3.2 Reviews API) and docs MUST reference it instead of restating the algorithm.
@@ -774,8 +774,8 @@ Notes
 
   | Binding | Implementation | Test | Observability |
   |---|---|---|---|
-  | Concurrent approval swap | `packages/udocket_core/approvals/service.py::approve_artifact` | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner` | Alert `approval_swap_conflict_total` (Grafana “Approvals” panel) |
-  | Deliverable release exclusivity | `packages/udocket_core/approvals/service.py::promote_deliverable` | `tests/platform/artifacts/test_deliverable_release.py::test_single_released_deliverable_enforced` | Metric `deliverable_release_retries_total`; alert `deliverable_release_uniqueness` |
+  | Concurrent approval swap | `packages/core/approvals/service.py::approve_artifact` | `tests/platform/artifacts/test_approval_swap.py::test_concurrent_approvals_single_winner` | Alert `approval_swap_conflict_total` (Grafana “Approvals” panel) |
+  | Deliverable release exclusivity | `packages/core/approvals/service.py::promote_deliverable` | `tests/platform/artifacts/test_deliverable_release.py::test_single_released_deliverable_enforced` | Metric `deliverable_release_retries_total`; alert `deliverable_release_uniqueness` |
 
 ### 5.5 Partitioning, indexing, and performance considerations
 
@@ -863,7 +863,7 @@ Notes
 }
 ```
 
-All schema properties marked with `"format": "uuid"` expect UUIDv7 strings; generator tooling annotates each property with `"description": "UUIDv7"` and the non-enforcing extension `"x-udocket-uuid-version": 7`. Runtime validators (`packages.udocket_core.validators.uuid.ensure_v7`) reject non-v7 inputs on write. The `masking`, `security`, and `retry` sections bind manifests to the vault/HSM posture defined in §4.5.2 and capture the replay metadata consumed by the job lifecycle contract (§10.2, §6.2–§6.4). CI fixtures in `tests/spec/test_artifact_manifest_schema.py` assert the additional required fields for every artifact class.
+All schema properties marked with `"format": "uuid"` expect UUIDv7 strings; generator tooling annotates each property with `"description": "UUIDv7"` and the non-enforcing extension `"x-udocket-uuid-version": 7`. Runtime validators (`packages.core.validators.uuid.ensure_v7`) reject non-v7 inputs on write. The `masking`, `security`, and `retry` sections bind manifests to the vault/HSM posture defined in §4.5.2 and capture the replay metadata consumed by the job lifecycle contract (§10.2, §6.2–§6.4). CI fixtures in `tests/spec/test_artifact_manifest_schema.py` assert the additional required fields for every artifact class.
 
 ### 5.7 Ingestion pipelines & malware/archives defenses
 
@@ -922,7 +922,7 @@ Example
 **State:** Agents persist transcript text + JSON, the internal Analyze `AtomsIndex`, discrete analysis artifacts (outline, timeline, entities, issues, gaps, flags, alerts, summary JSON, staff report MD, QA report JSON), compose deliverables, manifests, and audit streams under `storage/media/tenants/<ORG_ID>/cases/<case>/`. Settings stores pipeline/tool configuration and region allowlists; Worker Cluster orchestrates LangGraph jobs; Guardian verdicts gate promotion. **|**
 **Failures & handling:** Failure taxonomy (`TRANSIENT`, `POLICY`, `INPUT`, `INTEGRITY`, `CONCURRENCY`, `REGION_POLICY`) is defined in the LangGraph agents spec; Worker Cluster retries and Guardian quarantines apply consistently across pipelines. **|**
 **Observability:** Dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs”, lane-level metrics (`agent_lane_duration_seconds`, `agent_lane_queue_wait_seconds`, `agent_lane_schema_fail_total`, `atoms_extracted_total`), and audit JSONL streams provide traceability; quality targets remain anchored in the LangGraph agents spec. **|**
-**Breadcrumbs:** Canonical design [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); runtime `packages/udocket_core/agents/langgraph_orchestrator.py`; analyze stages `packages/udocket_core/agents/analyze/stages/`; compose orchestrator `packages/udocket_core/agents/compose/orchestrator.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
+**Breadcrumbs:** Canonical design [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); runtime `packages/core/agents/langgraph_orchestrator.py`; analyze stages `packages/core/agents/analyze/stages/`; compose orchestrator `packages/core/agents/compose/orchestrator.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
 **References:** §3 (platform architecture), §5 (artifact lifecycle), §§7–8 (Guardian & Signer summaries), Appendices I & U, LangGraph agents spec §§1–10, spec schemas `spec/schemas/agents/`.
 
 ### 6.1 LangGraph orchestration (summary)
@@ -931,7 +931,7 @@ Example
 - GraphRunner (LangGraph `>=0.2,<0.3`) compiles the Transcribe → Analyze → Compose DAG with explicit fan-out/fan-in nodes: Analyze runs outline, timeline, entities, issues, gaps, and flags lanes in parallel before converging into summary, staff, and QA stages; Compose retains client/lawyer/bundle lanes with QA gating. Finalize nodes remain the sole writers for deterministic artifacts and share the same `StateGraph` idioms.
 - Settings (`agents.pipeline.*`, `agents.tools.*`) declare pipelines, lane concurrency, region allowlists, and idempotency keys; activation lints enforce schema hashes and contract tests prior to rollout.
 - LangGraph checkpoints persist in Postgres (shared DB) with per-node `idempotency_key = sha256(job_id || pipeline_id || node_id || graph_version || input_hash)` so retries + resumes stay deterministic. Resumes require matching settings snapshots and manifest hashes; divergences raise `E_INTEGRITY_MISMATCH`.
-- Execution boundary: `packages/udocket_core` owns the LangGraph runtime, schemas, and job services; `apps/platform` invokes those services via Celery for orchestration + UX, preserving core/service separation for future deployment targets.
+- Execution boundary: `packages/core` owns the LangGraph runtime, schemas, and job services; `apps/platform` invokes those services via Celery for orchestration + UX, preserving core/service separation for future deployment targets.
 - Assistant pipelines reuse the same activation pathway, ensuring retrieval, moderation, and responder lanes inherit identical policy controls and manifest discipline.
 
 ### 6.2 Transcription pipeline (summary)
@@ -1096,7 +1096,7 @@ Artifact CRUD semantics, download guards, and approval workflows live in [`../pl
 
 #### 10.3.1 Idempotency keys store (binding)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/idem/store.py::IdempotencyStore`, Tests `tests/platform/api/test_idempotency_store.py::test_replay_returns_cached`, Observability Grafana “API Idempotency” dashboard (metric `idempotency_replay_total`).
+**Breadcrumbs:** Implementation `packages/core/idem/store.py::IdempotencyStore`, Tests `tests/platform/api/test_idempotency_store.py::test_replay_returns_cached`, Observability Grafana “API Idempotency” dashboard (metric `idempotency_replay_total`).
 
 *Purpose: Provide a generic mechanism for safe retries across create/approve flows.*
 
@@ -1126,11 +1126,11 @@ CREATE UNIQUE INDEX idempotency_request_dedupe_idx
 Handler pattern
 
 1. `udlock.xact_lock(scope, CONCAT(:org_id, '/', :key))`.
-1. Normalise endpoint to `METHOD:/path` (path variables preserved) and compute `request_hash = sha256(canonical_request_bytes)` via `packages.udocket_core.idem.hash_request`.
+1. Normalise endpoint to `METHOD:/path` (path variables preserved) and compute `request_hash = sha256(canonical_request_bytes)` via `packages.core.idem.hash_request`.
 1. Insert `(org, scope, key, endpoint, case_id, request_hash, result_ref, response_code, response_hash, status, expires_at)` on first execution with `expires_at = now() + make_interval(hours => :ttl_hours)`. Conflicts where `request_hash` differs MUST raise 409 `CONFLICT` with `details.reason="IDEMPOTENCY_SIGNATURE_MISMATCH"`; matching hashes update `last_seen_at` and return `result_ref`.
 1. Optional overlapping-run guard per case/kind: `udlock.try_lock('jobkind', CONCAT(:case_id, '/', :kind))` → 409 `JOB_KIND_BUSY` if held.
 
-- Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create', 'job:checkpoint', 'artifact:approve', 'artifact:upload', 'upload:finalize'}` exported from `packages.udocket_core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
+- Canonical scopes (binding): `IDEMPOTENCY_SCOPES = {'job:create', 'job:checkpoint', 'artifact:approve', 'artifact:upload', 'upload:finalize'}` exported from `packages.core.idem.constants`. Services **MUST NOT** invent ad-hoc strings; CI lints specs and Python call sites to use the constant set.
 
 - Response contract: any API that accepts `Idempotency-Key` **MUST** echo the exact value in the response headers for success and error paths (`Idempotency-Key: <value>`) and emit `Idempotency-Status: fresh|replay|conflict`. OpenAPI lint (`ops/openapi/rules/idempotency-echo.yaml`) enforces the headers on 2xx/4xx/5xx responses.
 
@@ -1138,9 +1138,9 @@ Handler pattern
 
   | Binding | Implementation | Test | Observability |
   |---|---|---|---|
-  | Canonical scope constants | Implementation: `packages/udocket_core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
+  | Canonical scope constants | Implementation: `packages/core/idem/constants.py::IDEMPOTENCY_SCOPES` | Test: `tests/udocket_core/idempotency/test_scopes.py::test_scope_constant_matches_db` | Observability: Buildkite `lint-idempotency` step (scope diff) |
   | Response echo header | Implementation: `apps/platform/common/middleware/idempotency.py::IdempotencyHeaderMiddleware` | Test: `tests/platform/api/test_idempotency_header.py::test_response_echoes_header` | Observability: API metrics `idempotency_echo_missing_total` |
-  | Replay semantics | Implementation: `packages/udocket_core/idem/service.py::upsert_key` | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT` |
+  | Replay semantics | Implementation: `packages/core/idem/service.py::upsert_key` | Test: `tests/platform/api/test_idempotency_replay.py::test_same_key_same_body_vs_conflict` | Observability: Audit event `IDEMPOTENCY_CONFLICT` |
 
 #### 10.3.2 Reviews API (binding)
 
@@ -1529,7 +1529,7 @@ ______________________________________________________________________
 
 #### 13.3.1 Detection & masking controls (binding)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/privacy/detection_suite.py::run_quality_suite`, Tests `tests/privacy/test_detection_suite.py::test_golden_corpora_thresholds`, Observability Grafana “Privacy & Masking QA” panel (metric `phi_detection_drift_total`).
+**Breadcrumbs:** Implementation `packages/core/privacy/detection_suite.py::run_quality_suite`, Tests `tests/privacy/test_detection_suite.py::test_golden_corpora_thresholds`, Observability Grafana “Privacy & Masking QA” panel (metric `phi_detection_drift_total`).
 
 *Purpose: Summarize automated detection and masking checks verified by QA.*
 
@@ -1834,7 +1834,7 @@ ______________________________________________________________________
 
 ### 15.9 Architectural decision records (binding)
 
-**Breadcrumbs:** Implementation `docs/adr/README.md`, Tests `packages/udocket_docs/src/doc_tools/check_adr_index.py::main`, Observability CI job “docs-adr-lint” with badge in Docs Quality dashboard.
+**Breadcrumbs:** Implementation `docs/adr/README.md`, Tests `packages/docs_tooling/src/doc_tools/check_adr_index.py::main`, Observability CI job “docs-adr-lint” with badge in Docs Quality dashboard.
 
 *Purpose: Ensure significant technical choices remain discoverable, immutable, and supersedable.*
 
@@ -2137,7 +2137,7 @@ Artifact table
 
 ### D.1 Chat assistant artifacts (binding)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/assistants/artifacts/chat.py::ChatArtifactWriter`, Tests `tests/udocket_core/assistants/test_chat_artifacts.py::test_manifest_integrity`, Observability Grafana “Assistant Sessions” dashboard (metric `assistant_chat_artifact_total`).
+**Breadcrumbs:** Implementation `packages/core/assistants/artifacts/chat.py::ChatArtifactWriter`, Tests `tests/udocket_core/assistants/test_chat_artifacts.py::test_manifest_integrity`, Observability Grafana “Assistant Sessions” dashboard (metric `assistant_chat_artifact_total`).
 
 *Purpose: Enumerate chat assistant artifact types, manifests, and retention rules.*
 
@@ -2213,7 +2213,7 @@ Artifact table
 
 ### D.3 Timeline artifacts (binding)
 
-**Breadcrumbs:** Implementation `packages/udocket_core/analysis/timeline.py::TimelineArtifactWriter`, Tests `tests/udocket_core/analysis/test_timeline_artifact.py::test_uuid_stability`, Observability Grafana “Timeline” panel (metric `timeline_artifact_total`).
+**Breadcrumbs:** Implementation `packages/core/analysis/timeline.py::TimelineArtifactWriter`, Tests `tests/udocket_core/analysis/test_timeline_artifact.py::test_uuid_stability`, Observability Grafana “Timeline” panel (metric `timeline_artifact_total`).
 
 *Purpose: Describe timeline artifact structure, identity, and promotion rules.*
 

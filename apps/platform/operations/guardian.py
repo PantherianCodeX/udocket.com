@@ -20,7 +20,7 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.models import GuardianSettings
 from config.paths import resolve_config_dir, resolve_repo_root
-from packages.udocket_common.json_utils import (
+from packages.common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,
@@ -34,9 +34,9 @@ from packages.udocket_common.json_utils import (
     parse_json_value,
     read_json_object,
 )
-from packages.udocket_core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
-from packages.udocket_core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
-from packages.udocket_core.logging.context import LogContext, build_extra
+from packages.core.agents.guardian_lib import GuardianAgent, GuardianConfig, GuardianVerdict
+from packages.core.llm import LLMSettings, LLMStageAssignment, load_llm_settings
+from packages.core.logging.context import LogContext, build_extra
 
 MAX_CONTENT_CHARS: Final = 50000
 MAX_HISTORY_ENTRIES: Final = 10

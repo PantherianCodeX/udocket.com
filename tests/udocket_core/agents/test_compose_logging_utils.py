@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from packages.udocket_core.agents.compose.logging_utils import (
+from packages.core.agents.compose.logging_utils import (
     ComposeLogContext,
     format_run_message,
     format_stage_message,

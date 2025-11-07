@@ -60,7 +60,7 @@ The full automation specifications live in `docs/typing/automation_helper_specs.
 
 ## Upcoming Focus Areas
 
-1. Ship the strict pragma manager and run it across `packages/udocket_core/agents/**` before touching new modules.
+1. Ship the strict pragma manager and run it across `packages/core/agents/**` before touching new modules.
 2. Backfill typed pytest fixtures starting with the logging and presenter suites, which still account for a large share of `reportMissingParameterType` diagnostics.
 3. Integrate stub validation into CI to prevent regressions when dependency versions change.
 4. Schedule recurring pyright snapshots (with and without the virtualenv) so we can distinguish configuration issues from missing type information.

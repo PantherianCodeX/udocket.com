@@ -48,13 +48,13 @@ CMD ?=
 DEV_SERVICE := platform-dev
 DOCS_SERVICE := docs
 DOCS_RUN := $(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc
-DOCS_PY := $(UV) run --project packages/udocket_docs --extra dev
+DOCS_PY := $(UV) run --project packages/docs_tooling --extra dev
 DOCSITE_CONTAINER ?= udocket-docs-site
 DOCSITE_ADDR ?= 0.0.0.0
 DOCSITE_HOST ?= localhost
 DOCSITE_PORT ?= 8010
 DOCSITE_URL ?= http://$(DOCSITE_HOST):$(DOCSITE_PORT)
-DOCSITE_PREVIEW ?= doc-builds/sites/dev/index.html
+DOCSITE_PREVIEW ?= out/doc-builds/sites/dev/index.html
 PLATFORM_IMAGE := udocket-platform
 DOCS_IMAGE := udocket-docs-toolbox
 KEYCLOAK_IMAGE := udocket-keycloak
@@ -181,10 +181,10 @@ pytest.cov: ## Execute pytest suite with coverage reporting
 pytest.clean: ## Remove pytest cache directory
 	rm -rf .pytest_cache
 
-common.test: ## Run udocket_common test suite
-	$(UV) run --project apps/platform --extra dev pytest -n auto -q packages/udocket_common
+common.test: ## Run packages.common test suite
+	$(UV) run --project apps/platform --extra dev pytest -n auto -q packages/common
 
-core.test: ## Run udocket_core test suite
+core.test: ## Run packages.core test suite
 	$(UV) run --project apps/platform --extra dev pytest -n auto -q tests/udocket_core
 
 platform.test: ## Run platform test suite
@@ -193,32 +193,31 @@ platform.test: ## Run platform test suite
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
 typing.baseline: ## Run pyright and mypy type checks
-	mkdir -p reports/typing
-	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/udocket_core/agents packages/udocket_common
+	mkdir -p out/test-reports/typing
+	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
 	$(UV) run --project apps/platform --extra dev mypy
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
 	$(PYTHON) scripts/typing/check_strict.py --tool both
-	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
+	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/udocket_core/agents packages/udocket_common
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format json --output reports/typing/dashboard.json || true
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md || true
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html || true
+	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
+	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format json --output out/test-reports/typing/dashboard.json || true
+	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md || true
+	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html || true
 
 ##@ Typewiz
 typewiz.audit: ## Generate Typewiz audit manifest
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/udocket_core/agents packages/udocket_common
+	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
 typewiz.dashboard: ## Render Typewiz dashboards (MD + HTML)
 	$(MAKE) typewiz.audit
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format markdown --output reports/typing/dashboard.md
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest reports/typing/typing_audit.json --format html --output reports/typing/dashboard.html
+	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md
+	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html
 typewiz.readiness: ## Show Typewiz readiness summary (blocked/ready folders)
 	$(MAKE) typewiz.audit
-	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
+	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 typewiz.clean: ## Drop Typewiz caches and generated reports
-	rm -rf .typewiz_cache
-	rm -rf reports/typing
+	rm -rf .typewiz_cache out/test-reports/typing
 
 ##@ Other Cache Cleaning
 clean.mypy: ## Remove mypy cache directory
@@ -357,11 +356,11 @@ docs.check.build: ## Validate docs build prerequisites without modifying artifac
 	$(DOCS_PY) python -m doc_tools.sync.doc_assets --dry-run; \
 	$(DOCS_PY) python -m doc_tools.check_asset_paths docs; \
 	$(DOCS_PY) python -m doc_tools.build.diagram_index --check; \
-	$(DOCS_PY) mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/udocket_docs/mkdocs.yml"
+	$(DOCS_PY) mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/docs_tooling/mkdocs.yml"
 
 docs.clean: ## Remove rendered docs artifacts (diagrams + site outputs)
 	rm -rf docs/build
-	rm -rf packages/udocket_docs/build
+	rm -rf packages/docs_tooling/build
 
 ##@ Docsite • MkDocs Dev Server
 docsite.up: ## Start MkDocs live-reload server in the docs container
@@ -369,7 +368,7 @@ docsite.up: ## Start MkDocs live-reload server in the docs container
 	DOCS_DEV_PORT=$(DOCSITE_PORT) $(DOCS_COMPOSE) run -d --name $(DOCSITE_CONTAINER) --service-ports \
 		-e DOCSITE_ADDR="$(DOCSITE_ADDR)" \
 		-e DOCSITE_PORT="$(DOCSITE_PORT)" \
-		$(DOCS_SERVICE) bash -lc "set +u; set -eo pipefail; $(UV) run --project packages/udocket_docs --extra dev mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr \"$${DOCSITE_ADDR:-0.0.0.0}:$${DOCSITE_PORT:-8010}\""
+		$(DOCS_SERVICE) bash -lc "set +u; set -eo pipefail; $(UV) run --project packages/docs_tooling --extra dev mkdocs serve --config-file packages/docs_tooling/mkdocs.yml --dev-addr \"$${DOCSITE_ADDR:-0.0.0.0}:$${DOCSITE_PORT:-8010}\""
 	@echo "[docsite] Serving docs at $(DOCSITE_URL)"
 
 docsite.down: ## Stop the MkDocs dev server container
@@ -399,7 +398,7 @@ docsite.preview: ## Preview the last built docs output from the filesystem
 		import webbrowser
 		from pathlib import Path
 
-		target = Path(os.environ.get("DOCSITE_PREVIEW_FILE", "doc-builds/sites/dev/index.html")).expanduser()
+		target = Path(os.environ.get("DOCSITE_PREVIEW_FILE", "out/doc-builds/sites/dev/index.html")).expanduser()
 		if not target.exists():
 		    sys.stderr.write(f"[docsite.preview] missing built site at {target}\n")
 		    raise SystemExit(1)
@@ -413,10 +412,10 @@ escape_dquotes = $(subst ",\",$(1))
 DOCS_ARGS ?= $(filter-out docs.test docs.test.coverage,$(MAKECMDGOALS))
 
 docs.test:
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner"
 
 docs.test.coverage:
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner --coverage"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner --coverage"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image
@@ -582,7 +581,7 @@ help:
 	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options."
 
 %.help:
-	@$(UV) run --project packages/udocket_docs --extra dev python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
+	@$(UV) run --project packages/docs_tooling --extra dev python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
 TYPEWIZ_STATUSES ?= blocked ready
 TYPEWIZ_LEVEL ?= folder
 TYPEWIZ_LIMIT ?= 20

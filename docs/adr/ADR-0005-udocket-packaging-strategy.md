@@ -7,7 +7,7 @@
 
 ## Context
 
-uDocket began with a single `packages/udocket_core` module that bundled agents, guardrails, runtime
+uDocket began with a single `packages/core` module that bundled agents, guardrails, runtime
 helpers, and assorted utilities. As the platform expanded (platform services, docs tooling,
 LangGraph pipelines), teams repeatedly re-implemented helpers—deterministic UUID builders, JSON
 coercers, hashing utilities—inside feature directories. This duplication complicates typing, raises
@@ -19,9 +19,9 @@ platform adapters that orchestrate them.
 
 ## Decision
 
-1. **Consolidate helpers in `packages.udocket_common`.** Promote reusable pieces (deterministic UUIDs,
+1. **Consolidate helpers in `packages.common`.** Promote reusable pieces (deterministic UUIDs,
    JSON payload builders, time utilities) into a shared module with dedicated tests and strict typing.
-2. **Keep feature code focussed.** Agent modules (`packages.udocket_core.agents.*`) consume the shared
+2. **Keep feature code focussed.** Agent modules (`packages.core.agents.*`) consume the shared
    helpers instead of redefining bespoke variants. Platform orchestration layers and docs tooling import
    from `udocket_common` to stay DRY.
 3. **Document the boundaries.** This ADR records the packaging strategy so future refactors (LangGraph

@@ -5,7 +5,7 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
 ## Quick start
 1) Implement or customise your **pilot agent** inside the importable interface:
-   `packages/udocket_core/agents/transcribe_lib.py` (see `TranscriptionAgent`).
+   `packages/core/agents/transcribe_lib.py` (see `TranscriptionAgent`).
 2) Copy `.env.example` to `.env` and fill required values.
    - Postgres defaults are provided; start the bundled database with `PROJECT_NAME=udocket-dev make stack.up SERVICES=postgres`.
    - The container entrypoint runs `python manage.py migrate`, `python manage.py enable_rls`, and `python manage.py bootstrap_defaults` automatically; you can rerun them manually if needed.
@@ -16,8 +16,8 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
    ```bash
    uv sync --frozen --group dev --project apps/platform
-   uv sync --frozen --group dev --project packages/udocket_common
-   uv sync --frozen --group dev --project packages/udocket_core
+   uv sync --frozen --group dev --project packages/common
+   uv sync --frozen --group dev --project packages/core
    ```
 
    No manual activation is required—`uv run --project <path> …` will always pick the matching virtualenv.
@@ -45,10 +45,10 @@ and module discovery (`db/__init__.py`, `config/__init__.py`).
 
    - Prefer `make all.test` to fan out across common/core/platform/docs with the correct interpreters.
    - Platform/common/core suites share the `apps/platform` environment: `uv run --project apps/platform --extra dev pytest -n auto -q`.
-   - Docs tooling has its own environment: `uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner` (add `--coverage` or use `make docs.test.coverage` when needed).
+   - Docs tooling has its own environment: `uv run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner` (add `--coverage` or use `make docs.test.coverage` when needed).
    - Avoid running `pytest` from the repo root; it mixes Django+docs tests and requires incompatible dependency sets.
 
-   Prompt templates live under `packages/udocket_prompts`. Validate changes with `make prompts.lint`, or render a specific prompt via `make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json]` when iterating on copy.
+   Prompt templates live under `packages/ai/promptsets`. Validate changes with `make prompts.lint`, or render a specific prompt via `make prompts.render DOMAIN=analyze KEY=system_summary [LOCALE=en-CA] [VARS=vars.json]` when iterating on copy.
 
 5) Build & run the stack:
 
@@ -94,7 +94,7 @@ PROJECT_NAME=udocket-dev make stack.smoke
 
   Use `make stack.up`, `make stack.down`, and `make stack.logs` to manage the dev stack. Override `PROJECT_NAME` when you want side-by-side stacks (e.g., `PROJECT_NAME=my-feature make stack.up`).
 
-- Docs tooling uses the same overlay. Copy `packages/udocket_docs/.env.example` to `packages/udocket_docs/.env` before running `make docs.build` or `make docsite.launch`.
+- Docs tooling uses the same overlay. Copy `packages/docs_tooling/.env.example` to `packages/docs_tooling/.env` before running `make docs.build` or `make docsite.launch`.
 
 - **Production** — run the base compose file plus the production overlay after preparing a production `.env` (secrets, SSL, database, etc.) and copying `storage/` to persistent storage:
 
@@ -148,9 +148,9 @@ Most targets accept optional variables so you can customize behaviour without ed
 - `FOLLOW=0` — disable log streaming in `make stack.logs` and print the current buffer instead.
 
 ## Shared Python packages
-- Shared, framework-agnostic helpers live under `packages/udocket_common`. Import them via `packages.udocket_common.*` (the repo root sits on `PYTHONPATH` in every container and the dev workflow).
-- Package-specific helpers continue to reside under their respective package namespaces (e.g., `packages.udocket_core.*`). Only promote utilities into `udocket_common` when they have no dependencies on Django, Celery, or provider SDKs.
-- If you later publish the packages independently, either install them side-by-side or add a top-level shim that re-exports `packages.udocket_common` — avoid hand-rolled relative imports to keep the path story predictable.
+- Shared, framework-agnostic helpers live under `packages/common`. Import them via `packages.common.*` (the repo root sits on `PYTHONPATH` in every container and the dev workflow).
+- Package-specific helpers continue to reside under their respective package namespaces (e.g., `packages.core.*`). Only promote utilities into `packages.common` when they have no dependencies on Django, Celery, or provider SDKs.
+- If you later publish the packages independently, either install them side-by-side or add a top-level shim that re-exports `packages.common` — avoid hand-rolled relative imports to keep the path story predictable.
 
 ## Notes
 - Postgres is now the default application database. Per-organization row-level security is enforced via `python manage.py enable_rls`.
@@ -160,7 +160,7 @@ Most targets accept optional variables so you can customize behaviour without ed
 - Application migrations were flattened into new `0001_initial.py` files for the local apps; run `PROJECT_NAME=udocket-dev docker compose -f docker-compose.yml -f docker-compose.dev.yml down --volumes` after pulling to ensure your database is recreated before starting the stack.
 - Azure OpenAI providers now enforce Canada-only endpoints (canadacentral/canadaeast). Set the per-provider `allow_non_ca_region` flag only for temporary local testing; production deployments must stay in-region.
 - Media storage is tenant-aware: artifacts for organization `ORG123` live under `/media/tenants/ORG123/cases/<CASE_ID>/...`.
-- Run platform/common/core tests from the dev container with `uv run --project apps/platform --extra dev pytest` (or `make platform.test`). Docs tests belong to `packages/udocket_docs` and should be invoked via `uv run --project packages/udocket_docs --extra dev python -m doc_tools.pytest_runner`. Avoid calling `pytest` from the repo root to prevent dependency bleed.
+- Run platform/common/core tests from the dev container with `uv run --project apps/platform --extra dev pytest` (or `make platform.test`). Docs tests belong to `packages/docs_tooling` and should be invoked via `uv run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner`. Avoid calling `pytest` from the repo root to prevent dependency bleed.
 - Remote dev: open the repository in VS Code using **Dev Containers > Reopen in Container** to attach to the `platform-dev` service defined under `.devcontainer/` (starts alongside Postgres and Redis).
 - Permissions: Visit `/permissions/` for a read-only catalog of artifact fields, presets, and roles (edits still happen via Django admin for MVP).
 - Platform uploads let you choose `batch` (default) or `on-demand` transcription.

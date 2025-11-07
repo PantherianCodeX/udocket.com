@@ -47,7 +47,7 @@ services:
 
   docs:
     build:
-      context: packages/udocket_docs
+      context: packages/docs_tooling
       dockerfile: Dockerfile
     command: sleep infinity
     tty: true

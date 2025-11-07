@@ -12,7 +12,7 @@ from apps.platform.authorization.capabilities import has_capability
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
-from packages.udocket_common.json_utils import stringify_json
+from packages.common.json_utils import stringify_json
 
 from ..presenters.cases import case_progress_context
 from ..selectors import job_telemetry_map

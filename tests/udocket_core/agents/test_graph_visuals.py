@@ -4,8 +4,8 @@ from pathlib import Path
 
 from PIL import ImageFont
 
-from packages.udocket_core.agents.compose import graph_visuals as gv
-from packages.udocket_core.agents.compose.graph_visuals import build_graph_visual_artifacts
+from packages.core.agents.compose import graph_visuals as gv
+from packages.core.agents.compose.graph_visuals import build_graph_visual_artifacts
 
 
 def test_measure_text_with_default_font() -> None:

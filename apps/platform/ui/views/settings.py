@@ -39,13 +39,13 @@ from apps.platform.operations.llm import (
 )
 from apps.platform.operations.models import LLMConfiguration
 from config.settings import settings as app_settings
-from packages.udocket_common.json_utils import (
+from packages.common.json_utils import (
     normalize_json_object,
     parse_json_value,
     stringify_pretty,
 )
-from packages.udocket_core.llm import LLMSettings, load_llm_settings
-from packages.udocket_core.llm.runtime import ChatClientError
+from packages.core.llm import LLMSettings, load_llm_settings
+from packages.core.llm.runtime import ChatClientError
 
 from .auth import ensure_authenticated
 

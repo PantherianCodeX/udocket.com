@@ -9,10 +9,10 @@
   "markdown.preview.scrollEditorWithPreview": true,
   "markdown.preview.scrollPreviewWithEditor": true,
 
-  "vale.configPath": "packages/udocket_docs/config/vale.ini",
-  "markdownlint.configFile": "packages/udocket_docs/config/.markdownlint.json",
-  "mkdocs.projectDirectory": "packages/udocket_docs",
-  "mkdocs.configFilePath": "packages/udocket_docs/config/mkdocs.yml",
+  "vale.configPath": "packages/docs_tooling/config/vale.ini",
+  "markdownlint.configFile": "packages/docs_tooling/config/.markdownlint.json",
+  "mkdocs.projectDirectory": "packages/docs_tooling",
+  "mkdocs.configFilePath": "packages/docs_tooling/config/mkdocs.yml",
 
   "markdown-pdf.executablePath": "/usr/bin/chromium",
   "markdown-pdf.launchOptions": [
@@ -43,9 +43,8 @@
     "typings/vendor/**": true,
     "storage/**": true,
     "apps/storage/**": true,
-    "reports/**": true,
-    "doc_builds/**": true,
-    "packages/udocket_docs/build/**": true,
+    "out/**": true,
+    "packages/docs_tooling/build/**": true,
     "build/**": true,
     "dist/**": true,
     "downloads/**": true,

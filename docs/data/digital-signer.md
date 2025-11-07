@@ -92,7 +92,7 @@ ______________________________________________________________________
 **State:** Signed artifacts persist in object storage with manifests recording signature metadata, TSA tokens, OCSP results, and FIPS posture; auxiliary records track client attestations. **|**
 **Failures & handling:** TSA/OCSP outages, trust-root drift, or FIPS attestation failures block portal release and trigger runbooks (§5, §8). **|**
 **Observability:** Grafana “Signer & TSA” and “Deliverable Signatures” dashboards monitor latency, TSA drift, OCSP freshness, and policy violations; CI jobs verify FIPS posture. **|**
-**Breadcrumbs:** Implementation `apps/platform/operations/signer.py`, policy resolver `apps/platform/operations/signer_policy.py`, security guard `packages/udocket_core/security/fips_guard.py`, tests `tests/platform/operations/test_signer_modes.py`, `tests/platform/operations/test_signature_policy.py`. **|**
+**Breadcrumbs:** Implementation `apps/platform/operations/signer.py`, policy resolver `apps/platform/operations/signer_policy.py`, security guard `packages/core/security/fips_guard.py`, tests `tests/platform/operations/test_signer_modes.py`, `tests/platform/operations/test_signature_policy.py`. **|**
 **References:** §2 Responsibilities, §4 State management, §5 Failure modes, §7 Security & compliance, ADR-0002.
 
 - Signing pipeline converts canonical TXT/MD/JSON into PDF/A (or JWS) envelopes, applies platform signature + TSA token, and records signature manifests for Guardian, portal, and audit surfaces.
@@ -120,7 +120,7 @@ ______________________________________________________________________
 **Failures & handling:** Pipeline stages failing validation leave deliverables in `PENDING_SIGNATURE`, emit `SIGNING_PIPELINE_BLOCKED`, and trigger §5.1 remediate-or-rollback steps. **|**
 **Observability:** Metrics `signer_request_latency_seconds`, `signer_queue_depth`, `signature_manifest_error_total` plus audit JSONL records; dashboards highlight pipeline stage latency and error distribution. **|**
 **References:** §3 API contract, §4 State management, `ops/runbooks/signer/pipeline_block.md`.
-**Breadcrumbs:** Implementation `apps/platform/operations/signer.py::issue_signed_document`, packager `packages/udocket_core/signer/packager.py`, tests `tests/platform/operations/test_signer_pipeline.py`.
+**Breadcrumbs:** Implementation `apps/platform/operations/signer.py::issue_signed_document`, packager `packages/core/signer/packager.py`, tests `tests/platform/operations/test_signer_pipeline.py`.
 
 - Canonical stages:
   1. Producing agent emits TXT/MD/JSON (`class='DL'`, `status='GENERATED'`).
@@ -175,7 +175,7 @@ ______________________________________________________________________
 **Failures & handling:** Expired responses or unreachable responders raise `SIGN_VERIFY_SOFT_FAIL` (deliverable still available) and escalate to `SIGN_REVOKE_STATUS_UNKNOWN` after the soft window, quarantining portals (§5.1). **|**
 **Observability:** Metrics `ocsp_latency_seconds`, `ocsp_staple_age_seconds`, `tsa_latency_seconds`, `tsa_time_drift_seconds`; alerts `ocsp_unreachable_total`, `tsa_drift_seconds`. **|**
 **References:** §5.1 OCSP/TSA outage, §8.1 Runbooks & rotations.
-**Breadcrumbs:** Validator `packages/udocket_core/signer/verification.py`, cache `packages/udocket_core/signer/cache.py`, tests `tests/platform/operations/test_signer_verification.py`.
+**Breadcrumbs:** Validator `packages/core/signer/verification.py`, cache `packages/core/signer/cache.py`, tests `tests/platform/operations/test_signer_verification.py`.
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/diagrams/data/digital-signer/signing-delivery-v1.svg" alt="Signing and delivery flow">
@@ -223,7 +223,7 @@ curl -X POST https://platform.local/api/v1/sign \
 - Celery worker orchestration uses dedicated queues (`signature.high`, `signature.bulk`) and relies on Worker Cluster job controllers; retries, backoff, and idempotency enforcement flow through `apps/platform/operations/signer_job.py`.
 - Guardian integration submits deliverable manifests for judgment prior to release; acknowledgements and portal invalidation messages route through Notifications topics `deliverable.ready` and `deliverable.revoked`.
 - Settings activation (`sign.*`) pushes trust-root, TSA/OCSP, and waiver configuration; activation lints invoke signer contract tests before enabling changes.
-- Evidence store writers, manifest generators, and ack processors share the internal API layer `packages/udocket_core/signer/*`, ensuring deterministic manifests and audit append-only logs.
+- Evidence store writers, manifest generators, and ack processors share the internal API layer `packages/core/signer/*`, ensuring deterministic manifests and audit append-only logs.
 
 ### 3.3 API Error Codes (binding) {#3-3-api-error-codes-binding}
 
@@ -232,7 +232,7 @@ curl -X POST https://platform.local/api/v1/sign \
 **State:** Codes originate from `apps/platform/signer/api.py`, worker pipeline guards, and replay tooling; audit events append to `ops/signer/signature_ops.jsonl`. **|**
 **Failures & handling:** Unknown codes fail contract tests and block deploys; Alertmanager routes `signer_api_error_total{code}` spikes to RB-SIGN-INCIDENT. **|**
 **Observability:** Dashboards “Signer & TSA”, metrics `signer_api_error_total{code}`, `signer_signature_policy_violation_total`, and synthetic signing drills capture error distribution. **|**
-**Breadcrumbs:** API handlers `apps/platform/signer/api.py`, manifest validator `packages/udocket_core/signer/manifest.py`, replay utilities `ops/scripts/signer/replay_signature.py`, tests `tests/platform/operations/test_signer_api.py`. **|**
+**Breadcrumbs:** API handlers `apps/platform/signer/api.py`, manifest validator `packages/core/signer/manifest.py`, replay utilities `ops/scripts/signer/replay_signature.py`, tests `tests/platform/operations/test_signer_api.py`. **|**
 **References:** Platform Runtime §3.3, Settings spec §3.4, Guardian spec §2.2.
 
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#digital-signer)
@@ -264,7 +264,7 @@ curl -X POST https://platform.local/api/v1/sign \
 **State:** Deliverable/signature tables, evidence store objects, waiver ledger entries, trust-root settings, Redis caches, and idempotency key tables. **|**
 **Failures & handling:** Manifest divergences, waiver expiry, or cache/idempotency mismatches raise `SIGNATURE_MANIFEST_INVALID`, `SIGNATURE_REPLAY_MISMATCH`, or `SIGN_IDEMPOTENCY_CONFLICT` and route through RB-SIGN-* runbooks. **|**
 **Observability:** Dashboards “Signer & TSA”, metrics `signature_manifest_invalid_total`, `sign_trust_root_expiring_total`, `idempotency_replay_total`, `signer_pipeline_blocked_total`. **|**
-**Breadcrumbs:** Manifest writer `packages/udocket_core/signer/manifest.py`, waiver and trust-root activation `apps/platform/settings/services/signature.py`, cache/idempotency helpers `packages/udocket_core/signer/cache.py`, replay scripts `ops/scripts/signer/replay_signature.py`. **|**
+**Breadcrumbs:** Manifest writer `packages/core/signer/manifest.py`, waiver and trust-root activation `apps/platform/settings/services/signature.py`, cache/idempotency helpers `packages/core/signer/cache.py`, replay scripts `ops/scripts/signer/replay_signature.py`. **|**
 **References:** Audit §4, Settings §3.4, Observability §4.
 
 ### 4.1 Artifact manifests & evidence (binding)
@@ -275,7 +275,7 @@ curl -X POST https://platform.local/api/v1/sign \
 **Failures & handling:** Missing manifest fields or mismatched digests cause `SIGNATURE_MANIFEST_INVALID`; deliverable promotion blocked until corrected. **|**
 **Observability:** Metric `signature_manifest_invalid_total`, audits `MANIFEST_FIX_APPLIED`; nightly validators (`scripts/signer/validate_manifests.py`) ensure schema parity. **|**
 **References:** §2.1 Pipeline, §5 Failure modes, Appendix D schemas.
-**Breadcrumbs:** Manifest writer `packages/udocket_core/signer/manifest.py`, evidence store `packages/udocket_core/signer/evidence.py`, tests `tests/platform/operations/test_manifest_integrity.py`.
+**Breadcrumbs:** Manifest writer `packages/core/signer/manifest.py`, evidence store `packages/core/signer/evidence.py`, tests `tests/platform/operations/test_manifest_integrity.py`.
 
 ### 4.2 Key, certificate, and waiver records (binding)
 
@@ -294,7 +294,7 @@ curl -X POST https://platform.local/api/v1/sign \
 **State:** Namespaces `ocsp:<cert_fingerprint>` and `tsa:<profile>` (Redis), `idempotency_keys` rows scoped to `artifact:sign`, replay logs under `ops/signer/replays/<date>/`. **|**
 **Failures & handling:** Cache poisoning or mismatched request hashes trigger `SIGN_IDEMPOTENCY_CONFLICT` alerts; replay mismatches output `SIGNATURE_REPLAY_MISMATCH` and route to RB-SIGN-VERIFY. **|**
 **Observability:** Metrics `ocsp_cache_hit_ratio`, `idempotency_replay_total`, audit event `SIGN_REPLAY_EXECUTED`; CI task `scripts/signer/check_replay_fixture.py` validates fixtures. **|**
-**Breadcrumbs:** Idempotency service `packages/udocket_core/idem/service.py`, cache helpers `packages/udocket_core/signer/cache.py`, replay tooling `ops/scripts/signer/replay_signature.py`.
+**Breadcrumbs:** Idempotency service `packages/core/idem/service.py`, cache helpers `packages/core/signer/cache.py`, replay tooling `ops/scripts/signer/replay_signature.py`.
 
 ______________________________________________________________________
 
@@ -324,7 +324,7 @@ ______________________________________________________________________
 **State:** Failure evidence stored under `ops/security/fips/attestation_failures/`; incidents logged with waiver references if temporary downgrade approved. **|**
 **Handling:** Execute `RB-SIGN-FIPS`—verify module certificate, reseed HSM/DRBG, rotate modules if required, and document remediation. **|**
 **Observability:** Metrics `crypto_fips_selftest_fail_total`, `crypto_fips_module_cert_id`, alerts `fips_attestation_failure_total`. **|**
-**Breadcrumbs:** Security guard `packages/udocket_core/security/fips_guard.py`, tests `tests/security/test_fips_guard.py`.
+**Breadcrumbs:** Security guard `packages/core/security/fips_guard.py`, tests `tests/security/test_fips_guard.py`.
 
 ### 5.3 Signature policy mismatch or client SLA breach (normative)
 
@@ -370,7 +370,7 @@ ______________________________________________________________________
 **State:** Waiver artifacts (`FIPS_MODE_EXCEPTION`, `SIGNATURE_POLICY_EXCEPTION`) stored in `ops/security/waivers/`; manifests include `{fips_mode, fips_module_cert_id, waiver_id?}`. **|**
 **Failures & handling:** Waiver expiry, certificate drift, or module deprecation escalate to Security incidents; traffic halted until compliance restored. **|**
 **Observability:** Alerts `crypto_fips_waiver_active_total`, `signature_policy_waiver_expiring_total`, `sign_trust_root_expiring_total`; CI job `ci-fips-scan` validates code changes. **|**
-**Breadcrumbs:** Security guard `packages/udocket_core/security/fips_guard.py`, waiver automation `ops/scripts/security/check_signer_waivers.py`, tests `tests/security/test_fips_guard.py`. **|**
+**Breadcrumbs:** Security guard `packages/core/security/fips_guard.py`, waiver automation `ops/scripts/security/check_signer_waivers.py`, tests `tests/security/test_fips_guard.py`. **|**
 **References:** ADR-0002, §5 Failure modes, §8 Operational notes.
 
 - Startup attestation validates module self-tests, CMVP certificate ID (`security.crypto.expected_cert_id`), and DRBG source; failures abort boot.
@@ -514,7 +514,7 @@ ______________________________________________________________________
 
 - Signing & delivery diagram — `docs/data/digital-signer/diagrams/signing-delivery-v1.mmd`.
 - TSA/OCSP outage runbook — `ops/runbooks/signer/tsa_ocsp_outage.md`.
-- FIPS attestation guard — `packages/udocket_core/security/fips_guard.py`.
+- FIPS attestation guard — `packages/core/security/fips_guard.py`.
 - Signature policy resolver — `apps/platform/operations/signer_policy.py`.
 - Guardian integration — `apps/platform/operations/guardian_signer_bridge.py`.
 - Key rotation artifacts — `ops/security/key_rotation/`.

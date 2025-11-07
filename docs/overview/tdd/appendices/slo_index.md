@@ -78,7 +78,7 @@ ______________________________________________________________________
 **State:** Metrics `audit_seal_errors_total`, `audit_worm_lag_seconds`, `waiver_expiring_total`, `dsar_journal_pending_total`; stored seal artifacts, waiver ledger entries, and DSAR journals provide evidence. **|**
 **Failures & handling:** Breaches invoke RB-AUDIT-004, RB-WAIVER-GOV, or RB-PRIV-DSAR prior to resuming promotions. **|**
 **Observability:** Dashboards “Audit Seal Integrity”, “Waiver Ledger”, and synthetic `audit_verify` runs monitor compliance. **|**
-**Breadcrumbs:** Seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/udocket_core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
+**Breadcrumbs:** Seal runner `ops/audit/seal_runner.py`, waiver ledger `packages/core/compliance/waiver.py`, DSAR tooling `ops/privacy/dsar_runner.py`. **|**
 **References:** Logging spec §6, Settings spec §7.3, TDD §12.
 
 - **Seal continuity:** Hourly seal verification succeeds with ≤1 failed interval per quarter; tracked via `audit_seal_errors_total` and synthetic `audit_verify` job, escalating through RB-AUDIT-004 on breach.
@@ -139,7 +139,7 @@ ______________________________________________________________________
 **State:** Metrics `guardian_judgment_latency_seconds`, `guardian_pending_oldest_seconds`, `guardian_quarantine_false_positive_total`; dashboards “Guardian SLO” and “Guardian Manual Review”; synthetic job `guardian_slo.yaml`. **|**
 **Failures & handling:** Breaches invoke RB-GUARD-QUEUE, RB-GUARD-REVIEW, or RB-GUARD-POLICY before approvals resume. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, and synthetic runs monitor compliance. **|**
-**Breadcrumbs:** Telemetry `packages/udocket_core/guardian/metrics.py`, runbooks `docs/ops/runbooks/guardian/*.md`. **|**
+**Breadcrumbs:** Telemetry `packages/core/guardian/metrics.py`, runbooks `docs/ops/runbooks/guardian/*.md`. **|**
 **References:** TDD §6, Audit spec §5, Settings spec §7.3.
 
 - **Judgment latency:** 99.9 % availability with P95 ≤ 5 minutes measured via `guardian_judgment_latency_seconds` and synthetic `guardian_slo.yaml`; burn-rate alerts 2×/6× open RB-GUARD-QUEUE.
@@ -153,7 +153,7 @@ ______________________________________________________________________
 **State:** Metrics `identity_token_flow`, `auth_layer_violation_total`, `rls_context_missing_total`, `logging_neverlog_violation_total`, `break_glass_event_missing_retrospective_total`; dashboards “Identity Posture” and “RLS Context Guards”; synthetic probes `synthetics/identity_*`. **|**
 **Failures & handling:** Breaches trigger RB-IDP-FAILOVER, RB-RLS-CONTEXT, RB-MASK, or RB-BREAK-GLASS prior to resuming automation. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, and synthetic runs ensure compliance. **|**
-**Breadcrumbs:** Telemetry modules `apps/platform/logging/access.py`, `packages/udocket_core/permissions`, runbooks `docs/ops/runbooks/identity/*.md`. **|**
+**Breadcrumbs:** Telemetry modules `apps/platform/logging/access.py`, `packages/core/permissions`, runbooks `docs/ops/runbooks/identity/*.md`. **|**
 **References:** Settings spec §7, TDD §12, Guardian spec §7.
 
 - **Authentication availability:** ≥99.9% success for token issuance and session validation, measured via synthetic `identity_token_flow` and `auth_layer_violation_total`; breaches page RB-IDP-FAILOVER and require RCA prior to release.
@@ -167,7 +167,7 @@ ______________________________________________________________________
 **State:** Metrics `agent_job_completion_ratio`, `agent_lane_duration_seconds`, `agent_queue_latency_seconds`, `agent_token_budget_violation_total`; dashboards “Agent Pipelines – Activation”, “Agent QA Acceptance”, FinOps monitors `ops/finops/agents_cost_dashboard.json`. **|**
 **Failures & handling:** Breaches invoke RB-AGENT-PIPELINE, RB-AGENT-QA, or RB-FINOPS-LANGGRAPH before enabling new activations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, QA harness reports, and shadow run comparisons provide evidence. **|**
-**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/udocket_core/agents/logging.py`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
+**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/core/agents/logging.py`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
 **References:** This document.
 
 - **Pipeline availability:** ≥99.5% of LangGraph runs complete without manual retry, measured via `agent_job_completion_ratio`; breaches trigger RB-AGENT-PIPELINE before promotions proceed.
@@ -201,7 +201,7 @@ ______________________________________________________________________
 **State:** Metrics `lpe_lookup_latency_seconds`, `lpe_compiler_duration_seconds`, `lpe_policy_block_total`; dashboards “LPE – Enforcement & Residency”, “LPE Compiler”, synthetic HIPAA/PIPEDA probes. **|**
 **Failures & handling:** Breaches invoke RB-LPE-CONTEXT, RB-LPE-COMPILER, or residency runbooks before unfreezing activations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic activation jobs, and decision-log audits provide evidence. **|**
-**Breadcrumbs:** Telemetry `packages/udocket_core/lpe/telemetry.py`, synthetic definitions `synthetics/lpe_*`, runbooks `docs/ops/runbooks/lpe/*.md`. **|**
+**Breadcrumbs:** Telemetry `packages/core/lpe/telemetry.py`, synthetic definitions `synthetics/lpe_*`, runbooks `docs/ops/runbooks/lpe/*.md`. **|**
 **References:** TDD §6, Settings spec §7.3, Guardian spec §7.
 
 - **PolicyContext availability:** ≥99.9% of lookups succeed each month (`lpe_lookup_latency_seconds` + synthetic HIPAA/PIPEDA probes). Breaches trigger RB-LPE-CONTEXT and block Settings activations.
@@ -252,7 +252,7 @@ ______________________________________________________________________
 **State:** Metrics `reference_manager_harvest_total`, `reference_manager_publish_latency_seconds`, `reference_bundle_adoption_latency_seconds`, `reference_manager_license_violation_total`; dashboards “Reference Manager – Harvest”, “Publish Pipeline”, “Adoption”, “Compliance”. **|**
 **Failures & handling:** Breaches invoke RB-RM-HARVEST, RB-RM-PUBLISH, RB-RM-ADOPTION, or RB-RM-LICENSE before resuming operations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, synthetic harvest/publish jobs, and adoption drills provide evidence. **|**
-**Breadcrumbs:** Telemetry `packages/udocket_core/reference_manager/telemetry.py`, synthetic definitions `ops/reference/synthetics/*.yaml`, runbooks `docs/ops/runbooks/reference/*.md`. **|**
+**Breadcrumbs:** Telemetry `packages/core/reference_manager/telemetry.py`, synthetic definitions `ops/reference/synthetics/*.yaml`, runbooks `docs/ops/runbooks/reference/*.md`. **|**
 **References:** TDD §6, Settings spec §7.3, Audit spec §4.
 
 - **Harvest availability:** ≥99.5% availability for provider harvest runs, measured via `reference_manager_harvest_total` success rate and synthetic connector checks; breaches trigger RB-RM-HARVEST.

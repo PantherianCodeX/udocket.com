@@ -21,10 +21,9 @@ if sys.version_info < (3, 12):
 
 PROJECTS: tuple[Project, ...] = (
     ("platform", REPO_ROOT / "apps" / "platform", (None, "dev")),
-    ("common", REPO_ROOT / "packages" / "udocket_common", (None, "dev")),
-    ("core", REPO_ROOT / "packages" / "udocket_core", (None, "dev")),
-    ("docs", REPO_ROOT / "packages" / "udocket_docs", (None, "dev")),
-    ("prompts", REPO_ROOT / "packages" / "udocket_prompts", (None,)),
+    ("common", REPO_ROOT / "packages" / "common", (None, "dev")),
+    ("core", REPO_ROOT / "packages" / "core", (None, "dev")),
+    ("docs", REPO_ROOT / "packages" / "docs_tooling", (None, "dev")),
 )
 
 

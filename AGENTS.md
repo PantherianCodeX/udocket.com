@@ -9,11 +9,11 @@ This document defines how automation and contributors should add and operate "ag
 - **Type-first development.** Before editing logic, introduce the strongly typed primitives the file needs (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers, or helper classes). Provider payloads must be represented by precise types or local stubs—never raw dicts. Missing third-party stubs are added alongside the change (no TODOs).
 - **Zero tolerance for `Any`.** New code may not add `typing.Any`. When touching legacy code, remove Any annotations as part of the change. Casts are a last resort: keep them in helper functions with a short comment explaining the invariant they protect. Never add `# type: ignore` or lint ignores; fix the root cause instead.
 - **Strict Python 3.12+.** Use modern syntax (`match/case`, `StrEnum`, `dataclasses`, `contextlib.asynccontextmanager`, `zoneinfo`). Delete compatibility branches for earlier Python versions and refuse polyfills/back-compat shims.
-- **Separation of concerns.** Main modules orchestrate flows; supporting modules provide models and pure helpers. Do not mix HTTP/Django concerns with LangGraph orchestration or disk IO in the same function. Extract shared helpers to `packages/udocket_common` when they are framework-agnostic, otherwise keep them in package-scoped `utils.py`. Module-level helpers stay short and single-purpose.
+- **Separation of concerns.** Main modules orchestrate flows; supporting modules provide models and pure helpers. Do not mix HTTP/Django concerns with LangGraph orchestration or disk IO in the same function. Extract shared helpers to `packages/common` when they are framework-agnostic, otherwise keep them in package-scoped `utils.py`. Module-level helpers stay short and single-purpose.
 - **Quality over speed.** Restructure when the design demands it. Keep functions small (prefer <40 LOC) and files cohesive. Document invariants whenever you add or change behavior.
 - **Testing discipline.** Every touched module must remain ≥90% line coverage (unit + property tests). Add property tests for determinism (UUIDs, manifests, approvals) whenever you add new data structures. Integration tests cover Celery tasks, Guardian/Signer interactions, and settings activation. No change merges without green tests.
 - **Tooling requirements.** Run commands through the provided containers/venvs (`make ...`, `uv run --project …`). Never install ad-hoc dependencies via `pip`. Docs/spec changes must pass `doc_tools.check_links` and MkDocs builds.
-- **Helper placement & wrappers.** Cross-cutting helpers (JSON, hashing, parsing) belong in `packages/udocket_common`. Agent-specific helpers live alongside the agent implementation. Use thin wrappers (value objects) around primitive strings/IDs instead of passing raw literals between layers.
+- **Helper placement & wrappers.** Cross-cutting helpers (JSON, hashing, parsing) belong in `packages/common`. Agent-specific helpers live alongside the agent implementation. Use thin wrappers (value objects) around primitive strings/IDs instead of passing raw literals between layers.
 - **No back-compat.** When removing deprecated APIs or flags, delete the compat code entirely. Do not add toggles to support “old” behavior—migrations happen in one direction.
 - **Flow of control.** Entry-point modules validate inputs, snapshot settings, and delegate to type-safe helpers. They never mutate global state or perform best-effort retries outside the shared retry utilities.
 - **Additional expectations.** Always update specs (this file + TDD §2.3) when you introduce new behaviors, include Guardian/Settings impacts in PR descriptions, and keep ops/audit logging additive and deterministic.
@@ -22,7 +22,7 @@ This document defines how automation and contributors should add and operate "ag
 
 - Services:
   - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
-- Core agent implementation lives in `packages/udocket_core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
+- Core agent implementation lives in `packages/core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
   - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL).
   - Diarization: supported in `batch` mode only.
   - Outputs: timestamped transcript `.txt`, per-job JSON metadata, append-only ops audit JSONL.
@@ -38,10 +38,10 @@ This document defines how automation and contributors should add and operate "ag
 
 To make agents composable and observable when executed inside Celery workers, follow this contract:
 
-- Implement the `TranscriptionAgent` interface (see `packages/udocket_core/agents/transcribe_lib.py`).
+- Implement the `TranscriptionAgent` interface (see `packages/core/agents/transcribe_lib.py`).
   - Accepts structured config (`TranscriptionConfig`) instead of CLI flags.
   - Read configuration from `.env` where relevant, mirroring `config/settings.py` keys.
-- Return a `TranscriptionResult` (from `packages.udocket_common.agents`) and raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
+- Return a `TranscriptionResult` (from `packages.common.agents`) and raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
 - Deterministic outputs:
   - Write artifacts with stable, case-scoped names and versioning (e.g., `_v2` suffix) when re-running the same job.
 - Ops logging:
@@ -50,11 +50,11 @@ To make agents composable and observable when executed inside Celery workers, fo
 - Security & locality:
   - Canada-only Azure regions (`canadacentral` or `canadaeast`). Do not send PII to non-Canadian services by default.
 
-Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
+Reference patterns exist in `packages/core/agents/transcribe_lib.py`.
 
 ## Current Transcription Agent
 
-- Entry: `packages/udocket_core/agents/transcribe_lib.py`
+- Entry: `packages/core/agents/transcribe_lib.py`
 - Inputs: local file path or HTTPS SAS URL (batch mode), language, diarization flag (batch only)
 - Outputs:
   - Transcript: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/transcript/<job_id>__transcript.txt`
@@ -173,7 +173,7 @@ General guidelines:
 - Style: type-annotated functions; avoid one-letter names; no inline comments unless essential.
 - Strong typing:
   - Read and follow `docs/typing-roadmap.md` and `docs/typing_refactor_plan.md` before touching code.
-  - Per-module enforcement: `packages/udocket_core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/udocket_core/logging` and `pyright packages/udocket_core/logging`). Do not introduce `Any` or untyped defs there.
+  - Per-module enforcement: `packages/core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/core/logging` and `pyright packages/core/logging`). Do not introduce `Any` or untyped defs there.
   - When editing other modules, remove `Any` usage, add precise types, and reduce pyright warnings in that scope. Never add `# type: ignore` without an accompanying TODO referencing the typing roadmap.
   - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
 - Stub dependencies: run `uv sync --frozen --group dev --project apps/platform` to ensure Pyright and Django/DRF stubs are installed before editing. Activation isn’t required—invoke tools with `uv run --project apps/platform …` so the right interpreter is picked automatically.
@@ -193,7 +193,7 @@ General guidelines:
 
   ```python
 
-  from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig
+  from packages.core.agents import TranscriptionAgent, TranscriptionConfig
   cfg = TranscriptionConfig.from_env()
   agent = TranscriptionAgent(cfg)
   agent.transcribe(

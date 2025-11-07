@@ -20,9 +20,9 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
   ![Artifact Overview](build/diagrams/overview/tdd/artifact-lifecycle-overview-v1.svg)
 
-- Rendered SVGs live under `docs/build/diagrams/` (mirrored into `packages/udocket_docs/build/diagrams/`) so MkDocs can serve them alongside the Markdown sources. Use `build/diagrams/<path relative to the owning document directory>` in image links so paths remain correct regardless of page depth (`docs/platform/guardian/diagrams/foo.mmd` → `build/diagrams/platform/guardian/foo.svg`).
+- Rendered SVGs live under `docs/build/diagrams/` (mirrored into `packages/docs_tooling/build/diagrams/`) so MkDocs can serve them alongside the Markdown sources. Use `build/diagrams/<path relative to the owning document directory>` in image links so paths remain correct regardless of page depth (`docs/platform/guardian/diagrams/foo.mmd` → `build/diagrams/platform/guardian/foo.svg`).
 
-- Before generating PDFs, render diagrams: `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
+- Before generating PDFs, render diagrams: `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid` (only re-renders `.mmd` files that changed). Use `--all` to force a complete rebuild.
 
 - Embed rules:
   - Owner docs should contain the Mermaid fence and an adjacent image fallback that points at the pre-rendered SVG.
@@ -43,7 +43,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 
 ## Lint and build locally
 
-- Install doc tooling once (from `packages/udocket_docs/`):
+- Install doc tooling once (from `packages/docs_tooling/`):
   - `uv sync --frozen --extra dev`
   - `PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm ci`
   - `apt-get install -y chromium` (or `brew install chromium` on macOS) so the Mermaid CLI can launch a headless browser
@@ -62,11 +62,11 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Style checks (Vale):
   - From `docs/`: `vale --config docs/config/vale.ini src/`
   - Rules live under `docs/config/vale/`.
-- Build site: `uv run mkdocs build --config-file packages/udocket_docs/mkdocs.yml --site-dir site --clean`.
+- Build site: `uv run mkdocs build --config-file packages/docs_tooling/mkdocs.yml --site-dir site --clean`.
 - Preview docs locally (default dev server port 8010):
-  - `uv run mkdocs serve --config-file packages/udocket_docs/mkdocs.yml --dev-addr 0.0.0.0:8010`
+  - `uv run mkdocs serve --config-file packages/docs_tooling/mkdocs.yml --dev-addr 0.0.0.0:8010`
 - Build TDD/PRD PDFs:
-  - `uv run --project packages/udocket_docs python -m doc_tools.render_mermaid --all`
+  - `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid --all`
   - `uv run python tools/pdf_build.py`
   - Provide `--target`/`--skip-build` to narrow the scope or reuse an existing MkDocs build.
 
@@ -89,7 +89,7 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Sources: `docs/` (TDD, platform, automation, data, customer, experience, ADR, runbooks, .assets).
 - Generated: `docs/site/`, `docs/build/` (gitignored).
 - Config: `.markdownlint.json` (extends `docs/config/.markdownlint.json`), `docs/config/mkdocs.yml`, `docs/config/vale.ini`, `docs/config/.markdownlint.json`, `docs/config/mermaidrc.json`, `docs/config/settings_key_skip.txt`.
-- Scripts: `packages/udocket_docs/src/doc_tools/manage_docs.py`, `packages/udocket_docs/src/doc_tools/lint_docs.py`, sync helpers under `packages/udocket_docs/src/doc_tools/sync/`, and build assets under `packages/udocket_docs/src/doc_tools/build/`.
+- Scripts: `packages/docs_tooling/src/doc_tools/manage_docs.py`, `packages/docs_tooling/src/doc_tools/lint_docs.py`, sync helpers under `packages/docs_tooling/src/doc_tools/sync/`, and build assets under `packages/docs_tooling/src/doc_tools/build/`.
 
 ## Tips
 

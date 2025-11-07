@@ -15,7 +15,7 @@ from apps.platform.operations.audit import emit as audit_emit
 from apps.platform.operations.channels import send_case_update, send_job_update
 from apps.platform.operations.runtime import JobRuntimeContext
 from apps.platform.operations.services import execute_compose_job
-from packages.udocket_core.agents import ComposeConfig
+from packages.core.agents import ComposeConfig
 
 
 @shared_task(bind=True)

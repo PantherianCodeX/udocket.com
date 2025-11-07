@@ -312,7 +312,7 @@ ______________________________________________________________________
 
 **Purpose:** Enumerate alerts and monitors that declare an incident. **|**
 **Contract:** Alerts `tenant_activation_latency_seconds`, `tenant_offboarding_backlog_total`, `tenant_sso_metadata_outdated_total`, and Guardian role-drift heuristics must page on-call; synthetic provisioning job failure also pages. **|**
-**State:** Alert definitions `infra/monitoring/tenants-alerts.yaml`, synthetic job `scripts/ops/tenant_provision_check.py`, Guardian heuristics `packages/udocket_core/guardian/role_monitor.py`. **|**
+**State:** Alert definitions `infra/monitoring/tenants-alerts.yaml`, synthetic job `scripts/ops/tenant_provision_check.py`, Guardian heuristics `packages/core/guardian/role_monitor.py`. **|**
 **Failures & handling:** Alert misfires tuned via SRE ticket; silent failures result in governance review and updated alert thresholds. **|**
 **Observability:** Grafana “Tenant Incident Triggers”, PagerDuty incident exports, docs metric `tenant_alert_suppressed_total`. **|**
 **Breadcrumbs:** Alert rules, PagerDuty services, Guardian analytics dashboards. **|**

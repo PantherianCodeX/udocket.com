@@ -96,10 +96,10 @@ services:
   docs:
     build:
       context: .
-      dockerfile: packages/udocket_docs/Dockerfile
+      dockerfile: packages/docs_tooling/Dockerfile
     image: udocket-docs-toolbox:dev
     env_file:
-      - packages/udocket_docs/.env
+      - packages/docs_tooling/.env
     working_dir: /udocket
     volumes:
       - ${HOST_REPO_ROOT:-.}:/udocket:cached

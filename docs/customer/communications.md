@@ -556,7 +556,7 @@ ______________________________________________________________________
 
 **Purpose:** Keep the authoritative catalog of notification and portal SSE events in one place. **|**
 **Contract:** Publishers emit events that validate against the shared schemas; consumers implement the envelope contract and respect replay/SLO requirements. **|**
-**State:** Schemas live at `spec/schemas/sse/event_envelope.schema.json` with code‑generated models in `packages/udocket_core/events/schemas.py`. Redis streams back SSE buffers with 24 h retention. **|**
+**State:** Schemas live at `spec/schemas/sse/event_envelope.schema.json` with code‑generated models in `packages/core/events/schemas.py`. Redis streams back SSE buffers with 24 h retention. **|**
 **Failures & handling:** Schema drift or SLO regressions fail staging drills and block deploys; alerts `alert_sse_delivery_lag_high` and `alert_sse_snapshot_regression` route to on-call. **|**
 **Observability:** Dashboards “SSE Health” and “Notifications Fan-out” track `sse_client_delivery_lag_seconds`, `sse_snapshot_size_bytes`, `notifications_inapp_sent_total`. **|**
 **Breadcrumbs:** Publishers `apps/platform/events/*.py`, fan-out service `apps/platform/notifications/inapp.py`, tests `tests/platform/realtime/test_sse_payloads.py`, `tests/e2e/test_sse_reconnect.py`, `tests/e2e/test_sse_token_binding.py`. **|**

@@ -9,7 +9,7 @@ from typing import cast
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
-from packages.udocket_common.django.typing import TypedManager, get_typed_manager
+from packages.common.django.typing import TypedManager, get_typed_manager
 
 
 class Organization(models.Model):

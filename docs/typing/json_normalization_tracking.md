@@ -1,6 +1,6 @@
 # JSON Normalization Adoption — Tracking List
 
-This checklist tracks where to adopt the shared helpers from `packages/udocket_core/utils.json.py`:
+This checklist tracks where to adopt the shared helpers from `packages/core/utils.json.py`:
 
 - `normalize_json_object` — trim keys, optionally drop empty keys and nullish values
 - `coerce_json_object` — coerce to JSON shape without dropping data
@@ -28,11 +28,11 @@ Prefer `normalize_json_object` for UI/input metadata, provider options, and revi
 
 ## Candidates — Investigate First (may keep coerce_json_object)
 
-- packages/udocket_core/llm/runtime.py
+- packages/core/llm/runtime.py
   - Runtime coercions are intentionally lossless; keep `coerce_json_object`. Consider targeted normalization only for user-provided options.
-- packages/udocket_core/llm/config.py
+- packages/core/llm/config.py
   - Provider and assignment config parsing must preserve source; retain `coerce_json_object`.
-- packages/udocket_core/agents/compose_lib.py
+- packages/core/agents/compose_lib.py
   - Ingestion of summary/timeline/entity JSON. Retain `coerce_*` (avoid dropping data). Normalization could be scoped to UI-provided metadata only.
 - apps/platform/operations/services/analysis.py
   - Reading timeline/entity outputs from disk. Preserve payloads (`coerce_*`) to avoid unintentional data loss.
@@ -40,9 +40,9 @@ Prefer `normalize_json_object` for UI/input metadata, provider options, and revi
 ## Search References (current occurrences)
 
 - Ripgrep seeds (representative):
-  - packages/udocket_core/llm/runtime.py — multiple `coerce_json_object` uses (intended)
-  - packages/udocket_core/llm/config.py — multiple (intended)
-  - packages/udocket_core/agents/compose_lib.py — multiple (intended)
+  - packages/core/llm/runtime.py — multiple `coerce_json_object` uses (intended)
+  - packages/core/llm/config.py — multiple (intended)
+  - packages/core/agents/compose_lib.py — multiple (intended)
   - apps/platform/operations/task_modules/transcribe.py — base/meta candidates
   - apps/platform/operations/services/analysis.py — preserve
   - apps/platform/operations/services/compose.py — review

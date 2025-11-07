@@ -1,0 +1,1665 @@
+from __future__ import annotations
+
+# pyright: strict
+import hashlib
+import json
+import logging
+import re
+import time
+from collections.abc import Callable, Mapping
+from typing import Any, cast
+
+from langgraph.graph import END, START, StateGraph
+
+from packages.common.json_utils import (
+    JSONArray,
+    JSONObject,
+    JSONValue,
+    coerce_json_object,
+    coerce_json_value,
+    coerce_str,
+)
+
+from ...llm import LLMSettings
+from .context import assemble_context
+from .errors import ComposeStageError
+from .guards import (
+    compliance_report,
+    factuality_report,
+    markdown_structure_report,
+    sentence_length_report,
+)
+from .llm_runtime import invoke_llm
+from .logging_utils import ComposeLogContext, format_stage_message
+from .prompt_config import ComposePromptConfig, LanePrompts, QALanePrompts
+from .qa import run_lane_qa_review
+from .run import ComposeRun
+from .settings import ComposeConfig
+from .state import (
+    ComposeContext,
+    ComposeState,
+    GuardReport,
+    LaneActionDirective,
+    LaneAttempt,
+    LaneOutcome,
+    LaneQAResult,
+    LaneRuntimeState,
+    QAReviewerResult,
+    clone_guard_report,
+)
+
+
+class ComposeOrchestrator:
+    def __init__(
+        self,
+        *,
+        config: ComposeConfig,
+        settings: LLMSettings,
+        logger: logging.Logger,
+        qa_ok_status: set[str],
+        prompts: ComposePromptConfig,
+        compose_run: ComposeRun | None = None,
+        log_context: ComposeLogContext | None = None,
+    ) -> None:
+        self.config: ComposeConfig = config
+        self.settings: LLMSettings = settings
+        self.logger = logger
+        self._qa_ok_status = frozenset(status.lower() for status in qa_ok_status)
+        self.prompts = prompts
+        self._run_tracker = compose_run
+        if log_context is not None:
+            self._log_context = log_context
+        elif compose_run is not None:
+            self._log_context = compose_run.log_context
+        else:
+            self._log_context = ComposeLogContext(case_id="unknown", job_id="unknown")
+
+    def run(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> ComposeState:
+        return self._run_graph(
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+
+    async def run_async(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> ComposeState:
+        return await self._run_graph_async(
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+
+    # ------------------------------------------------------------------
+    # Orchestration
+
+    def _setup_graph(
+        self,
+        graph: Any,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> None:
+        def context_node(current: ComposeState) -> dict[str, object]:
+            return self._context_assembler(current, progress)
+
+        def client_guard_route(current: ComposeState) -> str:
+            return self._lane_post_guard_routing(current, "client")
+
+        def lawyer_guard_route(current: ComposeState) -> str:
+            return self._lane_post_guard_routing(current, "lawyer")
+
+        def client_qa_route(current: ComposeState) -> str:
+            return self._lane_qa_routing(current, "client")
+
+        def lawyer_qa_route(current: ComposeState) -> str:
+            return self._lane_qa_routing(current, "lawyer")
+
+        def compose_join_route(current: ComposeState) -> str:
+            return self._compose_join_routing(current)
+
+        def client_composer_node(current: ComposeState) -> dict[str, object]:
+            return self._draft_lane(
+                current,
+                lane="client",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def client_structure_node(current: ComposeState) -> dict[str, object]:
+            return self._structure_guard(current, lane="client", progress=progress)
+
+        def client_compliance_node(current: ComposeState) -> dict[str, object]:
+            return self._compliance_guard(current, lane="client", progress=progress)
+
+        def client_factual_node(current: ComposeState) -> dict[str, object]:
+            return self._factuality_gate(current, lane="client", progress=progress)
+
+        def client_revision_node(current: ComposeState) -> dict[str, object]:
+            return self._prepare_revision(current, lane="client", progress=progress)
+
+        def lawyer_composer_node(current: ComposeState) -> dict[str, object]:
+            return self._draft_lane(
+                current,
+                lane="lawyer",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def lawyer_structure_node(current: ComposeState) -> dict[str, object]:
+            return self._structure_guard(current, lane="lawyer", progress=progress)
+
+        def lawyer_compliance_node(current: ComposeState) -> dict[str, object]:
+            return self._compliance_guard(current, lane="lawyer", progress=progress)
+
+        def lawyer_factual_node(current: ComposeState) -> dict[str, object]:
+            return self._factuality_gate(current, lane="lawyer", progress=progress)
+
+        def lawyer_revision_node(current: ComposeState) -> dict[str, object]:
+            return self._prepare_revision(current, lane="lawyer", progress=progress)
+
+        def client_qa_node(current: ComposeState) -> dict[str, object]:
+            return self._lane_qa_reviewer(
+                current,
+                lane="client",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def lawyer_qa_node(current: ComposeState) -> dict[str, object]:
+            return self._lane_qa_reviewer(
+                current,
+                lane="lawyer",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def client_qa_revision_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_revision(
+                current,
+                lane="client",
+                progress=progress,
+            )
+
+        def client_qa_editor_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_editor(
+                current,
+                lane="client",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def lawyer_qa_revision_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_revision(
+                current,
+                lane="lawyer",
+                progress=progress,
+            )
+
+        def lawyer_qa_editor_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_lane_editor(
+                current,
+                lane="lawyer",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+
+        def compose_join_node(current: ComposeState) -> dict[str, object]:
+            return {}
+
+        def compose_join_wait_node(current: ComposeState) -> dict[str, object]:
+            return {}
+
+        def wait_for_client_node(current: ComposeState) -> dict[str, object]:
+            return {"stage_usage": {}}
+
+        def wait_for_lawyer_node(current: ComposeState) -> dict[str, object]:
+            return {"stage_usage": {}}
+
+        def qa_join_node(current: ComposeState) -> dict[str, object]:
+            return self._qa_join(current, progress=progress)
+
+        def release_node(current: ComposeState) -> dict[str, object]:
+            return self._release_gate(
+                current,
+                progress=progress,
+            )
+
+        graph.add_node("ContextAssembler", context_node)
+        graph.add_node("ClientComposer", client_composer_node)
+        graph.add_node("ClientStructureValidator", client_structure_node)
+        graph.add_node("ClientComplianceGuard", client_compliance_node)
+        graph.add_node("ClientFactualityGate", client_factual_node)
+        graph.add_node("ClientRevision", client_revision_node)
+        graph.add_node("LawyerComposer", lawyer_composer_node)
+        graph.add_node("LawyerStructureValidator", lawyer_structure_node)
+        graph.add_node("LawyerComplianceGuard", lawyer_compliance_node)
+        graph.add_node("LawyerFactualityGate", lawyer_factual_node)
+        graph.add_node("LawyerRevision", lawyer_revision_node)
+        graph.add_node("ClientQAReviewer", client_qa_node)
+        graph.add_node("LawyerQAReviewer", lawyer_qa_node)
+        graph.add_node("ClientQARevision", client_qa_revision_node)
+        graph.add_node("ClientQAEditor", client_qa_editor_node)
+        graph.add_node("LawyerQARevision", lawyer_qa_revision_node)
+        graph.add_node("LawyerQAEditor", lawyer_qa_editor_node)
+        graph.add_node("ComposeJoin", compose_join_node)
+        graph.add_node("ComposeJoinWait", compose_join_wait_node)
+        graph.add_node("WaitForClientLane", wait_for_client_node)
+        graph.add_node("WaitForLawyerLane", wait_for_lawyer_node)
+        graph.add_node("QAJoin", qa_join_node)
+        graph.add_node("ReleaseGate", release_node)
+
+        graph.add_edge(START, "ContextAssembler")
+        graph.add_edge("ContextAssembler", "ClientComposer")
+        graph.add_edge("ContextAssembler", "LawyerComposer")
+
+        graph.add_edge("ClientComposer", "ClientStructureValidator")
+        graph.add_edge("ClientStructureValidator", "ClientComplianceGuard")
+        graph.add_edge("ClientComplianceGuard", "ClientFactualityGate")
+        graph.add_edge("ClientRevision", "ClientComposer")
+
+        graph.add_edge("LawyerComposer", "LawyerStructureValidator")
+        graph.add_edge("LawyerStructureValidator", "LawyerComplianceGuard")
+        graph.add_edge("LawyerComplianceGuard", "LawyerFactualityGate")
+        graph.add_edge("LawyerRevision", "LawyerComposer")
+
+        graph.add_conditional_edges(
+            "ClientFactualityGate",
+            client_guard_route,
+            {"revise": "ClientRevision", "qa": "ClientQAReviewer"},
+        )
+        graph.add_conditional_edges(
+            "LawyerFactualityGate",
+            lawyer_guard_route,
+            {"revise": "LawyerRevision", "qa": "LawyerQAReviewer"},
+        )
+
+        graph.add_edge("WaitForClientLane", "ComposeJoin")
+        graph.add_edge("WaitForLawyerLane", "ComposeJoin")
+
+        graph.add_conditional_edges(
+            "ClientQAReviewer",
+            client_qa_route,
+            {
+                "revise": "ClientQARevision",
+                "editor": "ClientQAEditor",
+                "next": "WaitForClientLane",
+            },
+        )
+        graph.add_conditional_edges(
+            "LawyerQAReviewer",
+            lawyer_qa_route,
+            {
+                "revise": "LawyerQARevision",
+                "editor": "LawyerQAEditor",
+                "next": "WaitForLawyerLane",
+            },
+        )
+        graph.add_edge("ClientQARevision", "ClientComposer")
+        graph.add_edge("LawyerQARevision", "LawyerComposer")
+        graph.add_edge("ClientQAEditor", "ClientQAReviewer")
+        graph.add_edge("LawyerQAEditor", "LawyerQAReviewer")
+        graph.add_conditional_edges(
+            "ComposeJoin",
+            compose_join_route,
+            {
+                "qa": "QAJoin",
+                "wait": "ComposeJoinWait",
+            },
+        )
+        graph.add_edge("QAJoin", "ReleaseGate")
+        graph.add_edge("ReleaseGate", END)
+
+    def _run_graph(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> ComposeState:
+        graph: Any = StateGraph(ComposeState)
+        self._setup_graph(
+            graph,
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+        compiled = graph.compile()
+        result_state = compiled.invoke(state)
+        if isinstance(result_state, ComposeState):
+            return result_state
+        if isinstance(result_state, dict):
+            result_mapping = cast(dict[str, object], result_state)
+            for key, value in result_mapping.items():
+                setattr(state, key, value)
+            return state
+        raise ComposeStageError(
+            "compose.graph", f"Unexpected graph result type: {type(result_state)!r}"
+        )
+
+    async def _run_graph_async(
+        self,
+        *,
+        state: ComposeState,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> ComposeState:
+        graph: Any = StateGraph(ComposeState)
+        self._setup_graph(
+            graph,
+            state=state,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+        compiled = graph.compile()
+        result_state = await compiled.ainvoke(state)
+        if isinstance(result_state, ComposeState):
+            return result_state
+        if isinstance(result_state, dict):
+            result_mapping = cast(dict[str, object], result_state)
+            for key, value in result_mapping.items():
+                setattr(state, key, value)
+            return state
+        raise ComposeStageError(
+            "compose.graph", f"Unexpected graph result type: {type(result_state)!r}"
+        )
+
+    @staticmethod
+    def _lane_state(state: ComposeState, lane: str) -> LaneRuntimeState:
+        if lane == "client":
+            return state.client
+        if lane == "lawyer":
+            return state.lawyer
+        raise ComposeStageError(f"compose.{lane}", "Unknown lane")
+
+    def _lane_prompts(self, lane: str) -> LanePrompts:
+        if lane == "client":
+            return self.prompts.client
+        if lane == "lawyer":
+            return self.prompts.lawyer
+        raise ComposeStageError(f"compose.{lane}", "Unknown lane")
+
+    def _lane_qa_prompts(self, lane: str) -> QALanePrompts:
+        qa_prompts = self.prompts.qa
+        if lane == "client":
+            return qa_prompts.client
+        if lane == "lawyer":
+            return qa_prompts.lawyer
+        raise ComposeStageError(f"compose.{lane}", "Unknown lane")
+
+    def _context_assembler(
+        self,
+        state: ComposeState,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        stage_name = "compose.context"
+        start_time = time.perf_counter()
+        self._log(logging.INFO, stage_name, "start", {})
+        emit(progress, stage_name, "start", {})
+        try:
+            context = assemble_context(state.inputs)
+            state.context = context
+            emit(progress, stage_name, "complete", {})
+            self._log(logging.INFO, stage_name, "complete", {"has_context": True})
+            self._snapshot(stage_name, state)
+            return {"context": cast(object, context)}
+        finally:
+            duration = time.perf_counter() - start_time
+            self._register_stage_duration(state, stage_name, duration, lane_state=None)
+
+    def _draft_lane(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_state = self._lane_state(state, lane)
+        start_time = time.perf_counter()
+        context = state.context
+        if context is None:
+            raise ComposeStageError(f"compose.{lane}.draft", "Compose context missing")
+        is_revision = lane_state.revision_brief is not None
+        stage_name = f"compose.{lane}.{'revise' if is_revision else 'draft'}"
+        start_time = time.perf_counter()
+        next_attempt = lane_state.attempts + 1
+        if next_attempt > lane_state.max_attempts:
+            self._log(
+                logging.ERROR,
+                stage_name,
+                "max_attempts_exhausted",
+                {
+                    "lane": lane,
+                    "attempts": lane_state.attempts,
+                    "max_attempts": lane_state.max_attempts,
+                    "structure": self._guard_summary(lane_state.structure_report),
+                    "compliance": self._guard_summary(lane_state.compliance_report),
+                    "factuality": self._guard_summary(lane_state.factuality_report),
+                },
+            )
+            emit(
+                progress,
+                stage_name,
+                "max_attempts_exhausted",
+                coerce_json_object(
+                    {
+                        "lane": lane,
+                        "attempts": lane_state.attempts,
+                        "max_attempts": lane_state.max_attempts,
+                    }
+                ),
+            )
+            if self.config.qa_enforced:
+                raise ComposeStageError(
+                    stage_name, "Maximum attempts exhausted", lane=lane, attempt=lane_state.attempts
+                )
+
+        lane_state.current_source = "revise" if is_revision else "draft"
+        start_payload: JSONObject = {
+            "attempt": next_attempt,
+            "lane": lane,
+            "source": lane_state.current_source,
+        }
+        self._log(logging.INFO, stage_name, "start", dict(start_payload))
+        emit(progress, stage_name, "start", start_payload)
+        lane_state.attempts = next_attempt
+        lane_prompts = self._lane_prompts(lane)
+        temperature = (
+            self.config.temperature if lane == "client" else self.config.lawyer_temperature
+        )
+        if is_revision:
+            temperature = lane_state.config.revision_temperature
+        system_prompt = (
+            lane_prompts.revision_system_prompt if is_revision else lane_prompts.system_prompt
+        )
+        instruction = (
+            lane_prompts.revision_instruction if is_revision else lane_prompts.draft_instruction
+        )
+        user_prompt: str
+        if is_revision:
+            user_prompt = lane_user_prompt(
+                lane,
+                context,
+                lane_state.revision_brief,
+                locale=self.config.locale,
+                instruction=instruction,
+                previous_document=lane_state.document,
+                headings=list(lane_state.config.headings),
+                min_words=lane_state.config.min_words,
+                min_timestamp_references=lane_state.config.min_timestamp_references,
+            )
+        else:
+            user_prompt = lane_user_prompt(
+                lane,
+                context,
+                None,
+                locale=self.config.locale,
+                instruction=instruction,
+                headings=list(lane_state.config.headings),
+                min_words=lane_state.config.min_words,
+                min_timestamp_references=lane_state.config.min_timestamp_references,
+            )
+
+        document, usage, provider, model = invoke_llm(
+            stage=stage_name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            provider_credentials=provider_credentials,
+            config=self.config,
+            settings=self.settings,
+        )
+        lane_state.revision_brief = None
+        lane_state.document = document
+        doc_hash = stable_doc_fingerprint(document)
+        if (
+            is_revision
+            and lane_state.last_document_hash is not None
+            and doc_hash == lane_state.last_document_hash
+        ):
+            raise ComposeStageError(
+                stage_name, "Revision produced no changes", lane=lane, attempt=lane_state.attempts
+            )
+        lane_state.last_document_hash = doc_hash
+        lane_state.structure_report = None
+        lane_state.compliance_report = None
+        lane_state.factuality_report = None
+        lane_state.providers.append(provider)
+        lane_state.models.append(model)
+        lane_state.record_usage(stage_name, usage)
+        complete_payload: JSONObject = {
+            "attempt": lane_state.attempts,
+            "lane": lane,
+            "provider": provider,
+            "model": model,
+            "usage": dict(usage),
+            "source": lane_state.current_source,
+        }
+        emit(progress, stage_name, "complete", complete_payload)
+        self._log(logging.INFO, stage_name, "complete", dict(complete_payload))
+        result: dict[str, object] = {
+            lane: cast(object, lane_state),
+            "stage_usage": cast(object, {stage_name: dict(usage)}),
+        }
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return result
+
+    def _structure_guard(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_state = self._lane_state(state, lane)
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(f"compose.{lane}.structure", "No draft available")
+        stage_name = f"compose.{lane}.structure"
+        start_time = time.perf_counter()
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "source": lane_state.current_source},
+        )
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
+        )
+        per_section_min: Mapping[str, int] | None = None
+        per_section_max: Mapping[str, int] | None = None
+        if lane_state.config.lane == "client":
+            from .llm_profiles import (
+                CLIENT_MAX_WORDS_BY_SECTION as _CLIENT_MAX,
+            )
+            from .llm_profiles import (
+                CLIENT_MIN_WORDS_BY_SECTION as _CLIENT_MIN,
+            )
+
+            per_section_min = _CLIENT_MIN
+            per_section_max = _CLIENT_MAX
+        elif lane_state.config.lane == "lawyer":
+            from .llm_profiles import (
+                LAWYER_MAX_WORDS_BY_SECTION as _LAWYER_MAX,
+            )
+            from .llm_profiles import (
+                LAWYER_MIN_WORDS_BY_SECTION as _LAWYER_MIN,
+            )
+
+            per_section_min = _LAWYER_MIN
+            per_section_max = _LAWYER_MAX
+        report = markdown_structure_report(
+            document,
+            lane_state.config.headings,
+            min_words=lane_state.config.min_words,
+            per_section_min=per_section_min,
+            per_section_max=per_section_max,
+        )
+        if lane_state.config.readability_limit is not None:
+            readability = sentence_length_report(
+                document,
+                max_average_words=lane_state.config.readability_limit,
+            )
+            if not readability.ok:
+                report.errors.extend(readability.errors)
+                report.warnings.extend(readability.warnings)
+        lane_state.structure_report = report
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"structure": "ok" if report.ok else "fail"},
+                "errors": list(report.errors),
+                "warnings": list(report.warnings),
+            },
+        )
+        self._log(
+            logging.INFO,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "source": lane_state.current_source,
+                **self._guard_summary(report),
+            },
+        )
+        result: dict[str, object] = {lane: cast(object, lane_state)}
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return result
+
+    def _compliance_guard(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_state = self._lane_state(state, lane)
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(f"compose.{lane}.compliance", "No draft available")
+        stage_name = f"compose.{lane}.compliance"
+        start_time = time.perf_counter()
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "source": lane_state.current_source},
+        )
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
+        )
+        report = compliance_report(document)
+        lane_state.compliance_report = report
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "guards": {"compliance": "ok" if report.ok else "fail"},
+                "errors": list(report.errors),
+                "warnings": list(report.warnings),
+            },
+        )
+        self._log(
+            logging.INFO,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "source": lane_state.current_source,
+                **self._guard_summary(report),
+            },
+        )
+        result: dict[str, object] = {lane: cast(object, lane_state)}
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return result
+
+    def _factuality_gate(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_state = self._lane_state(state, lane)
+        document = lane_state.document
+        context = state.context
+        if document is None or context is None:
+            raise ComposeStageError(f"compose.{lane}.factuality", "Missing draft or context")
+        stage_name = f"compose.{lane}.factuality"
+        start_time = time.perf_counter()
+        current_source = lane_state.current_source
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "source": current_source},
+        )
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane, "source": lane_state.current_source},
+        )
+        report = factuality_report(
+            document,
+            claimable_atoms=context.claimable_atoms,
+            timeline_events=context.events,
+            min_timestamp_references=lane_state.config.min_timestamp_references,
+        )
+        lane_state.factuality_report = report
+        structure_snapshot = (
+            clone_guard_report(lane_state.structure_report)
+            if lane_state.structure_report
+            else GuardReport(ok=False, errors=["Structure report missing"])
+        )
+        compliance_snapshot = (
+            clone_guard_report(lane_state.compliance_report)
+            if lane_state.compliance_report
+            else GuardReport(ok=False, errors=["Compliance report missing"])
+        )
+        attempt_record = LaneAttempt(
+            attempt_number=lane_state.attempts,
+            source=lane_state.current_source,
+            document=document,
+            structure=structure_snapshot,
+            compliance=compliance_snapshot,
+            factuality=clone_guard_report(report),
+        )
+        lane_state.history.append(attempt_record)
+        lane_state.current_source = "draft"
+        user_prompt: JSONObject = {
+            "lane": lane,
+            "attempt": lane_state.attempts,
+            "guards": {"factuality": "ok" if report.ok else "fail"},
+            "errors": list(report.errors),
+            "warnings": list(report.warnings),
+        }
+        emit(progress, stage_name, "complete", user_prompt)
+        self._log(
+            logging.INFO,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "source": current_source,
+                **self._guard_summary(report),
+            },
+        )
+        lanes_update: dict[str, LaneOutcome] | None = None
+        if (
+            lane_state.structure_report
+            and lane_state.structure_report.ok
+            and lane_state.compliance_report
+            and lane_state.compliance_report.ok
+            and report.ok
+        ):
+            lanes_update = {lane: lane_state.to_outcome()}
+        updates: dict[str, object] = {lane: cast(object, lane_state)}
+        if lanes_update:
+            updates["lanes"] = cast(object, lanes_update)
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return updates
+
+    def _prepare_revision(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_state = self._lane_state(state, lane)
+        stage_name = f"compose.{lane}.revision"
+        start_time = time.perf_counter()
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {"attempt": lane_state.attempts, "lane": lane},
+        )
+        if (
+            lane_state.structure_report is None
+            or lane_state.compliance_report is None
+            or lane_state.factuality_report is None
+        ):
+            raise ComposeStageError(stage_name, "Revision requested before guard reports computed")
+        revision_brief = build_revision_brief(
+            self.prompts.revision_header_template,
+            lane,
+            lane_state.structure_report,
+            lane_state.compliance_report,
+            lane_state.factuality_report,
+        )
+        lane_state.revision_brief = revision_brief
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {"lane": lane, "attempt": lane_state.attempts},
+        )
+        result: dict[str, object] = {lane: cast(object, lane_state)}
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return result
+
+    def _qa_reviewer_step(
+        self,
+        state: ComposeState,
+        *,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        results: dict[str, object] = {}
+        results.update(
+            self._lane_qa_reviewer(
+                state,
+                lane="client",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+        )
+        results.update(
+            self._lane_qa_reviewer(
+                state,
+                lane="lawyer",
+                provider_credentials=provider_credentials,
+                progress=progress,
+            )
+        )
+        results.update(self._qa_join(state, progress=progress))
+        return results
+
+    def _lane_qa_reviewer(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        stage_name = f"compose.{lane}.qa_reviewer"
+        lane_state = self._lane_state(state, lane)
+        start_time = time.perf_counter()
+        start_payload: JSONObject = {
+            "lane": lane,
+            "iteration": state.qa_iterations,
+            "qa_enforced": self.config.qa_enforced,
+        }
+        self._log(logging.INFO, stage_name, "start", dict(start_payload))
+        emit(progress, stage_name, "start", start_payload)
+        if self.config.qa_enforced and state.qa_iterations >= self.config.qa_iteration_limit:
+            reason = "QA iteration limit reached; manual review recommended."
+            lane_result = LaneQAResult(
+                status="iteration_limit",
+                alerts=["QA iteration limit reached."],
+                recommendations=[],
+                staff_report=(
+                    "# Staff Report\n\nQA iteration limit reached; manual review recommended."
+                ),
+                provider="limit",
+                action=LaneActionDirective(action="none", reason=reason),
+                global_notes=reason,
+            )
+            state.qa_lane_results[lane] = lane_result
+            iteration_lane_outcome_update: dict[str, LaneOutcome] | None = None
+            if (
+                lane_state.structure_report
+                and lane_state.compliance_report
+                and lane_state.factuality_report
+            ):
+                iteration_lane_outcome_update = {lane: lane_state.to_outcome()}
+            emit(
+                progress,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": "iteration_limit",
+                    "iteration": state.qa_iterations,
+                    "limit": self.config.qa_iteration_limit,
+                },
+            )
+            self._log(
+                logging.WARNING,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": "iteration_limit",
+                    "iteration": state.qa_iterations,
+                    "limit": self.config.qa_iteration_limit,
+                },
+            )
+            self._snapshot(stage_name, state)
+            self._register_stage_duration(
+                state,
+                stage_name,
+                time.perf_counter() - start_time,
+                lane_state=lane_state,
+            )
+            iteration_updates: dict[str, object] = {
+                lane: cast(object, lane_state),
+                "qa_lane_results": {lane: lane_result},
+                "stage_usage": cast(object, {stage_name: {}}),
+            }
+            if iteration_lane_outcome_update:
+                iteration_updates["lanes"] = cast(object, iteration_lane_outcome_update)
+            return iteration_updates
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(stage_name, "Draft missing", lane=lane)
+        prompts = self._lane_qa_prompts(lane) if self.config.qa_enforced else None
+        if not self.config.qa_enforced:
+            lane_result = LaneQAResult(
+                status="skipped",
+                alerts=[],
+                recommendations=[],
+                staff_report="# Staff Report\n\nQA disabled by configuration.",
+                provider="disabled",
+                action=LaneActionDirective(action="none"),
+                global_notes="QA disabled by configuration.",
+            )
+            state.qa_lane_results[lane] = lane_result
+            lane_outcome_update: dict[str, LaneOutcome] | None = None
+            if (
+                lane_state.structure_report
+                and lane_state.compliance_report
+                and lane_state.factuality_report
+            ):
+                lane_outcome_update = {lane: lane_state.to_outcome()}
+            emit(
+                progress,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": lane_result.status,
+                    "action": lane_result.action.action,
+                    "provider": "disabled",
+                    "model": "n/a",
+                },
+            )
+            self._log(
+                logging.INFO,
+                stage_name,
+                "complete",
+                {
+                    "lane": lane,
+                    "status": lane_result.status,
+                    "action": lane_result.action.action,
+                    "provider": "disabled",
+                    "model": "n/a",
+                    "alerts": 0,
+                    "recommendations": 0,
+                },
+            )
+            self._snapshot(stage_name, state)
+            self._register_stage_duration(
+                state,
+                stage_name,
+                time.perf_counter() - start_time,
+                lane_state=lane_state,
+            )
+            updates: dict[str, object] = {
+                lane: cast(object, lane_state),
+                "qa_lane_results": {lane: lane_result},
+                "stage_usage": cast(object, {stage_name: {}}),
+            }
+            if lane_outcome_update:
+                updates["lanes"] = cast(object, lane_outcome_update)
+            return updates
+        lane_result, usage, provider, model = run_lane_qa_review(
+            state=state,
+            lane=lane,
+            document=document,
+            config=self.config,
+            settings=self.settings,
+            provider_credentials=provider_credentials,
+            logger=self.logger,
+            system_prompt=prompts.system_prompt if prompts else "",
+        )
+        lane_state.record_usage(stage_name, usage)
+        lane_state.providers.append(provider)
+        lane_state.models.append(model)
+        state.qa_lane_results[lane] = lane_result
+        state.qa_iterations += 1
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "status": lane_result.status,
+                "action": lane_result.action.action,
+                "reason": lane_result.action.reason,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+            },
+        )
+        self._log(
+            logging.INFO,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "status": lane_result.status,
+                "action": lane_result.action.action,
+                "reason": lane_result.action.reason,
+                "provider": provider,
+                "model": model,
+                "alerts": len(lane_result.alerts),
+                "recommendations": len(lane_result.recommendations),
+            },
+        )
+        self._snapshot(stage_name, state)
+        self._register_stage_duration(
+            state, stage_name, time.perf_counter() - start_time, lane_state=lane_state
+        )
+        return {
+            lane: cast(object, lane_state),
+            "stage_usage": cast(object, {stage_name: dict(usage)}),
+            "qa_lane_results": {lane: lane_result},
+        }
+
+    def _lane_qa_routing(self, state: ComposeState, lane: str) -> str:
+        lane_result = state.qa_lane_results.get(lane)
+        if lane_result is None or not self.config.qa_enforced:
+            return "next"
+        action = (lane_result.action.action or "none").strip().lower()
+        if action == "revise":
+            lane_state = self._lane_state(state, lane)
+            if lane_state.attempts >= lane_state.max_attempts:
+                reason = "Maximum lane attempts reached; releasing without QA revision."
+                lane_result.action.reason = reason
+                self._log(
+                    logging.WARNING,
+                    f"compose.{lane}.qa_reviewer",
+                    "revision_skipped_max_attempts",
+                    {
+                        "lane": lane,
+                        "attempts": lane_state.attempts,
+                        "max_attempts": lane_state.max_attempts,
+                    },
+                )
+                return "next"
+            return "revise"
+        if action == "editor":
+            return "editor"
+        return "next"
+
+    def _lane_post_guard_routing(self, state: ComposeState, lane: str) -> str:
+        lane_state = self._lane_state(state, lane)
+        structure_ok = lane_state.structure_report.ok if lane_state.structure_report else False
+        compliance_ok = lane_state.compliance_report.ok if lane_state.compliance_report else False
+        factuality_ok = lane_state.factuality_report.ok if lane_state.factuality_report else False
+        if structure_ok and compliance_ok and factuality_ok:
+            return "qa"
+        return "revise"
+
+    def _compose_join_routing(self, state: ComposeState) -> str:
+        for lane in ("client", "lawyer"):
+            if lane not in state.qa_lane_results:
+                return "wait"
+        return "qa"
+
+    def _qa_join(
+        self,
+        state: ComposeState,
+        *,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        stage_name = "compose.qa_join"
+        start_time = time.perf_counter()
+        client_result = state.qa_lane_results.get("client")
+        lawyer_result = state.qa_lane_results.get("lawyer")
+        if client_result is None or lawyer_result is None:
+            raise ComposeStageError(stage_name, "Lane QA results missing")
+        staff_sections: list[str] = []
+        for lane, result in (("client", client_result), ("lawyer", lawyer_result)):
+            lane_title = "Client" if lane == "client" else "Lawyer"
+            section_lines = [
+                f"## {lane_title} Lane QA",
+                "",
+                result.staff_report.strip() or "No staff report supplied.",
+            ]
+            if result.global_notes:
+                section_lines.extend(["", f"_Notes_: {result.global_notes.strip()}"])
+            staff_sections.append("\n".join(section_lines).strip())
+        staff_report = "# Staff Report\n\n" + "\n\n---\n\n".join(staff_sections)
+        final_alerts = list(client_result.alerts) + list(lawyer_result.alerts)
+        final_recommendations = list(client_result.recommendations) + list(
+            lawyer_result.recommendations
+        )
+        combined_global_notes = "\n".join(
+            filter(None, [client_result.global_notes, lawyer_result.global_notes])
+        ).strip()
+        provider_label = (
+            ",".join(filter(None, [client_result.provider, lawyer_result.provider])) or "synthetic"
+        )
+        lane_actions: dict[str, LaneActionDirective] = {
+            "client": LaneActionDirective(
+                action=client_result.action.action,
+                revision_brief=client_result.action.revision_brief,
+                reason=client_result.action.reason,
+            ),
+            "lawyer": LaneActionDirective(
+                action=lawyer_result.action.action,
+                revision_brief=lawyer_result.action.revision_brief,
+                reason=lawyer_result.action.reason,
+            ),
+        }
+        qa_result = QAReviewerResult(
+            status="ok"
+            if all(action.action == "none" for action in lane_actions.values())
+            else "attention",
+            alerts=final_alerts,
+            recommendations=final_recommendations,
+            staff_report=staff_report,
+            provider=provider_label,
+            lane_actions=lane_actions,
+            global_notes=combined_global_notes,
+        )
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "status": qa_result.status,
+                "provider": qa_result.provider,
+                "client_action": lane_actions["client"].action,
+                "lawyer_action": lane_actions["lawyer"].action,
+            },
+        )
+        state.qa = qa_result
+        self._snapshot(stage_name, state)
+        self._register_stage_duration(
+            state, stage_name, time.perf_counter() - start_time, lane_state=None
+        )
+        return {"qa": qa_result}
+
+    def _qa_decision(self, state: ComposeState) -> str:
+        qa = state.qa
+        if qa is None:
+            raise ComposeStageError("compose.qa_reviewer", "QA reviewer result missing")
+        normalized_status = qa.status.lower().strip()
+        if normalized_status in self._qa_ok_status:
+            return "ReleaseGate"
+        for lane in ("client", "lawyer"):
+            directive = qa.lane_actions.get(lane)
+            if directive is None:
+                continue
+            action = (directive.action or "none").strip().lower()
+            if action == "revise":
+                return "ClientQARevision" if lane == "client" else "LawyerQARevision"
+            if action == "editor":
+                return "ClientQAEditor" if lane == "client" else "LawyerQAEditor"
+        raise ComposeStageError(
+            "compose.qa_reviewer",
+            "QA reported failure without actionable lane directives",
+        )
+
+    def _qa_lane_revision(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_result = state.qa_lane_results.get(lane)
+        if lane_result is None:
+            raise ComposeStageError(
+                f"compose.{lane}.qa_revision", "Lane QA result missing", lane=lane
+            )
+        directive = lane_result.action
+        stage_name = f"compose.{lane}.qa_revision"
+        start_time = time.perf_counter()
+        if (directive.action or "none").strip().lower() != "revise":
+            raise ComposeStageError(stage_name, "No revision directive available", lane=lane)
+        revision_brief = (directive.revision_brief or "").strip()
+        if not revision_brief:
+            raise ComposeStageError(stage_name, "QA requested revision without brief", lane=lane)
+        lane_state = self._lane_state(state, lane)
+        self._log(
+            logging.WARNING,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts + 1, "reason": directive.reason},
+        )
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts + 1,
+                "revision_brief": revision_brief,
+                "reason": directive.reason,
+            },
+        )
+        lane_state.revision_brief = revision_brief
+        lane_state.current_source = "revise"
+        lane_state.structure_report = None
+        lane_state.compliance_report = None
+        lane_state.factuality_report = None
+        lane_state.editor_attempted = False
+        state.qa_lane_results.pop(lane, None)
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {"lane": lane, "revision_brief": revision_brief, "reason": directive.reason},
+        )
+        self._log(
+            logging.WARNING,
+            stage_name,
+            "complete",
+            {"lane": lane, "reason": directive.reason},
+        )
+        result: dict[str, object] = {
+            lane: cast(object, lane_state),
+            "lanes": cast(object, {lane: None}),
+        }
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return result
+
+    def _qa_lane_editor(
+        self,
+        state: ComposeState,
+        *,
+        lane: str,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_result = state.qa_lane_results.get(lane)
+        if lane_result is None:
+            raise ComposeStageError(f"compose.{lane}.editor", "Lane QA result missing", lane=lane)
+        directive = lane_result.action
+        if (directive.action or "none").strip().lower() != "editor":
+            raise ComposeStageError(
+                f"compose.{lane}.editor", "No editor directive available", lane=lane
+            )
+        updates = self._run_lane_editor(
+            state=state,
+            lane=lane,
+            directive=directive,
+            provider_credentials=provider_credentials,
+            progress=progress,
+        )
+        state.qa_lane_results.pop(lane, None)
+        return updates
+
+    def _run_lane_editor(
+        self,
+        *,
+        state: ComposeState,
+        lane: str,
+        directive: LaneActionDirective,
+        provider_credentials: Mapping[str, JSONObject],
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        lane_state = self._lane_state(state, lane)
+        stage_name = f"compose.{lane}.editor"
+        start_time = time.perf_counter()
+        if lane_state.editor_attempted:
+            raise ComposeStageError(stage_name, "Editor already attempted", lane=lane)
+        document = lane_state.document
+        if document is None:
+            raise ComposeStageError(stage_name, "No draft available for editor", lane=lane)
+        lane_state.current_source = "editor"
+        revision_brief = (directive.revision_brief or "").strip()
+        known_issues = known_issues_from_brief(revision_brief)
+        lane_prompts = self._lane_prompts(lane)
+        constraints_payload = coerce_json_object(
+            {
+                "headings": list(lane_state.config.headings),
+                "min_words": lane_state.config.min_words,
+                "min_timestamp_references": lane_state.config.min_timestamp_references,
+                "tone": lane,
+            }
+        )
+        allowed_edits: JSONArray = [
+            coerce_json_value(item)
+            for item in [
+                "formatting",
+                "punctuation",
+                "grammar",
+                "compliance wording",
+                "timestamp placement",
+            ]
+        ]
+        known_issues_json: JSONArray = [coerce_json_value(item) for item in known_issues]
+        base_payload: dict[str, JSONValue] = {
+            "document": document,
+            "constraints": constraints_payload,
+            "known_issues": known_issues_json,
+            "allowed_edits": allowed_edits,
+        }
+        if revision_brief:
+            base_payload["revision_brief"] = revision_brief
+        base_payload["locale"] = self.config.locale
+        system_prompt = lane_prompts.editor_system_prompt
+        base_payload["instruction"] = lane_prompts.editor_instruction
+        user_prompt_payload = coerce_json_object(base_payload)
+        user_prompt = json.dumps(user_prompt_payload, ensure_ascii=False)
+        self._log(
+            logging.INFO,
+            stage_name,
+            "start",
+            {"lane": lane, "attempt": lane_state.attempts, "reason": directive.reason},
+        )
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {
+                "lane": lane,
+                "attempt": lane_state.attempts,
+                "revision_brief": revision_brief,
+                "reason": directive.reason,
+            },
+        )
+        response, usage, provider, model = invoke_llm(
+            stage=stage_name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.0,
+            provider_credentials=provider_credentials,
+            config=self.config,
+            settings=self.settings,
+        )
+        try:
+            parsed = json.loads(response)
+        except json.JSONDecodeError as exc:
+            raise ComposeStageError(
+                stage_name,
+                f"Invalid editor response: {exc}",
+                lane=lane,
+                provider=provider,
+                model=model,
+            ) from exc
+        new_document = coerce_str(parsed.get("document")) or ""
+        if not new_document.strip():
+            raise ComposeStageError(
+                stage_name,
+                "Editor returned empty document",
+                lane=lane,
+                provider=provider,
+                model=model,
+            )
+        change_log_raw = parsed.get("change_log")
+        change_log: list[str] = []
+        if isinstance(change_log_raw, list):
+            for item in cast(list[JSONValue], change_log_raw):
+                entry = coerce_str(item) if isinstance(item, str) else None
+                if entry:
+                    change_log.append(entry)
+        lane_state.document = new_document
+        lane_state.record_usage(stage_name, usage)
+        lane_state.providers.append(provider)
+        lane_state.models.append(model)
+        lane_state.editor_attempted = True
+        change_log_payload: JSONArray = [coerce_json_value(entry) for entry in change_log]
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            {
+                "lane": lane,
+                "provider": provider,
+                "model": model,
+                "usage": dict(usage),
+                "change_log": change_log_payload,
+            },
+        )
+        self._log(
+            logging.INFO,
+            stage_name,
+            "complete",
+            {"lane": lane, "provider": provider, "changes": len(change_log)},
+        )
+        result: dict[str, object] = {lane: cast(object, lane_state)}
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=lane_state)
+        return result
+
+    def _release_gate(
+        self,
+        state: ComposeState,
+        *,
+        progress: Callable[[str, str, JSONObject], None] | None,
+    ) -> dict[str, object]:
+        stage_name = "compose.release_gate"
+        start_time = time.perf_counter()
+        emit(
+            progress,
+            stage_name,
+            "start",
+            {},
+        )
+        client_outcome = state.lanes.get("client")
+        lawyer_outcome = state.lanes.get("lawyer")
+        if client_outcome is None or lawyer_outcome is None:
+            raise ComposeStageError(stage_name, "Missing lane outcomes")
+        lane_status = lane_status_snapshot(client_outcome, lawyer_outcome)
+        emit(
+            progress,
+            stage_name,
+            "complete",
+            lane_status,
+        )
+        self._snapshot(stage_name, state)
+        duration = time.perf_counter() - start_time
+        self._register_stage_duration(state, stage_name, duration, lane_state=None)
+        return {}
+
+    def _snapshot(self, stage: str, state: ComposeState) -> None:
+        if self._run_tracker is None:
+            return
+        try:
+            self._run_tracker.record(stage, state)
+        except Exception:  # pragma: no cover - defensive
+            self.logger.debug("compose.snapshot_failed", extra={"stage": stage}, exc_info=True)
+
+    @staticmethod
+    def _json_default(value: object) -> str:
+        return repr(value)
+
+    def _log(self, level: int, stage: str, event: str, details: Mapping[str, object]) -> None:
+        user_prompt: dict[str, object] = {"stage": stage, "event": event}
+        user_prompt.update(dict(details))
+        try:
+            serialized = json.dumps(
+                user_prompt,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=self._json_default,
+            )
+            message = format_stage_message(self._log_context, stage, event, user_prompt)
+            self.logger.log(
+                level,
+                message,
+                extra={
+                    "compose": user_prompt,
+                    "event": f"{stage}.{event}",
+                    "component": stage,
+                    "serialized": serialized,
+                },
+            )
+        except Exception:  # pragma: no cover - defensive
+            self.logger.debug(
+                "compose.logging_failed", extra={"stage": stage, "event": event}, exc_info=True
+            )
+
+    @staticmethod
+    def _guard_summary(report: GuardReport | None) -> dict[str, object]:
+        if report is None:
+            return {
+                "ok": None,
+                "error_count": 0,
+                "warning_count": 0,
+                "errors": [],
+                "warnings": [],
+            }
+        return {
+            "ok": report.ok,
+            "error_count": len(report.errors),
+            "warning_count": len(report.warnings),
+            "errors": list(report.errors)[:5],
+            "warnings": list(report.warnings)[:5],
+        }
+
+    def _register_stage_duration(
+        self,
+        state: ComposeState,
+        stage: str,
+        duration: float,
+        *,
+        lane_state: LaneRuntimeState | None,
+    ) -> None:
+        if duration <= 0:
+            return
+        if lane_state is not None:
+            lane_state.record_duration(stage, duration)
+        state.stage_durations[stage] = state.stage_durations.get(stage, 0.0) + duration
+
+
+def known_issues_from_brief(brief: str) -> list[str]:
+    cleaned: list[str] = []
+    for raw_line in brief.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.endswith(":"):
+            continue
+        cleaned_value = stripped.lstrip("-* ").strip()
+        if cleaned_value:
+            cleaned.append(cleaned_value)
+    return cleaned[:20]
+
+
+def lane_user_prompt(
+    lane: str,
+    context: ComposeContext,
+    revision_brief: str | None,
+    *,
+    locale: str,
+    instruction: str,
+    previous_document: str | None = None,
+    headings: list[str] | None = None,
+    min_words: int | None = None,
+    min_timestamp_references: int | None = None,
+) -> str:
+    user_prompt: dict[str, JSONValue] = {
+        "context": coerce_json_object(
+            {
+                "claimable_atoms": context.claimable_atoms,
+                "events": context.events,
+                "facts": context.facts,
+                "issues": context.issues,
+                "parties": context.parties,
+                "procedural": context.procedural,
+            }
+        ),
+        "lane": lane,
+        "locale": locale,
+        "instruction": instruction,
+    }
+    if revision_brief:
+        user_prompt["revision_brief"] = revision_brief
+    if previous_document:
+        user_prompt["previous_document"] = previous_document
+    if headings:
+        user_prompt["headings"] = coerce_json_value(headings)
+    if min_words is not None:
+        user_prompt["min_words"] = min_words
+    if min_timestamp_references is not None:
+        user_prompt["min_timestamp_references"] = min_timestamp_references
+    return json.dumps(user_prompt, ensure_ascii=False)
+
+
+def stable_doc_fingerprint(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def build_revision_brief(
+    template: str,
+    lane: str,
+    structure: GuardReport,
+    compliance: GuardReport,
+    factuality: GuardReport,
+) -> str:
+    sections: list[str] = []
+    if structure.errors or structure.warnings:
+        sections.append("Structure:")
+        for item in structure.errors:
+            sections.append(f"- {item}")
+        for item in structure.warnings:
+            sections.append(f"- (warning) {item}")
+    if compliance.errors or compliance.warnings:
+        sections.append("Compliance:")
+        for item in compliance.errors:
+            sections.append(f"- {item}")
+        for item in compliance.warnings:
+            sections.append(f"- (warning) {item}")
+    if factuality.errors or factuality.warnings:
+        sections.append("Factuality:")
+        for item in factuality.errors:
+            sections.append(f"- {item}")
+        for item in factuality.warnings:
+            sections.append(f"- (warning) {item}")
+    if not sections:
+        sections.append("No issues detected; maintain required style and references.")
+    header = template.format(lane=lane)
+    return "\n".join([header, *sections])
+
+
+def lane_status_snapshot(client: LaneOutcome, lawyer: LaneOutcome) -> JSONObject:
+    return coerce_json_object(
+        {
+            "client": {
+                "attempts": client.attempts,
+                "structure": "ok" if client.structure_report.ok else "fail",
+                "compliance": "ok" if client.compliance_report.ok else "fail",
+                "factuality": "ok" if client.factuality_report.ok else "fail",
+            },
+            "lawyer": {
+                "attempts": lawyer.attempts,
+                "structure": "ok" if lawyer.structure_report.ok else "fail",
+                "compliance": "ok" if lawyer.compliance_report.ok else "fail",
+                "factuality": "ok" if lawyer.factuality_report.ok else "fail",
+            },
+        }
+    )
+
+
+def emit(
+    progress: Callable[[str, str, JSONObject], None] | None,
+    stage: str,
+    event: str,
+    user_prompt: JSONObject,
+) -> None:
+    envelope: JSONObject = {"stage": stage, "event": event}
+    for key, value in user_prompt.items():
+        envelope[key] = value
+    if progress is None:
+        logging.getLogger("udocket.compose.agent").debug(
+            "compose.stage",
+            extra={"stage": stage, "event": event, "user_prompt": envelope},
+        )
+        return
+    try:
+        progress(stage, event, envelope)
+    except Exception:
+        logging.getLogger("udocket.compose.agent").debug(
+            "compose.progress_callback_failed", exc_info=True
+        )
+
+
+__all__ = [
+    "ComposeOrchestrator",
+    "emit",
+    "known_issues_from_brief",
+    "lane_status_snapshot",
+    "lane_user_prompt",
+    "stable_doc_fingerprint",
+    "build_revision_brief",
+]

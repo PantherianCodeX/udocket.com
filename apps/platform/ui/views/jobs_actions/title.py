@@ -11,7 +11,7 @@ from django.views.decorators.http import require_http_methods
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations.utils import append_job_log, update_job_meta
-from packages.udocket_common.json_utils import stringify_json
+from packages.common.json_utils import stringify_json
 
 from ..auth import ensure_authenticated
 from ..contexts import job_detail_context, user_can_review_case

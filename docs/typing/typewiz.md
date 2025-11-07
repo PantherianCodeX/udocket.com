@@ -19,37 +19,37 @@ Local usage
   uv run --project apps/platform --extra dev typewiz audit \
     --mode current \
     --fail-on warnings \
-    --manifest reports/typing/typing_audit.json \
+    --manifest out/test-reports/typing/typing_audit.json \
     --readiness \
     --readiness-status blocked \
     --readiness-status ready \
-    apps/platform packages/udocket_common tests
+    apps/platform packages/common tests
   ```
 
 CI/Nightly
 ----------
 
-- CI job `Typewiz Audit` runs on every push/PR, uploads `reports/typing/*` artifacts, and does not block builds.
+- CI job `Typewiz Audit` runs on every push/PR, uploads `out/test-reports/typing/*` artifacts, and does not block builds.
 - Nightly job `Typewiz Nightly Audit` posts a summary to the workflow summary and uploads artifacts.
 
 Ratcheting plan
 ---------------
 
 - Keep repo-wide baseline (`pyright` baseline) via `typewiz.toml`.
-- Enforce strict zones via per-folder overrides `typewiz.dir.toml` starting with `packages/udocket_core/logging`.
+- Enforce strict zones via per-folder overrides `typewiz.dir.toml` starting with `packages/core/logging`.
 - Expand strict zones incrementally as folders reach zero diagnostics. Current strict zones:
-  - `packages/udocket_core/logging/` (strict)
+  - `packages/core/logging/` (strict)
   - `apps/platform/admin/` (strict)
   - `apps/platform/authorization/` (strict)
   - `apps/platform/jobs/` (strict)
-  - Candidates (validate, then promote): `tests/`, `packages/udocket_core/agents/`, `apps/platform/operations/`
+  - Candidates (validate, then promote): `tests/`, `packages/core/agents/`, `apps/platform/operations/`
 - When stable, remove legacy ad-hoc typing steps and make the typewiz CI job blocking.
 
 Configuration
 -------------
 
 - Root config: `typewiz.toml` sets runners, paths, and profiles.
-- Folder override example (strict): `packages/udocket_core/logging/typewiz.dir.toml`.
+- Folder override example (strict): `packages/core/logging/typewiz.dir.toml`.
 
 Readiness workflow (v0.1.1)
 ---------------------------
@@ -68,4 +68,4 @@ Notes
   - `TYPEWIZ_STATUSES="blocked close ready"` to print multiple buckets at once when using `make typing-readiness`.
   - `TYPEWIZ_LEVEL=file` for per-file listings.
   - `TYPEWIZ_LIMIT=5` to tighten the output focus.
-- Shared agent payloads (e.g., `packages.udocket_common.agents.TranscriptionResult`) keep platform and core modules aligned—prefer these over ad-hoc dicts when wiring new jobs.
+- Shared agent payloads (e.g., `packages.common.agents.TranscriptionResult`) keep platform and core modules aligned—prefer these over ad-hoc dicts when wiring new jobs.

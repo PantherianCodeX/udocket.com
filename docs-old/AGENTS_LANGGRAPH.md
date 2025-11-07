@@ -161,12 +161,12 @@ attempts: dict[str, int]
 
 
 ## Implementation Plan
-1) Implement `packages/udocket_core/agents/analyze_lib.py` (config, agent, pipeline, Azure REST client).
+1) Implement `packages/core/agents/analyze_lib.py` (config, agent, pipeline, Azure REST client).
 2) Update `apps/platform/operations/tasks.py:analyze_job` to use AnalyzeAgent, pass intake fields.
 3) Ensure versioned outputs and ops logs; register CaseArtifact for summary.
 4) Extend timeline/graph tasks to optionally read `timeline_seeds`/`entity_hints` if present.
 5) Add unit tests for transcript parsing, versioned filenames, and schema shapes; keep flow test passing without Azure.
-6) Implement `packages/udocket_core/agents/langgraph_orchestrator.py` using LangGraph for node orchestration; LangGraph is a required dependency in the agent stack.
+6) Implement `packages/core/agents/langgraph_orchestrator.py` using LangGraph for node orchestration; LangGraph is a required dependency in the agent stack.
 
 
 ## LangGraph Skeleton
