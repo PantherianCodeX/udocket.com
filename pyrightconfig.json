@@ -9,7 +9,9 @@
     "packages",
     "apps/platform/operations"
   ],
-  "strict": [],
+  "strict": [
+    "packages/ai"
+  ],
 // STAGE 1
   "reportArgumentType": "warning",
   "reportMissingTypeStubs": "warning",

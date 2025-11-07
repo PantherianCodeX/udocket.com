@@ -3,6 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .identifiers import (
+    ArtifactID,
+    CaseID,
+    CapabilityName,
+    JobID,
+    ModelName,
+    OrganizationID,
+    ProviderName,
+    RouteName,
+)
 
 class LanguageCode(StrEnum):
     """Supported language identifiers for AI-powered flows."""
@@ -11,27 +21,37 @@ class LanguageCode(StrEnum):
     FR_CA = "fr-CA"
 
 
+class RegionCode(StrEnum):
+    """Azure Speech / OpenAI residency-compliant regions."""
+
+    CANADA_CENTRAL = "canadacentral"
+    CANADA_EAST = "canadaeast"
+
+
 class AgentTask(StrEnum):
     """Canonical agent task identifiers used for routing and telemetry."""
 
     SUMMARIZE = "summarize"
-    COMPOSE = "compose"
+    OUTLINE = "outline"
     TIMELINE = "timeline"
-    RELATIONSHIP = "relationship"
+    ENTITIES = "entities"
+    RELATIONSHIP = "relationship"  # alias for backward compat
+    COMPOSE = "compose"
+    QA_REVIEW = "qa_review"
     CHAT = "chat"
     EMBED = "embed"
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class CaseContext:
     """Case-scoped identifiers that travel with every AI request."""
 
-    org_id: str
-    case_id: str
-    job_id: str | None = None
+    org_id: OrganizationID
+    case_id: CaseID
+    job_id: JobID | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class ProviderCallMetrics:
     """Structured telemetry returned by provider adapters."""
 
@@ -45,8 +65,15 @@ UUIDStr = str
 
 __all__ = [
     "AgentTask",
+    "ArtifactID",
     "CaseContext",
+    "CapabilityName",
     "LanguageCode",
+    "RegionCode",
+    "ModelName",
+    "OrganizationID",
     "ProviderCallMetrics",
+    "ProviderName",
+    "RouteName",
     "UUIDStr",
 ]

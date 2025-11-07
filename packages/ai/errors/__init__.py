@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .types import AgentTask
+from ..types import AgentTask, RegionCode
+from ..types.identifiers import CapabilityName, ProviderName
 
 
 class AIError(RuntimeError):
@@ -33,8 +34,57 @@ class RouteNotFoundError(AIError):
         return f"{self.detail} (task={self.task.value}{provider_part})"
 
 
+@dataclass(eq=False)
+class ProviderConfigurationError(AIError):
+    """Raised when provider credentials or endpoints are invalid."""
+
+    provider: ProviderName
+    detail: str
+
+    def __str__(self) -> str:
+        return f"{self.detail} (provider={self.provider})"
+
+
+@dataclass(eq=False)
+class ResidencyViolationError(AIError):
+    """Raised when a request attempts to use a disallowed region."""
+
+    region: RegionCode
+    detail: str = "Requested region is not allowed for this tenant."
+
+    def __str__(self) -> str:
+        return f"{self.detail} (region={self.region.value})"
+
+
+@dataclass(eq=False)
+class EgressPolicyError(AIError):
+    """Raised when policy guards prohibit sending the payload to a provider."""
+
+    provider: ProviderName
+    reason: str
+
+    def __str__(self) -> str:
+        return f"Egress blocked for provider={self.provider}: {self.reason}"
+
+
+@dataclass(eq=False)
+class CapabilityLimitExceeded(AIError):
+    """Raised when concurrency or quota limits would be exceeded."""
+
+    task: AgentTask
+    capability: CapabilityName
+    detail: str = "Capability limit exceeded."
+
+    def __str__(self) -> str:
+        return f"{self.detail} (task={self.task.value}, capability={self.capability})"
+
+
 __all__ = [
     "AIError",
     "ProviderNotConfiguredError",
     "RouteNotFoundError",
+    "ProviderConfigurationError",
+    "ResidencyViolationError",
+    "EgressPolicyError",
+    "CapabilityLimitExceeded",
 ]

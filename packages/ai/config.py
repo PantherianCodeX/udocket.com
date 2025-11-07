@@ -4,19 +4,32 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
-from .types import AgentTask, LanguageCode
+from .types import AgentTask, LanguageCode, RegionCode
+from .types.identifiers import ModelName, ProviderName
 from .utils import ensure_language
+
+DEFAULT_ROUTED_TASKS: tuple[AgentTask, ...] = (
+    AgentTask.SUMMARIZE,
+    AgentTask.OUTLINE,
+    AgentTask.TIMELINE,
+    AgentTask.ENTITIES,
+    AgentTask.RELATIONSHIP,
+    AgentTask.COMPOSE,
+    AgentTask.QA_REVIEW,
+    AgentTask.CHAT,
+    AgentTask.EMBED,
+)
 
 
 @dataclass(frozen=True)
 class ProviderAccount:
     """Configuration for a single AI provider account."""
 
-    name: str
+    name: ProviderName
     provider_type: str
-    region: str
+    region: RegionCode
     endpoint: str | None = None
-    default_model: str | None = None
+    default_model: ModelName | None = None
     api_key_env: str | None = None
 
 
@@ -25,8 +38,8 @@ class ModelRoute:
     """Maps a task to a provider/model pair."""
 
     task: AgentTask
-    provider: str
-    model: str
+    provider: ProviderName
+    model: ModelName
 
 
 @dataclass(frozen=True)
@@ -52,27 +65,25 @@ class AISettings:
         """Construct settings from environment variables."""
 
         data = dict(env or os.environ)
-        region = data.get("AZURE_OPENAI_REGION", "canadacentral")
+        region_value = data.get("AZURE_OPENAI_REGION", RegionCode.CANADA_CENTRAL.value)
+        try:
+            region = RegionCode(region_value)
+        except ValueError:
+            region = RegionCode.CANADA_CENTRAL
         provider_name = data.get("UDOCKET_AI_PROVIDER", "azure-openai")
-        default_model = data.get("UDOCKET_AI_MODEL", "gpt-4o")
+        default_model_value = data.get("UDOCKET_AI_MODEL", "gpt-4o")
+        model_name = ModelName(default_model_value)
         provider = ProviderAccount(
-            name=provider_name,
+            name=ProviderName(provider_name),
             provider_type="azure-openai" if "azure" in provider_name else provider_name,
             region=region,
             endpoint=data.get("AZURE_OPENAI_ENDPOINT"),
-            default_model=default_model,
+            default_model=model_name,
             api_key_env=data.get("UDOCKET_AI_KEY_ENV", "AZURE_OPENAI_KEY"),
         )
         routes = tuple(
-            ModelRoute(task=task, provider=provider.name, model=default_model)
-            for task in (
-                AgentTask.SUMMARIZE,
-                AgentTask.COMPOSE,
-                AgentTask.TIMELINE,
-                AgentTask.RELATIONSHIP,
-                AgentTask.CHAT,
-                AgentTask.EMBED,
-            )
+            ModelRoute(task=task, provider=provider.name, model=model_name)
+            for task in DEFAULT_ROUTED_TASKS
         )
         caps = (
             CapabilityLimit(task=AgentTask.COMPOSE, max_concurrent=1),
@@ -87,9 +98,17 @@ class AISettings:
         )
 
 
+def load_settings(env: Mapping[str, str] | None = None) -> AISettings:
+    """Convenience wrapper for constructing AISettings."""
+
+    return AISettings.from_env(env)
+
+
 __all__ = [
     "AISettings",
     "CapabilityLimit",
+    "DEFAULT_ROUTED_TASKS",
     "ModelRoute",
     "ProviderAccount",
+    "load_settings",
 ]

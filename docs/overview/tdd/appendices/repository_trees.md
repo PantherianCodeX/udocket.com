@@ -197,18 +197,28 @@ packages/core/ — domain libs + agents; no Django/DB/LLM SDKs
 packages/ai/ — exportable AI runtime; all AI deps live here (LLM Registry +)
 ├─ py.typed — ensures downstream type safety
 ├─ api.py — stable surface (summarize/compose/extract/chat/embed) for other projects
+├─ client.py — DefaultAIClient enforcing residency/egress + routing
 ├─ config.py — typed config (providers, routing, caps, locales); region-restricted egress guards
-├─ providers/ — SDK adapters (Azure OpenAI, OpenAI, Bedrock, local_llm) with residency gates
+├─ registry.py — helper for wiring DefaultAIClient + adapter registry
+├─ providers/
+│  ├─ interfaces.py — ProviderAdapter protocol
+│  ├─ clients.py — Chat/Embedding client Protocols
+│  ├─ null.py — deterministic no-op provider for tests
+│  └─ registry.py — adapter bootstrap helpers
 ├─ routing/ — model selection + fallback policy; deterministic + audited
 ├─ promptsets/ — locale/role packs + org overrides (absorbs legacy prompt assets)
 ├─ compilers/ — localization-aware prompt builders producing hashed artifacts
-├─ safety/ — moderation, redaction pre/post filters; deterministic
+├─ safety/
+│  ├─ moderation.py — moderation client protocol
+│  ├─ filters.py — prompt/response safety filters
+│  ├─ residency.py — residency guard component
+│  └─ egress.py — provider egress policy guard
 ├─ embeddings/ — embedding clients (Azure/OpenAI/local) with typed outputs
 ├─ retrieval/ — RAG helpers (chunking, scoring); pure logic
 ├─ telemetry/ — request hashing, cost tracking, provenance; no PII leakage
 ├─ types/ — dataclasses/Protocols/StrEnum for AI payloads; zero Any
 ├─ errors/ — rich recoverable/non-recoverable exceptions; actionable messages
-├─ utils/ — package-specific shared helpers and utilities
+├─ utils/ — package-specific shared helpers and utilities (identity/json/validators)
 ├─ packaging/ — build scripts emitting packaged prompt/artifact bundles for consumers
 └─ settings/ — typed config loaders, env snapshot helpers
 ```

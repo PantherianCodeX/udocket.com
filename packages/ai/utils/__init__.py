@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .types import LanguageCode
+from ..types import LanguageCode
 
 
 def ensure_language(value: str | LanguageCode | None) -> LanguageCode:
