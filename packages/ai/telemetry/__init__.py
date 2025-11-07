@@ -1,21 +1,24 @@
-from __future__ import annotations
-
 # pyright: strict
-
 """Structured telemetry payloads for provider calls."""
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from __future__ import annotations
 
-from ..types import AgentTask, ProviderCallMetrics
-from ..types.identifiers import (
-    CaseID,
-    JobID,
-    ModelName,
-    OrganizationID,
-    ProviderName,
-    RouteName,
-)
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from packages.ai.types import ProviderCallMetrics
+
+if TYPE_CHECKING:
+    from packages.ai.types import AgentTask
+    from packages.ai.types.identifiers import (
+        CaseID,
+        JobID,
+        ModelName,
+        OrganizationID,
+        ProviderName,
+        RouteName,
+    )
 
 
 @dataclass(slots=True)
@@ -54,8 +57,8 @@ class TaskTelemetryEnvelope:
             org_id=org_id,
             job_id=job_id,
             call=call,
-            recorded_at=datetime.now(tz=timezone.utc),
+            recorded_at=datetime.now(tz=UTC),
         )
 
 
-__all__ = ["ProviderCallRecord", "TaskTelemetryEnvelope"]
+__all__ = ["ProviderCallMetrics", "ProviderCallRecord", "TaskTelemetryEnvelope"]

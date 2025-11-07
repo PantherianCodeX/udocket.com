@@ -1,3 +1,5 @@
+"""Helpers for building case payloads."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

@@ -194,7 +194,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Controller handlers, schema definitions, integration tests. **|**
 **References:** Link to schema fixtures or appendices.
 
-<a id="digital-signer-external-interfaces"></a>
+
 
 ### 3.1 External Interfaces (binding)
 

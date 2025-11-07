@@ -272,7 +272,7 @@ ______________________________________________________________________
 | `POST /vault/detokenize` | Restore masked spans (Compose/Signer only) | Requires `guardian_judgment_id`, purpose, and mTLS; Guardian never logs plaintext. |
 | `SSE GUARDIAN.JUDGMENT.*` | Broadcast PASS/WARN/BLOCK/WAIVED outcomes | Carries `guardian_judgment_id`, reason codes, waiver IDs, `settings_snapshot_sha256`, span evidence hashes. |
 
-<a id="guardian-review-approval"></a>
+
 
 #### 3.1.1 Review approval example (binding)
 

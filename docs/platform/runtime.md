@@ -130,7 +130,7 @@ ______________________________________________________________________
 - Identity provider: Keycloak ships in the stack for local parity, while production instances run behind the platform reverse proxy. TLS terminates at that proxy; Keycloak listens on its internal port (8085 in the prod overlay), and external hosts must forward HTTPS traffic to the container without bypassing the proxy guardrails.
 - Multi-region posture: each environment operates within a primary/secondary region pair. Database replicas, blob replication, and queue failover respect organization allowlists. Disaster recovery runbooks document region cut-over and data rehydration using only approved regions (§8).
 
-<a id="platform-runtime-conditional-download"></a>
+
 
 #### 3.1.1 Artifact download conditional requests (binding)
 
@@ -152,7 +152,7 @@ curl -L -H "Authorization: Bearer $TOKEN" \
   https://platform.local/api/v1/artifacts/$A/download
 ```
 
-<a id="platform-runtime-cors-preflight"></a>
+
 
 #### 3.1.2 CORS preflight (binding)
 

@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 if __package__ in {None, ""}:
     import sys
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
-    from scripts.typing.common import DOCS_ROOT, PROJECT_ROOT  # type: ignore[import-not-found]
+    from scripts.typing.common import DOCS_ROOT, PROJECT_ROOT
 else:
     from .common import DOCS_ROOT, PROJECT_ROOT
 
@@ -23,7 +25,8 @@ def format_helper_table(helpers: Sequence[Mapping[str, Any]]) -> str:
         return "_No helper runs recorded._"
     headers = "| Helper | Version | Status | Last Run |\n| --- | --- | --- | --- |"
     rows = [
-        f"| {item.get('name')} | {item.get('version', '-')} | {item.get('status', '-')} | {item.get('lastRun', '-')} |"
+        f"| {item.get('name')} | {item.get('version', '-')} "
+        f"| {item.get('status', '-')} | {item.get('lastRun', '-')} |"
         for item in helpers
     ]
     return "\n".join([headers, *rows])
@@ -68,17 +71,20 @@ def sync_status(manifest: Mapping[str, Any]) -> None:
             "## Strict Modules",
             "",
             format_strict_list(strict_modules),
-        ]
+        ],
     )
     STATUS_FILE.write_text("\n".join(content) + "\n", encoding="utf-8")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Generate automation status documentation from manifest."
+        description="Generate automation status documentation from manifest.",
     )
     parser.add_argument(
-        "manifest", nargs="?", default="docs/typing/automation_manifest.json", type=Path
+        "manifest",
+        nargs="?",
+        default="docs/typing/automation_manifest.json",
+        type=Path,
     )
     args = parser.parse_args()
 

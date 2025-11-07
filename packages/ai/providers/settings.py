@@ -1,13 +1,15 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Provider configuration dataclasses derived from AI settings."""
 
-from dataclasses import dataclass
+from __future__ import annotations
 
-from ..types import AllowedRegion, Region
-from ..types.identifiers import ProviderName
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from packages.ai.types import AllowedRegion, Region
+    from packages.ai.types.identifiers import ProviderName
 
 
 @dataclass(slots=True, frozen=True)
@@ -28,4 +30,4 @@ class AzureOpenAIConfig(ProviderConfig):
     api_key_env: str
 
 
-__all__ = ["ProviderConfig", "AzureOpenAIConfig"]
+__all__ = ["AzureOpenAIConfig", "ProviderConfig"]

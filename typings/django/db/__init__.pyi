@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Protocol
+from types import TracebackType
 
 from . import models, transaction
 
@@ -8,7 +9,12 @@ from . import models, transaction
 class Cursor(Protocol):
     def __enter__(self) -> Cursor: ...
 
-    def __exit__(self, exc_type, exc, tb) -> bool | None: ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool | None: ...
 
     def execute(self, sql: str, params: Any | None = ...) -> None: ...
 

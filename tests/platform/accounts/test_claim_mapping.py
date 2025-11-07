@@ -22,7 +22,7 @@ def test_apply_claim_mappings_syncs_organizations(settings):
         "organizations": [
             {"id": "org-alpha", "name": "Alpha Org", "roles": ["admin"]},
             {"id": "org-beta", "name": "Beta Org", "roles": ["member"]},
-        ]
+        ],
     }
     apply_claim_mappings(user, claims, sync_cases=False)
 
@@ -37,7 +37,7 @@ def test_apply_claim_mappings_syncs_organizations(settings):
     claims = {
         "organizations": [
             {"id": "org-beta", "name": "Beta Org", "roles": ["member"]},
-        ]
+        ],
     }
     apply_claim_mappings(user, claims, sync_cases=False)
     memberships = OrganizationMembership.objects.filter(user=user)

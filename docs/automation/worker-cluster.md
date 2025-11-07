@@ -287,7 +287,7 @@ X-Request-ID: 4f1a9c8c-0da5-4b27-9acd-6b6ddfd402c2
 
 Workers MUST update `last_seen_at` on every replay, echo the stored payload when `Idempotency-Status: replay`, and return `Idempotency-Status: conflict` when the canonical hash changes.
 
-<a id="worker-api-sse"></a>
+
 
 ### 3.5 Job SSE replay contract (binding)
 
@@ -305,7 +305,7 @@ curl -N -H "Authorization: Bearer $TOKEN" \
   https://platform.local/api/v1/jobs/$JOB_ID/events
 ```
 
-<a id="worker-api-upload-finalize"></a>
+
 
 ### 3.6 Upload finalize endpoint (binding)
 

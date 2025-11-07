@@ -1,16 +1,18 @@
-from __future__ import annotations
-
 # pyright: strict
-
 """Translates legacy LLM settings into AISettings."""
 
-from collections.abc import Iterable
+from __future__ import annotations
 
-from packages.core.llm.config import LLMSettings
+from typing import TYPE_CHECKING
 
-from .config import AISettings, CapabilityLimit, ModelRoute, ProviderAccount
-from .types import AgentTask, AllowedRegion, LanguageCode, Region
-from .types.identifiers import ModelName, ProviderName
+from packages.ai.config import AISettings, CapabilityLimit, ModelRoute, ProviderAccount
+from packages.ai.types import AgentTask, AllowedRegion, LanguageCode, Region
+from packages.ai.types.identifiers import ModelName, ProviderName
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from packages.core.llm.config import LLMSettings
 
 
 def ai_settings_from_llm(llm_settings: LLMSettings) -> AISettings:
@@ -32,7 +34,7 @@ def ai_settings_from_llm(llm_settings: LLMSettings) -> AISettings:
                 default_model=ModelName(default_model_name),
                 api_key_env=(provider.env_requirements[0] if provider.env_requirements else None),
                 allowed_regions=allowed,
-            )
+            ),
         )
 
     routes: list[ModelRoute] = []
@@ -43,14 +45,15 @@ def ai_settings_from_llm(llm_settings: LLMSettings) -> AISettings:
         model_name = assignment.model or _default_model_name(assignment.providers)
         if not model_name:
             continue
-        for provider_name in assignment.providers or []:
-            routes.append(
-                ModelRoute(
-                    task=task,
-                    provider=ProviderName(provider_name),
-                    model=ModelName(model_name),
-                )
+        providers = assignment.providers or ()
+        routes.extend(
+            ModelRoute(
+                task=task,
+                provider=ProviderName(provider_name),
+                model=ModelName(model_name),
             )
+            for provider_name in providers
+        )
     capability_limits = (
         CapabilityLimit(task=AgentTask.SUMMARIZE, max_concurrent=2),
         CapabilityLimit(task=AgentTask.COMPOSE, max_concurrent=1),
@@ -66,8 +69,7 @@ def ai_settings_from_llm(llm_settings: LLMSettings) -> AISettings:
 def _default_model_name(model_names: Iterable[str] | None) -> str | None:
     if not model_names:
         return None
-    first = next(iter(model_names), None)
-    return first
+    return next(iter(model_names), None)
 
 
 def _task_for_stage(stage_key: str) -> AgentTask | None:

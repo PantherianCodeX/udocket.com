@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Utility helpers for working with JSON-compatible structures."""
+
+from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence

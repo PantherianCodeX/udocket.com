@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """UTC time helpers shared across packages."""
+
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Literal, overload

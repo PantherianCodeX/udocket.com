@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Common filesystem helpers for case-scoped storage."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path

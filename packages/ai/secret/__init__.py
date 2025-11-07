@@ -1,13 +1,14 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Secret source abstractions for provider adapters."""
 
+from __future__ import annotations
+
 import os
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class SecretSource(Protocol):
     """Provides access to stored credentials without exposing storage details."""
 
@@ -22,4 +23,4 @@ class EnvSecretSource:
         return value or None
 
 
-__all__ = ["SecretSource", "EnvSecretSource"]
+__all__ = ["EnvSecretSource", "SecretSource"]

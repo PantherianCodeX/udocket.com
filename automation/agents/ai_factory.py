@@ -1,18 +1,18 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Shared AI client factory for automation modules."""
 
+from __future__ import annotations
+
 from functools import lru_cache
 
 from packages.ai import DefaultAIClient, build_client
-from packages.ai.config_translator import ai_settings_from_llm
-from packages.core.llm.config import load_llm_settings
+from packages.ai.config.translator import ai_settings_from_llm
 from packages.ai.providers.registry import adapters_from_settings
 from packages.ai.safety.egress import EgressPolicy
 from packages.ai.safety.residency import AllowAllResidencyPolicy, ResidencyPolicy
 from packages.ai.secret import EnvSecretSource
+from packages.core.llm.config import load_llm_settings
 
 
 @lru_cache(maxsize=1)

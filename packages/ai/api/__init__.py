@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
-from .errors import ProviderNotConfiguredError
-from .types import (
+from packages.ai.errors import ProviderNotConfiguredError
+from packages.ai.types import (
     AgentTask,
     CaseContext,
     LanguageCode,
@@ -182,11 +182,13 @@ class AIClient(Protocol):
     def compose(self, request: ComposeRequest) -> ComposeResult: ...
 
     def extract_timeline(
-        self, request: TimelineExtractionRequest
+        self,
+        request: TimelineExtractionRequest,
     ) -> TimelineExtractionResult: ...
 
     def extract_entities(
-        self, request: EntityExtractionRequest
+        self,
+        request: EntityExtractionRequest,
     ) -> EntityExtractionResult: ...
 
     def chat(self, request: ChatRequest) -> ChatResult: ...
@@ -207,7 +209,9 @@ def compose(request: ComposeRequest, *, client: AIClient | None = None) -> Compo
 
 
 def extract_timeline(
-    request: TimelineExtractionRequest, *, client: AIClient | None = None
+    request: TimelineExtractionRequest,
+    *,
+    client: AIClient | None = None,
 ) -> TimelineExtractionResult:
     """Normalize timeline events based on diarized transcripts."""
 
@@ -215,7 +219,9 @@ def extract_timeline(
 
 
 def extract_entities(
-    request: EntityExtractionRequest, *, client: AIClient | None = None
+    request: EntityExtractionRequest,
+    *,
+    client: AIClient | None = None,
 ) -> EntityExtractionResult:
     """Derive entity/relationship hints for downstream tooling."""
 
@@ -241,28 +247,28 @@ def _require_client(client: AIClient | None, task: AgentTask) -> AIClient:
 
 
 __all__ = [
-    'AIClient',
-    'ChatMessage',
-    'ChatRequest',
-    'ChatResult',
-    'ComposeAudience',
-    'ComposeRequest',
-    'ComposeResult',
-    'EmbeddingRequest',
-    'EmbeddingResult',
-    'EmbeddingVector',
-    'EntityExtractionRequest',
-    'EntityExtractionResult',
-    'EntityHint',
-    'SummarizeRequest',
-    'SummarizeResult',
-    'TimelineEvent',
-    'TimelineExtractionRequest',
-    'TimelineExtractionResult',
-    'chat',
-    'compose',
-    'embed',
-    'extract_entities',
-    'extract_timeline',
-    'summarize',
+    "AIClient",
+    "ChatMessage",
+    "ChatRequest",
+    "ChatResult",
+    "ComposeAudience",
+    "ComposeRequest",
+    "ComposeResult",
+    "EmbeddingRequest",
+    "EmbeddingResult",
+    "EmbeddingVector",
+    "EntityExtractionRequest",
+    "EntityExtractionResult",
+    "EntityHint",
+    "SummarizeRequest",
+    "SummarizeResult",
+    "TimelineEvent",
+    "TimelineExtractionRequest",
+    "TimelineExtractionResult",
+    "chat",
+    "compose",
+    "embed",
+    "extract_entities",
+    "extract_timeline",
+    "summarize",
 ]

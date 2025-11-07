@@ -1,14 +1,13 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Egress policy guardrail helpers."""
 
-from dataclasses import dataclass
-from typing import Collection
+from __future__ import annotations
 
-from ..errors import EgressPolicyError
-from ..types.identifiers import ProviderName
+from dataclasses import dataclass
+
+from packages.ai.errors import EgressPolicyError
+from packages.ai.types.identifiers import ProviderName
 
 
 @dataclass(slots=True, frozen=True)
@@ -22,7 +21,7 @@ class EgressPolicy:
             raise EgressPolicyError(provider=provider, reason="Provider not permitted")
 
     @classmethod
-    def from_list(cls, providers: Collection[str] | None) -> EgressPolicy:
+    def from_list(cls, providers: tuple[str, ...] | list[str] | None) -> EgressPolicy:
         values = tuple(
             ProviderName(provider.strip())
             for provider in (providers or ())

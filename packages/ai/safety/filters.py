@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Safety filter interfaces for prompts and responses."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable

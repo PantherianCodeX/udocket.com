@@ -1,13 +1,12 @@
-from __future__ import annotations
-
 # pyright: strict
-
 """Default AIClient implementation."""
 
-from collections import defaultdict
-from collections.abc import Mapping
+from __future__ import annotations
 
-from .api import (
+from collections import defaultdict
+from typing import TYPE_CHECKING
+
+from packages.ai.api import (
     AIClient,
     ChatRequest,
     ChatResult,
@@ -22,14 +21,18 @@ from .api import (
     TimelineExtractionRequest,
     TimelineExtractionResult,
 )
-from .config import AISettings
-from .errors import ProviderNotConfiguredError, RouteNotFoundError
-from .providers.interfaces import ProviderAdapter
-from .routing.registry import RouteBinding, RouteRegistry
-from .safety.egress import EgressPolicy
-from .safety.residency import AllowAllResidencyPolicy, ResidencyPolicy
-from .types import AgentTask
-from .types.identifiers import ModelName, ProviderName, RouteName
+from packages.ai.errors import ProviderNotConfiguredError, RouteNotFoundError
+from packages.ai.routing.registry import RouteBinding, RouteRegistry
+from packages.ai.safety.egress import EgressPolicy
+from packages.ai.safety.residency import AllowAllResidencyPolicy, ResidencyPolicy
+from packages.ai.types import AgentTask
+from packages.ai.types.identifiers import ModelName, ProviderName, RouteName
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from packages.ai.config import AISettings
+    from packages.ai.providers.interfaces import ProviderAdapter
 
 
 class DefaultAIClient(AIClient):
@@ -43,12 +46,12 @@ class DefaultAIClient(AIClient):
         residency_policy: ResidencyPolicy | None = None,
         egress_policy: EgressPolicy | None = None,
     ) -> None:
-        self._settings = settings
-        self._providers = providers
-        self._residency_policy = residency_policy or AllowAllResidencyPolicy()
-        allowed = egress_policy or EgressPolicy.from_list([str(name) for name in providers.keys()])
-        self._egress_policy = allowed
-        self._routes = self._build_registry(settings)
+        self._settings: AISettings = settings
+        self._providers: Mapping[ProviderName, ProviderAdapter] = providers
+        self._residency_policy: ResidencyPolicy = residency_policy or AllowAllResidencyPolicy()
+        allowed = egress_policy or EgressPolicy.from_list([str(name) for name in providers])
+        self._egress_policy: EgressPolicy = allowed
+        self._routes: RouteRegistry = self._build_registry(settings)
 
     def summarize(self, request: SummarizeRequest) -> SummarizeResult:
         adapter = self._resolve_adapter(AgentTask.SUMMARIZE)
@@ -59,13 +62,15 @@ class DefaultAIClient(AIClient):
         return adapter.compose(request)
 
     def extract_timeline(
-        self, request: TimelineExtractionRequest
+        self,
+        request: TimelineExtractionRequest,
     ) -> TimelineExtractionResult:
         adapter = self._resolve_adapter(AgentTask.TIMELINE)
         return adapter.extract_timeline(request)
 
     def extract_entities(
-        self, request: EntityExtractionRequest
+        self,
+        request: EntityExtractionRequest,
     ) -> EntityExtractionResult:
         adapter = self._resolve_adapter(AgentTask.ENTITIES)
         return adapter.extract_entities(request)
@@ -90,7 +95,7 @@ class DefaultAIClient(AIClient):
                     provider=route.provider,
                     model=route.model,
                     route_name=self._route_name(route.provider, route.model),
-                )
+                ),
             )
         for task, entries in grouped.items():
             registry[task] = tuple(entries)

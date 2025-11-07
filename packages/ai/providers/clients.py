@@ -1,17 +1,18 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Low-level client Protocols for provider adapters."""
 
-from typing import Protocol, runtime_checkable
+from __future__ import annotations
 
-from ..api import (
-    ChatRequest,
-    ChatResult,
-    EmbeddingRequest,
-    EmbeddingResult,
-)
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from packages.ai.api import ChatRequest, ChatResult, EmbeddingRequest, EmbeddingResult
+else:  # pragma: no cover - runtime placeholders
+    class _RuntimeTypeStub:
+        """Fallback type used only when annotations are evaluated at runtime."""
+
+    ChatRequest = ChatResult = EmbeddingRequest = EmbeddingResult = _RuntimeTypeStub
 
 
 @runtime_checkable

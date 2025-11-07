@@ -1,6 +1,8 @@
-from sqlalchemy import Column, String, DateTime, Text
+from sqlalchemy import Column, DateTime, String, Text
 from sqlalchemy.sql import func
+
 from db.base import Base
+
 
 class Case(Base):
     __tablename__ = "cases"

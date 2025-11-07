@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+# pyright: strict
 """Import-forwarding shims for agent implementations.
 
 Agents will ultimately live under the automation tree and call packages.ai.api
@@ -7,7 +6,8 @@ directly. While that refactor is underway, this module re-exports the existing
 packages.core.agents surface so new imports resolve immediately.
 """
 
-# pyright: strict
+from __future__ import annotations
+
 from packages.core.agents import (
     AnalyzeAgent,
     AnalyzeConfig,
@@ -29,27 +29,28 @@ from packages.core.agents import (
     ensure_wav,
     normalize_audio,
 )
+
 from .ai_factory import get_ai_client
 
 __all__ = [
-    "AudioNormalizationResult",
-    "TranscriptionAgent",
-    "TranscriptionConfig",
-    "TranscriptionResult",
     "AnalyzeAgent",
     "AnalyzeConfig",
+    "AnalyzeGraph",
+    "AnalyzeNodeImpl",
     "AnalyzeResult",
+    "AudioNormalizationResult",
     "ComposeAgent",
     "ComposeConfig",
     "ComposeResult",
     "GuardianAgent",
     "GuardianConfig",
-    "GuardianVerdict",
     "GuardianRejection",
-    "AnalyzeGraph",
-    "AnalyzeNodeImpl",
+    "GuardianVerdict",
+    "TranscriptionAgent",
+    "TranscriptionConfig",
+    "TranscriptionResult",
     "build_analyze_graph",
     "ensure_wav",
-    "normalize_audio",
     "get_ai_client",
+    "normalize_audio",
 ]

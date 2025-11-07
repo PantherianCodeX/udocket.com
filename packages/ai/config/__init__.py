@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING
 
-from .types import AgentTask, AllowedRegion, LanguageCode, Region
-from .types.identifiers import ModelName, ProviderName
-from .utils import ensure_language
+from packages.ai.types import AgentTask, AllowedRegion, LanguageCode, Region
+from packages.ai.types.identifiers import ModelName, ProviderName
+from packages.ai.utils import ensure_language
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 DEFAULT_ROUTED_TASKS: tuple[AgentTask, ...] = (
     AgentTask.SUMMARIZE,
@@ -104,9 +107,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> AISettings:
 
 
 __all__ = [
+    "DEFAULT_ROUTED_TASKS",
     "AISettings",
     "CapabilityLimit",
-    "DEFAULT_ROUTED_TASKS",
     "ModelRoute",
     "ProviderAccount",
     "load_settings",

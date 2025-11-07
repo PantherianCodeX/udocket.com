@@ -1,14 +1,16 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Typed routing registry definitions."""
 
-from dataclasses import dataclass
-from typing import Mapping
+from __future__ import annotations
 
-from ..types import AgentTask
-from ..types.identifiers import ModelName, ProviderName, RouteName
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from packages.ai.types import AgentTask
+
+if TYPE_CHECKING:
+    from packages.ai.types.identifiers import ModelName, ProviderName, RouteName
 
 
 @dataclass(slots=True, frozen=True)
@@ -21,6 +23,6 @@ class RouteBinding:
     route_name: RouteName | None = None
 
 
-RouteRegistry = Mapping[AgentTask, tuple[RouteBinding, ...]]
+RouteRegistry = dict[AgentTask, tuple[RouteBinding, ...]]
 
 __all__ = ["RouteBinding", "RouteRegistry"]

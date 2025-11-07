@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-if TYPE_CHECKING:  # pragma: no cover
+from django.conf import settings as django_settings
+
+if TYPE_CHECKING:
     from config.settings import Settings
 
 
@@ -72,10 +74,6 @@ def resolve_config_dir(config: SettingsProtocol | None = None) -> Path:
 
 
 def _django_storage_root() -> Path | None:
-    try:
-        from django.conf import settings as django_settings
-    except Exception:
-        return None
     storage_root = getattr(django_settings, "STORAGE_ROOT", None)
     if not storage_root:
         return None
@@ -86,10 +84,10 @@ def _django_storage_root() -> Path | None:
 
 
 __all__ = [
-    "resolve_repo_root",
-    "resolve_app_root",
-    "resolve_storage_root",
     "ensure_storage_root",
-    "resolve_media_root",
+    "resolve_app_root",
     "resolve_config_dir",
+    "resolve_media_root",
+    "resolve_repo_root",
+    "resolve_storage_root",
 ]

@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Helpers for loading `.env` style configuration files."""
+
+from __future__ import annotations
 
 import os
 from collections.abc import Iterable

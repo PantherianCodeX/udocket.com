@@ -4,14 +4,23 @@ target-version = "py312"
 extend-exclude = ["**/migrations/**", "node_modules", "storage", "out"]
 
 [tool.ruff.lint]
-select = [
-    "E",  # pycodestyle errors
-    "F",  # pyflakes
-    "I",  # import sorting (isort)
-    "W",  # pycodestyle warnings
-    "ISC",  # implicit string concatenation
+select = ["ALL"]
+ignore = [
+    "D",  # docstring enforcement handled separately
+    "ANN101",
+    "ANN102",
 ]
-ignore = ["E402"]
+[tool.ruff.lint.extend-per-file-ignores]
+"apps/**" = ["ALL"]
+"packages/common/**" = ["ALL"]
+"packages/core/**" = ["ALL"]
+"packages/docs_tooling/**" = ["ALL"]
+"packages/client_sdks/**" = ["ALL"]
+"typings/**" = ["ALL"]
+"tests/**" = ["S101", "PLR2004", "INP001", "I001", "E501"]
+"packages/ai/tests/**" = ["S101", "PLR2004", "INP001", "I001", "E501"]
+"packages/ai/providers/interfaces.py" = ["TID252"]
+"packages/ai/providers/registry.py" = ["TC001", "TID252"]
 
 [tool.ruff.format]
 quote-style = "double"

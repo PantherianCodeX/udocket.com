@@ -49,23 +49,24 @@ The sections are ordered from the shared platform runtime outward through automa
 packages, experience, data, infrastructure, testing, and documentation. Update this
 appendix manually whenever the canonical structure changes.
 
-**Tree Index**
+## Tree Index
 
 - [Document Controls](#document-controls)
 - [Appendix overview](#appendix-overview)
+- [Tree Index](#tree-index)
   - [Top-level layout](#top-level-layout)
-  - [A. Platform runtime \& core services](#a-platform-runtime-core-services)
-  - [B. Automation \& agent pipelines](#b-automation-agent-pipelines)
-  - [C. Shared packages \& SDKs](#c-shared-packages-sdks)
+  - [A. Platform runtime \& core services](#a-platform-runtime--core-services)
+  - [B. Automation \& agent pipelines](#b-automation--agent-pipelines)
+  - [C. Shared packages \& SDKs](#c-shared-packages--sdks)
     - [C.1 `packages/common/`](#c1-packagescommon)
     - [C.2 `packages/core/`](#c2-packagescore)
     - [C.3 `packages/ai/`](#c3-packagesai)
     - [C.4 `packages/docs_tooling/`](#c4-packagesdocs_tooling)
     - [C.5 `packages/client_sdks/`](#c5-packagesclient_sdks)
-  - [D. Experience \& communications](#d-experience-communications)
-  - [E. Data, trust \& compliance](#e-data-trust-compliance)
-  - [F. Infrastructure \& operations](#f-infrastructure-operations)
-  - [G. Testing \& quality](#g-testing-quality)
+  - [D. Experience \& communications](#d-experience--communications)
+  - [E. Data, trust \& compliance](#e-data-trust--compliance)
+  - [F. Infrastructure \& operations](#f-infrastructure--operations)
+  - [G. Testing \& quality](#g-testing--quality)
   - [H. Documentation system](#h-documentation-system)
 
 ______________________________________________________________________
@@ -137,11 +138,11 @@ automation/ — agent pipelines + orchestration; no provider SDKs inline
 ├─ langgraph/ — canonical graphs (transcribe/analyze/compose/timeline/relationship)
 ├─ pipelines/ — stage metadata, QA gates, cost ceilings; deterministic
 ├─ agents/ — typed agent implementations; call packages.ai.api for AI
-│  ├─ transcribe/ — Azure Speech (CA regions), ops/audit writers
-│  ├─ analyze/ — summaries/outline/timeline/entity seeds via packages.ai.api.summarize
-│  ├─ compose/ — client/lawyer deliverables, QA gating via packages.ai.api.compose
-│  ├─ timeline/ — normalized events with speakers/offsets via packages.ai.api.extract_timeline
-│  └─ relationship/ — entity/edge extraction via packages.ai.api.extract_entities
+│  ├─ transcribe/ — Azure Speech ingestion, ops/audit writers, residency-aware routing
+│  ├─ analyze/ — transcript-to-analysis workloads (summaries, outlines, seeds) via AI tasks
+│  ├─ compose/ — deliverable assembly lanes with QA gating via shared AI tasks
+│  ├─ timeline/ — normalized events with speakers/offsets, deterministic timestamps
+│  └─ relationship/ — entity/edge extraction with evidence pointers, deterministic UUIDs
 ├─ task_modules/ — Celery task shims; forwards existing platform tasks until LangGraph-native orchestration lands
 ```
 
@@ -164,6 +165,7 @@ packages/ — shared libraries; no runtime configs
 ```tree
 packages/common/ — pure helpers; no network/DB/framework deps
 ├─ py.typed — marker for downstream type checking
+├─ config/ — package-local defaults, manifests, and env samples
 ├─ ids/ — deterministic UUID5 + unique title helpers; pure functions
 ├─ json/ — canonical encoders/decoders; no file I/O
 ├─ time/ — zoneinfo utilities, duration/interval types
@@ -171,24 +173,31 @@ packages/common/ — pure helpers; no network/DB/framework deps
 ├─ agents/ — shared Result/Config Protocols/TypedDicts; zero Any
 ├─ types/ — dataclasses/StrEnum/Protocols reused across services
 ├─ testing/ — property strategies/fixtures; test-only helpers
-└─ utils/ — small, single-purpose pure helpers; no side effects
+├─ utils/ — small, single-purpose pure helpers; no side effects
+├─ tests/ — package-owned unit/property suites
+└─ tooling/ — lint/type/test helpers dedicated to common libs
 ```
 
 #### C.2 `packages/core/`
 
 ```tree
 packages/core/ — domain libs + agents; no Django/DB/LLM SDKs
+├─ py.typed — marker for downstream type checking
+├─ config/ — package defaults, deterministic fixtures, schema manifests
 ├─ agents/ — typed agents + helpers (transcribe/analyze/compose; deterministic outputs)
-├─ guardian/ — decision/policy adapters; API-layer agnostic
-├─ lpe/ — localization/policy compilers; deterministic artifacts
 ├─ failover/ — retry + idempotency envelopes; no silent fallbacks
-├─ reference_manager/ — ingestion/normalization primitives; typed payloads
-├─ redaction/ — PII patterns + deterministic hashers
-├─ logging/ — structured logging + ops JSONL writers; pyright-clean
-├─ retry/ — shared retry/backoff helpers; deterministic
+├─ guardian/ — decision/policy adapters; API-layer agnostic
 ├─ idem/ — idempotency keys/manifests; stable schemas
+├─ logging/ — structured logging + ops JSONL writers; pyright-clean
+├─ lpe/ — localization/policy compilers; deterministic artifacts
+├─ redaction/ — PII patterns + deterministic hashers
+├─ reference_manager/ — ingestion/normalization primitives; typed payloads
+├─ retry/ — shared retry/backoff helpers; deterministic
+├─ settings/ — typed config loaders, env snapshot helpers
+├─ types/ — dataclasses/StrEnum/Protocols reused across services
 ├─ utils/ — package-specific shared helpers and utilities
-└─ settings/ — typed config loaders, env snapshot helpers
+├─ tests/ — package-owned unit/property suites
+└─ tooling/ — generators, fixtures, pyright/mypy helpers
 ```
 
 #### C.3 `packages/ai/`
@@ -196,10 +205,15 @@ packages/core/ — domain libs + agents; no Django/DB/LLM SDKs
 ```tree
 packages/ai/ — exportable AI runtime; all AI deps live here (LLM Registry +)
 ├─ py.typed — ensures downstream type safety
-├─ api.py — stable surface (summarize/compose/extract/chat/embed) for other projects
-├─ client.py — DefaultAIClient enforcing residency/egress + routing
-├─ config.py — typed config (providers, routing, caps, locales); region-restricted egress guards
-├─ registry.py — helper for wiring DefaultAIClient + adapter registry
+├─ config/
+│  ├─ __init__.py — typed provider/routing/capability config; residency-aware defaults
+│  └─ translator.py — LLM settings → AISettings adapter for migration tooling
+├─ api/
+│  └─ __init__.py — typed AI surface for automation/services (task-scoped entrypoints)
+├─ client/
+│  └─ __init__.py — DefaultAIClient enforcing residency/egress + routing
+├─ registry/
+│  └─ __init__.py — helper for wiring DefaultAIClient + adapter registry
 ├─ providers/
 │  ├─ interfaces.py — ProviderAdapter protocol
 │  ├─ clients.py — Chat/Embedding client Protocols
@@ -220,7 +234,10 @@ packages/ai/ — exportable AI runtime; all AI deps live here (LLM Registry +)
 ├─ errors/ — rich recoverable/non-recoverable exceptions; actionable messages
 ├─ utils/ — package-specific shared helpers and utilities (identity/json/validators)
 ├─ packaging/ — build scripts emitting packaged prompt/artifact bundles for consumers
-└─ settings/ — typed config loaders, env snapshot helpers
+├─ settings/ — typed env loader + snapshot helpers
+├─ tooling/ — fixtures, mocks, lint/type helpers dedicated to AI package dev
+└─ tests/
+   └─ unit/ — package-owned unit/property suites
 ```
 
 #### C.4 `packages/docs_tooling/`
@@ -234,6 +251,7 @@ packages/docs_tooling/ — docs tooling only; no product docs
 │  ├─ utils/ — package-specific shared helpers and utilities
 │  ├─ config/ — configuration for the doc tools (paths, settings)
 │  └─ sync/ — Scripts to keep documents in sync
+├─ tooling/ — repo automation, synthetic fixtures, smoke runners
 └─ tests/ — Unit tests
 ```
 
@@ -241,11 +259,14 @@ packages/docs_tooling/ — docs tooling only; no product docs
 
 ```tree
 packages/client_sdks/ — public SDKs; no private/admin APIs
+├─ config/ — SDK build settings, codegen inputs
 ├─ schemas/ — OpenAPI sources; single truth for codegen
 ├─ codegen/ — pinned templates/pipelines; reproducible outputs
 ├─ python/ — Python SDK (sync/async clients, typed models, residency-safe defaults)
 ├─ typescript/ — TypeScript SDK (fetch/axios clients, typed models, browser/node examples)
-└─ utils/ — Package-specific shared helpers and utilities
+├─ utils/ — Package-specific shared helpers and utilities
+├─ tooling/ — SDK release scripts, lint/type helpers
+└─ tests/ — Unit tests
 ```
 
 ### D. Experience & communications

@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
   "pythonVersion": "3.12",
   "venvPath": ".",
+  "venv": ".venv",
   "typeCheckingMode": "standard",
   // Enable strict via per-file pragma for clean modules only.
   // Keep repo-wide scanning limited initially to core packages.

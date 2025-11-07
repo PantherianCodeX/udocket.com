@@ -1,6 +1,7 @@
+# pyright: strict
+
 from __future__ import annotations
 
-# pyright: strict
 from pathlib import Path
 
 from packages.common.agents import TranscriptionResult

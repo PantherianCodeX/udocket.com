@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Iterable
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 if __package__ in {None, ""}:
     import sys
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
-    from scripts.typing.common import (  # type: ignore[import-not-found]
+    from scripts.typing.common import (
         PROJECT_ROOT,
         load_manifest,
         save_manifest,
@@ -92,7 +95,9 @@ def main() -> int:
         help="Runtime module to ensure has a stub skeleton.",
     )
     parser.add_argument(
-        "--fix", action="store_true", help="Create missing directories or stubs automatically."
+        "--fix",
+        action="store_true",
+        help="Create missing directories or stubs automatically.",
     )
     args = parser.parse_args()
 
@@ -118,8 +123,6 @@ def main() -> int:
             return 1
 
     if args.fix:
-        from datetime import datetime
-
         manifest = load_manifest()
         upsert_helper_record(
             manifest,

@@ -1,17 +1,22 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Helpers for constructing DefaultAIClient instances."""
 
-from collections.abc import Mapping
+from __future__ import annotations
 
-from .client import DefaultAIClient
-from .config import AISettings, load_settings
-from .providers.interfaces import ProviderAdapter
-from .safety.egress import EgressPolicy
-from .safety.residency import ResidencyPolicy
-from .types.identifiers import ProviderName
+from typing import TYPE_CHECKING
+
+from packages.ai.client import DefaultAIClient
+from packages.ai.config import load_settings
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from packages.ai.config import AISettings
+    from packages.ai.providers.interfaces import ProviderAdapter
+    from packages.ai.safety.egress import EgressPolicy
+    from packages.ai.safety.residency import ResidencyPolicy
+    from packages.ai.types.identifiers import ProviderName
 
 
 def build_client(

@@ -1,9 +1,8 @@
+"""Strongly typed identifier aliases used across the AI runtime."""
+
 from __future__ import annotations
 
 # pyright: strict
-
-"""Strongly typed identifier aliases used across the AI runtime."""
-
 from typing import NewType
 
 OrganizationID = NewType("OrganizationID", str)
@@ -17,8 +16,8 @@ CapabilityName = NewType("CapabilityName", str)
 
 __all__ = [
     "ArtifactID",
-    "CaseID",
     "CapabilityName",
+    "CaseID",
     "JobID",
     "ModelName",
     "OrganizationID",

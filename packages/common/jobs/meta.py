@@ -1,3 +1,6 @@
+# pyright: strict
+"""Typed helpers for job metadata storage and propagation."""
+
 from __future__ import annotations
 
 import uuid

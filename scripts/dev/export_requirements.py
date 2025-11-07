@@ -9,15 +9,11 @@ import subprocess
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REQUIREMENTS_DIR = REPO_ROOT / "requirements"
 
 Project = tuple[str, Path, Iterable[str | None]]
-
-if sys.version_info < (3, 12):
-    raise RuntimeError("Python 3.12 or newer is required to run export_requirements.py")
 
 PROJECTS: tuple[Project, ...] = (
     ("platform", REPO_ROOT / "apps" / "platform", (None, "dev")),
@@ -53,7 +49,7 @@ def run_uv_export(project: str, project_dir: Path, group: str | None) -> str:
         "",
     ]
     body = proc.stdout.strip()
-    return "\n".join(header_lines + [body, ""]) if body else "\n".join(header_lines)
+    return "\n".join([*header_lines, body, ""]) if body else "\n".join(header_lines)
 
 
 def write_if_changed(path: Path, content: str) -> bool:
@@ -83,7 +79,8 @@ def main() -> int:
     unknown = sorted(set(args.projects) - valid_names)
     if unknown:
         joined = ", ".join(sorted(valid_names))
-        raise SystemExit(f"Unknown project(s): {', '.join(unknown)}. Valid options: {joined}.")
+        msg = f"Unknown project(s): {', '.join(unknown)}. Valid options: {joined}."
+        raise SystemExit(msg)
 
     selected = [entry for entry in PROJECTS if not args.projects or entry[0] in args.projects]
     for project, project_dir, groups in selected:

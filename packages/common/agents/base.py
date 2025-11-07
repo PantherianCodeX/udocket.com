@@ -1,6 +1,7 @@
+# pyright: strict
+
 from __future__ import annotations
 
-# pyright: strict
 from dataclasses import dataclass
 from pathlib import Path
 

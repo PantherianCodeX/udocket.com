@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Mapping, Tuple, Type, TypeVar, TypeAlias
+from typing import Any, Callable, ClassVar, Mapping, Tuple, Type, TypeVar, TypeAlias
 
 T = TypeVar("T", bound="BaseSettings")
 
@@ -18,13 +18,13 @@ class BaseSettings:
 
     @classmethod
     def settings_customise_sources(
-        cls,
+        cls: Type["BaseSettings"],
         settings_cls: Type["BaseSettings"],
-        init_settings,
-        env_settings,
-        dotenv_settings,
-        file_secret_settings,
-    ) -> Tuple[Any, ...]: ...
+        init_settings: Callable[..., Any],
+        env_settings: Callable[..., Any],
+        dotenv_settings: Callable[..., Any],
+        file_secret_settings: Callable[..., Any],
+    ) -> Tuple[Callable[..., Any], ...]: ...
 
 
 from . import sources

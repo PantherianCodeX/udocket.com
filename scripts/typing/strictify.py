@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 if __package__ in {None, ""}:
     import sys
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
-    from scripts.typing.common import (  # type: ignore[import-not-found]
+    from scripts.typing.common import (
         append_strict_manifest,
         load_manifest,
         save_manifest,
@@ -30,8 +33,7 @@ def iter_python_files(targets: Iterable[Path]) -> Iterable[Path]:
         if target.is_file() and target.suffix == ".py":
             yield target
         elif target.is_dir():
-            for path in sorted(target.rglob("*.py")):
-                yield path
+            yield from sorted(target.rglob("*.py"))
 
 
 def has_strict(text: str) -> bool:
@@ -83,10 +85,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Add # pyright: strict to Python modules.")
     parser.add_argument("targets", nargs="+", type=Path, help="Files or directories to process.")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show files that need updates without editing them."
+        "--dry-run",
+        action="store_true",
+        help="Show files that need updates without editing them.",
     )
     parser.add_argument(
-        "--check", action="store_true", help="Exit with 1 if any file is missing the strict pragma."
+        "--check",
+        action="store_true",
+        help="Exit with 1 if any file is missing the strict pragma.",
     )
     args = parser.parse_args()
 

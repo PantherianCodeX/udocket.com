@@ -5,18 +5,24 @@ from __future__ import annotations
 import json
 import os
 import socket
-from collections.abc import Iterable as IterableABC, Mapping
+from collections.abc import Iterable as IterableABC
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Sequence, cast
+from typing import Any, ClassVar, cast
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource, PydanticBaseSettingsSource
+from pydantic_settings.sources import (
+    DotEnvSettingsSource,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+)
 
+from config.paths import ensure_storage_root as _ensure_root
+from config.paths import resolve_storage_root
 from packages.common.env import load_env_defaults
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 os.environ.setdefault("APP_ROOT", str(REPO_ROOT))
@@ -42,6 +48,7 @@ def _read_text(path: Path) -> str | None:
         return None
     return data.strip()
 
+
 def _parse_env_file(path: Path, encoding: str | None = None) -> dict[str, str]:
     try:
         text = path.read_text(encoding=encoding or "utf-8")
@@ -58,6 +65,7 @@ def _parse_env_file(path: Path, encoding: str | None = None) -> dict[str, str]:
         overrides[key.strip()] = value.strip()
     return overrides
 
+
 def _collect_iter_items(value: IterableABC[object]) -> list[str]:
     result: list[str] = []
     for item in value:
@@ -71,7 +79,7 @@ def _split_env_list(value: object) -> list[str]:
     if value is None:
         return []
     if isinstance(value, IterableABC) and not isinstance(value, (str, bytes, bytearray)):
-        iterable_value = cast(IterableABC[object], value)
+        iterable_value = cast("IterableABC[object]", value)
         return _collect_iter_items(iterable_value)
     text = str(value).strip()
     if not text:
@@ -83,7 +91,7 @@ def _json_or_split_str_list(value: object) -> list[str]:
     if value is None:
         return []
     if isinstance(value, IterableABC) and not isinstance(value, (str, bytes, bytearray)):
-        iterable_value = cast(IterableABC[object], value)
+        iterable_value = cast("IterableABC[object]", value)
         return _collect_iter_items(iterable_value)
     text = str(value).strip()
     if not text:
@@ -95,7 +103,7 @@ def _json_or_split_str_list(value: object) -> list[str]:
     if isinstance(loaded, str):
         return _split_env_list(loaded)
     if isinstance(loaded, IterableABC) and not isinstance(loaded, (str, bytes, bytearray)):
-        iterable_loaded = cast(IterableABC[object], loaded)
+        iterable_loaded = cast("IterableABC[object]", loaded)
         return _collect_iter_items(iterable_loaded)
     return _split_env_list(text)
 
@@ -117,7 +125,7 @@ def _json_or_mapping(value: object) -> dict[str, str]:
     if value is None:
         return {}
     if isinstance(value, Mapping):
-        mapping_value = cast(Mapping[object, object], value)
+        mapping_value = cast("Mapping[object, object]", value)
         items = [(str(k), str(v)) for k, v in mapping_value.items()]
     else:
         text = str(value).strip()
@@ -138,18 +146,18 @@ def _json_or_mapping(value: object) -> dict[str, str]:
             items = pairs
         else:
             if isinstance(loaded, Mapping):
-                mapping_loaded = cast(Mapping[object, object], loaded)
+                mapping_loaded = cast("Mapping[object, object]", loaded)
                 items = [(str(k), str(v)) for k, v in mapping_loaded.items()]
             elif isinstance(loaded, IterableABC):
                 pairs_list: list[tuple[str, str]] = []
-                iterable_loaded = cast(IterableABC[object], loaded)
+                iterable_loaded = cast("IterableABC[object]", loaded)
                 for entry in iterable_loaded:
                     if isinstance(entry, Mapping):
-                        entry_map = cast(Mapping[object, object], entry)
+                        entry_map = cast("Mapping[object, object]", entry)
                         for k, v in entry_map.items():
                             pairs_list.append((str(k), str(v)))
                     elif isinstance(entry, (list, tuple)):
-                        seq_entry = cast(Sequence[object], entry)
+                        seq_entry = cast("Sequence[object]", entry)
                         if len(seq_entry) == 2:
                             first_obj = seq_entry[0]
                             second_obj = seq_entry[1]
@@ -219,7 +227,7 @@ def _coerce_path(value: Path | str | None, default: Path) -> Path:
 def _settings_field_info(settings_cls: type[BaseSettings]) -> dict[str, FieldInfo]:
     raw_fields = getattr(settings_cls, "model_fields", {})
     if isinstance(raw_fields, Mapping):
-        mapping_fields = cast(Mapping[object, object], raw_fields)
+        mapping_fields = cast("Mapping[object, object]", raw_fields)
         result: dict[str, FieldInfo] = {}
         for key, info in mapping_fields.items():
             if isinstance(key, str) and isinstance(info, FieldInfo):
@@ -228,7 +236,11 @@ def _settings_field_info(settings_cls: type[BaseSettings]) -> dict[str, FieldInf
     return {}
 
 
-def _settings_field_default(settings_cls: type[BaseSettings], field_name: str, fallback: Any = None) -> Any:
+def _settings_field_default(
+    settings_cls: type[BaseSettings],
+    field_name: str,
+    fallback: Any = None,
+) -> Any:
     fields = _settings_field_info(settings_cls)
     info = fields.get(field_name)
     if info is None:
@@ -258,7 +270,9 @@ def _normalize_storage_values(
                 db_name = Path(database_url.replace("sqlite:///", "", 1)).name or "udocket.db"
                 normalized_db = f"sqlite:///{fallback_root / db_name}"
             if test_database_url and test_database_url.startswith("sqlite:///"):
-                test_name = Path(test_database_url.replace("sqlite:///", "", 1)).name or "test_udocket.db"
+                test_name = (
+                    Path(test_database_url.replace("sqlite:///", "", 1)).name or "test_udocket.db"
+                )
                 normalized_test_db = f"sqlite:///{fallback_root / test_name}"
 
     return normalized_root, normalized_db, normalized_test_db
@@ -691,7 +705,7 @@ class Settings(BaseSettings):
             "member": "MEMBER",
             "owner": "ADMIN",
             "superuser": "SUPERUSER",
-        }
+        },
     )
     OIDC_CASE_MEMBERSHIPS_CLAIM: str = "case_memberships"
     OIDC_CASE_ID_FIELD: str = "id"
@@ -706,7 +720,7 @@ class Settings(BaseSettings):
             "auditor": "AUDITOR",
             "external": "EXTERNAL",
             "client": "CLIENT",
-        }
+        },
     )
     OIDC_CASE_DEFAULT_ROLE: str = "REVIEWER"
 
@@ -752,7 +766,7 @@ class Settings(BaseSettings):
             return int(value)
         except (TypeError, ValueError):
             return 25
- 
+
     @field_validator("OIDC_ORG_ROLE_MAP", "OIDC_CASE_ROLE_MAP", mode="before")
     @classmethod
     def parse_role_maps(cls, value: Any) -> dict[str, str]:
@@ -790,10 +804,10 @@ class Settings(BaseSettings):
         if data is None:
             data_dict: dict[str, Any] = {}
         elif isinstance(data, Mapping):
-            mapping_data = cast(Mapping[str, Any], data)
+            mapping_data = cast("Mapping[str, Any]", data)
             data_dict = dict(mapping_data)
         else:
-            data_iter = cast(IterableABC[tuple[str, Any]], data)
+            data_iter = cast("IterableABC[tuple[str, Any]]", data)
             data_dict = dict(data_iter)
 
         file_values = _collect_secret_file_values(field_map.keys())
@@ -819,10 +833,7 @@ class Settings(BaseSettings):
         data_dict["STORAGE_ROOT"] = storage_root
 
         db_url_value = data_dict.get("DATABASE_URL")
-        if isinstance(db_url_value, str):
-            db_url = db_url_value
-        else:
-            db_url = "sqlite:///__AUTO__"
+        db_url = db_url_value if isinstance(db_url_value, str) else "sqlite:///__AUTO__"
         allow_sqlite_raw = data_dict.get("ALLOW_SQLITE_DEV_FALLBACK")
         if allow_sqlite_raw is None:
             allow_sqlite_raw = _settings_field_default(cls, "ALLOW_SQLITE_DEV_FALLBACK", False)
@@ -833,14 +844,14 @@ class Settings(BaseSettings):
             else:
                 raise ValueError(
                     "DATABASE_URL must be configured (Postgres recommended). "
-                    "Set ALLOW_SQLITE_DEV_FALLBACK=1 to opt into the development SQLite fallback."
+                    "Set ALLOW_SQLITE_DEV_FALLBACK=1 to opt into the development SQLite fallback.",
                 )
         elif isinstance(db_url_value, str):
             data_dict["DATABASE_URL"] = db_url_value
         return data_dict
 
     @model_validator(mode="after")
-    def ensure_paths(self) -> "Settings":
+    def ensure_paths(self) -> Settings:
         updates: dict[str, Any] = {}
 
         normalized_redis = _normalize_redis_url(self.REDIS_URL)
@@ -873,13 +884,14 @@ class Settings(BaseSettings):
         if self.TEST_DATABASE_URL:
             _ensure_sqlite_parent(self.TEST_DATABASE_URL)
 
-        if not self.DJANGO_DEBUG and self.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key":
+        if (
+            not self.DJANGO_DEBUG
+            and self.DJANGO_SECRET_KEY.get_secret_value() == "dev-insecure-secret-key"
+        ):
             raise ValueError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false")
         return self
 
     def ensure_storage_root(self) -> Path:
-        from config.paths import ensure_storage_root as _ensure_root
-
         return _ensure_root(self)
 
     @property
@@ -901,14 +913,10 @@ class Settings(BaseSettings):
 
     @property
     def storage(self) -> StorageConfig:
-        from config.paths import resolve_storage_root
-
         return StorageConfig(root=resolve_storage_root(self), max_upload_mb=self.MAX_UPLOAD_MB)
 
     @property
     def database(self) -> DatabaseConfig:
-        from config.paths import resolve_storage_root
-
         return DatabaseConfig(
             url=self.DATABASE_URL,
             allow_sqlite_dev_fallback=self.ALLOW_SQLITE_DEV_FALLBACK,

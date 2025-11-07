@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Retrieval interface definitions."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable

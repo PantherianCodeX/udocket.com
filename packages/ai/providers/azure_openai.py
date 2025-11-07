@@ -1,17 +1,16 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Azure OpenAI provider adapter."""
 
+from __future__ import annotations
+
 import json
-from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import requests
 
-from ..api import (
+from packages.ai.api import (
     ChatMessage,
     ChatRequest,
     ChatResult,
@@ -26,15 +25,16 @@ from ..api import (
     TimelineExtractionRequest,
     TimelineExtractionResult,
 )
-from ..errors import ProviderConfigurationError
-from ..providers.interfaces import ProviderAdapter
-from ..providers.settings import AzureOpenAIConfig
-from ..safety.egress import EgressPolicy
-from ..safety.residency import ResidencyPolicy
-from ..secret import SecretSource
-from ..telemetry import ProviderCallMetrics
-from ..types import AgentTask, Region
-from ..types.identifiers import ModelName, ProviderName, RouteName
+from packages.ai.errors import ProviderConfigurationError
+from packages.ai.providers.interfaces import ProviderAdapter
+from packages.ai.types import AgentTask, ProviderCallMetrics, Region
+from packages.ai.types.identifiers import ModelName, ProviderName, RouteName
+
+if TYPE_CHECKING:
+    from packages.ai.providers.settings import AzureOpenAIConfig
+    from packages.ai.safety.egress import EgressPolicy
+    from packages.ai.safety.residency import ResidencyPolicy
+    from packages.ai.secret import SecretSource
 
 
 def _coerce_int(value: object) -> int | None:
@@ -68,38 +68,52 @@ class AzureOpenAIAdapter(ProviderAdapter):
         return self.config.region
 
     @property
-    def supported_tasks(self) -> Collection[AgentTask]:
+    def supported_tasks(self) -> tuple[AgentTask, ...]:
         return (
             AgentTask.CHAT,
             AgentTask.EMBED,
         )
 
-    def available_models(self, task: AgentTask) -> Collection[ModelName]:
+    def available_models(self, task: AgentTask) -> tuple[ModelName, ...]:
         if task in self.supported_tasks:
             return (ModelName(self.config.deployment),)
         return ()
 
-    def summarize(self, request: SummarizeRequest) -> SummarizeResult:  # pragma: no cover - not wired yet
-        raise NotImplementedError("Summarize not wired to Azure adapter yet")
+    def summarize(
+        self,
+        request: SummarizeRequest,
+    ) -> SummarizeResult:  # pragma: no cover - not wired yet
+        message = "Summarize not wired to Azure adapter yet"
+        raise NotImplementedError(message)
 
     def compose(self, request: ComposeRequest) -> ComposeResult:  # pragma: no cover - not wired yet
-        raise NotImplementedError("Compose not wired to Azure adapter yet")
+        message = "Compose not wired to Azure adapter yet"
+        raise NotImplementedError(message)
 
-    def extract_timeline(self, request: TimelineExtractionRequest) -> TimelineExtractionResult:  # pragma: no cover
-        raise NotImplementedError("Timeline extraction not wired to Azure adapter yet")
+    def extract_timeline(
+        self,
+        request: TimelineExtractionRequest,
+    ) -> TimelineExtractionResult:  # pragma: no cover
+        message = "Timeline extraction not wired to Azure adapter yet"
+        raise NotImplementedError(message)
 
-    def extract_entities(self, request: EntityExtractionRequest) -> EntityExtractionResult:  # pragma: no cover
-        raise NotImplementedError("Entity extraction not wired to Azure adapter yet")
+    def extract_entities(
+        self,
+        request: EntityExtractionRequest,
+    ) -> EntityExtractionResult:  # pragma: no cover
+        message = "Entity extraction not wired to Azure adapter yet"
+        raise NotImplementedError(message)
 
     def chat(self, request: ChatRequest) -> ChatResult:
         payload = self._invoke_chat(request)
         return ChatResult(messages=payload.messages, metrics=payload.metrics)
 
     def embed(self, request: EmbeddingRequest) -> EmbeddingResult:
-        raise NotImplementedError("Embedding not implemented for Azure adapter")
+        message = "Embedding not implemented for Azure adapter"
+        raise NotImplementedError(message)
 
     def describe_route(self, *, task: AgentTask, model: ModelName) -> RouteName | None:
-        return RouteName(f"{self.name}:{model}")
+        return RouteName(f"{self.name}:{task.value}:{model}")
 
     # Internal helpers -------------------------------------------------
 
@@ -126,9 +140,8 @@ class AzureOpenAIAdapter(ProviderAdapter):
             f"{self.config.endpoint.rstrip('/')}/openai/deployments/"
             f"{self.config.deployment}/chat/completions?api-version=2024-02-15-preview"
         )
-        messages_payload: list[Mapping[str, str]] = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.messages
+        messages_payload: list[dict[str, str]] = [
+            {"role": msg.role, "content": msg.content} for msg in request.messages
         ]
         payload = {"messages": messages_payload}
         response = requests.post(
@@ -141,18 +154,18 @@ class AzureOpenAIAdapter(ProviderAdapter):
             timeout=120,
         )
         response.raise_for_status()
-        data = cast(dict[str, object], response.json())
-        choices = cast(Sequence[object], data.get("choices") or ())
+        data = cast("dict[str, object]", response.json())
+        choices = cast("list[object]", data.get("choices") or [])
         content = ""
         if choices:
-            first = cast(dict[str, object], choices[0])
-            message = cast(dict[str, object], first.get("message") or {})
+            first = cast("dict[str, object]", choices[0])
+            message = cast("dict[str, object]", first.get("message") or {})
             raw_content = message.get("content")
             if isinstance(raw_content, str):
                 content = raw_content
             else:
                 content = json.dumps(raw_content, ensure_ascii=False)
-        usage_payload = cast(dict[str, object], data.get("usage") or {})
+        usage_payload = cast("dict[str, object]", data.get("usage") or {})
         metrics = ProviderCallMetrics(
             total_tokens=_coerce_int(usage_payload.get("total_tokens")),
             prompt_tokens=_coerce_int(usage_payload.get("prompt_tokens")),
@@ -160,6 +173,6 @@ class AzureOpenAIAdapter(ProviderAdapter):
         )
         assistant_message = ChatMessage(role="assistant", content=str(content))
         return AzureOpenAIAdapter._ChatPayload(
-            messages=request.messages + (assistant_message,),
+            messages=(*request.messages, assistant_message),
             metrics=metrics,
         )

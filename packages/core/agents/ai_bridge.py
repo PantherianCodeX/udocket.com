@@ -7,7 +7,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from packages.ai import DefaultAIClient, build_client
-from packages.ai.config_translator import ai_settings_from_llm
+from packages.ai.config.translator import ai_settings_from_llm
 from packages.ai.providers.registry import default_adapters
 from packages.core.llm.config import load_llm_settings
 

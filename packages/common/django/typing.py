@@ -1,8 +1,10 @@
+# pyright: strict
+"""Typing protocols for Django models and querysets."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
 
-# pyright: strict
 from typing import Any, Protocol, TypeVar, cast, overload
 
 T_co = TypeVar("T_co", covariant=True)

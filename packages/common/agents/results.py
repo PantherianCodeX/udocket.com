@@ -1,11 +1,12 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Shared dataclasses describing agent outputs."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
+
 RegionLiteral = str
 
 

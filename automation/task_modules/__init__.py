@@ -1,4 +1,4 @@
-from __future__ import annotations
+# pyright: strict
 
 """Import-forwarding shims for Celery task modules.
 
@@ -7,7 +7,8 @@ tree. Until then we lazily re-export the existing platform task modules so that
 new import paths are already available to callers and tests.
 """
 
-# pyright: strict
+from __future__ import annotations
+
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Final
 
@@ -35,7 +36,8 @@ if TYPE_CHECKING:
 
 def __getattr__(name: str) -> Any:
     if name not in _EXPORTED_NAMES:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+        msg = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(msg)
     module = import_module(_TARGET_MODULE)
     value = getattr(module, name)
     globals()[name] = value

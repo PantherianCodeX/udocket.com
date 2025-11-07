@@ -5,8 +5,13 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from packages.common.text import slugify
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 THIS_DIR = Path(__file__).resolve().parent
 try:
@@ -20,8 +25,6 @@ REPO_ROOT = THIS_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from packages.common.text import slugify
-
 
 def decode_from_make(lines: Sequence[str], name: str) -> str:
     pattern = re.compile(rf"^{re.escape(name)}\s*:=\s*\"(.*)\"$")
@@ -29,7 +32,8 @@ def decode_from_make(lines: Sequence[str], name: str) -> str:
         match = pattern.match(line)
         if match:
             return bytes(match.group(1), "utf-8").decode("unicode_escape")
-    raise SystemExit(f"Missing definition for {name}")
+    msg = f"Missing definition for {name}"
+    raise SystemExit(msg)
 
 
 def collect_sections(
@@ -156,7 +160,8 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     makefile_path = Path(args.makefile).resolve()
     if not makefile_path.exists():
-        raise SystemExit(f"Makefile not found: {makefile_path}")
+        msg = f"Makefile not found: {makefile_path}"
+        raise SystemExit(msg)
 
     return render_help(slug=args.slug, makefile_path=makefile_path)
 

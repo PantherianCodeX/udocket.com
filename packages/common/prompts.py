@@ -1,6 +1,7 @@
+# pyright: strict
+
 from __future__ import annotations
 
-# pyright: strict
 import json
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence

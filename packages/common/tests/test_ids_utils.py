@@ -1,8 +1,9 @@
+# pyright: strict
+
 from __future__ import annotations
 
 from collections.abc import MutableMapping
 
-# pyright: strict
 from typing import cast
 from uuid import NAMESPACE_DNS, UUID, uuid5
 

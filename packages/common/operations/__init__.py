@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Shared operations-layer helpers."""
+
+from __future__ import annotations
 
 from .case_payloads import CaseIntakeBuilder, CaseIntakePayload
 from .channels import CaseUpdatePayload, JobUpdatePayload

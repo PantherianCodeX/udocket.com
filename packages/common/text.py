@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """String-related helpers shared across packages."""
+
+from __future__ import annotations
 
 import re
 from collections.abc import Iterable

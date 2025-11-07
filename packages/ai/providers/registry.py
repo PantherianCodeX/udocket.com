@@ -1,26 +1,26 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Factory helpers for provider adapters."""
 
-from collections.abc import Mapping
+from __future__ import annotations
 
-from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
-from .azure_openai import AzureOpenAIAdapter
-from .interfaces import ProviderAdapter
-from .null import NullProvider
-from ..config import AISettings, ProviderAccount
-from ..providers.settings import AzureOpenAIConfig
-from ..safety.egress import EgressPolicy
-from ..safety.residency import ResidencyPolicy
-from ..secret import SecretSource
 from ..types import AllowedRegion
 from ..types.identifiers import ProviderName
+from .azure_openai import AzureOpenAIAdapter
+from .null import NullProvider
+from .settings import AzureOpenAIConfig
+
+if TYPE_CHECKING:
+    from ..config import AISettings, ProviderAccount
+    from ..safety.egress import EgressPolicy
+    from ..safety.residency import ResidencyPolicy
+    from ..secret import SecretSource
+    from .interfaces import ProviderAdapter
 
 
-def default_adapters() -> Mapping[ProviderName, ProviderAdapter]:
+def default_adapters() -> dict[ProviderName, ProviderAdapter]:
     """Return a registry containing the null provider for tests."""
 
     provider = NullProvider()
@@ -33,7 +33,7 @@ def adapters_from_settings(
     secret_source: SecretSource,
     residency_policy: ResidencyPolicy,
     egress_policy: EgressPolicy,
-) -> Mapping[ProviderName, ProviderAdapter]:
+) -> dict[ProviderName, ProviderAdapter]:
     """Build provider adapters from AI settings."""
 
     adapters: dict[ProviderName, ProviderAdapter] = {}
@@ -64,7 +64,7 @@ def _build_adapter_for_account(
         config = AzureOpenAIConfig(
             name=provider_name,
             region=account.region,
-            allowed_regions=allowed_regions or (AllowedRegion(region=account.region),),
+            allowed_regions=allowed_regions,
             endpoint=account.endpoint or "",
             deployment=account.default_model or "",
             api_key_env=account.api_key_env or "",
@@ -78,4 +78,4 @@ def _build_adapter_for_account(
     return None
 
 
-__all__ = ["default_adapters", "adapters_from_settings"]
+__all__ = ["adapters_from_settings", "default_adapters"]

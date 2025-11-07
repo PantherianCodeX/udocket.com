@@ -1,17 +1,20 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Residency policy interfaces."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from ..errors import ResidencyViolationError
-from ..types import AgentTask, AllowedRegion, Region
-from ..types.identifiers import OrganizationID, ProviderName
+from packages.ai.errors import ResidencyViolationError
+
+if TYPE_CHECKING:
+    from packages.ai.types import AgentTask, AllowedRegion, Region
+    from packages.ai.types.identifiers import OrganizationID, ProviderName
 
 
+@runtime_checkable
 class ResidencyPolicy(Protocol):
     """Determines whether a provider/region combination is permitted."""
 
@@ -39,6 +42,7 @@ class AllowListResidencyPolicy(ResidencyPolicy):
         task: AgentTask,
         org_id: OrganizationID | None = None,
     ) -> None:
+        _ = (task, org_id)
         if not self.allowed_regions:
             return
         for rule in self.allowed_regions:
@@ -60,11 +64,11 @@ class AllowAllResidencyPolicy(ResidencyPolicy):
         task: AgentTask,
         org_id: OrganizationID | None = None,
     ) -> None:  # pragma: no cover - trivial
-        return None
+        _ = (provider, region, task, org_id)
 
 
 __all__ = [
-    "ResidencyPolicy",
-    "AllowListResidencyPolicy",
     "AllowAllResidencyPolicy",
+    "AllowListResidencyPolicy",
+    "ResidencyPolicy",
 ]

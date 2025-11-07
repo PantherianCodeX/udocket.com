@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # pyright: strict
 
 """Helpers for generating deterministic identifiers."""
+
+from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, MutableMapping, Sequence
 from typing import Union, cast

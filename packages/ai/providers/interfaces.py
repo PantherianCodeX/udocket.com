@@ -1,28 +1,27 @@
-from __future__ import annotations
-
 # pyright: strict
-
 """Provider interface definitions."""
 
-from collections.abc import Collection
-from typing import Protocol, runtime_checkable
+from __future__ import annotations
 
-from ..api import (
-    ChatRequest,
-    ChatResult,
-    ComposeRequest,
-    ComposeResult,
-    EmbeddingRequest,
-    EmbeddingResult,
-    EntityExtractionRequest,
-    EntityExtractionResult,
-    SummarizeRequest,
-    SummarizeResult,
-    TimelineExtractionRequest,
-    TimelineExtractionResult,
-)
-from ..types import AgentTask, Region
-from ..types.identifiers import ModelName, ProviderName, RouteName
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from ..api import (
+        ChatRequest,
+        ChatResult,
+        ComposeRequest,
+        ComposeResult,
+        EmbeddingRequest,
+        EmbeddingResult,
+        EntityExtractionRequest,
+        EntityExtractionResult,
+        SummarizeRequest,
+        SummarizeResult,
+        TimelineExtractionRequest,
+        TimelineExtractionResult,
+    )
+    from ..types import AgentTask, Region
+    from ..types.identifiers import ModelName, ProviderName, RouteName
 
 
 @runtime_checkable
@@ -36,20 +35,22 @@ class ProviderAdapter(Protocol):
     def region(self) -> Region: ...
 
     @property
-    def supported_tasks(self) -> Collection[AgentTask]: ...
+    def supported_tasks(self) -> tuple[AgentTask, ...]: ...
 
-    def available_models(self, task: AgentTask) -> Collection[ModelName]: ...
+    def available_models(self, task: AgentTask) -> tuple[ModelName, ...]: ...
 
     def summarize(self, request: SummarizeRequest) -> SummarizeResult: ...
 
     def compose(self, request: ComposeRequest) -> ComposeResult: ...
 
     def extract_timeline(
-        self, request: TimelineExtractionRequest
+        self,
+        request: TimelineExtractionRequest,
     ) -> TimelineExtractionResult: ...
 
     def extract_entities(
-        self, request: EntityExtractionRequest
+        self,
+        request: EntityExtractionRequest,
     ) -> EntityExtractionResult: ...
 
     def describe_route(self, *, task: AgentTask, model: ModelName) -> RouteName | None: ...

@@ -2315,7 +2315,7 @@ ______________________________________________________________________
 *Observability: Docs lint metric `docs_runbook_missing_total` and OnCall drill analytics monitor coverage.*
 
 - **Platform runbooks:** `../ops/runbooks.md`
-- **Settings Registry runbooks:** [`../platform/settings.md Appendix D`](../ops/runbooks.md#settings-registry-83-runbooks-drills-binding)
+- **Settings Registry runbooks:** [`../platform/settings.md Appendix D`](../ops/runbooks.md#settings-registry--83-runbooks--drills-binding)
 - **Guardian runbooks:** [`../platform/guardian.md Appendix B`](../platform/guardian.md#83-runbooks-drills-binding)
 
 ## Appendix I — Glossary & taxonomy
