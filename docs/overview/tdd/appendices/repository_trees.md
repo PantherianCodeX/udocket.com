@@ -53,24 +53,24 @@ appendix manually whenever the canonical structure changes.
 
 - [Document Controls](#document-controls)
 - [Appendix overview](#appendix-overview)
-  - [Top-level layout {#top-level-layout}](#top-level-layout-top-level-layout)
-  - [A. Platform runtime \& core services {#a-platform-runtime-core-services}](#a-platform-runtime--core-services-a-platform-runtime-core-services)
-  - [B. Automation \& agent pipelines {#b-automation-agent-pipelines}](#b-automation--agent-pipelines-b-automation-agent-pipelines)
-  - [C. Shared packages \& SDKs {#c-shared-packages-sdks}](#c-shared-packages--sdks-c-shared-packages-sdks)
+  - [Top-level layout](#top-level-layout)
+  - [A. Platform runtime \& core services](#a-platform-runtime-core-services)
+  - [B. Automation \& agent pipelines](#b-automation-agent-pipelines)
+  - [C. Shared packages \& SDKs](#c-shared-packages-sdks)
     - [C.1 `packages/common/`](#c1-packagescommon)
     - [C.2 `packages/core/`](#c2-packagescore)
     - [C.3 `packages/ai/`](#c3-packagesai)
     - [C.4 `packages/docs_tooling/`](#c4-packagesdocs_tooling)
     - [C.5 `packages/client_sdks/`](#c5-packagesclient_sdks)
-  - [D. Experience \& communications {#d-experience-communications}](#d-experience--communications-d-experience-communications)
-  - [E. Data, trust \& compliance {#e-data-trust-compliance}](#e-data-trust--compliance-e-data-trust-compliance)
-  - [F. Infrastructure \& operations {#f-infrastructure-operations}](#f-infrastructure--operations-f-infrastructure-operations)
-  - [G. Testing \& quality {#g-testing-quality}](#g-testing--quality-g-testing-quality)
-  - [H. Documentation system {#h-documentation-system}](#h-documentation-system-h-documentation-system)
+  - [D. Experience \& communications](#d-experience-communications)
+  - [E. Data, trust \& compliance](#e-data-trust-compliance)
+  - [F. Infrastructure \& operations](#f-infrastructure-operations)
+  - [G. Testing \& quality](#g-testing-quality)
+  - [H. Documentation system](#h-documentation-system)
 
 ______________________________________________________________________
 
-### Top-level layout {#top-level-layout}
+### Top-level layout
 
 The root keeps peers shallow so each concern stays obvious.
 
@@ -92,7 +92,7 @@ udocket/ — repo root
 
 ______________________________________________________________________
 
-### A. Platform runtime & core services {#a-platform-runtime-core-services}
+### A. Platform runtime & core services
 
 The platform runtime is split into web apps under `apps/` and independent services under
 `services/`, making each deployable obvious and auditable.
@@ -127,7 +127,7 @@ services/ — independently deployable backends; no UI (each keeps runtime in sr
 
 > **Service convention:** Every service directory keeps runtime Python code in `src/` so Dockerfiles, k8s manifests, and infra scripts can live alongside without polluting import paths. Apps and packages keep their modules at the root (no extra `src/`) to minimize import depth.
 
-### B. Automation & agent pipelines {#b-automation-agent-pipelines}
+### B. Automation & agent pipelines
 
 Automation code is layered so LangGraph pipelines, agent implementations, and Celery task
 modules remain isolated yet composable.
@@ -144,7 +144,7 @@ automation/ — agent pipelines + orchestration; no provider SDKs inline
 │  └─ relationship/ — entity/edge extraction via packages.ai.api.extract_entities
 ```
 
-### C. Shared packages & SDKs {#c-shared-packages-sdks}
+### C. Shared packages & SDKs
 
 Packages house reusable primitives, policy-bound orchestration, AI tooling, docs helpers,
 and customer SDKs.
@@ -237,7 +237,7 @@ packages/client_sdks/ — public SDKs; no private/admin APIs
 └─ utils/ — Package-specific shared helpers and utilities
 ```
 
-### D. Experience & communications {#d-experience-communications}
+### D. Experience & communications
 
 Experience modules track staff and client UIs, assistants, communications pipelines, and
 localization evidence so every touchpoint is localized and auditable.
@@ -264,7 +264,7 @@ config/localization/packs/ — locale pack sources, ICU inputs, pseudolocale tog
 out/localization/packs/ — compiled locale packs emitted by services/lpe
 ```
 
-### E. Data, trust & compliance {#e-data-trust-compliance}
+### E. Data, trust & compliance
 
 Data services bundle reference management, signing, search, artifact storage, and policy
 residency to keep attestations and licensing consistent.
@@ -287,7 +287,7 @@ services/lpe/ — localization + policy compiler; emits packs + OPA bundles
 ops/policy/ — approvals, provenance logs, signer manifests
 ```
 
-### F. Infrastructure & operations {#f-infrastructure-operations}
+### F. Infrastructure & operations
 
 Infrastructure directories surface Kubernetes manifests, service mesh policy, Terraform,
 observability assets, runbooks, and security automation.
@@ -321,7 +321,7 @@ out/ — generated artifacts (gitignored)
 └─ localization/packs/ — compiled locale packs
 ```
 
-### G. Testing & quality {#g-testing-quality}
+### G. Testing & quality
 
 Testing assets cover unit, integration, contract, end-to-end, load, and localization
 suites plus shared fixtures.
@@ -341,7 +341,7 @@ tooling/ — developer/test tooling; no production dependencies
 └─ scripts/ — repo automation, generators, code mods
 ```
 
-### H. Documentation system {#h-documentation-system}
+### H. Documentation system
 
 Documentation follows the same taxonomy as the platform, with appendices mirroring the
 tree definitions and tooling living in `packages/docs_tooling`.
