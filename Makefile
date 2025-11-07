@@ -47,7 +47,7 @@ SERVICE ?= platform
 CMD ?=
 DEV_SERVICE := platform-dev
 DOCS_SERVICE := docs
-DOCS_RUN := $(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc
+DOCS_RUN := $(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c
 DOCS_PY := $(UV) run --project packages/docs_tooling --extra dev
 DOCSITE_CONTAINER ?= udocket-docs-site
 DOCSITE_ADDR ?= 0.0.0.0
@@ -368,7 +368,7 @@ docsite.up: ## Start MkDocs live-reload server in the docs container
 	DOCS_DEV_PORT=$(DOCSITE_PORT) $(DOCS_COMPOSE) run -d --name $(DOCSITE_CONTAINER) --service-ports \
 		-e DOCSITE_ADDR="$(DOCSITE_ADDR)" \
 		-e DOCSITE_PORT="$(DOCSITE_PORT)" \
-		$(DOCS_SERVICE) bash -lc "set +u; set -eo pipefail; $(UV) run --project packages/docs_tooling --extra dev mkdocs serve --config-file packages/docs_tooling/mkdocs.yml --dev-addr \"$${DOCSITE_ADDR:-0.0.0.0}:$${DOCSITE_PORT:-8010}\""
+		$(DOCS_SERVICE) bash -c "set +u; set -eo pipefail; $(UV) run --project packages/docs_tooling --extra dev mkdocs serve --config-file packages/docs_tooling/mkdocs.yml --dev-addr \"$${DOCSITE_ADDR:-0.0.0.0}:$${DOCSITE_PORT:-8010}\""
 	@echo "[docsite] Serving docs at $(DOCSITE_URL)"
 
 docsite.down: ## Stop the MkDocs dev server container
@@ -412,10 +412,10 @@ escape_dquotes = $(subst ",\",$(1))
 DOCS_ARGS ?= $(filter-out docs.test docs.test.coverage,$(MAKECMDGOALS))
 
 docs.test:
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner"
 
 docs.test.coverage:
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -lc "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner --coverage"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner --coverage"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image
