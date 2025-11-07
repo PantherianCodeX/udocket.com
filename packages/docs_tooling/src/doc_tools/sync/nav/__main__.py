@@ -9,7 +9,9 @@ from doc_tools.sync.nav import appendices
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Synchronise MkDocs navigation sections.")
-    parser.add_argument("--dry-run", action="store_true", help="Show planned changes without editing files")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show planned changes without editing files"
+    )
     return parser.parse_args(argv or sys.argv[1:])
 
 
@@ -23,10 +25,6 @@ def main(argv: list[str] | None = None) -> int:
     appendix_files = appendices.discover_appendices(appendices.APPENDICES_DIR)
     changed |= appendices.sync_nav(appendices.MKDOCS_CONFIG, appendix_files, dry_run=args.dry_run)
 
-    if args.dry_run and not changed:
-        print("[nav.sync] navigation already up to date")
-    elif not args.dry_run and not changed:
-        print("[nav.sync] navigation already up to date")
     return 0
 
 
