@@ -172,8 +172,6 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
                 output.append("")
             slug = slugify(prefixed_text)
             heading_line = f"{'#' * normalized_level} {prefixed_text}"
-            if slug:
-                heading_line += f" {{#{slug}}}"
             output.append(heading_line)
             pending_blank_after_heading = True
             headings.append(
