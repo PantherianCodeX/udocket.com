@@ -36,10 +36,10 @@ behaviour; it only enforces cross-cutting engineering discipline.
   and Settings activation. No change merges without green tests.
 - **Tooling requirements.** Run commands via the provided containers/venvs
   (`make …`, `uv run --project …`). Never install ad-hoc dependencies via `pip`.
-  Before merging any AI runtime change, run `make ai.mypy`, `make ai.pyright`,
-  and `make ai.ruff` so dependencies resolve consistently and typing/linting
-  cover the package with the correct configs. Docs/spec changes must pass
-  `doc_tools.check.links` and MkDocs builds.
+  `make typing.run` executes the repo-wide typewiz gates plus the AI runtime’s
+  dedicated mypy/pyright/Ruff configurations; run it (along with tests/docs)
+  before merging. Docs/spec changes must pass `doc_tools.check.links` and
+  MkDocs builds.
 - **Helper placement & wrappers.** Cross-cutting helpers (JSON, hashing, parsing)
   live in `packages/common`. Agent-specific helpers stay with the agent. Use thin
   wrappers (value objects) instead of raw literals between layers.

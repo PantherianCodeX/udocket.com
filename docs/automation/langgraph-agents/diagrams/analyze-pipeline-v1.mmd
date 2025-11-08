@@ -22,7 +22,6 @@ flowchart LR
     Summary["AN_SUMMARY_DRAFT<br/>(summary_v1.json)"]:::stage
     Staff["AN_STAFF_REPORT<br/>(staff_report_v1.md)"]:::stage
     QA["AN_LANE_QA / AN_EVAL<br/>schema + coverage + atom checks"]:::gate
-    QAJoin["AN_QA_JOIN<br/>Aggregate lane verdicts"]:::stage
     Finalize["AN_FINALIZE_WRITE<br/>version artifacts + ops manifests"]:::stage
 
     Input --> AtomsExtract --> AtomsIndex
@@ -40,7 +39,7 @@ flowchart LR
     Gaps --> Summary
     Flags --> Summary
 
-    Summary --> Staff --> QA --> QAJoin --> Finalize
+    Summary --> Staff --> QA --> Finalize
     QA -->|Requeue Outline| Outline
     QA -->|Requeue Timeline| Timeline
     QA -->|Requeue Entities| Entities

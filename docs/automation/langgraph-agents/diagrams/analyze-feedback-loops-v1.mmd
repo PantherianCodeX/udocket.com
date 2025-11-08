@@ -22,7 +22,6 @@ flowchart TD
     end
 
     QA["QA lane<br/>(schema + coverage)"]:::gate
-    QAJoin["QA join<br/>(aggregate verdicts)"]:::stage
     Directive["Revision directives<br/>(lane-specific instructions)"]:::directive
     Manifest["Write artifacts + ops manifests"]:::stage
 
@@ -39,7 +38,7 @@ flowchart TD
     Issues --> Summary
     Gaps --> Summary
     Flags --> Summary
-    Summary --> Staff --> QA --> QAJoin --> Manifest
+    Summary --> Staff --> QA --> Manifest
 
     QA -->|issue| Directive
     Directive -->|targeted edit| Outline

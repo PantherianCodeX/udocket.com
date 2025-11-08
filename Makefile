@@ -196,19 +196,13 @@ typing.baseline: ## Run pyright and mypy type checks
 	mkdir -p out/test-reports/typing
 	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
 	$(UV) run --project apps/platform --extra dev mypy
+	$(UV) run --project apps/platform --extra dev mypy --config-file packages/ai/mypy.ini packages/ai
+	$(UV) run --project apps/platform --extra dev pyright --project packages/ai/pyrightconfig.json
+	$(UV) run --project packages/common --extra dev python -m ruff check packages/ai --config packages/ai/ruff.toml
 typing.strict: ## Enforce strict typing gates
 	$(PYTHON) scripts/typing/ci_enforce_strict.py
 	$(PYTHON) scripts/typing/check_strict.py --tool both
 	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
-
-ai.mypy: ## Run mypy for packages/ai with the local config
-	$(UV) run --project apps/platform --extra dev mypy --config-file packages/ai/mypy.ini packages/ai
-
-ai.pyright: ## Run pyright for packages/ai using its project config
-	$(UV) run --project apps/platform --extra dev pyright --project packages/ai/pyrightconfig.json
-
-ai.ruff: ## Run Ruff checks for packages/ai with its config
-	$(UV) run --project packages/common --extra dev python -m ruff check packages/ai --config packages/ai/ruff.toml
 typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
 	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
 	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format json --output out/test-reports/typing/dashboard.json || true
