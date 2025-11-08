@@ -5,7 +5,12 @@ import sys
 from pathlib import Path
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import read_doc_label
-from doc_tools.common.nav_utils import collect_entries, find_section
+from doc_tools.common.nav_utils import (
+    NavEntry,
+    collect_entries,
+    find_section,
+    format_entries,
+)
 
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
 ADR_DIR = paths.DOCS_ROOT / "adr"
@@ -33,15 +38,17 @@ def _build_entries(adrs: list[Path], existing: dict[str, str]) -> list[str]:
             overview = adr
         else:
             others.append(adr)
-    lines: list[str] = [f"{INDEX_INDENT}- {INDEX_LABEL}:"]
+    child_entries: list[NavEntry] = []
     if overview:
         rel = overview.relative_to(paths.DOCS_ROOT).as_posix()
         label = existing.get(rel) or read_doc_label(overview, heading_prefixes=("ADR",))
-        lines.append(f"{ITEM_INDENT}- {label}: {rel}")
+        child_entries.append(NavEntry(label=label, target=rel))
     for adr in others:
         rel = adr.relative_to(paths.DOCS_ROOT).as_posix()
         label = existing.get(rel) or read_doc_label(adr, heading_prefixes=("ADR",))
-        lines.append(f"{ITEM_INDENT}- {label}: {rel}")
+        child_entries.append(NavEntry(label=label, target=rel))
+    lines: list[str] = [f"{INDEX_INDENT}- {INDEX_LABEL}:"]
+    lines.extend(format_entries(child_entries, ITEM_INDENT))
     return lines
 
 

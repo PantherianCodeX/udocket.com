@@ -5,7 +5,13 @@ import sys
 from pathlib import Path
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import read_doc_label
-from doc_tools.common.nav_utils import collect_entries, find_section
+from doc_tools.common.nav_utils import (
+    NavEntry,
+    collect_entries,
+    find_section,
+    format_entries,
+    partition_entries,
+)
 
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
 APPENDICES_DIR = paths.DOCS_ROOT / "overview" / "tdd" / "appendices"
@@ -34,27 +40,22 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
 
     managed_targets = {path.relative_to(paths.DOCS_ROOT).as_posix(): path for path in appendix_paths}
     managed_scope = set(managed_targets)
-    managed_lines: list[str] = []
+    preserved, static_entries = partition_entries(existing, managed_scope)
+    managed_entries: list[NavEntry] = []
     remaining_targets = dict(managed_targets)
 
-    # Preserve existing order for items already in the nav.
-    for entry in existing:
-        if entry.target in remaining_targets:
-            managed_lines.append(f"{ITEM_INDENT}- {entry.label}: {entry.target}")
-            remaining_targets.pop(entry.target, None)
+    for entry in preserved:
+        managed_entries.append(entry)
+        remaining_targets.pop(entry.target, None)
 
-    # Append new files alphabetically.
     for rel in sorted(remaining_targets):
         path = remaining_targets[rel]
         fallback_label = path.stem.replace("_", " ").title()
         label = read_doc_label(path, fallback=fallback_label)
-        managed_lines.append(f"{ITEM_INDENT}- {label}: {rel}")
+        managed_entries.append(NavEntry(label=label, target=rel))
 
-    static_lines = [
-        f"{ITEM_INDENT}- {entry.label}: {entry.target}"
-        for entry in existing
-        if entry.target not in managed_scope
-    ]
+    managed_lines = format_entries(managed_entries, ITEM_INDENT)
+    static_lines = format_entries(static_entries, ITEM_INDENT)
 
     new_block = [SECTION_HEADER, *managed_lines, *static_lines]
     current_block = lines[start:end]

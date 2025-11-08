@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True)
@@ -46,4 +46,26 @@ def collect_entries(lines: Sequence[str], start: int, end: int) -> list[NavEntry
     return entries
 
 
-__all__ = ["NavEntry", "collect_entries", "find_section"]
+def partition_entries(
+    entries: Iterable[NavEntry],
+    managed_targets: set[str],
+) -> tuple[list[NavEntry], list[NavEntry]]:
+    """Split *entries* into ``(managed, static)`` buckets based on ``target``."""
+
+    managed: list[NavEntry] = []
+    static: list[NavEntry] = []
+    for entry in entries:
+        if entry.target in managed_targets:
+            managed.append(entry)
+        else:
+            static.append(entry)
+    return managed, static
+
+
+def format_entries(entries: Iterable[NavEntry], indent: str) -> list[str]:
+    """Render *entries* using the provided indentation prefix."""
+
+    return [f"{indent}- {entry.label}: {entry.target}" for entry in entries]
+
+
+__all__ = ["NavEntry", "collect_entries", "find_section", "format_entries", "partition_entries"]
