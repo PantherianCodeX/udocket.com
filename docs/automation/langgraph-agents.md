@@ -17,37 +17,21 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - SRE Manager
-approved_by: 
-approved_date: 
+approved_by:
+approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — LangGraph Agent Orchestration Specification <br>
-    Canonical pipelines for Transcribe, Analyze, Compose, Timeline, and Relationship agents</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-28 · Page
-    <span class="page-number"></span> of <span class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — LangGraph Agent Orchestration Specification <br> Canonical pipelines for Transcribe, Analyze, Compose, Timeline, and Relationship agents</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -92,7 +76,8 @@ ______________________________________________________________________
 **State:** Manifests persist per job under `storage/media/tenants/<ORG_ID>/cases/<case>/analysis|docs|ops`. **|**
 **Failures & handling:** Graph activation rejects invalid schemas; runtime failures follow the taxonomy in §5. **|**
 **Observability:** Metrics for pipeline/job/lane execution and ops JSONL streams (`ops_transcription.jsonl`, `ops_summary.jsonl`, `ops_compose.jsonl`) record pipeline versions, node usage, and retry history. **|**
-**Breadcrumbs:** Orchestration runtime and graph builders live under `packages/core/agents/*`; acceptance tests under `tests/*`.
+**Breadcrumbs:** Orchestration runtime and graph builders live under `packages/core/agents/*`; acceptance tests under `tests/*`. **|**
+**References:** TDD §5.5, Platform Runtime §3, Ops runbooks RB-AGENT-*.
 
 ______________________________________________________________________
 
@@ -104,6 +89,7 @@ ______________________________________________________________________
 **Failures & handling:** Runtime failures map to the taxonomy in §5. **|**
 **Observability:** Metrics `agent_job_duration_seconds{agent=}`, `agent_retry_total`, `atoms_extracted_total`, QA issue density, and pipeline dashboards. **|**
 **Breadcrumbs:** Transcription `packages/core/agents/transcribe_lib.py`, Analyze `packages/core/agents/analyze_lib.py` + stages `packages/core/agents/analyze/stages/`, Compose `packages/core/agents/compose_lib.py` + orchestrator `packages/core/agents/compose/orchestrator.py`, manifests `packages/core/agents/manifests.py`. **|**
+**References:** Transcribe/Analyze/Compose specs, automation LangGraph diagrams, Ops runbooks RB-AGENT-*.
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/diagrams/automation/langgraph-agents/pipeline-overview-v1.svg" alt="LangGraph pipeline overview">
@@ -252,6 +238,8 @@ ______________________________________________________________________
 **State:** Runtime emits error codes as part of agent responses; schema parity is enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail lint and trigger `agent_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards chart `agent_api_error_total{code}`; synthetic launches follow pause/resume flows. **|**
+**Breadcrumbs:** Error catalog lives in `docs/overview/tdd/appendices/api_error_codes.md`, enforcement in `packages/core/agents/api_errors.py`, tests `tests/agents/test_error_codes.py`. **|**
+**References:** Platform Runtime §3.3, Ops runbooks RB-AGENT-ACTIVATION/RB-AGENT-QA.
 
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#langgraph-agent-orchestration)
 
@@ -347,7 +335,6 @@ ______________________________________________________________________
 - Resume rules: resumed jobs verify checkpoint digests, ensuring idempotent behaviour; if pipeline definitions drift, the runtime raises `E_INTEGRITY_MISMATCH` and recommends a fresh run.
 - Provider failure mitigations: fallback providers require waiver and explicit assignment; backlog watchers page after configurable SLO breaches.
 - QA failure handling: QA lane `E_POLICY_FORBIDDEN` stops promotion; reviewers receive ops log pointers and findings.
- 
 
 ______________________________________________________________________
 
@@ -362,7 +349,7 @@ ______________________________________________________________________
 **References:** This document.
 
 - **Transcription accuracy:** WER ≤ 8 % on on-demand, ≤ 6 % on batch measured quarterly; metrics `transcription_wer_pct{mode,language}`; regressions ≥ 2 % trigger incident review.
- 
+
 - **Review delta:** Reviewer change rate ≤ 15 % of sections; QA issue density ≤ 0.2 blocking defects per artifact; tracked via QA logs.
 - **FinOps blend:** Monitor tokens-per-approved artifact and rejection counts to ensure budget adherence without quality degradation.
 - **Shadow acceptance:** Shadow runs must match production outputs within tolerance windows (§8.2) before promoting new pipelines.
@@ -384,53 +371,65 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 7) Security & Compliance (scope note)
+## 7) Security & Compliance (binding)
 
-This specification focuses on LangGraph agent behaviour (graphs, nodes, state, artifacts, QA) and does not define residency regions, privacy regimes, or cross‑service policy enforcement. Those concerns are owned by platform services and their documents.
+**Purpose:** Summarize how LangGraph pipelines respect platform security, residency, and privacy controls. **|**
+**Contract:** Pipelines must honour settings snapshots, residency/waiver metadata, Guardian judgments, and redact PII/PHI from logs; no node may bypass policy enforcement owned by Guardian, Policy Residency, or Observability specs. **|**
+**State:** Settings snapshots, residency annotations, Guardian manifests, and ops JSONL logs capture security posture per job. **|**
+**Failures & handling:** Residency drifts or Guardian overrides block pipeline promotion until RB-RES-BLOCK or RB-AGENT-QA remediation completes; logging/redaction incidents route to RB-MASK. **|**
+**Observability:** Metrics `agent_guardian_block_total`, `agent_logging_neverlog_violation_total`, runbook evidence, and Guardian dashboards. **|**
+**Breadcrumbs:** Guardian spec, Policy Residency spec, Observability spec, Ops runbooks RB-AGENT-QA / RB-MASK. **|**
+**References:** Policy Residency §2, Guardian §5, Observability §7.
 
 ______________________________________________________________________
 
-## 8) Operational Notes
+## 8) Operational Notes (binding)
 
-**Purpose:** Document activation, migration, and incident management workflows that keep agent pipelines reliable in production. **|**
-**Contract:** Pipeline activations follow blue/green rollouts with automatic rollback on health regressions; shadow mode validation required prior to enabling new pipelines or providers. **|**
-**State:** Activation manifests record rollout state per org; shadow run results stored under `ops/shadow_runs/<pipeline>/<timestamp>.json`; migration plans track pipeline version transitions. **|**
-**Failures & handling:** Activation failure triggers rollback to previous pipeline; shadow divergences raise alerts; migration blockers escalate for remediation. **|**
-**Observability:** Ops manifests and LangGraph job metrics expose rollout status. **|**
-**Breadcrumbs:** Activation and shadow mode are platform orchestration topics and are out of scope here.
-**References:** This document.
+**Purpose:** Document activation, migration, and incident workflows required to run LangGraph pipelines safely. **|**
+**Contract:** Pipelines ship via staged activations (shadow → pilot → general) with automated rollback; migrations must preserve checkpoints and manifests; incidents follow RB-AGENT-\* playbooks. **|**
+**State:** Activation manifests under `ops/agents/activations/<pipeline>.json`, shadow run evidence `ops/shadow_runs/<pipeline>/<timestamp>.json`, migration plans in `ops/agents/migrations/*.md`. **|**
+**Failures & handling:** Activation failure, shadow divergence, or migration drift triggers rollback plus incident review before resumes. **|**
+**Observability:** Dashboards “Agent Activations”, “Shadow Acceptance”, `agent_activation_status` metrics, and ops manifests record rollout health. **|**
+**Breadcrumbs:** Activation scripts `scripts/agents/activate_pipeline.py`, Ops runbooks RB-AGENT-ACTIVATION/RB-AGENT-SHADOW. **|**
+**References:** Worker cluster spec §8, Ops governance policy, RB-AGENT-* runbooks.
 
 ### 8.1 Operational Posture (binding)
 
-**Purpose:** Capture staffing, maintenance windows, and readiness expectations for LangGraph operations. **|**
-**Contract:** Applied AI Engineering owns primary on-call with Platform Operations as secondary; rotations guarantee <15 minute acknowledgement and 24/7 coverage for production clusters. **|**
-**State/Observability/Breadcrumbs/References:** Operational staffing and escalation are out of scope for LangGraph agents.
+**Purpose:** Capture staffing, maintenance windows, and readiness expectations. **|**
+**Contract:** Applied AI Engineering owns the primary pager with Platform Operations as secondary; acknowledge pages within 15 minutes and maintain 24/7 coverage. **|**
+**State:** On-call rosters `ops/oncall/agents.md`, maintenance calendar `ops/agents/maintenance.ics`, readiness checklist `ops/agents/readiness.md`. **|**
+**Failures & handling:** Coverage gaps escalate to Platform Operations leadership and block releases until rota restored. **|**
+**Observability:** PagerDuty analytics (`agents_oncall_ack_latency_seconds`), rota health dashboards. **|**
+**Breadcrumbs:** Ops/oncall repo, incident management policy, RB-AGENT-ACTIVATION. **|**
+**References:** Ops governance policy §3, Worker cluster spec §8.
 
-- Primary on-call: Applied AI Engineering engineers rotate weekly; Platform Operations carries shadow rotation to absorb surge or responder fatigue.
-- Maintenance windows: weekly Tuesday 02:00–04:00 local and monthly Saturday 20:00–22:00 UTC reserved for pipeline migrations; customer-impacting changes require 72-hour notice to Customer Success.
- 
+- Primary on-call rotates weekly (Applied AI Engineering); Platform Operations maintains a shadow rotation for redundancy.
+- Maintenance windows: weekly Tuesday 02:00–04:00 local and monthly Saturday 20:00–22:00 UTC for migrations; customer-impacting changes require 72-hour notice.
 
 ### 8.2 Incident Triggers (binding)
 
-**Purpose:** Define the alerts and dashboards that escalate LangGraph incidents so responders execute the correct runbooks. **|**
-**Contract:** Each trigger maps to a specific RB-AGENT playbook; alerts must remain actionable with paging enabled during coverage windows. **|**
-**State/Observability/Breadcrumbs/References:** Operational alerting, staffing, and synthetic monitoring are out of scope for this document.
+**Purpose:** Define the alerts and dashboards that escalate LangGraph incidents. **|**
+**Contract:** Each trigger maps to RB-AGENT playbooks with paging enabled during coverage windows. **|**
+**State:** Alert definitions under `infra/monitoring/agents-prometheus-rules.yaml`; suppression policies in `ops/agents/alerts.md`. **|**
+**Failures & handling:** Monthly alert reviews prune noisy signals; missing runbooks block rollout until remediation. **|**
+**Observability:** Grafana “Agent Alerts” dashboard, Alertmanager audit logs. **|**
+**Breadcrumbs:** Monitoring repo, Ops runbooks RB-AGENT-*. **|**
+**References:** Observability spec §6, Ops governance policy.
 
 - `agent_shadow_divergence_total` or replay mismatches trigger `RB-AGENT-SHADOW` to disable the candidate pipeline and roll back to the prior manifest.
 - `agent_job_duration_seconds` / `agent_retry_total` breaches signal backlog or provider instability and dispatch `RB-AGENT-ACTIVATION`.
 - QA failure spikes (`qa_blocking_total`, `qa_issue_density`) page via `RB-AGENT-QA` to rerun validation and quarantine outputs.
 - Settings activation failures (`agents_pipeline_activation_failed_total`) route to `RB-AGENT-ACTIVATION`; responders collect manifests and block further rollouts.
- 
 
 ### 8.3 Runbooks & Drills (binding)
 
 **Purpose:** Ensure operators have actionable playbooks for agent degradations, activation failures, and QA regressions. **|**
 **Contract:** Runbooks listed here must remain current, link to Ops catalog entries, and surface evidence expectations for compliance. **|**
-**State:** Runbook markdown lives under `docs/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runboo../data/agents/`. **|**
+**State:** Runbook markdown lives under `docs/ops/runbooks/agents/`; drill evidence and after-action reviews are archived in `ops/runbooks/agents/drills/<date>/`. **|**
 **Failures & handling:** Missing or stale runbooks block launch; drills uncover coverage gaps and feed remediation tickets. **|**
 **Observability:** Ops catalog build (`make docs.sync.runbooks`), drill checklist dashboards, and on-call retros track preparedness. **|**
-**Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, evidence store `ops/runboo../data/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
-**References:** This document.
+**Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, evidence store `ops/runbooks/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
+**References:** Ops governance policy, RB-AGENT-* runbooks.
 
 - Runbooks must cover activation rollback, shadow divergence, and QA defect surge.
 - On-call rotation uses `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`, `RB-AGENT-ACTIVATION`, `RB-AGENT-SHADOW`, and `RB-AGENT-QA`.
@@ -494,9 +493,25 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 
 ______________________________________________________________________
 
-## 9) References
+## 9) Dependencies (binding)
 
-- This specification focuses exclusively on LangGraph agents (graphs, nodes, state, artifacts, QA). Integration and platform specifics are covered in their dedicated documents.
+**Purpose:** Describe upstream/downstream systems LangGraph relies on. **|**
+**Contract:** Pipelines depend on Settings activations, Policy Residency catalogs, Guardian judgments, worker cluster capacity, and provider registries; changes to those dependencies follow their specs. **|**
+**State:** Shared manifests, event streams (`agents.pipeline.activation`, `guardian.judgment.*`), and residency annotations link outputs to dependencies. **|**
+**Failures & handling:** Dependency drift (Settings failure, residency block, provider outage) triggers the respective RB-* runbook plus RB-AGENT-ACTIVATION before resuming pipelines. **|**
+**Observability:** Dependency dashboards (Settings health, residency waiver boards, provider parity) appear alongside agent dashboards. **|**
+**Breadcrumbs:** Settings spec §7, Policy Residency spec, Guardian spec, Worker cluster spec, Speech/LLM Registry specs. **|**
+**References:** TDD §§5–7, Ops runbooks RB-RES-BLOCK/RB-LLM-003.
+
+______________________________________________________________________
+
+## 10) References (informative)
+
+- TDD §5 Automation & Agent Pipelines
+- Platform Runtime §3 (API contracts & activation)
+- Guardian Specification §5–§8
+- Policy Residency & OPA Policy Plane specifications
+- Ops runbooks RB-AGENT-*, RB-RES-BLOCK, RB-LLM-003
 
 ______________________________________________________________________
 
@@ -601,13 +616,12 @@ ______________________________________________________________________
 - `E_INPUT_INVALID` → class `INPUT`
 - `E_INTEGRITY_MISMATCH` → class `INTEGRITY`
 - `E_CONFLICT` → class `CONCURRENCY`
- 
 
 Ops JSON includes `{code, class, message, attempt, final}` for every failure; UI shows human-friendly error strings mapped from this table.
 
 ______________________________________________________________________
 
-## Appendix B – Settings & activation keys (informative)
+## Appendix C – Settings & activation keys (informative)
 
 **Purpose:** Reference the Settings keys and activation artifacts that control LangGraph agents. **|**
 **Contract:** Keys remain authoritative; additions require spec update and Settings validators. **|**
@@ -629,7 +643,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Appendix C – Roadmap & Open Questions (informative)
+## Appendix D – Roadmap & Open Questions (informative)
 
 - LangGraph adoption guardrails: maintain linear fallback until shadow mode and QA metrics remain stable for three consecutive releases; GraphRunner feature flag stays available for emergency rollback.
 - Timeline/relationship agents: graduate from informative to binding once schemas finalise and QA thresholds are met.

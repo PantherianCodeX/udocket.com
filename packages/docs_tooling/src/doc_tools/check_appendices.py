@@ -63,11 +63,24 @@ def locate_document_controls(lines: list[str]) -> tuple[int, list[str]] | None:
         return None
 
     idx = header_idx + 1
-    while idx < len(lines) and not lines[idx].strip():
-        idx += 1
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+        if not stripped or stripped.startswith("<!--"):
+            idx += 1
+            continue
+        break
     rows: list[str] = []
-    while idx < len(lines) and lines[idx].startswith("|"):
-        rows.append(lines[idx])
+    while idx < len(lines):
+        line = lines[idx]
+        stripped = line.strip()
+        if not stripped:
+            break
+        if stripped.startswith("<!--"):
+            idx += 1
+            continue
+        if not line.startswith("|"):
+            break
+        rows.append(line)
         idx += 1
     return header_idx, rows
 
@@ -143,8 +156,9 @@ def main() -> int:
         problems.extend(check_document(target))
 
     if problems:
+        print(f"[check-appendices] {len(problems)} issue(s) detected:")
         for item in problems:
-            print(item)
+            print(f" - {item}")
         return 1
 
     print("All appendices contain synced front matter and document controls.")

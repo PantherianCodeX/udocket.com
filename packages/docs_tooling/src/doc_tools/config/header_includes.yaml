@@ -1,0 +1,14 @@
+subtitle_lead: ' <br> '
+blocks:
+  - |
+    <style>
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
+    </style>
+  - |
+    <header class="page-header">{{title}}{{subtitle_block}}</header>
+  - |
+    <footer class="page-footer">{{prefix}}Page {{page_number}} of {{page_count}}</footer>

@@ -22,47 +22,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      .md-typeset figure.full-width-diagram {
-        display: block;              /* no longer a table */
-        width: 100%;
-        margin: 2rem 0;
-        text-align: left;
-      }
-
-      .md-typeset figure.full-width-diagram img {
-        display: inline-block;
-        max-width: 95vw;             /* cap it to the viewport */
-        width: auto;                 /* honor the SVG’s intrinsic size */
-        height: auto;
-      }
-
-      .md-typeset figure.full-width-diagram figcaption {
-        display: block;              /* regular block, not a caption */
-        margin-top: 0.75rem;
-        text-align: left;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Technical Design Document <br> 
-    Platform Architecture & Compliance Specification</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
-    <span class="page-number"></span> of <span 
-    class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Technical Design Document <br> Platform Architecture &amp; Compliance Specification</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -81,8 +50,8 @@ ______________________________________________________________________
 | Owners | Platform Architecture; Security Engineering |
 | Reviewers | QA Engineering Lead; SRE Manager |
 | Approvers | Architecture Steering Committee; Security Review Board |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
 <!-- END AUTO-GENERATED: document-controls -->
 
 **Status:** KEP: Provisional → Implementable → Implemented
@@ -331,7 +300,7 @@ ______________________________________________________________________
 
 - Guardian judgments ≤ 5 minutes P95; Compose jobs complete ≤ 45 minutes P95 under nominal load.
 - Service availability: web/channels 99.5%, Guardian 99.9%, Settings API 99.9% (due to policy enforcement criticality).
-- LPE availability, compiler latency targets, and deployment windows are defined in `../automation/lp-engine.md §1`; burn-rate policies there govern bundle activations and OPA discovery pushes.
+- LPE availability, compiler latency targets, and deployment windows are defined in `../automation/lp-engine.md §1`; the OPA policy plane & bundle distribution controls live in `../automation/opa-bundle-server.md`.
 - Latency targets: SSE job progress updates P95 \< 2s (P99 \< 5s); artifact download start \< 500 ms for approved documents.
 - Error budgets tie directly to deploy gates (`§10.8`)—breaches block releases until burn rate stabilizes.
 
@@ -1853,7 +1822,7 @@ ______________________________________________________________________
 
 *Purpose: Provide cross-layer search over artifacts while honoring residency and RBAC.*
 
-- Sources: transcripts (latest approved or job-scoped), Analyze outputs (summaries, outlines, timeline seeds, entity hints), Compose deliverables, QA logs, and selected metadata fields; exclude sensitive raw attachments unless policy allows.
+- Sources: transcripts (latest approved or job-scoped), Analyze outputs (summaries, outlines, optional structured hints), Compose deliverables, QA logs, and selected metadata fields; exclude sensitive raw attachments unless policy allows.
 - Indices: full-text (Postgres/ES/OpenSearch) for keyword search; optional vector index for semantic search. Embeddings providers must respect `regions.allowlist.compute`.
 - Document identity: each indexed record carries `artifact_id` (and lane/section for Analyze/Compose) to enable deep-linking; titles via shared `unique_title` helper.
 - Update policy: on artifact APPROVED, indexers upsert records; on demotion/archival, records are hidden. Index jobs emit ops logs and metrics.
@@ -1909,7 +1878,7 @@ ______________________________________________________________________
 - **App.B** Threat model catalog *(source: §14.4, App.B)*
 - **App.C** Data classification & retention matrices *(source: App.C, §15)*
 - **App.D** Canonical artifact catalog *(source: App.F)*
-- **See also:** `../automation/langgraph-agents.md#appendix-a-agent-schemas-error-taxonomy` *(agent schemas & error taxonomy)*
+- **See also:** `../automation/langgraph-agents.md#appendix-a-agent-schemas-error-taxonomy-binding` *(agent schemas & error taxonomy)*
 - **See also:** [`../platform/settings.md Appendix A`](../platform/settings.md#appendix-a-settings-key-map-traceability-index) *(source: §5.4)*
 - **App.F** API reference snippets / example payloads *(source: §10.8)*
 - **App.G** ERD and schema migrations history *(source: App.I)*
@@ -1926,8 +1895,8 @@ ______________________________________________________________________
 - **App.R** Data lineage maps *(source: §5.6, §6, §7)*
 - **App.S** Ownership & RACI map *(source: §1.5, §15)*
 - **App.T** Traceability matrix *(source: §3.8, §7, §10, §12.1, §12.6)*
-- **See also:** `../experience/web-app.md#appendix-a-real-time-payloads-components` *(web app SSE payloads & job widget reference)*
-- **See also:** `../customer/communications.md#appendix-a-event-catalog-streaming-contract` *(SSE event catalog & replay contract)*
+- **See also:** `../experience/web-app.md#appendix-a-real-time-payloads-components-binding` *(web app SSE payloads & job widget reference)*
+- **See also:** `../customer/communications.md#appendix-a-event-catalog-streaming-contract-binding` *(SSE event catalog & replay contract)*
 
 ______________________________________________________________________
 
@@ -2293,7 +2262,7 @@ ______________________________________________________________________
 - [Platform Runtime §3.5](../platform/runtime.md#35-service-to-service-request-signing-binding) documents the HMAC request-signing contract (headers, canonical string, replay safeguards) and [§3.5.1](../platform/runtime.md#351-key-rotation-flows-binding) captures key rotation flows and denial procedures.
 - [Worker Cluster §3.4–§3.7](../automation/worker-cluster.md#34-idempotency-store-replay-headers-binding) define the idempotency store, job SSE replay behaviour, and upload finalization schema used by SDKs and operators.
 - [Guardian §3.6](../platform/guardian.md#36-review-rest-endpoints-binding) owns the review REST endpoints and associated optimistic-locking rules.
-- [Digital Signer §3.1](../data/digital-signer.md#digital-signer-external-interfaces) provides the canonical signing and verification request examples.
+- [Digital Signer §3.1](../data/digital-signer.md#31-external-interfaces-binding) provides the canonical signing and verification request examples.
 
 ## Appendix G — ERD & schema migrations history
 
@@ -2315,7 +2284,7 @@ ______________________________________________________________________
 *Observability: Docs lint metric `docs_runbook_missing_total` and OnCall drill analytics monitor coverage.*
 
 - **Platform runbooks:** `../ops/runbooks.md`
-- **Settings Registry runbooks:** [`../platform/settings.md Appendix D`](../ops/runbooks.md#settings-registry--83-runbooks--drills-binding)
+- **Settings Registry runbooks:** [`../platform/settings.md Appendix D`](../ops/runbooks.md#settings-registry-83-runbooks-drills-binding)
 - **Guardian runbooks:** [`../platform/guardian.md Appendix B`](../platform/guardian.md#83-runbooks-drills-binding)
 
 ## Appendix I — Glossary & taxonomy
@@ -2326,8 +2295,8 @@ This glossary has moved to a dedicated appendix page. See: tdd/appendices/glossa
 
 *Purpose:* Provide quick references for cross-cutting SQL governance while directing readers to the owning specs.
 
-- Identity & Access (`identity.md#appendix-a--sql-policy-patterns-binding`) owns RLS helpers, masking, and canary guards.
-- Communications (`../customer/communications.md#appendix-b--database-enforcement-patterns`) documents download token and messaging RLS requirements.
+- Identity & Access (`../platform/identity.md#appendix-a-sql-policy-patterns-binding`) owns RLS helpers, masking, and canary guards.
+- Communications (`../customer/communications.md#appendix-b-database-enforcement-patterns-binding`) documents download token and messaging RLS requirements.
 - Guardian (`guardian.md#appendix-c--integrity-scan-queue`) covers quarantine workflows and integrity sweeps.
 - Platform Runtime (`platform-runtime.md#4-state-management-binding`) tracks partition/retention governance.
 

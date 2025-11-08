@@ -22,32 +22,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Accounts & Tenants Service Specification <br>
-    Organization Provisioning, Identity Federation, and Lifecycle Controls</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page
-    <span class="page-number"></span> of <span class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Accounts &amp; Tenants Service Specification <br> Organization Provisioning, Identity Federation, and Lifecycle Controls</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________

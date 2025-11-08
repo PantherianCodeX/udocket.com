@@ -16,6 +16,19 @@ approvers:
   - "Operations Steering Committee"
 approved_by:
 approved_date:
+header-includes:
+  - |
+    <style>
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
+    </style>
+  - |
+    <header class="page-header">uDocket — Ops Checklist: Production Overlay <br> Keycloak proxy placement and operational runbook</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-11-02 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________

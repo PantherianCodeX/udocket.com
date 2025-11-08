@@ -6,6 +6,8 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+from markdown.extensions.toc import slugify as md_slugify
+
 from doc_tools import paths
 
 REPO_ROOT = paths.REPO_ROOT
@@ -112,18 +114,14 @@ def load_service_anchors(path: Path) -> set[str]:
     text = path.read_text(encoding="utf-8")
     for match in re.finditer(r"{#([A-Za-z0-9_\-\.]+)}", text):
         anchors.add(match.group(1))
-    # include mkdocs-section slugs for headings without explicit anchors by applying simplified slug rules.
+    # include mkdocs-section slugs for headings without explicit anchors by applying MkDocs/Markdown TOC slug rules.
     for heading in re.finditer(r"^#{1,6}\s+(.+)$", text, re.MULTILINE):
         title = heading.group(1).strip()
         explicit = re.search(r"{#([A-Za-z0-9_\-\.]+)}\s*$", title)
         if explicit:
             continue
-        slug = (
-            re.sub(r"[^\w\- ]+", "", title)
-            .strip()
-            .lower()
-            .replace(" ", "-")
-        )
+        cleaned = re.sub(r"\s*{#[A-Za-z0-9_\-\.]+}\s*$", "", title)
+        slug = md_slugify(cleaned, "-")
         if slug:
             anchors.add(slug)
     return anchors
@@ -139,7 +137,7 @@ def main() -> int:
     problems += check_sections(text)
     problems += check_services(text)
     if problems:
-        print("Doc link/check issues:")
+        print(f"Doc link/check issues ({len(problems)}):")
         for p in problems:
             print(f" - {p}")
         strict = os.getenv("STRICT_DOCS", "0").lower() in {"1","true","yes"}

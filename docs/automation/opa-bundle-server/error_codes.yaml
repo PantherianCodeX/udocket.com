@@ -1,0 +1,25 @@
+meta:
+  service: opa_bundle_server
+  owners:
+    - Platform Architecture
+    - Security Engineering
+  source: docs/automation/opa-bundle-server.md
+error_codes:
+  - code: opa_bundle_signature_invalid
+    http_status: 503
+    severity: error
+    audit_required: true
+    description: Latest bundle failed signature verification.
+    client_action: Block bundle promotion, execute RB-OPA-ROLLBACK to the last-known-good version, and retry discovery after signatures validate.
+  - code: opa_bundle_stale
+    http_status: 409
+    severity: warning
+    audit_required: false
+    description: Client requested a bundle older than the minimum supported version.
+    client_action: Refresh the discovery cache or force a bundle update; if the issue persists, investigate connectivity before retrying.
+  - code: opa_decision_log_unavailable
+    http_status: 502
+    severity: warning
+    audit_required: false
+    description: Decision log ingestion temporarily unavailable.
+    client_action: Buffer locally per RB-OPA-DECISIONLOG, monitor ingestion health, and replay logs once the collector recovers.

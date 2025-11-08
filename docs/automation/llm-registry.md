@@ -23,32 +23,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — LLM Registry & Runtime Governance Specification <br>
-    Model Selection, Safety, and Observability Controls</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
-    <span class="page-number"></span> of <span class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — LLM Registry &amp; Runtime Governance Specification <br> Model Selection, Safety, and Observability Controls</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -77,7 +61,7 @@ ______________________________________________________________________
 
 ## Reading Guide
 
-- **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing Analyze/Compose lanes and other agent workloads.
+- **Scope:** LLM provider catalog, selection orchestration, residency safeguards, moderation, reproducibility, and FinOps controls governing all LLM-backed agent workloads.
 - **Structure:** Follows the standard 0–10 template; subsections are marked (binding/normative/informative) per policy vocabulary. Appendices live in ops runbooks for golden sets and moderation configs.
 - **Maintenance:** Run `python -m doc_tools.manage_docs --lint` before submitting changes. Update golden-set fixtures and moderation configs referenced here when models, prompts, or safety settings change.
 - **Change protocol:** Any PR touching `llm.providers[]`, `llm.models[]`, failover logic, moderation, or FinOps guardrails must cite this spec and ADR-0003. Security + Architecture approval required for provider additions or residency waivers.
@@ -93,7 +77,7 @@ ______________________________________________________________________
 **State:** Provider metadata resides in Settings bundles; runtime decisions and evidence store envelopes capture per-call provenance; FinOps metrics and circuit state drive dashboards. **|**
 **Failures & handling:** Provider drift, safety violations, or cost overruns trigger circuit breakers, moderation quarantines, or deploy gates per §5. **|**
 **Observability:** Grafana dashboards (“LLM Residency & Failover”, “LLM Safety & Moderation”, “FinOps – LLM Cost & Circuit”) track health, safety, and spend; alerts map to RB-LLM-003 and RB-LLM-JB. **|**
-**Breadcrumbs:** Implementation `packages/core/llm/*`, Settings bundles `apps/platform/settings/services/llm.py`, moderation `packages/core/llm/moderation.py`, failover orchestrator `packages/core/failover/model.py`, tests `tests/core/llm/*`, `tests/platform/settings/test_llm_*`. **|**
+**Breadcrumbs:** Implementation `packages/ai/providers/*`, `packages/ai/registry/*`, `packages/ai/config/*`, automation agent callers `automation/agents/*`, Settings bundles `apps/platform/settings/services/llm.py`, moderation hooks `packages/ai/safety/*`, routing/failover orchestrators `packages/ai/routing/*`, tests `packages/ai/tests/unit/*`, `tests/platform/settings/test_llm_*`. **|**
 **References:** §2 Responsibilities, §4 State management, §6 Observability, Ops runbooks RB-LLM-003/RB-LLM-JB.
 
 ______________________________________________________________________

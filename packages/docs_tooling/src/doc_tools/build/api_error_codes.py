@@ -345,13 +345,14 @@ def _remove_legacy_notes(lines: list[str]) -> None:
         index += 1
 
 
-def _collect_components() -> list[Component]:
+def _collect_components() -> tuple[list[Component], list[str]]:
     docs: list[Path] = []
     for root in DOC_ROOTS:
         if not root.exists():
             continue
         docs.extend(sorted(root.glob("*.md")))
     components: list[Component] = []
+    errors: list[str] = []
     for doc in docs:
         if doc.name.startswith("_template"):
             continue
@@ -359,9 +360,13 @@ def _collect_components() -> list[Component]:
         doc_text = doc.read_text(encoding="utf-8")
         if not yaml_path.exists():
             if "### 3.3" in doc_text:
-                _fail(f"{doc}: expected {yaml_path.name} alongside the document")
+                errors.append(f"{doc}: expected {yaml_path.name} alongside the document")
             continue
-        entries = _load_entries(yaml_path)
+        try:
+            entries = _load_entries(yaml_path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
         display_name = _derive_display_name(doc)
         section_anchor = _find_section_anchor(doc)
         index_anchor = mkdocs_slug(display_name)
@@ -376,11 +381,16 @@ def _collect_components() -> list[Component]:
             )
         )
     components.sort(key=lambda item: item.display_name.lower())
-    return components
+    return components, errors
 
 
 def build_content(*, check: bool) -> bool:
-    components = _collect_components()
+    components, errors = _collect_components()
+    if errors:
+        for message in errors:
+            print(f"[api-error-codes] {message}", file=sys.stderr)
+        print(f"[api-error-codes] {len(errors)} error(s) detected", file=sys.stderr)
+        return False
     stale = False
     for component in components:
         if not _update_document(component, check=check):

@@ -22,25 +22,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Platform Runtime Specification <br>
-    Environments, Kubernetes Guardrails, and Service Catalog</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page
-    <span class="page-number"></span> of <span class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Platform Runtime Specification <br> Environments, Kubernetes Guardrails, and Service Catalog</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -130,8 +121,6 @@ ______________________________________________________________________
 - Identity provider: Keycloak ships in the stack for local parity, while production instances run behind the platform reverse proxy. TLS terminates at that proxy; Keycloak listens on its internal port (8085 in the prod overlay), and external hosts must forward HTTPS traffic to the container without bypassing the proxy guardrails.
 - Multi-region posture: each environment operates within a primary/secondary region pair. Database replicas, blob replication, and queue failover respect organization allowlists. Disaster recovery runbooks document region cut-over and data rehydration using only approved regions (§8).
 
-
-
 #### 3.1.1 Artifact download conditional requests (binding)
 
 **Purpose:** Ensure artifact downloads honour caching and integrity requirements while protecting evidence. **|**
@@ -151,8 +140,6 @@ curl -L -H "Authorization: Bearer $TOKEN" \
   -H "Range: bytes=0-1048575" \
   https://platform.local/api/v1/artifacts/$A/download
 ```
-
-
 
 #### 3.1.2 CORS preflight (binding)
 

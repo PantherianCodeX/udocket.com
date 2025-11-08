@@ -1,0 +1,25 @@
+meta:
+  service: speech_registry
+  owners:
+    - Voice Engineering
+    - Platform Architecture
+  source: docs/automation/speech-registry.md
+error_codes:
+  - code: speech_provider_blocked
+    http_status: 409
+    severity: error
+    audit_required: true
+    description: Speech provider unavailable for the tenant’s residency rules.
+    client_action: Surface the residency violation to operators, switch to an allowed provider/region, or obtain a waiver before retrying.
+  - code: speech_codec_unsupported
+    http_status: 400
+    severity: error
+    audit_required: false
+    description: Uploaded media codec/sample rate is not supported.
+    client_action: Re-upload media in PCM WAV 16 kHz mono (or another supported format advertised in provider metadata) before retrying.
+  - code: speech_diarization_unavailable
+    http_status: 422
+    severity: warning
+    audit_required: false
+    description: Diarization requested but no provider supports the parameters.
+    client_action: Disable diarization or adjust duration/language parameters until a supported provider is available, then retry.

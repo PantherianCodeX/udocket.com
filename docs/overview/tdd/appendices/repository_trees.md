@@ -6,7 +6,7 @@ authors:
 version: "0.1-draft"
 status: implementable
 classification: Confidential
-last_updated: "2025-10-30"
+last_updated: "2025-11-07"
 updated_by: "Documentation Team"
 owners:
   - "Platform Architecture"
@@ -16,6 +16,19 @@ approvers:
   - "Architecture Steering Committee"
 approved_by:
 approved_date:
+header-includes:
+  - |
+    <style>
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
+    </style>
+  - |
+    <header class="page-header">uDocket — TDD Appendix: Repository Trees <br> Canonical service and package layout vision</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-11-07 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -29,14 +42,16 @@ ______________________________________________________________________
 | Version | 0.1-draft |
 | Status | implementable |
 | Classification | Confidential |
-| Last updated | 2025-10-30 |
+| Last updated | 2025-11-07 |
 | Updated by | Documentation Team |
 | Owners | Platform Architecture |
 | Reviewers | Platform Engineering |
 | Approvers | Architecture Steering Committee |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
 <!-- END AUTO-GENERATED: document-controls -->
+
+**Status:** KEP: Provisional → Implementable → Implemented
 
 ______________________________________________________________________
 
@@ -48,28 +63,6 @@ applications, and operational tooling all land under the directories listed here
 The sections are ordered from the shared platform runtime outward through automation,
 packages, experience, data, infrastructure, testing, and documentation. Update this
 appendix manually whenever the canonical structure changes.
-
-## Tree Index
-
-- [Document Controls](#document-controls)
-- [Appendix overview](#appendix-overview)
-- [Tree Index](#tree-index)
-  - [Top-level layout](#top-level-layout)
-  - [A. Platform runtime \& core services](#a-platform-runtime--core-services)
-  - [B. Automation \& agent pipelines](#b-automation--agent-pipelines)
-  - [C. Shared packages \& SDKs](#c-shared-packages--sdks)
-    - [C.1 `packages/common/`](#c1-packagescommon)
-    - [C.2 `packages/core/`](#c2-packagescore)
-    - [C.3 `packages/ai/`](#c3-packagesai)
-    - [C.4 `packages/docs_tooling/`](#c4-packagesdocs_tooling)
-    - [C.5 `packages/client_sdks/`](#c5-packagesclient_sdks)
-  - [D. Experience \& communications](#d-experience--communications)
-  - [E. Data, trust \& compliance](#e-data-trust--compliance)
-  - [F. Infrastructure \& operations](#f-infrastructure--operations)
-  - [G. Testing \& quality](#g-testing--quality)
-  - [H. Documentation system](#h-documentation-system)
-
-______________________________________________________________________
 
 ### Top-level layout
 
@@ -138,11 +131,11 @@ automation/ — agent pipelines + orchestration; no provider SDKs inline
 ├─ langgraph/ — canonical graphs (transcribe/analyze/compose/timeline/relationship)
 ├─ pipelines/ — stage metadata, QA gates, cost ceilings; deterministic
 ├─ agents/ — typed agent implementations; call packages.ai.api for AI
-│  ├─ transcribe/ — Azure Speech ingestion, ops/audit writers, residency-aware routing
-│  ├─ analyze/ — transcript-to-analysis workloads (summaries, outlines, seeds) via AI tasks
+│  ├─ transcribe/ — speech ingestion, ops/audit writers, residency-aware routing
+│  ├─ analyze/ — transcript-to-analysis workloads (narratives + structured hints) via AI tasks
 │  ├─ compose/ — deliverable assembly lanes with QA gating via shared AI tasks
 │  ├─ timeline/ — normalized events with speakers/offsets, deterministic timestamps
-│  └─ relationship/ — entity/edge extraction with evidence pointers, deterministic UUIDs
+│  └─ relationship/ — entity/relationship extraction with evidence pointers, deterministic UUIDs
 ├─ task_modules/ — Celery task shims; forwards existing platform tasks until LangGraph-native orchestration lands
 ```
 
@@ -203,7 +196,7 @@ packages/core/ — domain libs + agents; no Django/DB/LLM SDKs
 #### C.3 `packages/ai/`
 
 ```tree
-packages/ai/ — exportable AI runtime; all AI deps live here (LLM Registry +)
+packages/ai/ — exportable AI runtime; all AI deps live here (LLM Registry core)
 ├─ py.typed — ensures downstream type safety
 ├─ config/
 │  ├─ __init__.py — typed provider/routing/capability config; residency-aware defaults
@@ -213,7 +206,7 @@ packages/ai/ — exportable AI runtime; all AI deps live here (LLM Registry +)
 ├─ client/
 │  └─ __init__.py — DefaultAIClient enforcing residency/egress + routing
 ├─ registry/
-│  └─ __init__.py — helper for wiring DefaultAIClient + adapter registry
+│  └─ __init__.py — LLM Registry core: adapter registry, capability catalog, routing + residency/egress enforcement
 ├─ providers/
 │  ├─ interfaces.py — ProviderAdapter protocol
 │  ├─ clients.py — Chat/Embedding client Protocols

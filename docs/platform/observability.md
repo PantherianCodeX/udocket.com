@@ -17,30 +17,21 @@ approvers:
 reviewers:
   - Compliance Engineering
   - Applied AI Engineering
-approved_by: 
-approved_date: 
+approved_by:
+approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Observability Specification <br>
-    Telemetry Pipeline, Log Access Controls, and Cost Guardrails</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page
-    <span class="page-number"></span> of <span class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Observability Specification <br> Telemetry Pipeline, Log Access Controls, and Cost Guardrails</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -218,11 +209,7 @@ ______________________________________________________________________
 - **Ingest availability:** ≥99.9% successful log ingestion each month, enforced by `logging_ingest_lag_seconds` < 30s P95 and `logging_drop_rate_pct = 0`; burn-rate alerts open RB-LOG-007.
 - **Immutable mirror lag:** Mirror delay stays ≤1 collection interval (≤15 minutes) measured via `audit_worm_lag_seconds`; breaches pause approvals until RB-AUDIT-004 completes.
 - **Trace correlation fidelity:** Sampling drift between trace/error rates <5% sustained, tracked by `trace_sampling_drift_total`; violations trigger RB-TRACE-CORR before release sign-off.
-
-
 - **Cost guardrails:** Daily log volume per service remains within configured budgets (`logging_volume_budget_violation_total = 0`); overrides require RB-COST and FinOps approval within 1 business day.
-
-______________________________________________________________________
 
 ## 7) Security & Compliance (binding)
 
@@ -292,9 +279,9 @@ ______________________________________________________________________
 
 #### 8.3.1 Runbook Index
 
-- `logging_ingest_lag_seconds` → RB-LOG-007  
-- `trace_sampling_drift_total` → RB-TRACE-CORR  
-- `logging_volume_budget_violation_total` → RB-COST  
+- `logging_ingest_lag_seconds` → RB-LOG-007
+- `trace_sampling_drift_total` → RB-TRACE-CORR
+- `logging_volume_budget_violation_total` → RB-COST
 - `logging_neverlog_violation_total` → RB-MASK
 
 #### 8.3.2 Primary Runbooks
@@ -351,10 +338,10 @@ ______________________________________________________________________
 
 ## 10) References
 
-- Technical Design Document §12 (summary)  
-- Settings Service specification — `../platform/settings.md` (§7.2 telemetry keys)  
-- Audit & Evidence specification — `../data/audit.md`  
-- Guardian specification — `../platform/guardian.md` §7  
-- LP Engine specification — `../automation/lp-engine.md` §5  
-- Ops runbook catalog — `../ops/runbooks.md` (RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK)  
+- Technical Design Document §12 (summary)
+- Settings Service specification — `../platform/settings.md` (§7.2 telemetry keys)
+- Audit & Evidence specification — `../data/audit.md`
+- Guardian specification — `../platform/guardian.md` §7
+- LP Engine specification — `../automation/lp-engine.md` §5
+- Ops runbook catalog — `../ops/runbooks.md` (RB-LOG-007, RB-TRACE-CORR, RB-COST, RB-MASK)
 - ADR index — `../adr/README.md` (ADR-0004 logging posture, ADR-0006 immutable sink)

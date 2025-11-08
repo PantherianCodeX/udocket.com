@@ -10,6 +10,8 @@ from doc_tools import doc_utils
 from doc_tools.sync import document_controls as sdc
 from doc_tools.sync.document_controls import (
     OPTIONAL_FIELDS,
+    PAGE_COUNT_HTML,
+    PAGE_NUMBER_HTML,
     collect_targets,
     parse_args,
     sync_file,
@@ -90,6 +92,10 @@ def _read_table(path: Path) -> dict[str, str]:
     return result
 
 
+def _header_block(front: dict[str, object]) -> str:
+    return "\n".join(sdc._render_header_includes(front))
+
+
 @pytest.fixture(autouse=True)
 def _reset_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(doc_utils, "yaml", sdc.yaml, raising=False)
@@ -115,6 +121,17 @@ def test_collect_targets_handles_dirs(tmp_path: Path) -> None:
     targets = list(collect_targets([services]))
 
     assert targets == [file_a.resolve()]
+
+
+def test_collect_targets_skips_missing_document_controls(tmp_path: Path) -> None:
+    docs_root = tmp_path / "docs"
+    docs_root.mkdir(parents=True)
+    file_a = docs_root / "a.md"
+    file_a.write_text("# Overview\nBody only", encoding="utf-8")
+
+    targets = list(collect_targets([docs_root]))
+
+    assert targets == []
 
 
 def test_collect_targets_warns_for_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -159,7 +176,17 @@ def test_sync_updates_document_controls(tmp_path: Path) -> None:
 
 
 def test_sync_no_changes_when_table_matches(tmp_path: Path) -> None:
-    content = """---
+    header_block = _header_block(
+        {
+            "title": "Service Spec",
+            "subtitle": "Reference",
+            "classification": "Confidential",
+            "last_updated": "2025-10-30",
+        }
+    )
+    content = f"""---
+title: Service Spec
+subtitle: Reference
 author:
   - Alice
   - Bob
@@ -174,8 +201,7 @@ reviewers:
   - Documentation Guild
 approvers:
   - Architecture Steering Committee
-header-includes:
-  - test
+{header_block}
 extra_meta: Extra data
 review_notes:
   - Note A
@@ -208,6 +234,64 @@ Body text.
     updated = sync_file(doc)
 
     assert updated is False
+
+
+def test_sync_updates_header_includes_from_front_matter(tmp_path: Path) -> None:
+    content = """---
+title: Example & Title
+subtitle: Subtitle for PDF header
+author:
+  - Alice
+version: 1.0
+status: implementable
+classification: Confidential
+last_updated: 2024-11-01
+updated_by: Docs Team
+owners:
+  - Platform Engineering
+reviewers:
+  - QA Guild
+approvers:
+  - Security Council
+header-includes:
+  - <header class="page-header">Legacy header</header>
+---
+
+## Document controls
+
+<!-- BEGIN AUTO-GENERATED: document-controls -->
+| Field | Value |
+| --- | --- |
+| Authors | Alice |
+| Version | 1.0 |
+| Status | implementable |
+| Classification | Confidential |
+| Last updated | 2024-11-01 |
+| Updated by | Docs Team |
+| Owners | Platform Engineering |
+| Reviewers | QA Guild |
+| Approvers | Security Council |
+| Approved by |  |
+| Approved date |  |
+<!-- END AUTO-GENERATED: document-controls -->
+"""
+    doc = _write_doc(tmp_path, content=content)
+
+    updated = sync_file(doc)
+
+    assert updated is True
+    front = doc_utils.parse_front_matter(doc.read_text(encoding="utf-8").splitlines())
+    header_includes = front.get("header-includes")
+    assert isinstance(header_includes, list)
+    assert header_includes
+    assert header_includes[0].strip() == sdc.HEADER_CONFIG.style.strip()
+    header_block = header_includes[1]
+    assert "Example &amp; Title" in header_block
+    assert "Subtitle for PDF header" in header_block
+    footer_block = header_includes[2]
+    assert "Confidential · Last updated 2024-11-01" in footer_block
+    assert PAGE_NUMBER_HTML in footer_block
+    assert PAGE_COUNT_HTML in footer_block
 
 
 def test_sync_skips_missing_front_matter(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

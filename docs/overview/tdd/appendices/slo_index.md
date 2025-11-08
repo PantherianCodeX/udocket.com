@@ -16,6 +16,19 @@ approvers:
   - "Architecture Steering Committee"
 approved_by:
 approved_date:
+header-includes:
+  - |
+    <style>
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
+    </style>
+  - |
+    <header class="page-header">uDocket — TDD Appendix: SLO Index <br> Consolidated service and app service-level objectives</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-30 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -37,6 +50,8 @@ ______________________________________________________________________
 | Approved by |  |
 | Approved date |  |
 <!-- END AUTO-GENERATED: document-controls -->
+
+**Status:** KEP: Provisional → Implementable → Implemented
 
 ______________________________________________________________________
 
@@ -223,9 +238,17 @@ ______________________________________________________________________
 - **Ingest availability:** ≥99.9% successful log ingestion each month, enforced by `logging_ingest_lag_seconds` < 30s P95 and `logging_drop_rate_pct = 0`; burn-rate alerts open RB-LOG-007.
 - **Immutable mirror lag:** Mirror delay stays ≤1 collection interval (≤15 minutes) measured via `audit_worm_lag_seconds`; breaches pause approvals until RB-AUDIT-004 completes.
 - **Trace correlation fidelity:** Sampling drift between trace/error rates <5% sustained, tracked by `trace_sampling_drift_total`; violations trigger RB-TRACE-CORR before release sign-off.
-
-
 - **Cost guardrails:** Daily log volume per service remains within configured budgets (`logging_volume_budget_violation_total = 0`); overrides require RB-COST and FinOps approval within 1 business day.
+
+### [OPA Policy Plane & Bundle Server](../../../automation/opa-bundle-server.md)
+
+**Purpose:** Define measurable success. **|**
+**Contract:** Bundle promotion success ≥99.95 %, discovery P95 ≤2 s globally, decision log delivery ≥99.9 % within 60 s. **|**
+**State:** SLO dashboards, burn-rate alerts. **|**
+**Failures & handling:** Breaches trigger RB-OPA-ROLLBACK or RB-OPA-DECISIONLOG. **|**
+**Observability:** Prometheus SLO queries, synthetic fetchers. **|**
+**Breadcrumbs:** Monitoring repo. **|**
+**References:** Observability spec §6.
 
 ______________________________________________________________________
 
@@ -242,6 +265,18 @@ ______________________________________________________________________
 - **Control plane availability:** ≥99.9% monthly uptime for the managed Kubernetes API and ingress endpoints, measured via synthetic `/readyz` probes and `platform_control_plane_up`. Burn-rate alerts (1×/6×) page platform runtime on-call via RB-K8S-FENCE.
 - **Flux convergence:** 95th percentile reconciliation latency ≤5 minutes as captured by `platform_flux_sync_seconds`; breaches block releases until drift is resolved and recorded in RB-K8S-FENCE.
 - **Guardrail enforcement:** Policy enforcement alerts (`pod_security_violation_total`, `mesh_policy_violation_total`, `residency_drift_detected_total`) must remain at zero sustained; any recurring breach triggers incident review prior to release sign-off.
+
+______________________________________________________________________
+
+### [Policy Residency Service](../../../data/policy-residency.md)
+
+**Purpose:** Provide measurable objectives. **|**
+**Contract:** Catalog publish success ≥99.9 %; mesh deployment parity <5 min; waiver decision P95 ≤2 business days. **|**
+**State:** SLO dashboards + burn-rate rules. **|**
+**Failures & handling:** Breaches trigger RB-RES-BLOCK or RB-WAIVER-GOV until metrics recover. **|**
+**Observability:** Prometheus SLO queries, FinOps dashboards. **|**
+**Breadcrumbs:** Monitoring repo. **|**
+**References:** Compliance policy, Ops governance.
 
 ______________________________________________________________________
 
@@ -286,6 +321,18 @@ ______________________________________________________________________
 - **Activation latency:** 95th percentile activation duration (`settings_activation_duration_seconds`) ≤ 120 seconds; overruns pause activations and require RCA prior to thaw.
 - **Cache freshness:** `settings_cache_invalidation_lag_seconds` stays ≤ 60 seconds P95; sustained lag opens RB-SETTINGS-CACHE and blocks deploys.
 - **Residency enforcement:** `settings_residency_violation_total` remains zero; any event invokes RB-RES-\* and requires waiver or remediation before continuing.
+
+### [Speech Registry Service](../../../automation/speech-registry.md)
+
+**Purpose:** Establish measurable objectives. **|**
+**Contract:** API availability ≥99.9 %, conversion enqueue P95 ≤15 s, diarization completion P95 ≤2× media duration; residency guard zero tolerance. **|**
+**State:** SLO dashboards and burn-rate alerts. **|**
+**Failures & handling:** Breaches trigger RB-SPEECH-FAILOVER (availability), RB-SPEECH-CODEC (conversion), RB-SPEECH-DIARIZATION (diarization). **|**
+**Observability:** Prometheus SLO rules, burn-rate alerts, synthetic conversion jobs. **|**
+**Breadcrumbs:** Monitoring repo, Ops runbooks. **|**
+**References:** Worker cluster capacity plan, FinOps guardrails.
+
+______________________________________________________________________
 
 ### [Web Application & Portal](../../../experience/web-app.md)
 

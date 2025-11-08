@@ -22,30 +22,34 @@ header-includes:
       table {
         font-size: 8.5pt;
       }
+      
       table td,
       table th {
         font-size: inherit;
         word-break: break-word;
         overflow-wrap: anywhere;
       }
+      
       figure svg text,
       figure svg tspan {
         fill: #111 !important;
       }
+      
       figure svg text {
         font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
       }
+      
       figure.full-width-diagram img {
         width: 100%;
         height: auto;
         display: block;
       }
     </style>
-  - <header class="page-header">uDocket — Guardian Service Specification <br> 
-    Canonical design, policy, and operational reference</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
-    <span class="page-number"></span> of <span 
-    class="page-count"></span></footer>
+  - |
+    <header class="page-header">Service Specification Template <br>
+    Structural reference for uDocket.com service documents</header>
+  - |
+    <footer class="page-footer">[Confidential] · Last updated <1970-01-01> · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________

@@ -89,10 +89,13 @@ nav:
   - LangGraph Agents: automation/langgraph-agents.md
   - Worker Cluster: automation/worker-cluster.md
   - LLM Registry: automation/llm-registry.md
+  - Speech Registry: automation/speech-registry.md
   - LPE: automation/lp-engine.md
+  - OPA Policy Plane: automation/opa-bundle-server.md
 - Data Platform:
   - Artifact Store: data/artifact-store.md
   - Digital Signer: data/digital-signer.md
+  - Policy Residency Service: data/policy-residency.md
   - Reference Manager: data/ref-manager.md
   - Search & Indexing: data/search-index.md
   - Audit & Evidence: data/audit.md

@@ -22,32 +22,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Worker Cluster Specification <br>
-    Job Orchestration, Watchdogs, and Background Operations</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page
-    <span class="page-number"></span> of <span class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Worker Cluster Specification <br> Job Orchestration, Watchdogs, and Background Operations</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -287,8 +271,6 @@ X-Request-ID: 4f1a9c8c-0da5-4b27-9acd-6b6ddfd402c2
 
 Workers MUST update `last_seen_at` on every replay, echo the stored payload when `Idempotency-Status: replay`, and return `Idempotency-Status: conflict` when the canonical hash changes.
 
-
-
 ### 3.5 Job SSE replay contract (binding)
 
 **Purpose:** Define the Server-Sent Events pattern workers use to stream job progress so clients can resume consumption safely. **|**
@@ -304,8 +286,6 @@ curl -N -H "Authorization: Bearer $TOKEN" \
   -H "Last-Event-ID: $LAST_ID" \
   https://platform.local/api/v1/jobs/$JOB_ID/events
 ```
-
-
 
 ### 3.6 Upload finalize endpoint (binding)
 

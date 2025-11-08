@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from dataclasses import dataclass
+from html import escape
 from pathlib import Path
-from typing import Iterable, Iterator, List
+from typing import Iterable, Iterator, List, Mapping, Sequence
 
+from doc_tools.config.header_includes import HEADER_INCLUDES_CONFIG
 from doc_tools import paths
 from doc_tools.doc_utils import (
     DOCUMENT_CONTROL_OPTIONAL_FIELDS,
@@ -16,15 +19,105 @@ from doc_tools.doc_utils import (
     build_document_control_map,
     end_auto_generated_marker,
     parse_front_matter,
+    stringify,
     yaml,
 )
 
 PROJECT_ROOT = paths.REPO_ROOT
 OPTIONAL_FIELDS = DOCUMENT_CONTROL_OPTIONAL_FIELDS
-DEFAULT_ROOTS = paths.SERVICE_ROOTS
+DEFAULT_ROOTS: tuple[Path, ...] = (paths.DOCS_ROOT,)
 MARKER_LABEL = "document-controls"
 MARKER_BEGIN = begin_auto_generated_marker(MARKER_LABEL)
 MARKER_END = end_auto_generated_marker(MARKER_LABEL)
+PAGE_COUNT_HTML = '<span class="page-count"></span>'
+PAGE_NUMBER_HTML = '<span class="page-number"></span>'
+HEADER_CONFIG = HEADER_INCLUDES_CONFIG
+
+@dataclass(frozen=True)
+class HeaderUpdatePlan:
+    start: int
+    end: int
+    replacement: List[str]
+
+
+def _front_matter_bounds(lines: Sequence[str]) -> tuple[int, int] | None:
+    if not lines or lines[0].strip() != "---":
+        return None
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            return 1, idx
+    return None
+
+
+def _scan_block_end(lines: Sequence[str], idx: int, limit: int) -> int:
+    cursor = idx
+    while cursor < limit:
+        line = lines[cursor]
+        stripped = line.strip()
+        if stripped and not line.startswith((" ", "\t")):
+            return cursor
+        cursor += 1
+    return limit
+
+
+def _find_header_block_range(lines: Sequence[str], bounds: tuple[int, int]) -> tuple[int, int]:
+    start, end = bounds
+    for idx in range(start, end):
+        if lines[idx].strip().startswith("header-includes:"):
+            block_end = _scan_block_end(lines, idx + 1, end)
+            return idx, block_end
+    return end, end
+
+
+def _indent_literal_block(content: str) -> List[str]:
+    lines = content.strip("\n").splitlines() or [""]
+    indented = [f"    {line}" if line else "    " for line in lines]
+    return ["  - |", *indented]
+
+
+def _header_html(front: Mapping[str, object]) -> str:
+    title = escape(stringify(front.get("title", "")))
+    subtitle = escape(stringify(front.get("subtitle", "")))
+    subtitle_block = f"{HEADER_CONFIG.subtitle_lead}{subtitle}" if subtitle else ""
+    return HEADER_CONFIG.header_template.format(title=title, subtitle_block=subtitle_block)
+
+
+def _footer_html(front: Mapping[str, object]) -> str:
+    classification = escape(stringify(front.get("classification", "")))
+    last_updated = escape(stringify(front.get("last_updated", "")))
+    meta_parts: List[str] = []
+    if classification:
+        meta_parts.append(classification)
+    if last_updated:
+        meta_parts.append(f"Last updated {last_updated}")
+    prefix = " · ".join(meta_parts)
+    if prefix:
+        prefix = f"{prefix} · "
+    return HEADER_CONFIG.footer_template.format(
+        prefix=prefix,
+        page_number=PAGE_NUMBER_HTML,
+        page_count=PAGE_COUNT_HTML,
+    )
+
+
+def _render_header_includes(front: Mapping[str, object]) -> List[str]:
+    blocks = [HEADER_CONFIG.style, _header_html(front), _footer_html(front)]
+    lines: List[str] = ["header-includes:"]
+    for block in blocks:
+        lines.extend(_indent_literal_block(block))
+    return lines
+
+
+def _plan_header_update(lines: List[str], front: Mapping[str, object]) -> HeaderUpdatePlan | None:
+    bounds = _front_matter_bounds(lines)
+    if bounds is None:
+        return None
+    block_start, block_end = _find_header_block_range(lines, bounds)
+    replacement = _render_header_includes(front)
+    existing = lines[block_start:block_end]
+    if existing == replacement:
+        return None
+    return HeaderUpdatePlan(block_start, block_end, replacement)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -50,15 +143,29 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
             for candidate in sorted(path.rglob("*.md")):
                 if candidate.name == "_template.md":
                     continue
+                if not _has_document_controls(candidate):
+                    continue
                 resolved = candidate.resolve()
                 if resolved not in seen:
                     seen.add(resolved)
                     yield resolved
         else:
             resolved = path.resolve()
-            if resolved.name != "_template.md" and resolved not in seen:
+            if resolved.name != "_template.md" and resolved not in seen and _has_document_controls(resolved):
                 seen.add(resolved)
                 yield resolved
+
+
+def _has_document_controls(path: Path) -> bool:
+    marker = "## document controls"
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                if raw_line.strip().lower() == marker:
+                    return True
+    except UnicodeDecodeError:
+        return False
+    return False
 
 
 def sync_file(path: Path, *, dry_run: bool = False) -> bool:
@@ -164,14 +271,21 @@ def sync_file(path: Path, *, dry_run: bool = False) -> bool:
         value = expected if expected or field not in OPTIONAL_FIELDS else ""
         new_rows.append(f"| {field} | {value} |")
 
-    if not markers_added and table_rows == new_rows:
+    table_changed = markers_added or table_rows != new_rows
+    header_plan = _plan_header_update(lines, front)
+
+    if not table_changed and header_plan is None:
         return False
 
     if dry_run:
         print(f"[sync-document-controls] would update {path}")
         return True
 
-    lines[table_start:table_start + len(table_rows)] = new_rows
+    if table_changed:
+        lines[table_start:table_start + len(table_rows)] = new_rows
+    if header_plan is not None:
+        lines[header_plan.start:header_plan.end] = header_plan.replacement
+
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[sync-document-controls] updated {path}")
     return True

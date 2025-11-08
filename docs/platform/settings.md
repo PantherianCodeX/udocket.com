@@ -19,38 +19,21 @@ approvers:
 reviewers:
   - QA Engineering Lead
   - SRE Manager
-approved_by: 
-approved_date: 
+approved_by:
+approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Settings Registry Technical Design 
-    <br> Configuration Governance & Activation Specification</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
-    <span class="page-number"></span> of <span 
-    class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Settings Registry Technical Design <br> Configuration Governance &amp; Activation Specification</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -894,10 +877,10 @@ class SettingDefinition(BaseModel):
 | `settings.activation.require_dual_approval` | SYSTEM | true | Dual approval for unsafe changes; §9.3. |
 | `logging.redaction.enabled` | SYSTEM | true | Redact PII in logs; [`Observability §4`](../platform/observability.md#4-state-management-binding). |
 | `logging.access.roles[]` | SYSTEM | \[\] | Role mapping for log query privileges (`observability.reader\|engineer\|auditor`); [`Observability §7.1`](../platform/observability.md#71-access-control). |
-| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
-| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
-| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
-| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Observability §7`](../platform/observability.md#7-cost-management--budgets). |
+| `logging.cost.daily_budget_mb_per_service` | SYSTEM\|ORG | 500 | Daily log volume budget per service; [`Observability §6.1`](../platform/observability.md#61-slos-targets-binding). |
+| `logging.cost.alert_threshold_pct` | SYSTEM\|ORG | 80 | Alert threshold as % of daily log budget; [`Observability §6.1`](../platform/observability.md#61-slos-targets-binding). |
+| `logging.level.default` | SYSTEM | "INFO" | Default production log level; [`Observability §6.1`](../platform/observability.md#61-slos-targets-binding). |
+| `logging.level.overrides[]` | ORG | \[\] | Per-service log level overrides; [`Observability §6.1`](../platform/observability.md#61-slos-targets-binding). |
 | `portal.logging.enabled` | ORG | true | Enable client telemetry capture; [`Observability §4`](../platform/observability.md#4-state-management-binding). |
 | `evidence_store.redacted_excerpts.enabled` | ORG | true | Allow storage of prompt/response excerpts; HIPAA enable guard forces false and triggers purge; §2.2, §8.2. |
 | `logging.immutable_sink.enabled` | SYSTEM | true (prod) | Mirror structured logs to immutable storage alongside the audit sink; validators block `false` in production and mark overrides unsafe (§9.11, [`Audit §4`](../data/audit.md#4-state-management-binding)). |

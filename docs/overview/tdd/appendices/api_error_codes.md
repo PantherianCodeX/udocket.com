@@ -16,6 +16,19 @@ approvers:
   - "Architecture Steering Committee"
 approved_by:
 approved_date:
+header-includes:
+  - |
+    <style>
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
+    </style>
+  - |
+    <header class="page-header">uDocket — TDD Appendix: API Error Codes <br> Consolidated service and app error-code contracts</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-30 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -37,6 +50,8 @@ ______________________________________________________________________
 | Approved by |  |
 | Approved date |  |
 <!-- END AUTO-GENERATED: document-controls -->
+
+**Status:** KEP: Provisional → Implementable → Implemented
 
 ______________________________________________________________________
 
@@ -281,6 +296,22 @@ Spec: [Observability](../../../platform/observability.md#33-api-error-codes-bind
 | `RATE_LIMIT` | 429 | No | telemetry_ingest_rate_limit_total |
 | `VALIDATION_ERROR` | 400 | No | observability_api_error_total |
 
+### OPA Policy Plane & Bundle Server
+
+Spec: [OPA Policy Plane & Bundle Server](../../../automation/opa-bundle-server.md#33-api-error-codes)
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `opa_bundle_signature_invalid` | Latest bundle failed signature verification. | Block bundle promotion, execute RB-OPA-ROLLBACK to the last-known-good version, and retry discovery after signatures validate. |
+| `opa_bundle_stale` | Client requested a bundle older than the minimum supported version. | Refresh the discovery cache or force a bundle update; if the issue persists, investigate connectivity before retrying. |
+| `opa_decision_log_unavailable` | Decision log ingestion temporarily unavailable. | Buffer locally per RB-OPA-DECISIONLOG, monitor ingestion health, and replay logs once the collector recovers. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `opa_bundle_signature_invalid` | 503 | Yes | — |
+| `opa_bundle_stale` | 409 | No | — |
+| `opa_decision_log_unavailable` | 502 | No | — |
+
 ### Platform Runtime
 
 Spec: [Platform Runtime](../../../platform/runtime.md#33-api-error-codes-binding)
@@ -312,6 +343,22 @@ Spec: [Platform Runtime](../../../platform/runtime.md#33-api-error-codes-binding
 | `QUARANTINED` | 423 | Yes | api_error_total |
 | `RATE_LIMIT` | 429 | No | api_error_total |
 | `VALIDATION_ERROR` | 400 | No | api_error_total |
+
+### Policy Residency Service
+
+Spec: [Policy Residency Service](../../../data/policy-residency.md#33-api-error-codes)
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `residency_catalog_missing` | Residency catalog unavailable or not activated. | Pause cross-region work, regenerate the catalog from Settings, verify signatures, and reissue the request once activation succeeds. |
+| `residency_mesh_drift` | Enforcement mesh does not match the active catalog version. | Redeploy the mesh from the current catalog version and confirm hashes match before reissuing the request. |
+| `residency_waiver_expired` | Waiver referenced by the request has expired. | Renew or replace the waiver (with dual approval) or adjust the job scope to stay within current allowlists before retrying. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `residency_catalog_missing` | 503 | Yes | — |
+| `residency_mesh_drift` | 500 | Yes | — |
+| `residency_waiver_expired` | 409 | Yes | — |
 
 ### Reference Manager
 
@@ -370,6 +417,22 @@ Spec: [Settings Registry](../../../platform/settings.md#33-api-error-codes-bindi
 | `POLICY_BLOCK` | 403 | Yes | settings_error_total<br>settings_policy_block_total |
 | `SECRET_DISCLOSURE_BLOCKED` | 403 | Yes | settings_error_total |
 | `VALIDATION_ERROR` | 400 | No | settings_error_total |
+
+### Speech Registry Service
+
+Spec: [Speech Registry Service](../../../automation/speech-registry.md#33-api-error-codes)
+
+| Code | Scenario | Client guidance |
+| --- | --- | --- |
+| `speech_codec_unsupported` | Uploaded media codec/sample rate is not supported. | Re-upload media in PCM WAV 16 kHz mono (or another supported format advertised in provider metadata) before retrying. |
+| `speech_diarization_unavailable` | Diarization requested but no provider supports the parameters. | Disable diarization or adjust duration/language parameters until a supported provider is available, then retry. |
+| `speech_provider_blocked` | Speech provider unavailable for the tenant’s residency rules. | Surface the residency violation to operators, switch to an allowed provider/region, or obtain a waiver before retrying. |
+
+| Code | HTTP Status | Audit Required | Metrics |
+| --- | --- | --- | --- |
+| `speech_codec_unsupported` | 400 | No | — |
+| `speech_diarization_unavailable` | 422 | No | — |
+| `speech_provider_blocked` | 409 | Yes | — |
 
 ### Web Application & Portal
 

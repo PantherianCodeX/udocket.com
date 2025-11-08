@@ -1,0 +1,25 @@
+meta:
+  service: policy_residency
+  owners:
+    - Security Engineering
+    - Compliance
+  source: docs/data/policy-residency.md
+error_codes:
+  - code: residency_catalog_missing
+    http_status: 503
+    severity: error
+    audit_required: true
+    description: Residency catalog unavailable or not activated.
+    client_action: Pause cross-region work, regenerate the catalog from Settings, verify signatures, and reissue the request once activation succeeds.
+  - code: residency_waiver_expired
+    http_status: 409
+    severity: error
+    audit_required: true
+    description: Waiver referenced by the request has expired.
+    client_action: Renew or replace the waiver (with dual approval) or adjust the job scope to stay within current allowlists before retrying.
+  - code: residency_mesh_drift
+    http_status: 500
+    severity: error
+    audit_required: true
+    description: Enforcement mesh does not match the active catalog version.
+    client_action: Redeploy the mesh from the current catalog version and confirm hashes match before reissuing the request.

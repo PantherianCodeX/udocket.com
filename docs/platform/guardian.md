@@ -22,33 +22,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Guardian Service Specification <br> 
-    Canonical design, policy, and operational reference</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
-    <span class="page-number"></span> of <span 
-    class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Guardian Service Specification <br> Canonical design, policy, and operational reference</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -271,8 +254,6 @@ ______________________________________________________________________
 | `POST /guardian/judgments:enqueue` | Administrative replay (internal tooling) | Idempotent on `{resource_urn, reason}`; reuses submission bus; audited under `ops/guardian/batch_submit.jsonl`. |
 | `POST /vault/detokenize` | Restore masked spans (Compose/Signer only) | Requires `guardian_judgment_id`, purpose, and mTLS; Guardian never logs plaintext. |
 | `SSE GUARDIAN.JUDGMENT.*` | Broadcast PASS/WARN/BLOCK/WAIVED outcomes | Carries `guardian_judgment_id`, reason codes, waiver IDs, `settings_snapshot_sha256`, span evidence hashes. |
-
-
 
 #### 3.1.1 Review approval example (binding)
 

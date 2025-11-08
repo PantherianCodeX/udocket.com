@@ -24,34 +24,16 @@ approved_date:
 header-includes:
   - |
     <style>
-      table {
-        font-size: 8.5pt;
-      }
-      table td,
-      table th {
-        font-size: inherit;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-      figure svg text,
-      figure svg tspan {
-        fill: #111 !important;
-      }
-      figure svg text {
-        font-family: "DejaVu Sans", "Trebuchet MS", Arial, sans-serif !important;
-      }
-      figure.full-width-diagram img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
-  - <header class="page-header">uDocket — Localization & Policy Engine Technical
-    Design <br> Localization, Residency, and Policy Enforcement 
-    Specification</header>
-  - <footer class="page-footer">Confidential · Last updated 2025-10-23 · Page 
-    <span class="page-number"></span> of <span 
-    class="page-count"></span></footer>
+  - |
+    <header class="page-header">uDocket — Localization &amp; Policy Engine Technical Design <br> Localization, Residency, and Policy Enforcement Specification</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -80,11 +62,11 @@ ______________________________________________________________________
 
 ## Reading Guide
 
-- **Scope:** Service charter, compiler/runtime internals, API contracts, observability, OPA bundle management, rollout controls, and runbooks for LPE.
+- **Scope:** Service charter, compiler/runtime internals, API contracts, observability, and rollout controls for LPE. OPA bundle distribution and enforcement details now live in `automation/opa-bundle-server.md`.
 - **Structure:** Sections follow the standard 0–10 outline; §8 contains the operational posture, alert triggers, runbook summaries, migrations, and workflows that previously lived in Appendix R.
 - **Cross-references:** Use `§<number>` for this document, `TDD §<number>` for the platform TDD, and `App.<letter>` when pointing at shared appendices (for example TDD App.J for FIPS tracing).
 - **Maintenance:** Run `python -m doc_tools.manage_docs --lint` before submitting edits. Localization and policy schema snippets must match `spec/schemas/*`; CI enforces localization completeness, policy coverage, and decision-log schema validation.
-- **Change protocol:** PRs touching localization packs, residency policies, OPA bundles, or PolicyContext generation must cite this spec and ADR-0003 in the review summary. Architecture + Security approvals are required when SDKs, Settings bundles, or compiler behaviour change.
+- **Change protocol:** PRs touching localization packs, residency policies, or PolicyContext generation must cite this spec and ADR-0003 in the review summary (OPA policy plane changes additionally cite `automation/opa-bundle-server.md`). Architecture + Security approvals are required when SDKs, Settings bundles, or compiler behaviour change.
 
 ______________________________________________________________________
 
@@ -520,7 +502,7 @@ ______________________________________________________________________
 - Synthetic monitors run after each deploy against HIPAA/PHIPA/PIPA contexts; failures block rollout.
 - Decision-log validator `scripts/opa/validate_decision_logs.py` runs in CI and after major releases.
 - Pre-release stress tests (k6 + Locust) exercise Guardian, LPE/OPA evaluation, and RLS-heavy API paths; results store under `ops/runbooks.md` and must meet Appendix L baselines before shipping.
-- Logs honour the never-log list ([`Observability §4`](../platform/observability.md#4-state-management-binding)); sampling budgets follow dynamic controls in [`Observability §7`](../platform/observability.md#7-cost-management--budgets), and structured logging adapters prevent ad-hoc stdout noise.
+- Logs honour the never-log list ([`Observability §4`](../platform/observability.md#4-state-management-binding)); sampling budgets follow the SLO/cost controls in [`Observability §6.1`](../platform/observability.md#61-slos-targets-binding), and structured logging adapters prevent ad-hoc stdout noise.
 
 ### 6.1 SLOs & Targets (binding)
 
@@ -548,7 +530,7 @@ ______________________________________________________________________
 **Breadcrumbs:** `packages/core/lpe/security.py`, compliance scripts `ops/scripts/lpe/audit_compliance.py`, tests `tests/compliance/test_lpe_retention.py`. **|**
 **References:** Link to residency or policy appendices/ADRs.
 
-- Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow [`Observability §7`](../platform/observability.md#7-cost-management--budgets) dynamic controls.
+- Never-log enforcement: Logging middleware strips PII/PHI; sampling budgets follow [`Observability §6.1`](../platform/observability.md#61-slos-targets-binding) dynamic controls.
 - Key management: HSM-backed signing keys rotate per policy; evidence stored with bundle manifest records.
 - DSAR & erasure: §8.5.3 workflow captures PolicyContext replay evidence after DSAR operations.
 - FIPS enforcement: When `security.crypto.fips_mode|required`, services consuming OPA bundles invoke `opa_verify_dual_signature()` to assert Ed25519 + ECDSA P-256 signatures. Missing or invalid ECDSA signatures raise `FipsBundleSignatureError`, fire `opa_bundle_fips_signature_missing_total`, and block activation; CI job `ci-opa-bundle-signatures` validates artifacts under `ops/lpe/opa_bundles/*.tar.gz`.

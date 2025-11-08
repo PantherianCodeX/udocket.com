@@ -16,6 +16,19 @@ approvers:
   - "Architecture Steering Committee"
 approved_by:
 approved_date:
+header-includes:
+  - |
+    <style>
+      table{font-size:8.5pt;}
+      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
+      figure svg text,figure svg tspan{fill:#111!important;}
+      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
+      figure.full-width-diagram img{width:100%;height:auto;display:block;}
+    </style>
+  - |
+    <header class="page-header">uDocket — TDD Appendix: Glossary <br> Canonical terminology reference</header>
+  - |
+    <footer class="page-footer">Confidential · Last updated 2025-10-29 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -34,9 +47,11 @@ ______________________________________________________________________
 | Owners | Platform Documentation Team |
 | Reviewers | Platform Architecture |
 | Approvers | Architecture Steering Committee |
-| Approved by | |
-| Approved date | |
+| Approved by |  |
+| Approved date |  |
 <!-- END AUTO-GENERATED: document-controls -->
+
+**Status:** KEP: Provisional → Implementable → Implemented
 
 ______________________________________________________________________
 
@@ -54,7 +69,7 @@ Authoritative definitions used across TDD, services, and UI. Keep terms concise 
 - Settings Registry: Central configuration and activation workflow for org/case policies, roles, and enforcement profiles.
 - LLM Registry: Registry of model providers/versions and allowed profiles per organization.
 - Transcribe Agent: Azure Speech–backed agent that produces case transcripts and ops metadata (runs only in allowlisted regions).
-- Analyze Agent: Consumes transcripts to produce summaries, outlines, timeline seeds, entity hints, and staff reports.
+- Analyze Agent: Consumes transcripts to produce summaries, outlines, optional structured hints (timeline/entity/relationship data), and staff reports.
 - Compose Agent: Produces client/lawyer deliverables and QA artifacts via LangGraph with guard rails.
 - Case: Top‑level container for jobs, artifacts, and operations; storage under `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`.
 - Job: A unit of work executed by agents or tools; writes ops logs and per‑run metadata; artifacts are prefixed with `<job_id>__`.

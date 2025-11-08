@@ -79,12 +79,11 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Use per-job or per-run names with the same prefix style when tied to a transcription job: `<job_id>__<artifact>.<ext>`.
 
 - Analyze agent
-  - Purpose: produce layered analyses from transcripts, including structured artifacts for downstream compose/timeline/graph tooling.
+  - Purpose: produce layered analyses from transcripts, including optional structured hints (timeline, entity, relationship, or other downstream signals).
   - Artifacts:
     - Primary: `analysis/<job_id>__summary_v1.md` (markdown) or `.txt`
     - Optional: `analysis/<job_id>__outline_v1.json` (hierarchical bullets)
-    - Timeline seeds: `analysis/<job_id>__timeline_seeds_v1.json` with deterministic `uuid` per event
-    - Entity hints: `analysis/<job_id>__entity_hints_v1.json` with deterministic `uuid` per entity/relationship
+    - Optional structured hints: `analysis/<job_id>__hints_v1.json` (type-specific payloads with deterministic `uuid` per record)
     - Ops JSON (per run): `ops/<job_id>__summary_log.json`
     - Ops audit JSONL: `ops/ops_summary.jsonl`
   - Staff report (mandatory): `analysis/<job_id>__staff_report_v1.md` (+ optional JSON companion) with gaps/risks/discrepancies and questionnaire score.
@@ -92,7 +91,7 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
 
 - Compose agent (final assembly)
   - Purpose: generate final, audience-specific deliverables using a LangGraph pipeline with dedicated client and lawyer lanes plus QA gating.
-  - Inputs: `summary_v1.json`/`summary_v1.md`, optional timeline seeds & entity hints, intake data, case metadata, and organization-specific provider/template configuration.
+  - Inputs: `summary_v1.json`/`summary_v1.md`, optional structured hints from Analyze, intake data, case metadata, and organization-specific provider/template configuration.
   - Outputs:
     - Client deliverable (grade 6, in-client voice): `docs/<job_id>__compose_client_v1.md` and `.docx`
     - Lawyer deliverable (professional legal): `docs/<job_id>__compose_lawyer_v1.md` and `.docx`
@@ -117,7 +116,7 @@ To avoid future confusion, the table below captures the canonical naming convent
 | Tool / Agent | UI label & panel key | `job_kind` / `agent_type` | Primary artifacts (types & filenames) | Notes |
 | --- | --- | --- | --- | --- |
 | Transcribe | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
-| Analyze | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
+| Analyze | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, structured hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
 | Compose | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), bundle/QA reports, compose ops logs | LangGraph pipeline with parallel lanes, guard rails, and QA gating. |
 | Timeline (future standalone) | `Timeline` / `timeline` | `timeline` | To-be-defined `timeline_v2.*` assets | When run independently, should still read latest summary outputs. |
 
