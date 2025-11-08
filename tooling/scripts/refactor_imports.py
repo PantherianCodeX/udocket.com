@@ -2,11 +2,12 @@
 """Bulk rewrite import statements according to a mapping.
 
 Usage:
-    python scripts/refactor_imports.py --map old.module=new.module [--root src]
+    python tooling/scripts/refactor_imports.py --map old=new [--root src]
 
-Multiple ``--map`` entries are allowed. By default the script runs in dry-run
-mode and prints the files that would change. Pass ``--apply`` to write the
-changes in-place.
+By default the script performs a dry-run and prints which files would change.
+Pass ``--apply`` once you are happy with the preview. Additional options cover
+mapping files, ensuring imports exist, exporting __all__ names, and toggling
+relative import preference.
 """
 
 from __future__ import annotations
@@ -189,10 +190,37 @@ def _load_mapping_file(path: Path) -> list[str]:
     return entries
 
 
+def _to_relative(module: str, current_module: str | None, prefer_relative: bool) -> str:
+    if not prefer_relative or not current_module:
+        return module
+
+    current_parts = current_module.split(".")
+    if not current_parts:
+        return module
+    # imports are resolved relative to the containing package, not the module name
+    package_parts = current_parts[:-1]
+    target_parts = module.split(".")
+    if not target_parts or package_parts[:1] != target_parts[:1]:
+        return module
+
+    common = 0
+    for lhs, rhs in zip(package_parts, target_parts):
+        if lhs != rhs:
+            break
+        common += 1
+    up_levels = len(package_parts) - common
+    remainder = target_parts[common:]
+    if not remainder:
+        return module
+    prefix = "." * (up_levels + 1)
+    return f"{prefix}{'.'.join(remainder)}"
+
+
 def _rewrite_from_line(
     line: str,
     mapping: dict[str, str],
     current_module: str | None,
+    prefer_relative: bool,
 ) -> tuple[str, bool]:
     stripped = line.lstrip()
     if not stripped.startswith("from "):
@@ -212,7 +240,8 @@ def _rewrite_from_line(
         replacement = mapping.get(module)
     if replacement is None:
         return line, False
-    new_line = f"{indent}from {replacement} import {suffix}"
+    rewritten = _to_relative(replacement, current_module, prefer_relative)
+    new_line = f"{indent}from {rewritten} import {suffix}"
     return new_line, True
 
 
@@ -248,11 +277,13 @@ def _rewrite_content(
     content: str,
     mapping: dict[str, str],
     current_module: str | None = None,
+    *,
+    prefer_relative: bool = False,
 ) -> tuple[str, bool]:
     lines = content.splitlines()
     changed_any = False
     for idx, line in enumerate(lines):
-        new_line, changed = _rewrite_from_line(line, mapping, current_module)
+        new_line, changed = _rewrite_from_line(line, mapping, current_module, prefer_relative)
         if changed:
             lines[idx] = new_line
             changed_any = True
@@ -311,10 +342,16 @@ def _determine_insertion_index(lines: list[str]) -> int:
     idx = insert_idx
     if parsed:
         for node in parsed.body:
+            if (
+                isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                continue
             if isinstance(node, ast.ImportFrom) and node.module == "__future__":
                 idx = max(idx, node.end_lineno or node.lineno)
-            else:
-                break
+                continue
+            break
     idx = max(idx, 0)
     while idx < len(lines) and not lines[idx].strip():
         idx += 1
@@ -399,6 +436,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Actually write changes (default: dry-run)",
     )
     parser.add_argument(
+        "--prefer-relative",
+        action="store_true",
+        help="Rewrite mapped imports using relative syntax where possible.",
+    )
+    parser.add_argument(
         "--ensure-import",
         dest="ensure_imports",
         action="append",
@@ -458,7 +500,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         for path in _iter_python_files(root, args.use_git):
             content = path.read_text(encoding="utf-8")
             module_name = _module_name_from_path(path, root)
-            new_content, changed = _rewrite_content(content, mapping_dict, module_name)
+            new_content, changed = _rewrite_content(
+                content,
+                mapping_dict,
+                module_name,
+                prefer_relative=args.prefer_relative,
+            )
             if not changed:
                 continue
             _mark(path)
