@@ -60,7 +60,7 @@ ______________________________________________________________________
 This appendix lists the SLOs defined in each service and app specification. Refresh it with `make docs.sync.slo` when SLO sections change.
 
 <!-- BEGIN AUTO-GENERATED: slo-index -->
-<!-- Run `make docs.sync.slo` to refresh. -->
+<!-- AUTO-GENERATED: Run `make docs.sync.slo` to refresh. -->
 
 ### [Accounts & Tenants Service](../../../customer/accounts-tenants.md)
 

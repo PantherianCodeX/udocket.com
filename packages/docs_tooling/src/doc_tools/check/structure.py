@@ -15,9 +15,9 @@ By default the checker inspects source documents under
 
 Typical usage (CLI/CI friendly):
 
-    python -m doc_tools.check_structure
-    python -m doc_tools.check_structure docs/experience/web-app.md
-    python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer docs/overview
+    python -m doc_tools.check.structure
+    python -m doc_tools.check.structure docs/experience/web-app.md
+    python -m doc_tools.check.structure docs/platform docs/automation docs/data docs/customer docs/overview
 """
 
 from __future__ import annotations
@@ -30,7 +30,13 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, cast
 
 from doc_tools import paths
-from doc_tools.doc_utils import (
+from doc_tools.check.requirements import (
+    EXCLUDED_CONTROL_KEYS,
+    OPTIONAL_KEYS,
+    TEMPLATE_REQUIREMENTS,
+)
+from doc_tools.check.utils import extract_table_rows, find_section_header, parse_table
+from doc_tools.common.doc_utils import (
     PREAMBLE_DIVIDER,
     YamlSchema,
     begin_auto_generated_marker,
@@ -56,28 +62,7 @@ DOCUMENT_CONTROLS_HEADER = "## Document Controls"
 DOCUMENT_CONTROLS_LABEL = "document-controls"
 DOCUMENT_CONTROLS_BEGIN = begin_auto_generated_marker(DOCUMENT_CONTROLS_LABEL)
 DOCUMENT_CONTROLS_END = end_auto_generated_marker(DOCUMENT_CONTROLS_LABEL)
-EXCLUDED_FRONT_MATTER_KEYS = {
-    "title",
-    "subtitle",
-    "header-includes",
-}
-OPTIONAL_CONTROL_KEYS = {"approved_by", "approved_date"}
-
-REQUIRED_FRONT_MATTER_KEYS = {
-    "title",
-    "subtitle",
-    "authors",
-    "version",
-    "status",
-    "classification",
-    "last_updated",
-    "updated_by",
-    "owners",
-    "reviewers",
-    "approvers",
-    "approved_by",
-    "approved_date",
-}
+REQUIRED_FRONT_MATTER_KEYS = TEMPLATE_REQUIREMENTS.required_front_matter_keys
 
 LOWERCASE_WORDS = {"and", "or", "the", "a", "an", "of", "in", "on", "for", "to", "with", "by"}
 DISABLED_TEMPLATE_MESSAGES: set[Path] = set()
@@ -129,45 +114,6 @@ def template_disabled(template_path: Path) -> bool:
     if "template:disabled" in stripped.lower():
         return True
     return False
-
-
-def find_section_header(lines: Sequence[str], header: str) -> int:
-    for idx, line in enumerate(lines):
-        if line.strip().lower() == header.lower():
-            return idx
-    raise ValueError(f"missing '{header}' section")
-
-
-def extract_table_rows(lines: Sequence[str], start_idx: int) -> List[str]:
-    rows: List[str] = []
-    idx = start_idx + 1
-    while idx < len(lines):
-        stripped = lines[idx].lstrip()
-        if stripped.startswith("|"):
-            break
-        idx += 1
-    while idx < len(lines):
-        stripped = lines[idx].lstrip()
-        if not stripped.startswith("|"):
-            break
-        rows.append(stripped)
-        idx += 1
-    return rows
-
-
-def parse_table(rows: Sequence[str]) -> Tuple[str, str, List[Tuple[str, str]]]:
-    if len(rows) < 2:
-        raise ValueError("document controls table incomplete")
-    header_row = rows[0]
-    separator_row = rows[1]
-    data: List[Tuple[str, str]] = []
-    for raw in rows[2:]:
-        cells = [cell.strip() for cell in raw.strip().strip("|").split("|")]
-        if len(cells) < 2:
-            continue
-        field, value = cells[0], cells[1]
-        data.append((field, value))
-    return header_row, separator_row, data
 
 
 def extract_tables(
@@ -388,9 +334,8 @@ def ensure_template_requirements(template_path: Path) -> None:
         normalized = normalize_key(label)
         label_keys.add(normalized)
         label_keys.update(key_variants(normalized))
-    excluded = {normalize_key(key) for key in EXCLUDED_FRONT_MATTER_KEYS}
-    required_controls = [key for key in REQUIRED_FRONT_MATTER_KEYS if key not in excluded]
-    missing_controls = [key for key in required_controls if key not in label_keys]
+    required_controls = TEMPLATE_REQUIREMENTS.required_document_control_keys
+    missing_controls = [key for key in required_controls if normalize_key(key) not in label_keys]
     if missing_controls:
         formatted = ", ".join(format_label(key) for key in missing_controls)
         raise RuntimeError(
@@ -466,7 +411,7 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
         joined = ", ".join(duplicates)
         errors.append(f"{path}: document controls contains duplicate fields: {joined}")
 
-    excluded = {normalize_key(item) for item in EXCLUDED_FRONT_MATTER_KEYS}
+    excluded = {normalize_key(item) for item in EXCLUDED_CONTROL_KEYS}
     matched_labels: set[str] = set()
     for key, value in front_matter.items():
         normalized_key = normalize_key(key)
@@ -474,7 +419,7 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
             continue
 
         expected = stringify(value).strip()
-        if not expected and normalized_key not in OPTIONAL_CONTROL_KEYS:
+        if not expected and normalized_key not in OPTIONAL_KEYS:
             errors.append(f"{path}: front matter key '{key}' must not be empty")
 
         variants = key_variants(key)
@@ -505,7 +450,7 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
                 f"{path}: document controls field '{label}' value '{actual_value}' does not match front matter '{expected}'"
             )
 
-    optional_labels = OPTIONAL_CONTROL_KEYS
+    optional_labels = OPTIONAL_KEYS
     for normalized, (label, _) in table_map.items():
         if normalized in matched_labels:
             continue

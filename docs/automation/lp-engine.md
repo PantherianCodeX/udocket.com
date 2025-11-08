@@ -681,7 +681,7 @@ ______________________________________________________________________
 
 - Contract tests validate OpenAPI schemas, golden `PolicyContext` fixtures for HIPAA/PHIPA/PIPA/GDPR combinations, and compiler diff outputs via `scripts/lpe/verify_policy_context.py`.
 - `tests/e2e/test_portal_policy_context.py::test_disclaimer_l10n` verifies localized banners and attribution; `tests/platform/db/test_mask_profiles.py` ensures masking alignment.
-- CI job `.github/workflows/lpe-validation.yml` runs `lint-artifact-vocabulary`, `python -m doc_tools.check_structure docs/automation docs/platform docs/overview`, and localization CI suites; failures block rollout.
+- CI job `.github/workflows/lpe-validation.yml` runs `lint-artifact-vocabulary`, `python -m doc_tools.check.structure docs/automation docs/platform docs/overview`, and localization CI suites; failures block rollout.
 - Synthetic monitors run after each deploy for HIPAA/PHIPA/PIPA contexts; failures keep cutover flags disabled until remediation.
 
 ______________________________________________________________________

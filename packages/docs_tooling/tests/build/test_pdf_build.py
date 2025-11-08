@@ -5,7 +5,7 @@ from typing import List
 
 import pytest
 
-from doc_tools import pdf_build as pb
+from doc_tools.build import pdf as pb
 
 
 class DummyHTML:

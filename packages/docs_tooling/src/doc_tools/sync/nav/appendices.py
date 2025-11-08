@@ -3,10 +3,9 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Iterable
-
 from doc_tools import paths
-from doc_tools.doc_utils import derive_doc_label, parse_front_matter, read_markdown_lines, stringify
+from doc_tools.common.doc_utils import derive_doc_label, parse_front_matter, read_markdown_lines, stringify
+from doc_tools.common.nav_utils import collect_entries, find_section
 
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
 APPENDICES_DIR = paths.DOCS_ROOT / "overview" / "tdd" / "appendices"
@@ -37,43 +36,13 @@ def _parse_label(path: Path) -> str:
     return derive_doc_label(title, fallback=path.stem)
 
 
-def _collect_existing(lines: list[str], start: int, end: int) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
-    for idx in range(start + 1, end):
-        stripped = lines[idx].strip()
-        if not stripped.startswith("- "):
-            continue
-        if ":" not in stripped:
-            continue
-        label, target = stripped[2:].split(":", 1)
-        entries.append((label.strip(), target.strip()))
-    return entries
-
-
-def _find_section(lines: list[str]) -> tuple[int, int]:
-    start = -1
-    for idx, line in enumerate(lines):
-        if line.strip() == SECTION_HEADER:
-            start = idx
-            break
-    if start == -1:
-        raise RuntimeError("Architecture Appendices section not found in mkdocs.yml")
-    end = start + 1
-    while end < len(lines):
-        line = lines[end]
-        if line.startswith("- "):
-            break
-        end += 1
-    return start, end
-
-
 def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) -> bool:
     if not config_path.exists():
         raise RuntimeError(f"mkdocs.yml not found at {config_path}")
 
     lines = config_path.read_text(encoding="utf-8").splitlines()
-    start, end = _find_section(lines)
-    existing = _collect_existing(lines, start, end)
+    start, end = find_section(lines, SECTION_HEADER)
+    existing = collect_entries(lines, start, end)
 
     managed_targets = {path.relative_to(paths.DOCS_ROOT).as_posix(): path for path in appendix_paths}
     managed_scope = set(managed_targets)
@@ -81,10 +50,10 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
     remaining_targets = dict(managed_targets)
 
     # Preserve existing order for items already in the nav.
-    for label, target in existing:
-        if target in remaining_targets:
-            managed_lines.append(f"{ITEM_INDENT}- {label}: {target}")
-            remaining_targets.pop(target, None)
+    for entry in existing:
+        if entry.target in remaining_targets:
+            managed_lines.append(f"{ITEM_INDENT}- {entry.label}: {entry.target}")
+            remaining_targets.pop(entry.target, None)
 
     # Append new files alphabetically.
     for rel in sorted(remaining_targets):
@@ -93,9 +62,9 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
         managed_lines.append(f"{ITEM_INDENT}- {label}: {rel}")
 
     static_lines = [
-        f"{ITEM_INDENT}- {label}: {target}"
-        for label, target in existing
-        if target not in managed_scope
+        f"{ITEM_INDENT}- {entry.label}: {entry.target}"
+        for entry in existing
+        if entry.target not in managed_scope
     ]
 
     new_block = [SECTION_HEADER, *managed_lines, *static_lines]

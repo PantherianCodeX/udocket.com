@@ -41,34 +41,38 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Keep one decision per ADR; link from TDD or service pages when referenced.
 - Shortcut: `python -m doc_tools.create_adr "Background worker topology"` generates the next numbered skeleton (`--dry-run` prints instead of writing, `--deciders/--tags` customise metadata).
 
+## Header includes & placeholders
+
+- `packages/docs_tooling/src/doc_tools/config/header_includes.yaml` is the single source of truth for PDF header/footer fragments.
+- **Front-matter placeholders** use `{<field_name>}` syntax and must map to front-matter keys. Example: `{<title>}`, `{<subtitle>}`, `{<subtitle_block>}`. `{<subtitle_block>}` is computed automatically from `subtitle` and `subtitle_lead` (blank if no subtitle).
+- **Built-ins** use double braces `{{token}}` and are injected by the renderer. Defaults: `{{page_number}}`, `{{page_count}}`, `{{prefix}}` (classification + last updated), with HTML stubs defined in `DEFAULT_BUILTIN_HTML`.
+- When editing headers/footers, never reintroduce legacy `{{field}}` forms for front-matter values. The templates check (`python -m doc_tools.check.templates`) emits warnings for legacy syntax; fix them instead of suppressing.
+- The document controls sync job (`python -m doc_tools.sync.document_controls`) now renders header-includes automatically; do not hand-edit the YAML block in each document.
+
 ## Lint and build locally
 
-- Install doc tooling once (from `packages/docs_tooling/`):
-  - `uv sync --frozen --extra dev`
-  - `PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium npm ci`
-  - `apt-get install -y chromium` (or `brew install chromium` on macOS) so the Mermaid CLI can launch a headless browser
-  - Vale CLI ships in the docs toolbox container; install Vale v3.7.1 locally if you prefer running outside the container.
-- Node tooling expects Node.js 20.x (see `.nvmrc` and devcontainer). Use `nvm use` or install the pinned version to avoid CLI mismatches.
-- Use the unified doc manager (`uv run python -m doc_tools.manage_docs`) or the Make targets (`make lint-docs`, `make build-docs`) to run common workflows:
-  - `uv run python -m doc_tools.manage_docs --lint` — read-only checks
-  - `uv run python -m doc_tools.manage_docs --sync` — regenerate runbook/diagram/SLO/API appendices and sync document controls/assets
-  - `uv run python -m doc_tools.manage_docs --build` — strict MkDocs build (temporary site dir on `--dry-run`)
-  - `uv run python -m doc_tools.manage_docs --pdf` — produce TDD/PRD PDFs
-  - Combine flags for bespoke flows, e.g. `uv run python -m doc_tools.manage_docs --lint --sync --dry-run` or `uv run python -m doc_tools.manage_docs --all`
-- `--dry-run` keeps the workspace read-only for sync/build tasks (scripts emit what would have changed and run `--check` variants where available).
-- Lint tasks include: runbook/diagram/API appendices in `--check` mode, structure validation (`platform`, `automation`, `data`, `customer`, `experience`, `ops`), appendix/table verification, markdownlint (`npx markdownlint-cli`), Vale (via `docs/config/vale-ci.ini`), documented settings parity, and strict link checking.
-- Validate service specs against the template: `uv run python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer`
-- Lint markdown: `npx markdownlint --config docs/config/.markdownlint.json 'docs/**/*.md'`.
-- Style checks (Vale):
-  - From `docs/`: `vale --config docs/config/vale.ini src/`
-  - Rules live under `docs/config/vale/`.
-- Build site: `uv run mkdocs build --config-file packages/docs_tooling/mkdocs.yml --site-dir site --clean`.
-- Preview docs locally (default dev server port 8010):
-  - `uv run mkdocs serve --config-file packages/docs_tooling/mkdocs.yml --dev-addr 0.0.0.0:8010`
-- Build TDD/PRD PDFs:
+- **Always** run lint/sync/build via the docs toolbox container to guarantee matching tooling (`make docs.*`). The Make targets automatically launch `docker compose run docs …` and inject required env (Vale, Node, Chromium, etc.).
+  - `make docs.lint` — full read-only lint pipeline (structure validation, runbook/diagram/SLO/API appendix checks, markdownlint, Vale, link + settings checks). This target sets `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` internally for deterministic pytest runs.
+  - `make docs.sync.runbooks`, `make docs.sync.diagrams`, `make docs.sync.slo`, `make docs.sync.api_codes` — rebuild the corresponding appendices after editing sources.
+  - `make docs.sync` — run the standard sync pipeline (doc controls, assets, appendices, nav updates).
+  - `make docs.sync.all` — run `docs.sync` plus the heavy extras (nav mapping migrations, other one-off content moves). Use this before major releases or after structure refactors.
+  - `make docs.build` — strict MkDocs build (temp site dir), honoring `--dry-run` semantics embedded in manage_docs.
+  - Build tasks **only** generate deliverables (mkdocs site, PDFs, diagram indexes) while sync tasks materialise deterministic content inside `docs/` (document controls, appendices, nav). Pick the one that matches your intent to avoid unreviewed file churn.
+- Container shell: `make doctools.shell` drops you into the toolbox if you need to run ad-hoc commands (Vale, mkdocs serve, etc.). Prefer this over `uv run …` on the host.
+- Local tool installation is optional; the toolbox image carries npm/Vale/Chromium. If you do install locally, match `.nvmrc` (Node 20.x) and Vale 3.7.1 to avoid CLI drift.
+- Templates & structure checks:
+  - `python -m doc_tools.check.structure docs/platform docs/automation docs/data docs/customer` — still useful per-directory, but run inside the toolbox shell.
+  - `python -m doc_tools.check.templates docs/overview/tdd/appendices/_template.md ...` — ensures `_template.md` files contain the required front-matter/document-control rows and only use the sanctioned placeholders.
+- Markdownlint & Vale (inside toolbox shell):
+  - `npx markdownlint --config docs/config/.markdownlint.json 'docs/**/*.md'`
+  - `vale --config docs/config/vale.ini docs/`
+- Build & preview:
+  - `uv run --project packages/docs_tooling mkdocs build --config-file packages/docs_tooling/mkdocs.yml --site-dir site --clean`
+  - `uv run --project packages/docs_tooling mkdocs serve --config-file packages/docs_tooling/mkdocs.yml --dev-addr 0.0.0.0:8010`
+- PDFs:
   - `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid --all`
-  - `uv run python tools/pdf_build.py`
-  - Provide `--target`/`--skip-build` to narrow the scope or reuse an existing MkDocs build.
+  - `uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target tdd`
+  - Use `--skip-build` if you already ran `make docs.build`.
 
 ## Cross-linking and single-source rules
 
@@ -96,3 +100,12 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Keep `overview/tdd.md` short; push details into service pages and appendices.
 - Use descriptive diagram filenames with version suffixes (e.g., `*-v1.mmd`).
 - For renamed/replaced artifacts, add `_v2`, `_v3`, etc. and update links.
+
+## Refactor backlog
+
+We track ongoing cleanup here so contributors can pick up tasks deliberately:
+
+1. **CLI wrappers** — migrate the remaining ad-hoc entrypoints (e.g., `doc_tools.lint_docs`, `doc_tools.pytest_runner`) to thin wrappers that detect `DOCS_TOOLBOX=1` and otherwise call the appropriate `make docs.*` targets.
+2. **Shared helper extraction** — move the remaining bespoke Markdown/YAML parsing helpers (diagram metadata parsing, SLO section extraction) under `doc_tools/common` for reuse.
+3. **Nav utilities** — expand `doc_tools.common.nav_utils` with serializers so future nav sync scripts don’t reimplement indentation/formatting rules.
+4. **Type hygiene** — continue replacing `typing.Any` usage in older scripts (e.g., `doc_tools/build/*.py`) with precise TypedDict/dataclass models so Pyright stays green in the `pyrightconfig.docs-scripts.json` scope.

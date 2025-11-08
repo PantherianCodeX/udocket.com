@@ -96,20 +96,27 @@ def builder_check_structure(ctx: RunContext) -> list[str]:
     return [
         PYTHON,
         "-m",
-        "doc_tools.check_structure",
+        "doc_tools.check.structure",
         *[str(path) for path in paths],
     ]
 
 
 def builder_check_doc_control_markers(ctx: RunContext) -> list[str]:
-    cmd = python_task("doc_tools.check_document_controls_tags")
+    cmd = python_task("doc_tools.check.document_controls_tags")
     if ctx.targets:
         cmd.extend(str(path) for path in ctx.targets)
     return cmd
 
 
 def builder_check_appendices(_: RunContext) -> list[str]:
-    return python_task("doc_tools.check_appendices")
+    return python_task("doc_tools.check.appendices")
+
+
+def builder_check_templates(ctx: RunContext) -> list[str]:
+    cmd = python_task("doc_tools.check.templates")
+    if ctx.targets:
+        cmd.extend(str(path) for path in ctx.targets)
+    return cmd
 
 
 def builder_markdownlint(_: RunContext) -> list[str]:
@@ -145,20 +152,16 @@ def builder_vale(ctx: RunContext) -> list[str]:
 
 
 def builder_check_settings(_: RunContext) -> list[str]:
-    return python_task("doc_tools.check_settings_keys")
+    return python_task("doc_tools.check.settings_keys")
 
 
 def builder_check_links(_: RunContext) -> list[str]:
-    return python_task("doc_tools.check_links")
-
-
-def builder_check_headings(_: RunContext) -> list[str]:
-    return python_task("doc_tools.check_heading_tags", "docs/automation/langgraph-agents.md")
+    return python_task("doc_tools.check.links")
 
 
 def builder_check_asset_paths(ctx: RunContext) -> list[str]:
     targets = ctx.targets or [paths.DOCS_ROOT]
-    cmd = python_task("doc_tools.check_asset_paths")
+    cmd = python_task("doc_tools.check.asset_paths")
     cmd.extend(str(target) for target in targets)
     return cmd
 
@@ -186,6 +189,13 @@ def builder_sync_nav(ctx: RunContext) -> list[str]:
     if ctx.dry_run:
         cmd.append("--dry-run")
     return cmd
+
+
+def builder_sync_nav_mapping(ctx: RunContext) -> list[str] | None:
+    if ctx.dry_run:
+        print("[manage-docs] dry-run: skipping nav mapping sync")
+        return None
+    return python_task("doc_tools.sync.nav_mapping")
 
 
 def builder_runbook_update(ctx: RunContext) -> list[str]:
@@ -224,14 +234,14 @@ def builder_pdf_tdd(ctx: RunContext) -> list[str] | None:
     if ctx.dry_run:
         print("[manage-docs] dry-run: skipping TDD PDF build")
         return None
-    return [PYTHON, "-m", "doc_tools.pdf_build", "--target", "tdd"]
+    return [PYTHON, "-m", "doc_tools.build.pdf", "--target", "tdd"]
 
 
 def builder_pdf_prd(ctx: RunContext) -> list[str] | None:
     if ctx.dry_run:
         print("[manage-docs] dry-run: skipping PRD PDF build")
         return None
-    return [PYTHON, "-m", "doc_tools.pdf_build", "--target", "prd"]
+    return [PYTHON, "-m", "doc_tools.build.pdf", "--target", "prd"]
 
 
 TASKS: list[Task] = [
@@ -271,6 +281,11 @@ TASKS: list[Task] = [
         builder=builder_check_appendices,
     ),
     Task(
+        name="check_templates.py",
+        category="check",
+        builder=builder_check_templates,
+    ),
+    Task(
         name="markdownlint docs",
         category="lint",
         builder=builder_markdownlint,
@@ -300,14 +315,14 @@ TASKS: list[Task] = [
         env={"STRICT_DOCS": "1"},
     ),
     Task(
-        name="check_heading_tags.py",
-        category="lint",
-        builder=builder_check_headings,
-    ),
-    Task(
         name="check_asset_paths.py",
         category="lint",
         builder=builder_check_asset_paths,
+    ),
+    Task(
+        name="sync doc controls",
+        category="sync",
+        builder=builder_sync_doc_controls,
     ),
     Task(
         name="sync doc assets",
@@ -338,6 +353,11 @@ TASKS: list[Task] = [
         name="sync ADR nav",
         category="sync",
         builder=builder_sync_nav,
+    ),
+    Task(
+        name="sync nav mapping",
+        category="sync-extra",
+        builder=builder_sync_nav_mapping,
     ),
     Task(
         name="mkdocs build --strict",
@@ -406,10 +426,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Optional paths to scope lint/sync commands (defaults to docs/ tree).",
     )
     parser.add_argument("--lint", action="store_true", help="Run read-only lint checks.")
+    parser.add_argument("--check", action="store_true", help="Run template/document checks.")
     parser.add_argument("--sync", action="store_true", help="Apply auto-generated artifacts.")
+    parser.add_argument(
+        "--sync-all",
+        action="store_true",
+        help="Run sync tasks plus optional extras (nav mapping, heavy migrations).",
+    )
     parser.add_argument("--build", action="store_true", help="Build the MkDocs site.")
     parser.add_argument("--pdf", action="store_true", help="Build PDF artifacts.")
-    parser.add_argument("--all", action="store_true", help="Run lint + sync + build + pdf.")
+    parser.add_argument("--all", action="store_true", help="Run lint + check + sync + build + pdf.")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -428,20 +454,24 @@ def list_tasks() -> None:
 
 def determine_categories(args: argparse.Namespace) -> list[str]:
     if args.all:
-        return ["lint", "sync", "build", "pdf"]
-    selected = [
-        cat
-        for cat, flag in (
-            ("lint", args.lint),
-            ("sync", args.sync),
-            ("build", args.build),
-            ("pdf", args.pdf),
-        )
-        if flag
-    ]
-    if not selected:
+        return ["lint", "check", "sync", "sync-extra", "build", "pdf"]
+
+    ordered: list[str] = []
+
+    def _add(category: str, enabled: bool) -> None:
+        if enabled and category not in ordered:
+            ordered.append(category)
+
+    _add("lint", args.lint)
+    _add("check", args.check)
+    _add("sync", args.sync or args.sync_all)
+    _add("sync-extra", args.sync_all)
+    _add("build", args.build)
+    _add("pdf", args.pdf)
+
+    if not ordered:
         return ["lint"]
-    return selected
+    return ordered
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -454,7 +484,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     targets = resolve_targets(args.targets)
     ctx = RunContext(dry_run=args.dry_run, targets=targets, verbose=args.verbose)
 
-    if "lint" in categories:
+    if any(cat in categories for cat in ("lint", "check")):
         tdd_doc = DOCS_DIR / "overview" / "tdd.md"
         if not tdd_doc.exists():
             print(f"[manage-docs] missing documentation anchor at {tdd_doc}", file=sys.stderr)

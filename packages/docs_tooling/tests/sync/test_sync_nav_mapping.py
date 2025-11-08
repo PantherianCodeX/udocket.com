@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import apply_nav_mapping as anm
+from doc_tools.sync import nav_mapping as anm
 
 
 def _setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -90,11 +90,38 @@ def test_update_references_rewrites_text(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_main_invokes_move_and_update(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = {"move": 0, "update": 0}
-    monkeypatch.setattr(anm, "move_sources", lambda: called.update(move=called["move"] + 1))
-    monkeypatch.setattr(anm, "update_references", lambda: called.update(update=called["update"] + 1))
+    called = {"move": 0, "update": 0, "move_dry": False, "update_dry": False}
 
-    rc = anm.main()
+    def fake_move(*, dry_run: bool = False) -> None:
+        called["move"] += 1
+        called["move_dry"] = dry_run
+
+    def fake_update(*, dry_run: bool = False) -> None:
+        called["update"] += 1
+        called["update_dry"] = dry_run
+
+    monkeypatch.setattr(anm, "move_sources", fake_move)
+    monkeypatch.setattr(anm, "update_references", fake_update)
+
+    rc = anm.main([])
 
     assert rc == 0
-    assert called == {"move": 1, "update": 1}
+    assert called == {"move": 1, "update": 1, "move_dry": False, "update_dry": False}
+
+
+def test_main_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    state = {"move": False, "update": False}
+
+    def fake_move(*, dry_run: bool = False) -> None:
+        state["move"] = dry_run
+
+    def fake_update(*, dry_run: bool = False) -> None:
+        state["update"] = dry_run
+
+    monkeypatch.setattr(anm, "move_sources", fake_move)
+    monkeypatch.setattr(anm, "update_references", fake_update)
+
+    rc = anm.main(["--dry-run"])
+
+    assert rc == 0
+    assert state == {"move": True, "update": True}

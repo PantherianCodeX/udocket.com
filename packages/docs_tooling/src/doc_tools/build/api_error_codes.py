@@ -13,18 +13,18 @@ from collections.abc import Iterable
 from typing import Any, Sequence, cast
 
 from doc_tools import paths
-from doc_tools.doc_utils import (
+from doc_tools.common.doc_utils import (
     auto_generated_header,
     begin_auto_generated_marker,
     derive_doc_label,
     end_auto_generated_marker,
+    mkdocs_slug,
     parse_front_matter,
     read_markdown_lines,
     replace_auto_generated_section,
     write_or_check,
     yaml,
 )
-from packages.common.text import slugify
 CROSS_LINK_PREFIX = "> _Full listing:_ [API error codes index]"
 NOTE_PREFIX = "> Tables generated from `"
 
@@ -64,15 +64,6 @@ class Component:
     section_anchor: str
     index_anchor: str
     entries: list[ErrorCodeEntry]
-
-
-def mkdocs_slug(text: str) -> str:
-    """Mirror MkDocs/Material slug generation (lowercase, strip punct, spaces->-)."""
-
-    lowered = text.lower()
-    cleaned = re.sub(r"[^\w\- ]+", "", lowered)
-    collapsed = re.sub(r"\s+", "-", cleaned)
-    return collapsed.strip("-")
 
 
 def _fail(message: str) -> None:
@@ -345,7 +336,7 @@ def _remove_legacy_notes(lines: list[str]) -> None:
         index += 1
 
 
-def _collect_components() -> tuple[list[Component], list[str]]:
+def _collect_components() -> list[Component]:
     docs: list[Path] = []
     for root in DOC_ROOTS:
         if not root.exists():
@@ -356,10 +347,10 @@ def _collect_components() -> tuple[list[Component], list[str]]:
     for doc in docs:
         if doc.name.startswith("_template"):
             continue
-        yaml_path = (doc.parent / doc.stem / "error_codes.yaml")
+        yaml_path = doc.parent / doc.stem / "error_codes.yaml"
         doc_text = doc.read_text(encoding="utf-8")
         if not yaml_path.exists():
-            if "### 3.3" in doc_text:
+            if ERROR_HEADING_PATTERN.search(doc_text):
                 errors.append(f"{doc}: expected {yaml_path.name} alongside the document")
             continue
         try:
@@ -381,16 +372,13 @@ def _collect_components() -> tuple[list[Component], list[str]]:
             )
         )
     components.sort(key=lambda item: item.display_name.lower())
-    return components, errors
+    if errors:
+        raise ApiErrorCodesError(errors)
+    return components
 
 
 def build_content(*, check: bool) -> bool:
-    components, errors = _collect_components()
-    if errors:
-        for message in errors:
-            print(f"[api-error-codes] {message}", file=sys.stderr)
-        print(f"[api-error-codes] {len(errors)} error(s) detected", file=sys.stderr)
-        return False
+    components = _collect_components()
     stale = False
     for component in components:
         if not _update_document(component, check=check):
@@ -413,12 +401,29 @@ def _run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="verify the API error codes tables are up to date")
     args = parser.parse_args(argv)
 
-    ok = build_content(check=args.check)
+    try:
+        ok = build_content(check=args.check)
+    except ApiErrorCodesError as exc:
+        for message in exc.messages:
+            print(f"[api-error-codes] {message}", file=sys.stderr)
+        return 1
     if args.check and not ok:
         print("API error codes tables are stale; run `make docs.sync.api_codes`.", file=sys.stderr)
+        return 1
+    if not ok:
         return 1
     return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(_run())
+ERROR_HEADING_PATTERN = re.compile(r"^###\s+3\.3\b", re.IGNORECASE | re.MULTILINE)
+
+
+class ApiErrorCodesError(RuntimeError):
+    """Raised when API error code generation cannot proceed."""
+
+    def __init__(self, messages: Sequence[str]):
+        joined = "\n".join(messages) if messages else "API error code generation failed"
+        super().__init__(joined)
+        self.messages = list(messages) if messages else [joined]

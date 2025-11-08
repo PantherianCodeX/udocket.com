@@ -64,7 +64,7 @@ Use this guide before changing Guardian policy, queue semantics, or downstream w
 
 - **Scope:** Guardian judgments, policy integration, API surface, queueing, observability, security, and operational controls.
 - **Structure:** Sections follow the 0–10 service spec template; appendices hold payload samples and runbooks.
-- **Maintenance:** Run the docs lint (`python -m doc_tools.manage_docs --lint`) and link check (`python -m doc_tools.check_links --strict`) prior to submitting Guardian changes.
+- **Maintenance:** Run the docs lint (`python -m doc_tools.manage_docs --lint`) and link check (`python -m doc_tools.check.links --strict`) prior to submitting Guardian changes.
 - **Change protocol:** Include a summary of Guardian impact in PR descriptions and link reviewers to the affected sections (`§2`, `§3`, `§4`, etc.).
 - **References:** TDD §7 (Guardian), ADR-0001, ADR-0002, ADR-0003.
 - **Contacts:** Owners Security Engineering + Platform Architecture; operational mailing list `guardian-oncall@`.

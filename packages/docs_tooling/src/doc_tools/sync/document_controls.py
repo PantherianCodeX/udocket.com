@@ -11,9 +11,13 @@ from html import escape
 from pathlib import Path
 from typing import Iterable, Iterator, List, Mapping, Sequence
 
-from doc_tools.config.header_includes import HEADER_INCLUDES_CONFIG
+from doc_tools.config.header_includes import (
+    COMPUTED_FRONT_PLACEHOLDERS,
+    DEFAULT_BUILTIN_HTML,
+    HEADER_INCLUDES_CONFIG,
+)
 from doc_tools import paths
-from doc_tools.doc_utils import (
+from doc_tools.common.doc_utils import (
     DOCUMENT_CONTROL_OPTIONAL_FIELDS,
     begin_auto_generated_marker,
     build_document_control_map,
@@ -29,8 +33,8 @@ DEFAULT_ROOTS: tuple[Path, ...] = (paths.DOCS_ROOT,)
 MARKER_LABEL = "document-controls"
 MARKER_BEGIN = begin_auto_generated_marker(MARKER_LABEL)
 MARKER_END = end_auto_generated_marker(MARKER_LABEL)
-PAGE_COUNT_HTML = '<span class="page-count"></span>'
-PAGE_NUMBER_HTML = '<span class="page-number"></span>'
+PAGE_COUNT_HTML = DEFAULT_BUILTIN_HTML["page_count"]
+PAGE_NUMBER_HTML = DEFAULT_BUILTIN_HTML["page_number"]
 HEADER_CONFIG = HEADER_INCLUDES_CONFIG
 
 @dataclass(frozen=True)
@@ -75,33 +79,39 @@ def _indent_literal_block(content: str) -> List[str]:
     return ["  - |", *indented]
 
 
-def _header_html(front: Mapping[str, object]) -> str:
-    title = escape(stringify(front.get("title", "")))
-    subtitle = escape(stringify(front.get("subtitle", "")))
-    subtitle_block = f"{HEADER_CONFIG.subtitle_lead}{subtitle}" if subtitle else ""
-    return HEADER_CONFIG.header_template.format(title=title, subtitle_block=subtitle_block)
+def _render_header_includes(front: Mapping[str, object]) -> List[str]:
+    def _value(key: str) -> str:
+        return escape(stringify(front.get(key, "")))
 
+    front_context: dict[str, str] = {}
+    for key in HEADER_CONFIG.front_matter_placeholders:
+        if key in COMPUTED_FRONT_PLACEHOLDERS:
+            continue
+        front_context[key] = _value(key)
 
-def _footer_html(front: Mapping[str, object]) -> str:
-    classification = escape(stringify(front.get("classification", "")))
-    last_updated = escape(stringify(front.get("last_updated", "")))
-    meta_parts: List[str] = []
-    if classification:
-        meta_parts.append(classification)
-    if last_updated:
-        meta_parts.append(f"Last updated {last_updated}")
+    for key in ("title", "subtitle", "classification", "last_updated"):
+        if key not in front_context:
+            front_context[key] = _value(key)
+
+    subtitle = front_context.get("subtitle", "")
+    if "subtitle_block" in HEADER_CONFIG.front_matter_placeholders:
+        front_context["subtitle_block"] = f"{HEADER_CONFIG.subtitle_lead}{subtitle}" if subtitle else ""
+
+    classification = front_context.get("classification", "")
+    last_updated = front_context.get("last_updated", "")
+    meta_parts = [
+        part for part in (classification, f"Last updated {last_updated}" if last_updated else "") if part
+    ]
     prefix = " · ".join(meta_parts)
     if prefix:
         prefix = f"{prefix} · "
-    return HEADER_CONFIG.footer_template.format(
-        prefix=prefix,
-        page_number=PAGE_NUMBER_HTML,
-        page_count=PAGE_COUNT_HTML,
-    )
 
+    builtin_context = dict(DEFAULT_BUILTIN_HTML)
+    builtin_context.setdefault("page_number", PAGE_NUMBER_HTML)
+    builtin_context.setdefault("page_count", PAGE_COUNT_HTML)
+    builtin_context["prefix"] = prefix
 
-def _render_header_includes(front: Mapping[str, object]) -> List[str]:
-    blocks = [HEADER_CONFIG.style, _header_html(front), _footer_html(front)]
+    blocks = HEADER_CONFIG.render(front_values=front_context, builtin_values=builtin_context)
     lines: List[str] = ["header-includes:"]
     for block in blocks:
         lines.extend(_indent_literal_block(block))
@@ -317,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
     verify_cmd = [
         sys.executable,
         "-m",
-        "doc_tools.check_structure",
+        "doc_tools.check.structure",
         "--frontmatter",
         *[str(path) for path in targets],
     ]

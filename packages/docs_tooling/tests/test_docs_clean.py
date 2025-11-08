@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_docs_clean_no_render() -> None:
-    repo_root = Path(__file__).resolve().parents[4]
+    repo_root = Path(__file__).resolve().parents[3]
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8").splitlines()
     try:
         start = next(idx for idx, line in enumerate(makefile) if line.startswith("docs.clean:"))

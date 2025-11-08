@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from doc_tools import hash_and_manifest as ham
+from doc_tools.build import manifest as ham
 
 
 def test_hash_and_manifest_generates_manifest(tmp_path: Path) -> None:

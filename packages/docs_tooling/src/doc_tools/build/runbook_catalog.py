@@ -11,16 +11,16 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from doc_tools import paths
-from doc_tools.doc_utils import (
+from doc_tools.common.doc_utils import (
     auto_generated_header,
     begin_auto_generated_marker,
     derive_doc_label,
     end_auto_generated_marker,
+    mkdocs_slug,
     parse_front_matter,
     stringify,
     write_or_check,
 )
-from packages.common.text import slugify
 DOCS_DIR = paths.DOCS_ROOT
 OUTPUT_FILE = DOCS_DIR / "ops" / "runbooks.md"
 MARKER_LABEL = "runbook-catalog"
@@ -170,12 +170,11 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
                     anchors_added.add(anchor_id)
             if output and output[-1].strip():
                 output.append("")
-            slug = slugify(prefixed_text)
             heading_line = f"{'#' * normalized_level} {prefixed_text}"
             output.append(heading_line)
             pending_blank_after_heading = True
             headings.append(
-                Heading(level=normalized_level, text=prefixed_text, slug=slugify(prefixed_text))
+                Heading(level=normalized_level, text=prefixed_text, slug=mkdocs_slug(prefixed_text))
             )
         else:
             if pending_blank_after_heading:

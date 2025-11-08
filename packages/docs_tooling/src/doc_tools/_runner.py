@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import runpy
 from importlib import import_module
-from types import ModuleType
 
 
 def run_module(module: str) -> int:
@@ -19,4 +18,3 @@ def run_module(module: str) -> int:
 def run_manage_docs(argv: list[str]) -> int:
     mod = import_module("doc_tools.manage_docs")
     return mod.main(argv)
-

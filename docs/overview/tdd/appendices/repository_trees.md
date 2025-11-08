@@ -275,7 +275,7 @@ apps/web/ — UI surfaces; no backend logic
 
 apps/assistants/ — conversational UI, retrieval bridges, moderation UX; no provider keys stored
 
-services/communications/ — outbound communications service; no UI
+customer/communications/ — outbound communications service; no UI
 ├─ src/ — orchestration, receipts API, digests, cost tracking
 ├─ providers/ — email/SMS/webhook adapters; residency guardrails
 └─ templates/ — canonical notification templates + policy banners
@@ -299,13 +299,13 @@ services/reference-manager/ — source ingestion, editorial tooling, bundle publ
 ├─ src/ — APIs, ingestion workers, editorial tooling
 └─ migrations/ — schema evolution, deterministic seeds
 
-services/digital-signer/ — signing pipelines, TSA/OCSP connectors
+data/digital-signer/ — signing pipelines, TSA/OCSP connectors
 ├─ src/ — signing APIs + workers
 └─ integrations/ — TSA/OCSP client configs
 
-services/audit-ledger/ — immutable audit sinks + query tooling
-services/search-index/ — case search + vector shards with residency-aware storage
-services/artifact-store/ — media lifecycle, retention enforcement, hashing
+data/audit-ledger/ — immutable audit sinks + query tooling
+data/search-index/ — case search + vector shards with residency-aware storage
+data/artifact-store/ — media lifecycle, retention enforcement, hashing
 services/policy-residency/ — residency catalogs, waiver manifests, mesh integration
 services/lpe/ — localization + policy compiler; emits packs + OPA bundles
 

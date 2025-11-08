@@ -29,12 +29,12 @@ The aggregator runs:
 
 1. `make docs.check.runbooks` to ensure the ops catalog matches the latest runbook sections
 1. `make docs.check.diagrams` for Mermaid inventory freshness
-1. `python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer docs/experience docs/ops` to enforce template compliance
-1. `python -m doc_tools.check_appendices` for appendix numbering and references
+1. `python -m doc_tools.check.structure docs/platform docs/automation docs/data docs/customer docs/experience docs/ops` to enforce template compliance
+1. `python -m doc_tools.check.appendices` for appendix numbering and references
 1. `npx markdownlint --config docs/config/.markdownlint.json 'docs/**/*.md'` plus an optional global `markdownlint-cli` invocation when available
 1. `vale --config docs/config/vale-ci.ini --minAlertLevel error …` via the embedded Vale tasks (with an offline style bundle under `docs/config/vale/`)
-1. `python -m doc_tools.check_settings_keys` to keep Appendix E aligned with shipped settings
-1. `python -m doc_tools.check_links` (with `STRICT_DOCS=1`) for anchor and cross-document validation
+1. `python -m doc_tools.check.settings_keys` to keep Appendix E aligned with shipped settings
+1. `python -m doc_tools.check.links` (with `STRICT_DOCS=1`) for anchor and cross-document validation
 
 All steps are wired into the `Docs Validation` GitHub workflow, so a clean run locally mirrors CI.
 

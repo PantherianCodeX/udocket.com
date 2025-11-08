@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import doc_utils as du
+from doc_tools.common import doc_utils as du
 
 
 def test_read_markdown_lines(tmp_path: Path) -> None:

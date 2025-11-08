@@ -9,6 +9,6 @@ blocks:
       figure.full-width-diagram img{width:100%;height:auto;display:block;}
     </style>
   - |
-    <header class="page-header">{{title}}{{subtitle_block}}</header>
+    <header class="page-header">{<title>}{<subtitle_block>}</header>
   - |
     <footer class="page-footer">{{prefix}}Page {{page_number}} of {{page_count}}</footer>

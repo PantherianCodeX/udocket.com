@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from doc_tools import check_repository_trees as crt
+from doc_tools.check import repository_trees as crt
 
 
 def write_appendix(root: Path, tree_body: str) -> Path:

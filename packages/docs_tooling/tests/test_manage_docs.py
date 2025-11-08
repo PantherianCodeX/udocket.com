@@ -84,6 +84,7 @@ def test_organise_tasks_filters_categories(monkeypatch: pytest.MonkeyPatch) -> N
 def test_sync_task_order_matches_pipeline() -> None:
     sync_names = [task.name for task in md.TASKS if task.category == "sync"]
     assert sync_names == [
+        "sync doc controls",
         "sync doc assets",
         "build diagram index",
         "build runbook catalog",
@@ -91,16 +92,29 @@ def test_sync_task_order_matches_pipeline() -> None:
         "build API error codes",
         "sync ADR nav",
     ]
+    extra_sync = [task.name for task in md.TASKS if task.category == "sync-extra"]
+    assert extra_sync == ["sync nav mapping"]
 
 
 def test_determine_categories_defaults() -> None:
-    args = argparse.Namespace(lint=False, sync=False, build=False, pdf=False, all=False)
+    args = argparse.Namespace(
+        lint=False, check=False, sync=False, sync_all=False, build=False, pdf=False, all=False
+    )
     assert md.determine_categories(args) == ["lint"]
 
 
 def test_determine_categories_all_flag() -> None:
-    args = argparse.Namespace(lint=False, sync=False, build=False, pdf=False, all=True)
-    assert md.determine_categories(args) == ["lint", "sync", "build", "pdf"]
+    args = argparse.Namespace(
+        lint=False, check=False, sync=False, sync_all=False, build=False, pdf=False, all=True
+    )
+    assert md.determine_categories(args) == ["lint", "check", "sync", "sync-extra", "build", "pdf"]
+
+
+def test_determine_categories_sync_all() -> None:
+    args = argparse.Namespace(
+        lint=False, check=False, sync=False, sync_all=True, build=False, pdf=False, all=False
+    )
+    assert md.determine_categories(args) == ["sync", "sync-extra"]
 
 
 def test_resolve_targets_filters_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -211,22 +225,13 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert md.builder_api_error_codes_check(ctx)[-1] == "--check"
 
     structure_cmd = md.builder_check_structure(ctx)
-    assert "doc_tools.check_structure" in structure_cmd
+    assert "doc_tools.check.structure" in structure_cmd
     assert str(structure_dir) in structure_cmd
 
-    assert md.builder_check_appendices(ctx)[-1] == "doc_tools.check_appendices"
-
-    heading_cmd = md.builder_check_headings(ctx)
-    expected_target = Path("docs/automation/langgraph-agents.md")
-    assert heading_cmd == [
-        md.PYTHON,
-        "-m",
-        "doc_tools.check_heading_tags",
-        str(expected_target),
-    ]
+    assert md.builder_check_appendices(ctx)[-1] == "doc_tools.check.appendices"
 
     asset_cmd = md.builder_check_asset_paths(ctx)
-    assert asset_cmd[:3] == [md.PYTHON, "-m", "doc_tools.check_asset_paths"]
+    assert asset_cmd[:3] == [md.PYTHON, "-m", "doc_tools.check.asset_paths"]
     assert asset_cmd[-1] == str(structure_dir)
 
     markdown_cmd = md.builder_markdownlint(ctx)
@@ -235,8 +240,8 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert md.builder_vale_sync(ctx)[0] == "vale"
     assert "--config" in md.builder_vale(ctx)
 
-    assert md.builder_check_settings(ctx)[-1] == "doc_tools.check_settings_keys"
-    assert md.builder_check_links(ctx)[-1] == "doc_tools.check_links"
+    assert md.builder_check_settings(ctx)[-1] == "doc_tools.check.settings_keys"
+    assert md.builder_check_links(ctx)[-1] == "doc_tools.check.links"
 
     sync_cmd = md.builder_sync_doc_controls(ctx)
     assert sync_cmd[-1] == str(structure_dir)
@@ -254,6 +259,11 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert nav_cmd[-1] == "doc_tools.sync.nav"
     nav_dry_cmd = md.builder_sync_nav(dry_ctx)
     assert nav_dry_cmd[-1] == "--dry-run"
+
+    nav_map_dry_cmd = md.builder_sync_nav_mapping(dry_ctx)
+    assert nav_map_dry_cmd is None
+    nav_map_cmd = md.builder_sync_nav_mapping(ctx)
+    assert nav_map_cmd == [md.PYTHON, "-m", "doc_tools.sync.nav_mapping"]
 
     assert md.builder_runbook_update(ctx) == [md.PYTHON, "-m", "doc_tools.build.runbook_catalog"]
     assert md.builder_runbook_update(dry_ctx)[-1] == "--check"
@@ -274,8 +284,8 @@ def test_builder_commands_cover_branches(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     assert md.builder_pdf_tdd(dry_ctx) is None
     pdf_cmd = md.builder_pdf_tdd(ctx)
-    assert pdf_cmd == [md.PYTHON, "-m", "doc_tools.pdf_build", "--target", "tdd"]
+    assert pdf_cmd == [md.PYTHON, "-m", "doc_tools.build.pdf", "--target", "tdd"]
 
     assert md.builder_pdf_prd(dry_ctx) is None
     pdf_prd_cmd = md.builder_pdf_prd(ctx)
-    assert pdf_prd_cmd == [md.PYTHON, "-m", "doc_tools.pdf_build", "--target", "prd"]
+    assert pdf_prd_cmd == [md.PYTHON, "-m", "doc_tools.build.pdf", "--target", "prd"]

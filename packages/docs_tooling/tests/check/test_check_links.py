@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import check_links as lc
+from doc_tools.check import links as lc
 
 
 def test_check_diagrams_detects_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -4,9 +4,10 @@ import argparse
 import os
 import shlex
 import sys
-from typing import Iterable, List
+from typing import Any, Iterable, List
 
 import pytest
+from typing import Any
 
 from doc_tools import paths
 
@@ -67,7 +68,9 @@ def main(argv: Iterable[str] | None = None) -> int:
             f"--cov-fail-under={threshold}",
             *pytest_args,
         ]
-    return pytest.main(pytest_args)
+    pytest_main: Any = getattr(pytest, "main")
+    result = pytest_main(pytest_args)
+    return int(result) if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

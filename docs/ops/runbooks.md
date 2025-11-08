@@ -16,19 +16,6 @@ approvers:
   - "Operations Steering Committee"
 approved_by:
 approved_date:
-header-includes:
-  - |
-    <style>
-      table{font-size:8.5pt;}
-      table td,table th{font-size:inherit;word-break:break-word;overflow-wrap:anywhere;}
-      figure svg text,figure svg tspan{fill:#111!important;}
-      figure svg text{font-family:"DejaVu Sans","Trebuchet MS",Arial,sans-serif!important;}
-      figure.full-width-diagram img{width:100%;height:auto;display:block;}
-    </style>
-  - |
-    <header class="page-header">uDocket — Ops Appendix: Runbook Catalog <br> Aggregated runbooks and drill references</header>
-  - |
-    <footer class="page-footer">Confidential · Last updated 2025-10-30 · Page <span class="page-number"></span> of <span class="page-count"></span></footer>
 ---
 
 ______________________________________________________________________
@@ -60,7 +47,7 @@ This appendix consolidates runbook sections from service and application specifi
 ______________________________________________________________________
 
 <!-- BEGIN AUTO-GENERATED: runbook-catalog -->
-<!-- Run `make docs.sync.runbooks` to refresh. -->
+<!-- AUTO-GENERATED: Run `make docs.sync.runbooks` to refresh. -->
 
 ## Guardian Service — 8.3 Runbooks & Drills (binding)
 

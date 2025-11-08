@@ -80,7 +80,7 @@ ______________________________________________________________________
 
 > **Section Requirements (binding):**
 >
-> - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer docs/experience docs/ops`)
+> - Preamble: Purpose/Contract/State/Failure/Observability/References/Breadcrumbs (`python -m doc_tools.check.structure docs/platform docs/automation docs/data docs/customer docs/experience docs/ops`)
     > - Section tags: `(binding)`, `(normative)` or `(informative)`
     > - Links resolve: §/App./ADR (`docs-link-check`)
     > - Document validation: `python -m doc_tools.manage_docs --lint`

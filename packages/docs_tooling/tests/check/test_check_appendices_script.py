@@ -6,7 +6,7 @@ from textwrap import dedent
 
 import pytest
 
-from doc_tools import check_appendices as ca
+from doc_tools.check import appendices as ca
 
 
 BASE_FRONT_MATTER = [

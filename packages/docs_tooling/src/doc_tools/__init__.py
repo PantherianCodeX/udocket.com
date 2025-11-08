@@ -5,7 +5,9 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-__all__ = ["manage_docs", "doc_utils", "paths", "pytest_runner"]
+from . import manage_docs, paths, pytest_runner  # noqa: F401
+
+__all__ = ["manage_docs", "paths", "pytest_runner"]
 
 
 def __getattr__(name: str) -> Any:  # pragma: no cover - thin wrapper

@@ -83,8 +83,8 @@ docs/                              ← single doc root
 scripts/
   docs/
     uv run --project packages/docs_tooling python -m doc_tools.render_mermaid
-    uv run --project packages/docs_tooling python -m doc_tools.pdf_build --target prd
-    uv run --project packages/docs_tooling python -m doc_tools.pdf_build --target tdd
+    uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target prd
+    uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target tdd
 ```
 
 **.gitignore** (excerpt)
@@ -131,7 +131,7 @@ These **top-level sections** make every document familiar and navigable. Within 
 * `## 10) References`: Links to ADRs, glossaries, diagrams, etc.
 ```
 
-* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python -m doc_tools.check_structure docs/platform docs/automation docs/data docs/customer` to confirm compliance before submitting PRs.
+* Each H2 section may have nested H3/H4 as needed. Every major section (all H2s and most H3s) should open with the standardized preamble block (Purpose, Contract, State, Failures & handling, Observability, References, Breadcrumbs) **except** `Reading Guide`, which stays free-form orientation text. Use `python -m doc_tools.check.structure docs/platform docs/automation docs/data docs/customer` to confirm compliance before submitting PRs.
 
 #### Standardized section preamble
 
@@ -254,7 +254,7 @@ nav:
       - LPE: automation/lp-engine.md
       - Reference Manager: evidence/ref-manager.md
   - Apps:
-      - Web App: apps/web-app.md
+      - Web App: experience/web-app.md
       - Worker Cluster: apps/worker-cluster.md
   - Ops:
       - Runbooks: ops/runbooks/
@@ -419,8 +419,8 @@ jobs:
       - name: Pandoc dry-run (PRD/TDD only)
         run: |
           mkdir -p out/doc-builds/pdf/dev
-          uv run --project packages/docs_tooling python -m doc_tools.pdf_build --target prd
-          uv run --project packages/docs_tooling python -m doc_tools.pdf_build --target tdd
+          uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target prd
+          uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target tdd
 
   linkcheck:
     runs-on: ubuntu-latest
@@ -471,10 +471,10 @@ jobs:
       - name: Build PDFs (PRD/TDD)
         run: |
           mkdir -p out/doc-builds/pdf/dev
-          uv run --project packages/docs_tooling python -m doc_tools.pdf_build --target prd
-          uv run --project packages/docs_tooling python -m doc_tools.pdf_build --target tdd
+          uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target prd
+          uv run --project packages/docs_tooling python -m doc_tools.build.pdf --target tdd
       - name: Checksums & manifest
-        run: bash uv run --project packages/docs_tooling python -m doc_tools.hash_and_manifest
+        run: bash uv run --project packages/docs_tooling python -m doc_tools.build.manifest
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -539,8 +539,8 @@ jobs:
 
     * `uv run --project packages/docs_tooling python -m doc_tools.render_mermaid` → render diagrams to SVG/PNG
     * `uv run --project packages/docs_tooling python -m doc_tools.build.mkdocs` → mkdocs build
-    * `uv run --project packages/docs_tooling python -m doc_tools.pdf_build` → generate PDFs (use `--target` to scope)
-    * `uv run --project packages/docs_tooling python -m doc_tools.hash_and_manifest` → hash PDFs + manifest
+    * `uv run --project packages/docs_tooling python -m doc_tools.build.pdf` → generate PDFs (use `--target` to scope)
+    * `uv run --project packages/docs_tooling python -m doc_tools.build.manifest` → hash PDFs + manifest
     * Fix lint/link/Mermaid errors.
 
 5. **CI**

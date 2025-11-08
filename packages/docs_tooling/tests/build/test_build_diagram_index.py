@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import doc_utils as du
+from doc_tools.common import doc_utils as du
 from doc_tools.build import diagram_index as bdi
 
 

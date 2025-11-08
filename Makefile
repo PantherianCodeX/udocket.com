@@ -319,10 +319,14 @@ docs.build: ## Render docs output (PDF/HTML as configured)
 	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --build"
 docs.lint: ## Run docs linting pipeline inside the toolbox
 	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --lint"
-docs.sync: ## Sync docs artifacts (fetch/update remote content)
+docs.sync: ## Sync docs artifacts (standard tasks only)
 	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --sync --verbose"
+docs.sync.all: ## Run full docs sync (includes optional extras such as nav mapping)
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --sync-all --verbose"
 docs.sync.nav: ## Ensure MkDocs navigation entries are up to date
 	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav"
+docs.sync.nav-mapping: ## Apply the nav mapping migration (heavy; use sparingly)
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav_mapping"
 docs.check.nav: ## Verify MkDocs navigation entries without writing changes
 	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav --dry-run"
 docs.sync.runbooks: ## Refresh the Ops runbook catalog appendix
@@ -346,7 +350,7 @@ docs.sync.trees: ## Refresh repository tree appendix (disabled until repo realig
 	@echo "Skip this target for now; it will be re-enabled after the tree refactor."
 	@exit 1
 docs.check.trees: ## Verify repository tree appendix matches the current repo structure
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.check_repository_trees"
+	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.check.repository_trees"
 docs.check: ## Run all docs checks (tree check excluded until refactor lands)
 	@$(MAKE) docs.check.nav docs.check.runbooks docs.check.api_codes docs.check.slo docs.check.diagrams docs.check.build
 docs.check.build: ## Validate docs build prerequisites without modifying artifacts
@@ -354,7 +358,7 @@ docs.check.build: ## Validate docs build prerequisites without modifying artifac
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf \$$TMP_DIR' EXIT; \
 	$(DOCS_PY) python -m doc_tools.sync.doc_assets --dry-run; \
-	$(DOCS_PY) python -m doc_tools.check_asset_paths docs; \
+	$(DOCS_PY) python -m doc_tools.check.asset_paths docs; \
 	$(DOCS_PY) python -m doc_tools.build.diagram_index --check; \
 	$(DOCS_PY) mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/docs_tooling/mkdocs.yml"
 

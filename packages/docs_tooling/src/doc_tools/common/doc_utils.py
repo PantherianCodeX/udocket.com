@@ -43,12 +43,23 @@ DOCUMENT_CONTROL_ALIAS_KEYS = {
 
 AUTO_GENERATED_PREFIX = "AUTO-GENERATED"
 DEFAULT_AUTO_GENERATED_NOTE = "Managed automatically; do not edit manually."
+MKDOCS_SLUG_RE = re.compile(r"[^\w\- ]+")
 
 
 def slugify(value: str) -> str:
     """Return a URL-safe slug preserving ASCII characters."""
 
     return _slugify(value)
+
+
+def mkdocs_slug(value: str) -> str:
+    """Return the slug MkDocs/Material assigns to a heading."""
+
+    lowered = value.strip().lower()
+    cleaned = MKDOCS_SLUG_RE.sub("", lowered)
+    collapsed = re.sub(r"\s+", "-", cleaned)
+    slug = collapsed.strip("-")
+    return slug or lowered or "section"
 
 
 def begin_auto_generated_marker(label: str) -> str:
@@ -100,7 +111,7 @@ def auto_generated_comment(
         message = f"Run `{command}` to refresh."
     else:
         message = DEFAULT_AUTO_GENERATED_NOTE
-    return f"<!-- {message} -->"
+    return f"<!-- {AUTO_GENERATED_PREFIX}: {message} -->"
 
 
 def auto_generated_header(

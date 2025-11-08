@@ -62,7 +62,7 @@ ______________________________________________________________________
 
 - **Scope:** Covers the shared LangGraph orchestration layer and the canonical pipelines for Transcribe, Analyze, Compose, Timeline, and Relationship agents. This spec also governs graph configuration, schema enforcement, QA gates, and shadow mode deployments.
 - **Structure:** Sections follow the standard 0–10 layout with appendices for schema and error taxonomies. Per-agent responsibilities live in §2; pipeline contracts, tooling, and LangGraph runtime details live in §3; operational guardrails are in §§5–8.
-- **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/automation/langgraph-agents.md` plus targeted lints (`python -m doc_tools.check_links --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
+- **Maintenance:** Run `python -m doc_tools.manage_docs --lint docs/automation/langgraph-agents.md` plus targeted lints (`python -m doc_tools.check.links --strict`) before shipping agent changes. Graph modifications require LangGraph contract tests (§3.2) and QA harness replays (§6.1) to pass in CI.
 - **Change protocol:** Any change that alters agent outputs, pipeline structure, or QA gating must update this spec and include LangGraph acceptance test results in the PR description.
 - **References:** This document intentionally scopes to LangGraph agents. Integration specifics live in their respective service documents.
 - **Contacts:** Applied AI Engineering (primary owners), Platform Architecture (co-owners).

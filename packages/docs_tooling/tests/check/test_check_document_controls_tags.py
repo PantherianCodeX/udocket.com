@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import check_document_controls_tags as checker
+from doc_tools.check import document_controls_tags as checker
 
 
 def _write_doc(path: Path, body: str) -> None:

@@ -5,7 +5,7 @@ from textwrap import dedent
 
 import pytest
 
-from doc_tools import doc_utils as du
+from doc_tools.common import doc_utils as du
 from doc_tools.build import api_error_codes as generator
 
 
@@ -139,8 +139,9 @@ def test_generator_populates_tables_and_appendix(tmp_path: Path, monkeypatch: py
     appendix_text = generator.APPENDIX_FILE.read_text(encoding="utf-8")
     assert "ALPHA_CONFLICT" in appendix_text
     assert "Web Application" in appendix_text
-    assert "#alpha-spec" in appendix_text
-    assert "#web-application" in appendix_text
+    # Cross-link markers should be present in service/app docs (MkDocs auto-anchors).
+    assert "#alpha-spec" in service_text
+    assert "#web-application" in app_text
     assert du.auto_generated_comment(refresh_command="make docs.sync.api_codes") in appendix_text
 
 
@@ -331,26 +332,6 @@ def test_cross_link_updates_existing(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert lines[1] == ""
 
 
-def test_heading_anchor_added_when_missing() -> None:
-    lines = [
-        "### 3.3 API Error Codes (binding)",
-        generator.SUMMARY_BEGIN,
-        generator.SUMMARY_END,
-    ]
-    component = generator.Component(
-        doc_path=Path("docs/platform/example.md"),
-        yaml_path=Path("docs/platform/example/error_codes.yaml"),
-        display_name="Example",
-        section_anchor="3-3-example",
-        index_anchor="example",
-        entries=[],
-    )
-
-    generator._ensure_heading_anchor(lines, component)
-
-    assert "{#3-3-example}" in lines[0]
-
-
 def test_remove_legacy_notes() -> None:
     lines = [
         generator.NOTE_PREFIX + "doc`",
@@ -398,7 +379,7 @@ def test_find_section_anchor_without_inline_anchor(tmp_path: Path, monkeypatch: 
 
     anchor = generator._find_section_anchor(doc)
 
-    assert anchor.startswith("3-3")
+    assert anchor.startswith("33-")
 
 
 def test_render_appendix_outputs_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -410,4 +391,4 @@ def test_render_appendix_outputs_links(tmp_path: Path, monkeypatch: pytest.Monke
     appendix = generator._render_appendix(components)
 
     assert "ALPHA_CONFLICT" in appendix
-    assert "(../../../services/alpha.md#3-3-api-error-codes-binding)" in appendix
+    assert "(../../../services/alpha.md#33-api-error-codes-binding)" in appendix

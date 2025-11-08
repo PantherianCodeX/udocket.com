@@ -167,6 +167,7 @@ __azurite_db_*.json
 # mkdocs documentation
 packages/docs_tooling/build/
 !packages/docs_tooling/src/doc_tools/build/
+!packages/docs_tooling/tests/build/
 
 # mypy
 .mypy_cache/

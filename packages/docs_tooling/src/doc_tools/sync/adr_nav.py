@@ -3,9 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Iterable
-
 from doc_tools import paths
+from doc_tools.common.nav_utils import collect_entries, find_section
 
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
 ADR_DIR = paths.DOCS_ROOT / "adr"
@@ -45,47 +44,6 @@ def _derive_label(path: Path) -> str:
     return path.stem
 
 
-def _parse_entry(line: str) -> tuple[str, str] | None:
-    stripped = line.strip()
-    if not stripped.startswith("- "):
-        return None
-    body = stripped[2:]
-    if ":" not in body:
-        return None
-    label, target = body.split(":", 1)
-    return label.strip(), target.strip()
-
-
-def _collect_existing(lines: Iterable[str], start: int, end: int) -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    for idx in range(start, end):
-        if ":" not in lines[idx]:
-            continue
-        parsed = _parse_entry(lines[idx])
-        if not parsed:
-            continue
-        label, target = parsed
-        mapping[target] = label
-    return mapping
-
-
-def _find_section(lines: list[str]) -> tuple[int, int]:
-    start = -1
-    for idx, line in enumerate(lines):
-        if line.strip() == ADR_SECTION_TITLE:
-            start = idx
-            break
-    if start == -1:
-        raise RuntimeError("Decision Records section not found in mkdocs.yml")
-    end = start + 1
-    while end < len(lines):
-        line = lines[end]
-        if line.startswith("- "):
-            break
-        end += 1
-    return start, end
-
-
 def _build_entries(adrs: list[Path], existing: dict[str, str]) -> list[str]:
     overview: Path | None = None
     others: list[Path] = []
@@ -110,8 +68,9 @@ def sync_nav(config_path: Path, adr_paths: list[Path], *, dry_run: bool) -> bool
     if not config_path.exists():
         raise RuntimeError(f"mkdocs.yml not found at {config_path}")
     lines = config_path.read_text(encoding="utf-8").splitlines()
-    start, end = _find_section(lines)
-    existing = _collect_existing(lines, start + 1, end)
+    start, end = find_section(lines, ADR_SECTION_TITLE)
+    existing_pairs = collect_entries(lines, start, end)
+    existing = {entry.target: entry.label for entry in existing_pairs}
     new_entries = _build_entries(adr_paths, existing)
     current_entries = lines[start + 1 : end]
     if current_entries == new_entries:

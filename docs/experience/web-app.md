@@ -275,7 +275,7 @@ The UI coordinates with internal controllers for portal messaging, edit manifest
 
 ```mermaid
 %% source: experience/web-app/diagrams/ui-interaction-topology-v1.mmd
-%% owner: apps/web-app.md
+%% owner: experience/web-app.md
 flowchart LR
     subgraph Staff_Workspace
         StaffUI[Staff Workspace UI]

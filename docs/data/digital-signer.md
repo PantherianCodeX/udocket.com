@@ -62,7 +62,7 @@ ______________________________________________________________________
 
 - **Scope:** Document Signer service responsible for platform signatures, client attestation workflows, TSA/OCSP validation, trust-root management, and FIPS enforcement.
 - **Structure:** Sections follow the standard 0–10 service template; appendices referenced here live in the ops runbook catalog and Settings registry key maps.
-- **Maintenance:** Run `python -m doc_tools.manage_docs --lint` and `python -m doc_tools.check_links --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
+- **Maintenance:** Run `python -m doc_tools.manage_docs --lint` and `python -m doc_tools.check.links --strict` before proposing signer changes. Signing policy or PKI updates require ADR references in the PR.
 - **Change protocol:** Modifying signature policies, TSA/OCSP profiles, or trust-root rotations demands dual approval (Security + Architecture) and an update to this spec plus the relevant runbooks.
 - **References:** TDD §7.2 (summary), ADR-0001, ADR-0002, ADR-0003, Ops runbooks `RB-SIGN-\*`.
 - **Contacts:** Security Engineering (service owner), Platform Architecture (co-owner), on-call list `signer-oncall@`.

@@ -8,9 +8,9 @@ from typing import Callable, List
 
 import pytest
 
-from doc_tools import check_structure as cs
-from doc_tools import doc_utils
-from doc_tools.check_structure import (
+from doc_tools.check import structure as cs
+from doc_tools.common import doc_utils
+from doc_tools.check.structure import (
     SectionSpec,
     TableRowSpec,
     TableSpec,
@@ -1389,5 +1389,4 @@ approved_date:
 
     with pytest.raises(RuntimeError):
         ensure_template_requirements(template)
-
 

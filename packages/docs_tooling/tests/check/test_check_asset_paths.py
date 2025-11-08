@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import check_asset_paths
+from doc_tools.check import asset_paths as check_asset_paths
 
 
 def _write_doc(base: Path, relative: str, content: str) -> Path:

@@ -8,8 +8,8 @@ from urllib.parse import urljoin
 
 import pytest
 
-from doc_tools import check_structure as cs
-from doc_tools import doc_utils
+from doc_tools.check import structure as cs
+from doc_tools.common import doc_utils
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

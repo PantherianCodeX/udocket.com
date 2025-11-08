@@ -5,7 +5,7 @@ from textwrap import dedent
 
 import pytest
 
-from doc_tools import doc_utils as du
+from doc_tools.common import doc_utils as du
 from doc_tools.build import slo_index as bsi
 
 

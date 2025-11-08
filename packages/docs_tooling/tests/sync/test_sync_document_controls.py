@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from doc_tools import doc_utils
+from doc_tools.common import doc_utils
 from doc_tools.sync import document_controls as sdc
 from doc_tools.sync.document_controls import (
     OPTIONAL_FIELDS,

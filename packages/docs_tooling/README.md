@@ -22,7 +22,7 @@ uv run --package mkdocs mkdocs serve --config-file packages/docs_tooling/mkdocs.
 Generate PDFs with the shared WeasyPrint styling:
 
 ```bash
-uv run python tools/pdf_build.py
+uv run --project packages/docs_tooling python -m doc_tools.build.pdf
 ```
 
 ## Asset & diagrams layout

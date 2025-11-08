@@ -5,7 +5,7 @@ Reads `docs/overview/tdd.md`, extracts settings keys from Appendix E, then uses 
 search for each key outside the document. Prints any keys that are missing so CI can
 fail fast when docs reference non-existent keys.
 
-Usage: python -m doc_tools.check_settings_keys
+Usage: python -m doc_tools.check.settings_keys
 Environment variables:
   SKIP_KEYS  Comma separated list of keys to ignore (e.g. experimental placeholders).
 """

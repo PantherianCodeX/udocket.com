@@ -154,7 +154,7 @@ ______________________________________________________________________
 **Purpose:** Define the schema that enforces data types, constraints, and documentation for settings keys. **|**
 **Contract:** All definitions use the shared `SettingDefinition` model with literal datatypes, scope guards, default values, documentation strings, and validator hooks; CI checks block unknown or malformed keys. **|**
 **State:** Definitions load from `config/settings_definitions.json` and compile into versioned JSON Schema artifacts stored in `setting_definition_schema`. **|**
-**Failures & handling:** Missing or malformed definitions fail `python -m doc_tools.check_settings_keys` and production activations; authors must update schema before merging. **|**
+**Failures & handling:** Missing or malformed definitions fail `python -m doc_tools.check.settings_keys` and production activations; authors must update schema before merging. **|**
 **Observability:** Metric `settings_validation_failure_total` categorizes error reasons; audit logs attach schema version IDs. **|**
 **References:** Appendix A key catalog, Appendix C seed bundles.
 **Breadcrumbs:** Schema implementation `packages/core/settings/schema.py`, tests `tests/platform/settings/test_definition_schema.py`.
@@ -653,7 +653,7 @@ ______________________________________________________________________
 #### 8.5.2 Tooling & automation checks (normative)
 
 **Purpose:** Summarize supporting tooling that keeps SR governance consistent. **|**
-**Contract:** Teams run `python -m doc_tools.manage_docs --lint`, `make docs.sync.runbooks`, `python -m doc_tools.check_settings_keys`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
+**Contract:** Teams run `python -m doc_tools.manage_docs --lint`, `make docs.sync.runbooks`, `python -m doc_tools.check.settings_keys`, and `scripts/sdk/check_openapi_alignment.py` before merging SR changes. **|**
 **State:** CI workflows enforce linting, seed bundle validation, and OpenAPI drift detection; runbook catalog renders the runbook index. **|**
 **Failures & handling:** Failing automation blocks merges; overrides require Architecture approval with follow-up tasks. **|**
 **Observability:** CI dashboards display job history; governance board reviews automation health monthly. **|**
@@ -729,7 +729,7 @@ ______________________________________________________________________
 - ADRs: ADR-0002 API Versioning & Sunset, ADR-0003 Localization & Policy Engine, ADR-0004 OPA Policy Plane. - TDD: TDD §5 Security Architecture, TDD §7 Settings Governance, TDD Appendix H Operational Guides.
 - Runbooks: §8.3.2 RB-GOV-008, RB-RES-ENDPOINT, RB-RES-BLOCK, RB-JOB-WATCHDOG, RB-LOCK-006.
 - Diagrams: `docs/platform/settings/diagrams/*.mmd`, `docs/overview/tdd/diagrams/data-lineage-v1.mmd`.
-- Scripts & tooling: `python -m doc_tools.check_settings_keys`, `scripts/sdk/check_openapi_alignment.py`, `ops/scripts/settings_deploy.py`.
+- Scripts & tooling: `python -m doc_tools.check.settings_keys`, `scripts/sdk/check_openapi_alignment.py`, `ops/scripts/settings_deploy.py`.
 - Metrics dashboards: `infra/grafana/settings_slo.json`, `infra/grafana/settings_drift.json`, `infra/grafana/settings_enforcement.json`.
 
 ______________________________________________________________________
@@ -739,10 +739,10 @@ ______________________________________________________________________
 **Purpose:** Link platform behaviour to Settings Registry configuration for audit and troubleshooting. **|**
 **Contract:** Every key referenced in code, bundles, or docs appears here with scope, defaults, and enforcement notes; automation cross-checks ensure completeness. **|**
 **State:** Maintained in version control; automation compares against `config/settings_definitions.json`, runtime validators, and seed bundles. **|**
-**Failures & handling:** Missing mappings fail `python -m doc_tools.check_settings_keys`; authors update definitions and this appendix together. **|**
+**Failures & handling:** Missing mappings fail `python -m doc_tools.check.settings_keys`; authors update definitions and this appendix together. **|**
 **Observability:** Docs lint metrics raise alerts on coverage gaps; release checklists block promotion when lint fails. **|**
 **References:** §2 Responsibilities, Appendix C seed inventory.
-**Breadcrumbs:** Script `python -m doc_tools.check_settings_keys`, tests `tests/docs/test_check_settings_keys.py`, dashboard “Docs – Settings Coverage”.
+**Breadcrumbs:** Script `python -m doc_tools.check.settings_keys`, tests `tests/docs/test_check_settings_keys.py`, dashboard “Docs – Settings Coverage”.
 
 ### A.0 SettingDefinition model (binding)
 
@@ -914,7 +914,7 @@ class SettingDefinition(BaseModel):
 **Failures & handling:** Any mismatch fails `settings:lint-keys`; update definitions, tests, and this appendix atomically. **|**
 **Observability:** CI dashboards track lint duration and failure rate. **|**
 **References:** §2 Responsibilities, §8.3 Tooling & automation.
-**Breadcrumbs:** Script `python -m doc_tools.check_settings_keys`, tests `tests/docs/test_lint_rules.py`.
+**Breadcrumbs:** Script `python -m doc_tools.check.settings_keys`, tests `tests/docs/test_lint_rules.py`.
 
 - Regions & residency → `regions.allowlist.*`, `privacy.*`; validated by residency scanners and RM catalog ingest.
 - APIs & rate limits → `api.*`, `portal.download.*`; OpenAPI spectral rules enforce header/limit parity.
