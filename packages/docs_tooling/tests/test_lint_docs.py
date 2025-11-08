@@ -4,7 +4,7 @@ from typing import List
 
 import pytest
 
-from doc_tools import lint_docs
+import doc_tools.lint_docs as lint_docs
 
 
 def test_lint_docs_forwards_arguments(monkeypatch: pytest.MonkeyPatch) -> None:

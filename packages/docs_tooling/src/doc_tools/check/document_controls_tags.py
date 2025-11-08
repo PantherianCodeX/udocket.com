@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.common.doc_utils import begin_auto_generated_marker, end_auto_generated_marker
 
 DEFAULT_TARGETS: tuple[Path, ...] = (paths.DOCS_ROOT,)

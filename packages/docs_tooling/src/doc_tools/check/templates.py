@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.check.requirements import OPTIONAL_KEYS, TEMPLATE_REQUIREMENTS
 from doc_tools.check.utils import extract_table_rows, find_section_header, parse_table
 from doc_tools.config.header_includes import HEADER_INCLUDES_CONFIG

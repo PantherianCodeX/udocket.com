@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import render_mermaid
+import doc_tools.render_mermaid as render_mermaid
 
 
 def test_render_mermaid_cli_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

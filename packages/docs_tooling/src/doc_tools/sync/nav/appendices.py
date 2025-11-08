@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.common.doc_utils import derive_doc_label, parse_front_matter, read_markdown_lines, stringify
 from doc_tools.common.nav_utils import collect_entries, find_section
 

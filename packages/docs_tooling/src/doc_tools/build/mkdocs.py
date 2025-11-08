@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 REPO_ROOT = paths.REPO_ROOT
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"

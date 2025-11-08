@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 DEFAULT_APPENDIX = paths.DOCS_ROOT / "overview" / "tdd" / "appendices" / "repository_trees.md"
 

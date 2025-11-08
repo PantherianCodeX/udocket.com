@@ -16,7 +16,7 @@ from doc_tools.config.header_includes import (
     DEFAULT_BUILTIN_HTML,
     HEADER_INCLUDES_CONFIG,
 )
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
     DOCUMENT_CONTROL_OPTIONAL_FIELDS,
     begin_auto_generated_marker,

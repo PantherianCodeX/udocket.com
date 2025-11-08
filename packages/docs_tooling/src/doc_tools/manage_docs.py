@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 REPO_ROOT = paths.REPO_ROOT
 PYTHON = sys.executable

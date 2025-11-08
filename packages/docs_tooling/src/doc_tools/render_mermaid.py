@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.postprocess_svg import process as postprocess_svg
 
 DEFAULT_SRC = paths.DOCS_ROOT

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from lxml import etree
 
-from doc_tools import postprocess_svg as psvg
+import doc_tools.postprocess_svg as psvg
 
 
 def test_parse_svg_returns_none_for_missing(tmp_path: Path) -> None:

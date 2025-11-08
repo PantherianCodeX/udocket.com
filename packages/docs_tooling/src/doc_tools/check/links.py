@@ -8,7 +8,7 @@ from pathlib import Path
 
 from markdown.extensions.toc import slugify as md_slugify
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 REPO_ROOT = paths.REPO_ROOT
 DOC = paths.DOCS_ROOT / "overview" / "tdd.md"

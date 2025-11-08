@@ -9,7 +9,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Iterable, Iterator
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.common import doc_utils
 
 DEFAULT_ROOT = paths.DOCS_ROOT / "overview" / "tdd" / "appendices"

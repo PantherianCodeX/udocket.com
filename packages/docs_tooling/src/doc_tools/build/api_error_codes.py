@@ -12,7 +12,7 @@ from pathlib import Path
 from collections.abc import Iterable
 from typing import Any, Sequence, cast
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
     auto_generated_header,
     begin_auto_generated_marker,

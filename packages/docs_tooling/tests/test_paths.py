@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.config import paths as config_paths
 
 

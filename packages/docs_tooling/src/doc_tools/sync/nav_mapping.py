@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 DOCS_SRC = paths.DOCS_ROOT
 PROJECT_ROOT = paths.REPO_ROOT

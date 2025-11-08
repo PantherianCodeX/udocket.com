@@ -8,7 +8,7 @@ import datetime as dt
 import sys
 from typing import Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 from packages.common.text import slugify
 
 ADR_DIR = paths.DOCS_ROOT / "adr"

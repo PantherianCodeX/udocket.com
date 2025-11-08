@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from doc_tools import create_adr as cad
+import doc_tools.create_adr as cad
 
 
 def test_next_identifier_handles_existing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

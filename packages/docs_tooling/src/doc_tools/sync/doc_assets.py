@@ -8,7 +8,8 @@ import shutil
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from doc_tools import paths, render_mermaid
+from doc_tools.config import paths
+import doc_tools.render_mermaid as render_mermaid
 
 
 def _expected_outputs(sources: Sequence[Path], base_dir: Path) -> list[Path]:

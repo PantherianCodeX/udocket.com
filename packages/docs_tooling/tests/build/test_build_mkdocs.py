@@ -6,7 +6,7 @@ from typing import Dict, List
 import pytest
 
 from doc_tools.build import mkdocs as bm
-from doc_tools import paths
+from doc_tools.config import paths
 
 
 class DummyCompletedProcess:

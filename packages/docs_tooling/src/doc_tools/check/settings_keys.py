@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 DOC_PATH = paths.DOCS_ROOT / "overview" / "tdd.md"
 SKIP_FILE = paths.CONFIG_ROOT / "settings_key_skip.txt"

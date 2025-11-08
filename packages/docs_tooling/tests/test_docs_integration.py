@@ -42,8 +42,7 @@ def built_site(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def test_docs_lint_script_runs_on_repo() -> None:
-    cmd = ["python", "-m", "doc_tools.lint_docs"]
-    subprocess.run(cmd, check=True, cwd=REPO_ROOT)
+    subprocess.run(["make", "docs.lint"], check=True, cwd=REPO_ROOT)
 
 
 def test_mkdocs_build_produces_expected_pages(built_site: Path) -> None:

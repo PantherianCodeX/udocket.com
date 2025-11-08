@@ -11,7 +11,7 @@ from typing import Iterable, Sequence
 
 from weasyprint import CSS, HTML
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 DOCS_DIR = paths.DOCS_ROOT
 SITE_DIR = paths.SITE_DEV_DIR

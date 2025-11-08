@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from doc_tools import paths
+from doc_tools.config import paths
 
 
 def sha256_digest(path: Path) -> str:

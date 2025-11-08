@@ -9,9 +9,9 @@ from typing import Any, Iterable, List
 import pytest
 from typing import Any
 
-from doc_tools import paths
+from doc_tools.config import paths
 
-DEFAULT_TARGET = "packages/docs_tooling/tests/doc_tools"
+DEFAULT_TARGET = "packages/docs_tooling/tests"
 ENV_VAR = "DOCS_PYTEST_ARGS"
 COVERAGE_MODULES = ["doc_tools"]
 DEFAULT_COVERAGE_THRESHOLD = 90

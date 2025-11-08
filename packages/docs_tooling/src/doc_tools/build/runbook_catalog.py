@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
     auto_generated_header,
     begin_auto_generated_marker,

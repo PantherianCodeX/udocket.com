@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, cast
 
-from doc_tools import paths
+from doc_tools.config import paths
 from doc_tools.check.requirements import (
     EXCLUDED_CONTROL_KEYS,
     OPTIONAL_KEYS,

@@ -6,7 +6,7 @@ from typing import List
 
 import pytest
 
-from doc_tools import manage_docs as md
+import doc_tools.manage_docs as md
 
 
 class DummyResult:

@@ -6,7 +6,7 @@ from typing import List
 
 import pytest
 
-from doc_tools import pytest_runner
+import doc_tools.pytest_runner as pytest_runner
 
 
 def test_pytest_runner_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
