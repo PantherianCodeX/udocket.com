@@ -94,6 +94,8 @@ This guide explains how to add and maintain TDD documentation in this repo. The 
 - Generated: `docs/site/`, `docs/build/` (gitignored).
 - Config: `.markdownlint.json` (extends `docs/config/.markdownlint.json`), `docs/config/mkdocs.yml`, `docs/config/vale.ini`, `docs/config/.markdownlint.json`, `docs/config/mermaidrc.json`, `docs/config/settings_key_skip.txt`.
 - Scripts: `packages/docs_tooling/src/doc_tools/manage_docs.py`, `packages/docs_tooling/src/doc_tools/lint_docs.py`, sync helpers under `packages/docs_tooling/src/doc_tools/sync/`, and build assets under `packages/docs_tooling/src/doc_tools/build/`.
+- Shared helpers live under `packages/docs_tooling/src/doc_tools/common/` (slug utilities, nav parsing, YAML helpers). Runtime code must import path constants via `from doc_tools.config import paths` so future moves only touch `doc_tools.config`. Tests/scripts import modules (e.g., `import doc_tools.manage_docs as md`) rather than re-export stubs.
+- `tooling/scripts/refactor_imports.py` rewrites imports at scale (`--map old=new`, `--mapping-file`, `--ensure-import`, `--export-map`). Keep bulk migrations in mapping files alongside refactors so they can be rerun deterministically.
 
 ## Tips
 
