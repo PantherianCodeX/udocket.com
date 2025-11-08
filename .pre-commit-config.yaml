@@ -1,24 +1,44 @@
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
   - repo: local
     hooks:
+      - id: uv-export-reqs
+        name: export requirements via uv
+        entry: python scripts/dev/export_requirements.py
+        language: system
+        pass_filenames: false
       - id: pyright-packages
         name: pyright (packages)
-        entry: pyright
+        entry: uv run --project apps/platform --extra dev pyright
         language: system
         pass_filenames: false
       - id: mypy-packages
         name: mypy (packages)
-        entry: mypy
+        entry: uv run --project apps/platform --extra dev mypy
         language: system
         pass_filenames: false
       - id: enforce-pyright-strict
         name: enforce pyright strict pragma
-        entry: python scripts/typing/ci_enforce_strict.py
+        entry: uv run --project apps/platform --extra dev python scripts/typing/ci_enforce_strict.py
         language: system
         pass_filenames: false
       - id: strict-manifest-check
         name: strict manifest check (focused)
-        entry: python scripts/typing/check_strict.py --tool both --stop-on-first
+        entry: uv run --project apps/platform --extra dev python scripts/typing/check_strict.py --tool both --stop-on-first
         language: system
         pass_filenames: false
-
+      - id: docs-lint
+        name: docs lint (src)
+        entry: python scripts/docs/lint_docs.py
+        language: system
+        pass_filenames: false
+      - id: prompts-lint
+        name: prompts lint
+        entry: uv run --project apps/platform --extra dev make prompts.lint
+        language: system
+        pass_filenames: false

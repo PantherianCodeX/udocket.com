@@ -1,7 +1,6 @@
 from __future__ import annotations
 
- 
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID
 
 from django.http import Http404, HttpRequest, HttpResponse
@@ -28,13 +27,15 @@ def case_job_row(request: HttpRequest, case_id: str, job_id: UUID) -> HttpRespon
 
     case = resolve_case(case_id, request)
     job = (
-        Job.objects.select_related("case", "case__organization").filter(case=case, pk=job_id).first()
+        Job.objects.select_related("case", "case__organization")
+        .filter(case=case, pk=job_id)
+        .first()
     )
     if not job:
         raise Http404
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
-    telemetry_map: Dict[str, Any] = {str(job.id): telemetry_dict}
+    telemetry_map: dict[str, Any] = {str(job.id): telemetry_dict}
     note_counts = {str(job.id): JobNote.objects.filter(job=job).count()}
     _, flat_rows = build_job_rows([job], telemetry_map, note_counts=note_counts)
     if not flat_rows:

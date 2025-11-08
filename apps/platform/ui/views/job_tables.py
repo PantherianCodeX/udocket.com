@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 # pyright: strict
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
 
 from django.conf import settings
 from django.core.paginator import Paginator
@@ -15,13 +16,13 @@ from apps.platform.jobs.models import Job
 
 @dataclass
 class JobTableState:
-    rows: List[Job]
-    filters: List[Dict[str, object]]
-    pagination: Dict[str, object]
-    limit_choices: Tuple[int, ...]
+    rows: list[Job]
+    filters: list[dict[str, object]]
+    pagination: dict[str, object]
+    limit_choices: tuple[int, ...]
     page_size: int
     param_prefix: str
-    param_names: List[str]
+    param_names: list[str]
     active_filters: int
     has_advanced_filters: bool
 
@@ -30,9 +31,9 @@ class JobTableState:
         return self.active_filters
 
 
-def _unique_select_options(pairs: Iterable[Tuple[object, object]]) -> List[Dict[str, str]]:
+def _unique_select_options(pairs: Iterable[tuple[object, object]]) -> list[dict[str, str]]:
     seen: set[str] = set()
-    results: List[Dict[str, str]] = []
+    results: list[dict[str, str]] = []
     for raw_value, raw_label in pairs:
         value = str(raw_value)
         if value in seen:
@@ -43,13 +44,13 @@ def _unique_select_options(pairs: Iterable[Tuple[object, object]]) -> List[Dict[
     return results
 
 
-def _limit_choices() -> Tuple[int, ...]:
+def _limit_choices() -> tuple[int, ...]:
     values = getattr(settings, "PLATFORM_UI_JOB_LIMIT_CHOICES", (25, 50, 100, 200))
     cleaned = sorted({int(v) for v in values if int(v) > 0})
     return tuple(cleaned or (25, 50, 100, 200))
 
 
-def _default_page_size(choices: Tuple[int, ...]) -> int:
+def _default_page_size(choices: tuple[int, ...]) -> int:
     default_value = getattr(settings, "PLATFORM_UI_JOB_DEFAULT_LIMIT", choices[0])
     if default_value in choices:
         return default_value
@@ -59,8 +60,8 @@ def _default_page_size(choices: Tuple[int, ...]) -> int:
     return choices[-1]
 
 
-def _clean_multi(values: Iterable[str]) -> List[str]:
-    result: List[str] = []
+def _clean_multi(values: Iterable[str]) -> list[str]:
+    result: list[str] = []
     for raw in values:
         if not raw:
             continue
@@ -70,7 +71,7 @@ def _clean_multi(values: Iterable[str]) -> List[str]:
     return result
 
 
-def _parse_date(value: Optional[str]):
+def _parse_date(value: str | None):
     if not value:
         return None
     from datetime import datetime
@@ -81,15 +82,15 @@ def _parse_date(value: Optional[str]):
         return None
 
 
-def _status_options() -> List[Dict[str, str]]:
+def _status_options() -> list[dict[str, str]]:
     return _unique_select_options(Job.Status.choices)
 
 
-def _review_options() -> List[Dict[str, str]]:
+def _review_options() -> list[dict[str, str]]:
     return _unique_select_options(Job.ReviewStatus.choices)
 
 
-def _distinct_strings(qs: QuerySet[Job], field: str, limit: int = 75) -> List[str]:
+def _distinct_strings(qs: QuerySet[Job], field: str, limit: int = 75) -> list[str]:
     values = (
         qs.exclude(**{f"{field}__isnull": True})
         .exclude(**{field: ""})
@@ -97,7 +98,7 @@ def _distinct_strings(qs: QuerySet[Job], field: str, limit: int = 75) -> List[st
         .distinct()[:limit]
     )
     seen: set[str] = set()
-    unique: List[str] = []
+    unique: list[str] = []
     for raw in values:
         value = str(raw)
         if not value.strip():
@@ -136,8 +137,7 @@ def build_job_table_state(
         page_number = int(request.GET.get(page_param, "1"))
     except (TypeError, ValueError):
         page_number = 1
-    if page_number < 1:
-        page_number = 1
+    page_number = max(page_number, 1)
 
     search_param = f"{prefix}_search"
     search_value = (request.GET.get(search_param) or "").strip()
@@ -155,7 +155,9 @@ def build_job_table_state(
     kind_values = {_normalize(value) for value in _clean_multi(request.GET.getlist(kind_param))}
 
     case_param = f"{prefix}_case"
-    case_values = set(_clean_multi(request.GET.getlist(case_param))) if include_case_filters else set()
+    case_values = (
+        set(_clean_multi(request.GET.getlist(case_param))) if include_case_filters else set()
+    )
 
     created_after_param = f"{prefix}_created_after"
     created_before_param = f"{prefix}_created_before"
@@ -189,7 +191,9 @@ def build_job_table_state(
         qs = qs.filter(last_activity__date__lte=modified_before)
 
     if search_value:
-        search_filter = Q(display_title__icontains=search_value) | Q(agent_label__icontains=search_value)
+        search_filter = Q(display_title__icontains=search_value) | Q(
+            agent_label__icontains=search_value
+        )
         search_filter |= Q(agent_type__icontains=search_value) | Q(job_kind__icontains=search_value)
         search_filter |= Q(id__icontains=search_value)
         if include_case_filters:
@@ -218,16 +222,16 @@ def build_job_table_state(
         "last_page": paginator.num_pages or 1,
     }
 
-    def _selected_labels(options: List[Dict[str, str]], selections: Iterable[str]) -> List[str]:
+    def _selected_labels(options: list[dict[str, str]], selections: Iterable[str]) -> list[str]:
         label_map = {option["value"]: option["label"] for option in options}
-        labels: List[str] = []
+        labels: list[str] = []
         for value in selections:
             label = label_map.get(value)
             if label:
                 labels.append(label)
         return labels
 
-    filters: List[Dict[str, object]] = [
+    filters: list[dict[str, object]] = [
         {
             "id": "search",
             "type": "search",
@@ -270,8 +274,7 @@ def build_job_table_state(
     agent_strings = sorted(_distinct_strings(queryset, "agent_type"))
     if agent_strings:
         agent_options = [
-            {"value": value, "label": value.replace("_", " ").title()}
-            for value in agent_strings
+            {"value": value, "label": value.replace("_", " ").title()} for value in agent_strings
         ]
         agent_options.sort(key=lambda item: item["label"].lower())
         agent_selected = sorted(agent_values)
@@ -291,8 +294,7 @@ def build_job_table_state(
     kind_strings = sorted(_distinct_strings(queryset, "job_kind"))
     if kind_strings:
         kind_options = [
-            {"value": value, "label": value.replace("_", " ").title()}
-            for value in kind_strings
+            {"value": value, "label": value.replace("_", " ").title()} for value in kind_strings
         ]
         kind_options.sort(key=lambda item: item["label"].lower())
         kind_selected = sorted(kind_values)
@@ -311,9 +313,7 @@ def build_job_table_state(
 
     if include_case_filters:
         case_pairs = (
-            queryset.select_related("case")
-            .values_list("case_id", "case__title")
-            .distinct()
+            queryset.select_related("case").values_list("case_id", "case__title").distinct()
         )
         case_options = _unique_select_options(
             (str(case_id), case_title or str(case_id)) for case_id, case_title in case_pairs
@@ -400,5 +400,5 @@ def build_job_table_state(
     )
 
 
-def _normalize(value: Optional[str]) -> str:
+def _normalize(value: str | None) -> str:
     return value.strip().lower() if isinstance(value, str) else ""

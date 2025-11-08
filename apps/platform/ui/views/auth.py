@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: strict
-
 from dataclasses import dataclass
 from typing import TypedDict
 
@@ -79,7 +78,6 @@ def ensure_authenticated(request: HttpRequest) -> HttpResponse | None:
     return HttpResponse("Authentication required", status=401)
 
 
-
 def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     return redirect("ui-index")
@@ -143,7 +141,7 @@ def organization_gate(request: HttpRequest) -> HttpResponse:
     )
     roles_by_org: dict[str, set[str]] = {}
     for membership in membership_roles:
-        org_id = str(getattr(membership, "organization_id"))
+        org_id = str(membership.organization_id)
         labels = roles_by_org.setdefault(org_id, set())
         labels.add(membership.get_role_display())
 

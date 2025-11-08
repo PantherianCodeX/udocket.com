@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from packages.udocket_core.reference.catalogs.registry import discover_catalogs
+from packages.core.reference.catalogs.registry import discover_catalogs
 
 def test_all_catalogs_load_and_validate():
     # Allow overriding data dir in CI; otherwise default package data is used

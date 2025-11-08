@@ -3,18 +3,20 @@
 This document spells out the automation we rely on to keep typing passes repeatable. Each helper includes the CLI contract, expected guardrails for idempotency, and hints for wiring it into CI and the developer workflow.
 
 ## 1. Bootstrap Environment (`scripts/typing/bootstrap_env.py`)
+
 - **Purpose**: Ensure Django/DRF/pytest stubs plus internal stub overlays are available before running static checks.
 - **CLI**: `python scripts/typing/bootstrap_env.py [--venv <path>] [--check-only]`
 - **Workflow**:
   1. Resolve the target virtualenv (default: `.venv`).
-  2. Verify `pip` is available; bail with actionable error if not.
-  3. Install (or upgrade) stub wheels listed in `pyproject.toml` / `requirements-dev.txt`.
+  2. Verify `uv` is available; bail with actionable error if not.
+  3. Install (or upgrade) stub wheels via `uv sync --frozen --group dev --no-install-project --project apps/platform`.
   4. Confirm required overlay paths in `pyrightconfig.json` exist; create empty directories when missing.
 - **Idempotency checks**: The script records an install hash (package + version) in `.cache/typing/bootstrap.json`. Reruns compare hashes and skip unchanged packages.
-- **Exit codes**: `0` on success/no-op, `10` if pip is missing, `20` if locking fails.
+- **Exit codes**: `0` on success/no-op, `10` if uv is missing, `20` if locking fails.
 - **Validation**: Automatically run `pyright --stats` post-install (optional `--no-stats`). Append snapshot to `docs/typing_debt_assessment.md` via the document synchroniser.
 
 ## 2. Strictify (`scripts/typing/strictify.py`)
+
 - **Purpose**: Idempotently add `# pyright: strict` to modules/directories that are clean.
 - **CLI**: `python scripts/typing/strictify.py src/<path> [--dry-run] [--check]`
 - **Behaviour**:
@@ -27,6 +29,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Idempotency**: The script sorts manifest entries and overwrites the file atomically; repeated runs produce identical output.
 
 ## 3. Manager Codemod (`scripts/typing/manager_codemod.py`)
+
 - **Purpose**: Standardise the `typed_objects()` + `scoped()` helper pattern across Django models.
 - **CLI**: `python scripts/typing/manager_codemod.py apps/platform/cases/models.py [--apply|--preview]`
 - **Algorithm**:
@@ -37,6 +40,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Verification hooks**: Emits a summary of updated models; `--preview` shows diffs without touching disk.
 
 ## 4. Pytest Fixture Annotator (`scripts/typing/annotate_fixtures.py`)
+
 - **Purpose**: Add typed fixtures (`monkeypatch`, `settings`, `db`, `client`, etc.) across the test suite.
 - **CLI**: `python scripts/typing/annotate_fixtures.py tests/ [--update-imports]`
 - **Implementation**:
@@ -46,6 +50,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Post-check**: Optionally run `pytest --maxfail=1 --disable-warnings -q tests/<subset>` to ensure behaviour unchanged.
 
 ## 5. Stub Synchroniser (`scripts/typing/check_stubs.py`)
+
 - **Purpose**: Keep project stub overlays aligned with runtime modules.
 - **CLI**: `python scripts/typing/check_stubs.py [--fix]`
 - **Key steps**:
@@ -56,6 +61,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Idempotency**: Uses deterministic ordering and hashing; regenerated stubs contain a header comment with the generator version.
 
 ## 6. Document Synchroniser (`scripts/typing/sync_docs.py`)
+
 - **Purpose**: Regenerate sections of the typing docs from machine-readable manifests.
 - **CLI**: `python scripts/typing/sync_docs.py docs/typing/automation_manifest.json`
 - **Behaviour**:
@@ -66,6 +72,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Integration**: Pair with a pre-commit hook to ensure docs reflect the latest manifest before pushing.
 
 ## 7. Stage Override Linter (`scripts/typing/lint_stage_overrides.py`)
+
 - **Purpose**: Validate organisation-provided stage maps using the `StageOverride` dataclass.
 - **CLI**: `python scripts/typing/lint_stage_overrides.py config/analyze_defaults.json [--fix]`
 - **Features**:
@@ -75,6 +82,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Idempotency**: Sorted output and canonical ordering guarantee identical rewrites on repeated runs.
 
 ## 8. Strict Manifest Check (`scripts/typing/check_strict.py`)
+
 - **Purpose**: Run `pyright` across every module recorded in the strict manifest to catch regressions early.
 - **CLI**: `python scripts/typing/check_strict.py [--manifest PATH] [--prefix PREFIX ...] [-- <pyright args>]`
 - **Behaviour**:
@@ -86,6 +94,7 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Integration**: Wire into CI or local pre-push hooks to ensure strict modules stay clean before merges.
 
 ## 9. Stub Vendor (`scripts/typing/vendor_stubs.py`)
+
 - **Purpose**: Copy third-party typing stubs into the (git-ignored) `typings/vendor/` directory and generate docstring-aware fallbacks when upstream packages do not ship them.
 - **CLI**: `python scripts/typing/vendor_stubs.py [--dist PKG ...] [--scan-installed] [--no-stubgen] [--force]`
 - **Behaviour**:
@@ -99,12 +108,14 @@ This document spells out the automation we rely on to keep typing passes repeata
 - **Integration**: Re-run after dependency upgrades or when adding new runtime packages; compose/dev bootstrap scripts should invoke the helper only if `typings/vendor/` is missing or empty.
 
 ## CI & Tooling Integration
+
 - Add a `just typing-bootstrap` recipe that wraps the bootstrapper and re-runs `pyright --stats`.
 - Introduce `just typing-strictify MODULE=<path>` to promote clean modules to strict mode.
 - Configure GitHub Actions to run `scripts/typing/sync_docs.py` and commit regenerated docs if the manifest changed (using a bot account).
 - Include the bootstrapper and document synchroniser in the devcontainer `postCreateCommand` so editors start with stubs in place.
 
 ## Manifest Schema
+
 - Store automation state in `docs/typing/automation_manifest.json` with the structure described in `docs/typing/automation_manifest_template.json`:
   - `pyrightStats`: command, files, errors, warnings, recordedAt.
   - `helpers`: array with helper name, version, lastRun, status.
@@ -112,6 +123,7 @@ This document spells out the automation we rely on to keep typing passes repeata
   - `notes`: free-form strings for upcoming work.
 
 ## Implementation Tips
+
 - Prefer LibCST or Bowler for codemods to preserve formatting.
 - Run helper unit tests under `tests/typing_helpers/` to keep automation reliable.
 - When publishing helpers, include `--dry-run`/`--check` flags and document them here.

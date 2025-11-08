@@ -1,0 +1,10 @@
+%% Mermaid flow: Manual/Agent Edit approval flows v1
+%%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
+flowchart TD
+  A[Artifact APPROVED] --> B[Manual Edit starts child version]
+  B --> C[Reviewer reviews child]
+  C -->|Approve| D[Promote child → APPROVED; demote prior]
+  C -->|Reject| E[Child REJECTED; parent remains]
+  A --> F[Agent Edit starts interactive session]
+  F --> G[Edits → Candidate child]
+  G --> C

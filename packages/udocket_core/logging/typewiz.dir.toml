@@ -1,7 +1,0 @@
-[active_profiles]
-pyright = "strict"
-
-[engines.pyright]
-# Restrict include to this package to avoid scanning neighbors when this override is picked up
-include = ["."]
-

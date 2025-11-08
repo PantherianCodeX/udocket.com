@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Iterable as IterableABC, Mapping as MappingABC
-from typing import Any, Optional, Sequence
+from collections.abc import Iterable as IterableABC
+from collections.abc import Mapping as MappingABC
+from collections.abc import Sequence
+from typing import Any
 
-from django.db import models, transaction
-from django.core.exceptions import PermissionDenied
-from django.http import HttpRequest
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
+from django.db import models, transaction
+from django.http import HttpRequest
 
 from apps.platform.accounts.models import Organization, OrganizationMembership
 from apps.platform.cases.models import Case, CaseMembership
@@ -50,15 +52,17 @@ def user_accessible_organizations(user: Any) -> models.QuerySet[Organization]:
 
 
 def user_accessible_org_ids(user: Any) -> list[str]:
-    return [str(org_id) for org_id in user_accessible_organizations(user).values_list("id", flat=True)]
+    return [
+        str(org_id) for org_id in user_accessible_organizations(user).values_list("id", flat=True)
+    ]
 
 
-def get_active_admin_org_id(request: HttpRequest) -> Optional[str]:
+def get_active_admin_org_id(request: HttpRequest) -> str | None:
     org = get_active_admin_org(request)
     return str(org.id) if org else None
 
 
-def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
+def get_active_admin_org(request: HttpRequest) -> Organization | None:
     session = getattr(request, "session", None)
     if session is None:
         request.admin_active_org = None  # type: ignore[attr-defined]
@@ -70,9 +74,7 @@ def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
     accessible = list(orgs_qs)
     stored = session.get(_SESSION_KEY)
     if stored and stored not in {str(org.id) for org in accessible}:
-        logger.warning(
-            "admin session organization no longer permitted", extra={"org_id": stored}
-        )
+        logger.warning("admin session organization no longer permitted", extra={"org_id": stored})
         stored = None
     if stored:
         for org in accessible:
@@ -87,7 +89,7 @@ def get_active_admin_org(request: HttpRequest) -> Optional[Organization]:
     return None
 
 
-def set_active_admin_org_id(request: HttpRequest, org_id: Optional[str]) -> None:
+def set_active_admin_org_id(request: HttpRequest, org_id: str | None) -> None:
     session = getattr(request, "session", None)
     if session is None:
         return
@@ -105,7 +107,7 @@ def admin_org_choices(request: HttpRequest) -> list[AdminOrgChoice]:
 
 def resolve_request_organization(
     request: HttpRequest, *, required: bool = True
-) -> Optional[Organization]:
+) -> Organization | None:
     """Resolve the active organization for the current request.
 
     Preference order:
@@ -121,7 +123,7 @@ def resolve_request_organization(
     header_name = getattr(settings, "ORG_HEADER_NAME", "HTTP_X_ORGANIZATION_ID")
     header_org_id = request.META.get(header_name)
 
-    def _get_org(org_id: str | None) -> Optional[Organization]:
+    def _get_org(org_id: str | None) -> Organization | None:
         if not org_id:
             return None
         try:
@@ -133,7 +135,9 @@ def resolve_request_organization(
     if header_org_id:
         org = _get_org(header_org_id)
         if org and user and getattr(user, "is_authenticated", False):
-            if OrganizationMembership.objects.filter(user=user, role=OrganizationMembership.Role.SUPERUSER).exists():
+            if OrganizationMembership.objects.filter(
+                user=user, role=OrganizationMembership.Role.SUPERUSER
+            ).exists():
                 return org
             if OrganizationMembership.objects.filter(organization=org, user=user).exists():
                 return org
@@ -166,9 +170,7 @@ def sync_user_access_flags(user: Any) -> None:
     if not user or not getattr(user, "pk", None):
         return
 
-    roles = set(
-        OrganizationMembership.objects.filter(user=user).values_list("role", flat=True)
-    )
+    roles = set(OrganizationMembership.objects.filter(user=user).values_list("role", flat=True))
 
     is_super = OrganizationMembership.Role.SUPERUSER in roles
     is_staff = is_super or OrganizationMembership.Role.ADMIN in roles
@@ -210,7 +212,13 @@ def _normalize_entries(value: Any) -> list[Any]:
     return [value]
 
 
-def _map_role(remote_roles: Sequence[str], mapping: MappingABC[str, str], default_role: str, *, valid_roles: set[str]) -> str:
+def _map_role(
+    remote_roles: Sequence[str],
+    mapping: MappingABC[str, str],
+    default_role: str,
+    *,
+    valid_roles: set[str],
+) -> str:
     for role in remote_roles:
         key = role.strip().lower()
         if not key:
@@ -233,7 +241,9 @@ def sync_organization_memberships_from_claims(user: Any, claims: MappingABC[str,
     org_id_field = getattr(settings, "OIDC_ORG_ID_FIELD", "id") or "id"
     org_name_field = getattr(settings, "OIDC_ORG_NAME_FIELD", "name") or "name"
     org_roles_field = getattr(settings, "OIDC_ORG_ROLES_FIELD", "roles") or "roles"
-    default_role = str(getattr(settings, "OIDC_ORG_DEFAULT_ROLE", OrganizationMembership.Role.MEMBER)).upper()
+    default_role = str(
+        getattr(settings, "OIDC_ORG_DEFAULT_ROLE", OrganizationMembership.Role.MEMBER)
+    ).upper()
     role_map_raw = getattr(settings, "OIDC_ORG_ROLE_MAP", {})
     if isinstance(role_map_raw, MappingABC):
         role_map = {str(k).lower(): str(v).upper() for k, v in role_map_raw.items()}
@@ -265,15 +275,23 @@ def sync_organization_memberships_from_claims(user: Any, claims: MappingABC[str,
                     org_id_value = text
 
             if not org_id_value:
-                logger.debug("Skipping organization entry without identifier", extra={"entry": entry})
+                logger.debug(
+                    "Skipping organization entry without identifier", extra={"entry": entry}
+                )
                 continue
 
             organization = Organization.objects.filter(kc_organization_id=org_id_value).first()
             if not organization and org_name_value:
-                organization = Organization.objects.filter(kc_organization_id__isnull=True, name=org_name_value).first()
+                organization = Organization.objects.filter(
+                    kc_organization_id__isnull=True, name=org_name_value
+                ).first()
             created = False
             if not organization:
-                organization = Organization(name=org_name_value or org_id_value, display_name=org_name_value or "", kc_organization_id=org_id_value)
+                organization = Organization(
+                    name=org_name_value or org_id_value,
+                    display_name=org_name_value or "",
+                    kc_organization_id=org_id_value,
+                )
                 organization.save()
                 created = True
             updates: list[str] = []
@@ -307,7 +325,9 @@ def sync_organization_memberships_from_claims(user: Any, claims: MappingABC[str,
             active_ids.add(organization.id)
 
         if active_ids:
-            OrganizationMembership.objects.filter(user=user).exclude(organization_id__in=active_ids).delete()
+            OrganizationMembership.objects.filter(user=user).exclude(
+                organization_id__in=active_ids
+            ).delete()
 
 
 def sync_case_memberships_from_claims(user: Any, claims: MappingABC[str, Any]) -> None:
@@ -321,7 +341,9 @@ def sync_case_memberships_from_claims(user: Any, claims: MappingABC[str, Any]) -
 
     case_id_field = getattr(settings, "OIDC_CASE_ID_FIELD", "id") or "id"
     case_role_field = getattr(settings, "OIDC_CASE_ROLE_FIELD", "role") or "role"
-    default_role = str(getattr(settings, "OIDC_CASE_DEFAULT_ROLE", CaseMembership.Role.CONTRIBUTOR)).upper()
+    default_role = str(
+        getattr(settings, "OIDC_CASE_DEFAULT_ROLE", CaseMembership.Role.CONTRIBUTOR)
+    ).upper()
     role_map_raw = getattr(settings, "OIDC_CASE_ROLE_MAP", {})
     if isinstance(role_map_raw, MappingABC):
         role_map = {str(k).lower(): str(v).upper() for k, v in role_map_raw.items()}
@@ -349,13 +371,17 @@ def sync_case_memberships_from_claims(user: Any, claims: MappingABC[str, Any]) -
                     case_id_value = text
 
             if not case_id_value:
-                logger.debug("Skipping case membership entry without identifier", extra={"entry": entry})
+                logger.debug(
+                    "Skipping case membership entry without identifier", extra={"entry": entry}
+                )
                 continue
 
             try:
                 case = Case.objects.get(pk=case_id_value)
             except Case.DoesNotExist:
-                logger.warning("Case from claim not found locally", extra={"case_id": case_id_value})
+                logger.warning(
+                    "Case from claim not found locally", extra={"case_id": case_id_value}
+                )
                 continue
 
             local_role = _map_role(remote_roles, role_map, default_role, valid_roles=valid_roles)

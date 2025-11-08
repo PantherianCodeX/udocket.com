@@ -1,0 +1,2 @@
+# Settings keys listed here are intentionally allowed to be missing in code (e.g., planned keys).
+# One key per line; lines starting with # are ignored.

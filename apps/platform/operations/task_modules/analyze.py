@@ -2,9 +2,8 @@ from __future__ import annotations
 
 # pyright: strict
 import logging
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-
-from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, cast
 
 from celery import shared_task
@@ -13,37 +12,47 @@ from celery import shared_task
 class TaskProtocol(Protocol):
     request: Any
 
+
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.audit import emit as _audit_emit
 from apps.platform.operations.channels import send_case_update as _send_case_update
 from apps.platform.operations.llm import (
     LLMConfigurationPayload,
-    StageMap,
+)
+from apps.platform.operations.llm import (
     ensure_default_llm_configuration as _ensure_default_llm_configuration,
+)
+from apps.platform.operations.llm import (
     get_llm_configuration as _get_llm_configuration,
+)
+from apps.platform.operations.llm import (
     get_provider_secret_with_metadata as _get_provider_secret_with_metadata,
 )
 from apps.platform.operations.runtime import JobRuntimeContext, safe_job_meta
 from apps.platform.operations.services import (
     case_intake_payload,
     case_paths,
-    collect_requested_providers as _collect_requested_providers,
     latest_transcript,
+)
+from apps.platform.operations.services import (
+    collect_requested_providers as _collect_requested_providers,
 )
 from apps.platform.operations.services.files import sha256_file
 from apps.platform.operations.utils import read_job_meta
-from packages.udocket_core.agents import AnalyzeAgent as _AnalyzeAgent, AnalyzeConfig
-from packages.udocket_core.utils.json import JSONObject, coerce_json_object, read_json_object
-from packages.udocket_core.llm.config import load_llm_settings as _load_llm_settings
-
+from packages.common.json_utils import JSONObject, coerce_json_object, read_json_object
+from packages.common.operations import ComposeStageMap, optional_json_object
+from packages.common.text import unique_title
+from packages.core.agents import AnalyzeAgent as _AnalyzeAgent
+from packages.core.agents import AnalyzeConfig
+from packages.core.llm.config import load_llm_settings as _load_llm_settings
 
 log = logging.getLogger("apps.platform.operations.tasks.analyze")
 
 
 def _load_json_dict(path: Path) -> JSONObject:
     return coerce_json_object(read_json_object(path))
+
 
 @shared_task(bind=True)
 def analyze_job(
@@ -62,7 +71,11 @@ def analyze_job(
     source_job = job
     if source_job_id and source_job_id != job_id:
         try:
-            source_job = Job.typed_objects().select_related("case", "case__organization").get(pk=source_job_id)
+            source_job = (
+                Job.typed_objects()
+                .select_related("case", "case__organization")
+                .get(pk=source_job_id)
+            )
         except Job.DoesNotExist:
             source_job = job
     org_value = job.organization_id or getattr(job.case, "organization_id", None)
@@ -147,7 +160,11 @@ def analyze_job(
         )
 
     if not transcript or not transcript.exists():
-        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "transcript_missing"}
+        failure_meta = {
+            **base_meta,
+            "summary_status": "failed",
+            "summary_error": "transcript_missing",
+        }
         if summary_task_id:
             failure_meta.setdefault("celery_task_id", summary_task_id)
             failure_meta["celery_task_status"] = "failed"
@@ -203,7 +220,9 @@ def analyze_job(
     from apps.platform.operations import tasks as tasks_module
 
     load_llm_settings_fn = getattr(tasks_module, "load_llm_settings", _load_llm_settings)
-    get_llm_configuration_fn = getattr(tasks_module, "get_llm_configuration", _get_llm_configuration)
+    get_llm_configuration_fn = getattr(
+        tasks_module, "get_llm_configuration", _get_llm_configuration
+    )
     ensure_default_llm_configuration_fn = getattr(
         tasks_module,
         "ensure_default_llm_configuration",
@@ -214,10 +233,13 @@ def analyze_job(
         "get_provider_secret_with_metadata",
         _get_provider_secret_with_metadata,
     )
-    collect_requested_providers_fn = getattr(
-        tasks_module,
-        "collect_requested_providers",
-        _collect_requested_providers,
+    collect_requested_providers_fn = cast(
+        Callable[[Sequence[str], Sequence[str], ComposeStageMap | None], list[str]],
+        getattr(
+            tasks_module,
+            "collect_requested_providers",
+            _collect_requested_providers,
+        ),
     )
     analyze_agent_cls = getattr(tasks_module, "AnalyzeAgent", _AnalyzeAgent)
     send_case_update_fn = getattr(tasks_module, "send_case_update", _send_case_update)
@@ -231,7 +253,11 @@ def analyze_job(
             "load llm settings failed",
             extra={"job_id": job_id, "case_id": case_id, "error": str(exc)},
         )
-        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "llm_settings_unavailable"}
+        failure_meta = {
+            **base_meta,
+            "summary_status": "failed",
+            "summary_error": "llm_settings_unavailable",
+        }
         if summary_task_id:
             failure_meta.setdefault("celery_task_id", summary_task_id)
             failure_meta["celery_task_status"] = "failed"
@@ -275,7 +301,11 @@ def analyze_job(
             "analyze llm configuration missing",
             extra={"job_id": job_id, "case_id": case_id, "llm_config_id": llm_config_id},
         )
-        failure_meta = {**base_meta, "summary_status": "failed", "summary_error": "llm_configuration_missing"}
+        failure_meta = {
+            **base_meta,
+            "summary_status": "failed",
+            "summary_error": "llm_configuration_missing",
+        }
         if summary_task_id:
             failure_meta.setdefault("celery_task_id", summary_task_id)
             failure_meta["celery_task_status"] = "failed"
@@ -302,7 +332,9 @@ def analyze_job(
     if active_config_id:
         base_meta["active_llm_config_id"] = active_config_id
 
-    stage_map: StageMap | None = config_payload["stage_map"] if config_payload else None
+    stage_map = ComposeStageMap.from_mapping(
+        optional_json_object(config_payload.get("stage_map")) if config_payload else None
+    )
     provider_chain_override: Sequence[str] = (
         tuple(config_payload["provider_chain"])
         if config_payload and config_payload["provider_chain"]
@@ -371,7 +403,7 @@ def analyze_job(
             intake=intake_payload,
             transcript_hint=transcript_hint_payload,
             provider_chain=config_chain or analyze_config.provider_chain,
-            stage_map=stage_map,
+            stage_map=stage_map.to_dict(),
             provider_credentials=provider_credentials or None,
             progress_callback=_progress,
         )
@@ -423,7 +455,9 @@ def analyze_job(
         "summary_file": str(result.summary_file),
         "summary_markdown_file": str(result.summary_markdown_file),
         "summary_outline_file": str(result.outline_file) if result.outline_file else None,
-        "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "summary_timeline_file": str(result.timeline_seeds_file)
+        if result.timeline_seeds_file
+        else None,
         "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
         "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
         "summary_meta_json": str(result.meta_json),
@@ -450,7 +484,9 @@ def analyze_job(
         "summary_file": str(result.summary_file),
         "summary_markdown_file": str(result.summary_markdown_file),
         "summary_outline_file": str(result.outline_file) if result.outline_file else None,
-        "summary_timeline_file": str(result.timeline_seeds_file) if result.timeline_seeds_file else None,
+        "summary_timeline_file": str(result.timeline_seeds_file)
+        if result.timeline_seeds_file
+        else None,
         "summary_entity_file": str(result.entity_hints_file) if result.entity_hints_file else None,
         "summary_case_brief_file": str(result.case_brief_file) if result.case_brief_file else None,
         "summary_words": result.words,
@@ -493,9 +529,7 @@ def analyze_job(
             extra={"job_id": job_id, "case_id": case_id, "path": str(result.summary_markdown_file)},
         )
 
-    log_message = (
-        f"Analyze succeeded: summary={result.summary_file.name} words={result.words}"
-    )
+    log_message = f"Analyze succeeded: summary={result.summary_file.name} words={result.words}"
     job_event_payload = {
         "summary_file": str(result.summary_file),
         "summary_markdown_file": str(result.summary_markdown_file),

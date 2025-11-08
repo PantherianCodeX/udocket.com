@@ -6,140 +6,142 @@ ARG DEV_TOOLS=0
 
 FROM ${PYTHON_BASE} AS python-base
 
+ARG TARGETARCH
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
     
-# Core packages needed for every image
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+# Prepare keyrings/repos once so downstream stages can reuse apt metadata.
+RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=toolchain-downloads-${TARGETARCH},target=/tmp/cache-downloads,sharing=locked \
+    set -eux; \
+    install -m 0755 -d /etc/apt/keyrings; \
+    cache_dir="/tmp/cache-downloads"; \
+    mkdir -p "$cache_dir"; \
+    docker_key="$cache_dir/docker.gpg"; \
+    gh_key="$cache_dir/gh.gpg"; \
+    if [ ! -f "$docker_key" ]; then \
+      python -c 'import sys, urllib.request; urllib.request.urlretrieve("https://download.docker.com/linux/debian/gpg", sys.argv[1])' "$docker_key"; \
+    fi; \
+    cp "$docker_key" /etc/apt/keyrings/docker.asc; \
+    chmod a+r /etc/apt/keyrings/docker.asc; \
+    if [ ! -f "$gh_key" ]; then \
+      python -c 'import sys, urllib.request; urllib.request.urlretrieve("https://cli.github.com/packages/githubcli-archive-keyring.gpg", sys.argv[1])' "$gh_key"; \
+    fi; \
+    cp "$gh_key" /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update
+
+# Core packages needed for every image.
+RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    set -eux; \
+    apt-get install -y --no-install-recommends \
       ffmpeg \
       ca-certificates \
       curl \
-      git \
- && rm -rf /var/lib/apt/lists/*
+      git
 
 # Keep pip modern once so every downstream stage benefits.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip
 
-FROM python-base AS toolchain
-ARG DEV_TOOLS
-ARG VALE_VERSION=3.7.1
-ARG PLAYWRIGHT_VERSION=1.46.0
-ARG NPM_VERSION=11.6.2
+# Install uv once so downstream stages share the same toolchain.
+RUN --mount=type=cache,target=/root/.cache/uv-installer,sharing=locked <<'EOF'
+set -eux
+cache_dir="/root/.cache/uv-installer"
+mkdir -p "$cache_dir"
+script="$cache_dir/install.sh"
+if [ ! -f "$script" ]; then
+  curl -fsSL https://astral.sh/uv/install.sh -o "$script"
+fi
+UV_INSTALL_DIR=/usr/local/bin sh "$script"
+EOF
 
-# Optional developer tooling (docker CLI, browsers, etc.)
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,target=/root/.npm,sharing=locked \
+FROM python-base AS toolchain
+ARG TARGETARCH
+ARG DEV_TOOLS
+
+# Optional developer tooling (docker CLI, debugging helpers, etc.)
+RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
     if [ "$DEV_TOOLS" = "1" ]; then \
       set -eux; \
-      install -m 0755 -d /etc/apt/keyrings; \
-      curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
-      chmod a+r /etc/apt/keyrings/docker.asc; \
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
-      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
-      chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list; \
-      curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource.sh; \
-      bash /tmp/nodesource.sh; \
-      rm -f /tmp/nodesource.sh; \
-      apt-get update; \
       apt-get install -y --no-install-recommends \
-        build-essential gcc g++ pkg-config libpq-dev \
-        git-lfs htop iputils-ping jq less lsof nano ripgrep strace tree unzip vim-tiny wget netcat-openbsd \
-        postgresql-client-15 \
-        docker-ce-cli docker-buildx-plugin docker-compose-plugin \
-        gh \
-        nodejs \
-        pandoc \
-      ; \
+        build-essential \
+        g++ \
+        gcc \
+        libpq-dev \
+        pkg-config \
+        postgresql-client-15; \
     fi;
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,target=/root/.npm,sharing=locked \
+
+RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
     if [ "$DEV_TOOLS" = "1" ]; then \
-      npm install -g "npm@${NPM_VERSION}"; \
-      npx --yes "playwright@${PLAYWRIGHT_VERSION}" install-deps; \
-      ARCH="$(dpkg --print-architecture)"; \
-      case "$ARCH" in \
-        amd64) VALE_ASSET_REGEX='Linux_64-bit.*tar\.gz$' ;; \
-        arm64) VALE_ASSET_REGEX='Linux_arm64.*tar\.gz$' ;; \
-        *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; \
-      esac; \
-      VALE_RELEASE_JSON="$(curl -fsSL https://api.github.com/repos/errata-ai/vale/releases/tags/v${VALE_VERSION})"; \
-      VALE_ASSET_NAME="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg re "$VALE_ASSET_REGEX" '.assets[] | select(.name | test($re)) | .name')"; \
-      VALE_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r --arg name "$VALE_ASSET_NAME" '.assets[] | select(.name == $name) | .browser_download_url')"; \
-      VALE_CHECKSUM_URL="$(printf '%s\n' "$VALE_RELEASE_JSON" | jq -r '.assets[] | select(.name | test("checksums.txt$")) | .browser_download_url')"; \
-      if [ -z "$VALE_URL" ] || [ -z "$VALE_ASSET_NAME" ]; then echo "Unable to locate Vale asset for $ARCH" >&2; exit 1; fi; \
-      curl -fsSL "$VALE_URL" -o /tmp/vale.tar.gz; \
-      if [ -n "$VALE_CHECKSUM_URL" ]; then \
-        curl -fsSL "$VALE_CHECKSUM_URL" -o /tmp/vale.checksums; \
-        (cd /tmp && grep "  $VALE_ASSET_NAME" vale.checksums | sha256sum -c -); \
-      fi; \
-      tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale; \
-      chmod +x /usr/local/bin/vale; \
-      rm -f /tmp/vale.tar.gz /tmp/vale.checksums; \
+      set -eux; \
+      apt-get install -y --no-install-recommends \
+        docker-buildx-plugin \
+        docker-ce-cli \
+        docker-compose-plugin \
+        gh; \
+    fi;
+
+RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    if [ "$DEV_TOOLS" = "1" ]; then \
+      set -eux; \
+      apt-get install -y --no-install-recommends \
+        git-lfs \
+        htop \
+        iputils-ping \
+        jq \
+        less \
+        lsof \
+        nano \
+        netcat-openbsd \
+        ripgrep \
+        strace \
+        tree \
+        unzip \
+        vim-tiny \
+        wget; \
+    fi;
+
+RUN if [ "$DEV_TOOLS" = "1" ]; then \
+      set -eux; \
       git lfs install --system; \
-      rm -rf /var/lib/apt/lists/*; \
     fi;
-
-FROM toolchain AS runtime-wheels
-
-WORKDIR /tmp/pip
-
-COPY apps/platform/requirements.txt runtime.txt
-COPY packages/udocket_core/requirements.txt core.txt
-
-RUN --mount=type=cache,target=/root/.cache/pip \
-    mkdir -p /wheels \
- && pip wheel --wheel-dir /wheels wheel \
- && pip wheel --wheel-dir /wheels --requirement runtime.txt \
- && pip wheel --wheel-dir /wheels --requirement core.txt
-
-FROM runtime-wheels AS dev-wheels
-ARG DEV_TOOLS
-
-COPY apps/platform/requirements-dev.txt dev.txt
-COPY requirements-docs.txt docs.txt
-
-RUN --mount=type=cache,target=/root/.cache/pip \
-    if [ "$DEV_TOOLS" = "1" ]; then \
-      pip wheel --wheel-dir /wheels --requirement dev.txt; \
-      if [ -s docs.txt ]; then \
-        pip wheel --wheel-dir /wheels --requirement docs.txt; \
-      fi; \
-    fi
 
 FROM toolchain AS python-deps
 ARG DEV_TOOLS
 
-WORKDIR /app
+WORKDIR /udocket
 
-COPY --from=dev-wheels /wheels /tmp/wheels
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
-# Install Python dependencies (shared across services)
-COPY apps/platform/requirements.txt /tmp/platform-requirements.txt
-COPY apps/platform/requirements-dev.txt /tmp/platform-requirements-dev.txt
-COPY packages/udocket_core/requirements.txt /tmp/udocket-core-requirements.txt
-COPY requirements-docs.txt /tmp/requirements-docs.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements.txt \
- && pip install --no-index --find-links=/tmp/wheels -r /tmp/udocket-core-requirements.txt \
- && if [ "$DEV_TOOLS" = "1" ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/platform-requirements-dev.txt; fi \
- && if [ "$DEV_TOOLS" = "1" ] && [ -s /tmp/requirements-docs.txt ]; then pip install --no-index --find-links=/tmp/wheels -r /tmp/requirements-docs.txt; fi \
- && rm -f /tmp/platform-requirements.txt /tmp/platform-requirements-dev.txt /tmp/udocket-core-requirements.txt \
- && rm -f /tmp/requirements-docs.txt \
- && rm -rf /tmp/wheels
+COPY apps/platform/pyproject.toml apps/platform/uv.lock /udocket/apps/platform/
+
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev --no-install-project --project apps/platform \
+ && if [ "$DEV_TOOLS" = "1" ]; then uv sync --frozen --only-group dev --no-install-project --project apps/platform; fi
 
 FROM python-deps AS app
 
-WORKDIR /app
+WORKDIR /udocket
 
 # Copy project source last to keep dependency layers hot
-COPY . /app
+COPY . /udocket
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 EXPOSE 8000
 

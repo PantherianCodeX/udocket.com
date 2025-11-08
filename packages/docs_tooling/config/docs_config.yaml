@@ -1,0 +1,7 @@
+service_areas:
+  - platform
+  - automation
+  - data
+  - customer
+  - experience
+

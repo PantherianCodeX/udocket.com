@@ -1,0 +1,92 @@
+name: Docs Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VALE_VERSION: 3.7.1
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          check-latest: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing uv..." >> "$GITHUB_STEP_SUMMARY"
+          curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y
+          printf '%s\n' "uv installed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing system dependencies..." >> "$GITHUB_STEP_SUMMARY"
+          sudo apt-get update
+          sudo apt-get install -y chromium pandoc
+          printf '%s\n' "System dependencies installed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install docs dependencies
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing documentation dependencies..." >> "$GITHUB_STEP_SUMMARY"
+          uv sync --frozen --extra dev
+          npm ci
+          printf '%s\n' "Documentation dependencies installed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Add local node binaries to PATH
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Adding local node binaries to PATH..." >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$PWD/packages/docs_tooling/node_modules/.bin" >> "$GITHUB_PATH"
+          printf '%s\n' "Local node binaries added to PATH." >> "$GITHUB_STEP_SUMMARY"
+      - name: Build site
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Building documentation site..." >> "$GITHUB_STEP_SUMMARY"
+          uv run mkdocs build --config-file mkdocs.yml --site-dir site --clean
+          printf '%s\n' "Documentation site built." >> "$GITHUB_STEP_SUMMARY"
+      - name: Render Mermaid (all)
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Rendering Mermaid diagrams..." >> "$GITHUB_STEP_SUMMARY"
+          bash tools/render_mermaid.sh --all --verbose
+          printf '%s\n' "Mermaid diagrams rendered." >> "$GITHUB_STEP_SUMMARY"
+      - name: Build PDFs (TDD & PRD)
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Building PDFs..." >> "$GITHUB_STEP_SUMMARY"
+          uv run python tools/pdf_build.py --skip-build
+          printf '%s\n' "PDFs built." >> "$GITHUB_STEP_SUMMARY"
+      - name: Checksums & manifest
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Generating hashes and manifest..." >> "$GITHUB_STEP_SUMMARY"
+          bash tools/hash_and_manifest.sh
+          printf '%s\n' "Hashes and manifest generated." >> "$GITHUB_STEP_SUMMARY"
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+      - name: Upload PDFs
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/docs_tooling/build/pdf/tdd.pdf
+            packages/docs_tooling/build/pdf/manifest.json

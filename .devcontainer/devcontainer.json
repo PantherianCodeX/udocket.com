@@ -2,55 +2,60 @@
   "name": "uDocket Platform Dev",
   "dockerComposeFile": [
     "../docker-compose.yml",
-    "../docker-compose.override.yml",
+    "../docker-compose.dev.yml",
+    "../docker-compose.cache.yml",
     "./docker-compose.devcontainer.yml"
   ],
   "service": "platform-dev",
   "runServices": [
     "platform-dev"
   ],
+  "initializeCommand": "bash -lc './scripts/devcontainer/ensure_buildx_builder.sh'",
   "shutdownAction": "stopCompose",
-  "workspaceFolder": "/app",
+  "workspaceFolder": "/udocket",
+  "forwardPorts": [8000, 8010],
   "overrideCommand": true,
   "remoteUser": "root",
   "remoteEnv": {
     "DJANGO_SETTINGS_MODULE": "apps.platform.config.settings.dev",
     "ENV_READ_DOTENV": "1"
   },
-  "postCreateCommand": "bash -lc 'set -euo pipefail; ./scripts/setup_buildx_cache.sh; if [ \"${INSTALL_DOCS:-1}\" = \"1\" ]; then pip install -r requirements-docs.txt; fi; npm ci; python scripts/typing/vendor_stubs.py",
+  "containerEnv": {
+    "HOST_REPO_ROOT": "${localWorkspaceFolder}"
+  },
+  "postCreateCommand": "bash -lc './scripts/devcontainer/post_create.sh'",
+  "postStartCommand": "bash -lc '[ -d /opt/venv ] || ./scripts/devcontainer/post_create.sh'",
   "customizations": {
     "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.terminal.activateEnvironment": true
+      },
       "extensions": [
-        "etmoffat.pip-packages",
-        "github.copilot",
-        "github.copilot-chat",
-        "github.vscode-pull-request-github",
         "ms-azuretools.vscode-containers",
         "ms-azuretools.vscode-docker",
-        "ms-python.black-formatter",
-        "charliermarsh.ruff",
-        "ms-python.debugpy",
         "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-python.vscode-python-envs",
-        "ms-vscode-remote.remote-containers",
-        "openai.chatgpt",
+        "ms-python.debugpy",
+        "etmoffat.pip-packages",
         "slightc.pip-manager",
+        "ms-python.vscode-python-envs",
+        "ms-python.vscode-pylance",
         "ms-python.mypy-type-checker",
-        "yzhang.markdown-all-in-one",
+        "charliermarsh.ruff",
         "DavidAnson.vscode-markdownlint",
+        "github.vscode-pull-request-github",
+        "donjayamanne.githistory",
+        "ms-vscode-remote.remote-containers",
+        "yzhang.markdown-all-in-one",
         "bierner.markdown-preview-github-styles",
         "tomoki1207.pdf",
+        "openai.chatgpt",
         "ms-vscode.vscode-node-azure-pack",
         "ms-windows-ai-studio.windows-ai-studio",
-        "ms-kubernetes-tools.vscode-kubernetes-tools",
         "firefox-devtools.vscode-firefox-debug",
         "ms-azuretools.vscode-azurevirtualmachines",
         "Azurite.azurite"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/app/.venv/bin/python"
-      }
+      ]
     }
   }
 }

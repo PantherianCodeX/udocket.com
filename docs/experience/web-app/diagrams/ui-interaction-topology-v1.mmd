@@ -1,0 +1,28 @@
+%% id: webapp-interaction-topology
+%% version: v1
+%% owner: experience/web-app.md
+flowchart LR
+    subgraph Staff_Workspace
+        StaffUI[Staff Workspace UI]
+    end
+    subgraph Client_Portal
+        ClientUI[Client Portal UI]
+    end
+    subgraph Platform_Core
+        API[Web App API Layer]
+        Channels[Channels / SSE Gateway]
+        Guardian[Guardian Verdict Service]
+        Settings[Settings Registry]
+        Notifications[Notifications Service]
+    end
+
+    StaffUI -->|GraphQL & REST| API
+    ClientUI -->|REST| API
+    API -->|PolicyContext lookup| Guardian
+    API -->|Feature toggles| Settings
+    API -->|Messages & alerts| Notifications
+    API -->|Presence / edits| Channels
+    Channels -->|Live updates| StaffUI
+    Channels -->|Portal SSE| ClientUI
+    Guardian -->|Verdict events| Channels
+    Notifications -->|Portal delivery| ClientUI

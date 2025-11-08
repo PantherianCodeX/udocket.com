@@ -1,6 +1,81 @@
 {
-  "python.defaultInterpreterPath": "/usr/local/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/opt/venv/bin/python",
+  "python.terminal.activateEnvironment": true,
   "python.analysis.djangoEnabled": true,
   "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
-  "chatgpt.commentCodeLensEnabled": false
+  "chatgpt.commentCodeLensEnabled": false,
+
+  "markdown.preview.doubleClickToSwitchToEditor": true,
+  "markdown.preview.scrollEditorWithPreview": true,
+  "markdown.preview.scrollPreviewWithEditor": true,
+
+  "vale.configPath": "packages/docs_tooling/config/vale.ini",
+  "markdownlint.configFile": "packages/docs_tooling/config/.markdownlint.json",
+  "mkdocs.projectDirectory": "packages/docs_tooling",
+  "mkdocs.configFilePath": "packages/docs_tooling/config/mkdocs.yml",
+
+  "markdown-pdf.executablePath": "/usr/bin/chromium",
+  "markdown-pdf.launchOptions": [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage"
+  ],
+  "markdown-pdf.type": ["pdf"],
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.hg/store/**": true,
+    "**/.venv/**": true,
+    "**/env/**": true,
+    "**/venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/.typewiz_cache/**": true,
+    "**/.tox/**": true,
+    "**/.nox/**": true,
+    "**/.hypothesis/**": true,
+    "**/.pytype/**": true,
+    "**/.pyre/**": true,
+    "**/node_modules/**": true,
+    "typings/external_stubs/**": true,
+    "typings/vendor/**": true,
+    "storage/**": true,
+    "apps/storage/**": true,
+    "out/**": true,
+    "packages/docs_tooling/build/**": true,
+    "build/**": true,
+    "dist/**": true,
+    "downloads/**": true,
+    "marimo/_static/**": true,
+    "marimo/_lsp/**": true,
+    "__marimo__/**": true
+  },
+  "makefile.configureOnOpen": false,
+  "python.formatting.provider": "none",
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
+  },
+  "ruff.path": [
+    "${workspaceFolder}/opt/venv/bin/ruff"
+  ],
+  "ruff.nativeServer": "on",
+  "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+  "mypy-type-checker.path": [
+    "${workspaceFolder}/opt/venv/bin/mypy"
+  ],
+  "mypy-type-checker.interpreter": [
+    "${workspaceFolder}/opt/venv/bin/python"
+  ],
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "mypy-type-checker.args": [
+    "--config-file",
+    "${workspaceFolder}/mypy.ini"
+  ]
 }

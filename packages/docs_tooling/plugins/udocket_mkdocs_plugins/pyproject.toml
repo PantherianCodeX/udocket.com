@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "udocket-mkdocs-plugins"
+version = "0.1.0"
+description = "uDocket MkDocs plugins (image scaling, build asset inclusion)."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "uDocket Team" }]
+license = "MIT"
+dependencies = [
+    "mkdocs>=1.5",
+]
+
+[project.entry-points."mkdocs.plugins"]
+auto-image-scale = "udocket_mkdocs_plugins.auto_image_scale.plugin:AutoImageScalePlugin"
+include-build-assets = "udocket_mkdocs_plugins.include_build_assets.plugin:IncludeBuildAssetsPlugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]

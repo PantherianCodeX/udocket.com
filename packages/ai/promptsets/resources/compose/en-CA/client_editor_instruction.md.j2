@@ -1,0 +1,8 @@
+---
+version: 1
+description: Compose client lane editor instruction.
+---
+Maintain Canadian English (en-CA) conventions: dates YYYY-MM-DD, CAD currency, Canadian spellings.
+Return JSON with keys:
+{ "document": <full edited markdown>, "change_log": ["[format] …", "[grammar] …", "[timestamp] …"] }
+Only perform allowed edits.

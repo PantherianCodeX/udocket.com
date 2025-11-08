@@ -1,0 +1,17 @@
+%% timeline-pipeline-v1.mmd
+%% Future timeline agent pipeline with targeted revisions
+flowchart TD
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
+    classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
+    classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
+
+    Input["Timeline inputs\n(transcript segments + timeline_v1.json)"]:::artifact
+    Normalize["Normalize diarised offsets\n& merge segments"]:::stage
+    Enrich["Enrich events\n(atoms, speakers, metadata)"]:::stage
+    QA["Timeline QA\n(schema + continuity)"]:::gate
+    Revision["Revision directives\n(event-level instructions)"]:::directive
+    Outputs["Analysis artifacts\n(timeline_seeds_v1.json, timeline_v2.json)"]:::artifact
+
+    Input --> Normalize --> Enrich --> QA --> Outputs
+    QA -->|issue| Revision --> Enrich

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 # pyright: strict
 import os
-import subprocess
 import re
-from typing import Any, Dict, List, Optional, TypedDict, cast
+import subprocess
+from typing import Any, TypedDict, cast
 
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest
@@ -20,7 +20,7 @@ class NavChild(TypedDict, total=False):
     key: str
     label: str
     href: str
-    patterns: List[str]
+    patterns: list[str]
     active: bool
 
 
@@ -28,15 +28,15 @@ class NavItem(TypedDict, total=False):
     key: str
     label: str
     href: str
-    patterns: List[str]
-    children: List[NavChild]
+    patterns: list[str]
+    children: list[NavChild]
     active: bool
 
 
-def _normalize_patterns(raw: Any) -> List[str]:
+def _normalize_patterns(raw: Any) -> list[str]:
     if isinstance(raw, list):
-        patterns: List[str] = []
-        for candidate_obj in cast(List[object], raw):
+        patterns: list[str] = []
+        for candidate_obj in cast(list[object], raw):
             if isinstance(candidate_obj, (str, bytes)):
                 patterns.append(str(candidate_obj))
         return patterns
@@ -45,23 +45,23 @@ def _normalize_patterns(raw: Any) -> List[str]:
     return []
 
 
-def ui_context(request: HttpRequest) -> Dict[str, Any]:
+def ui_context(request: HttpRequest) -> dict[str, Any]:
     """Inject active organization and choices into templates."""
 
-    active_org: Optional[Organization] = None
+    active_org: Organization | None = None
     try:
         active_org = resolve_request_organization(request, required=False)
     except PermissionDenied:
         active_org = None
 
-    org_choices: List[Organization] = []
+    org_choices: list[Organization] = []
     user = getattr(request, "user", None)
     if user and getattr(user, "is_authenticated", False):
         org_choices = list(user_accessible_organizations(user))
 
     path = getattr(request, "path", "") or ""
 
-    nav_items: List[NavItem] = [
+    nav_items: list[NavItem] = [
         {
             "key": "cases",
             "label": "Cases",
@@ -106,7 +106,7 @@ def ui_context(request: HttpRequest) -> Dict[str, Any]:
         patterns = _normalize_patterns(item.get("patterns"))
         active = any(re.search(pattern, path) for pattern in patterns)
         children = item.get("children") or []
-        normalized_children: List[NavChild] = []
+        normalized_children: list[NavChild] = []
         for child in children:
             child_patterns = _normalize_patterns(child.get("patterns"))
             child_active = any(re.search(pattern, path) for pattern in child_patterns)
@@ -126,7 +126,7 @@ def ui_context(request: HttpRequest) -> Dict[str, Any]:
     }
 
 
-def app_version(_: HttpRequest) -> Dict[str, str]:
+def app_version(_: HttpRequest) -> dict[str, str]:
     """Expose build/version string for footer display."""
 
     build = os.getenv("APP_BUILD")
@@ -138,7 +138,9 @@ def app_version(_: HttpRequest) -> Dict[str, str]:
         return {"APP_BUILD": sha[:12]}
 
     try:
-        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        )
         return {"APP_BUILD": out.decode("utf-8").strip()}
     except Exception:
         return {"APP_BUILD": "dev"}

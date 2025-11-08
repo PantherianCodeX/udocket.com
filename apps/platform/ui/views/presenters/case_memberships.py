@@ -1,26 +1,32 @@
- 
 """Helpers for presenting case membership assignments."""
-from __future__ import annotations
 
-from typing import Dict, List, Optional
+from __future__ import annotations
 
 from apps.platform.cases.models import Case, CaseMembership
 
 from ..presenters.utils import user_label
 
 
-def case_owner_memberships(memberships: List[CaseMembership]) -> List[CaseMembership]:
+def case_owner_memberships(memberships: list[CaseMembership]) -> list[CaseMembership]:
     """Return owner memberships with users attached."""
 
-    return [membership for membership in memberships if membership.role == CaseMembership.Role.OWNER and membership.user]
+    return [
+        membership
+        for membership in memberships
+        if membership.role == CaseMembership.Role.OWNER and membership.user
+    ]
 
 
-def case_owner_labels(memberships: List[CaseMembership]) -> List[str]:
-    return [user_label(membership.user) for membership in case_owner_memberships(memberships) if membership.user]
+def case_owner_labels(memberships: list[CaseMembership]) -> list[str]:
+    return [
+        user_label(membership.user)
+        for membership in case_owner_memberships(memberships)
+        if membership.user
+    ]
 
 
-def case_owner_details(memberships: List[CaseMembership]) -> List[Dict[str, str]]:
-    details: List[Dict[str, str]] = []
+def case_owner_details(memberships: list[CaseMembership]) -> list[dict[str, str]]:
+    details: list[dict[str, str]] = []
     for membership in case_owner_memberships(memberships):
         user = membership.user
         if not user:
@@ -34,11 +40,13 @@ def case_owner_details(memberships: List[CaseMembership]) -> List[Dict[str, str]
     return details
 
 
-def case_assignment_lists(case: Case, memberships: Optional[List[CaseMembership]] = None) -> Dict[str, List[Dict[str, str]]]:
+def case_assignment_lists(
+    case: Case, memberships: list[CaseMembership] | None = None
+) -> dict[str, list[dict[str, str]]]:
     memberships = memberships or list(case.memberships.select_related("user"))
-    reviewers: List[Dict[str, str]] = []
-    clients: List[Dict[str, str]] = []
-    owners: List[Dict[str, str]] = []
+    reviewers: list[dict[str, str]] = []
+    clients: list[dict[str, str]] = []
+    owners: list[dict[str, str]] = []
     for membership in memberships:
         user = membership.user
         if not user:

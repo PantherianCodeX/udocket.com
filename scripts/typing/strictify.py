@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -47,7 +46,11 @@ def add_strict(text: str) -> str:
         insertion_index = 1
 
     # skip encoding comments
-    while insertion_index < len(lines) and lines[insertion_index].startswith("#") and "coding" in lines[insertion_index]:
+    while (
+        insertion_index < len(lines)
+        and lines[insertion_index].startswith("#")
+        and "coding" in lines[insertion_index]
+    ):
         insertion_index += 1
 
     # avoid duplicate blank lines
@@ -79,8 +82,12 @@ def strictify_file(path: Path, *, dry_run: bool) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Add # pyright: strict to Python modules.")
     parser.add_argument("targets", nargs="+", type=Path, help="Files or directories to process.")
-    parser.add_argument("--dry-run", action="store_true", help="Show files that need updates without editing them.")
-    parser.add_argument("--check", action="store_true", help="Exit with 1 if any file is missing the strict pragma.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show files that need updates without editing them."
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="Exit with 1 if any file is missing the strict pragma."
+    )
     args = parser.parse_args()
 
     files = list(iter_python_files(args.targets))
@@ -113,7 +120,7 @@ def main() -> int:
             name=HELPER_NAME,
             version=HELPER_VERSION,
             status="ok",
-            last_run=datetime.now(timezone.utc),
+            last_run=datetime.now(UTC),
         )
         save_manifest(manifest)
 

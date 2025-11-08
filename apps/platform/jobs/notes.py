@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Iterable, List, Dict
+from collections.abc import Iterable
 
 from .models import JobNote
 
@@ -15,7 +14,7 @@ def _isoformat_value(dt) -> str | None:
         return dt.isoformat()
 
 
-def serialize_note(note: JobNote) -> Dict[str, str | None]:
+def serialize_note(note: JobNote) -> dict[str, str | None]:
     return {
         "id": str(note.id),
         "text": note.text,
@@ -25,5 +24,5 @@ def serialize_note(note: JobNote) -> Dict[str, str | None]:
     }
 
 
-def serialize_notes(notes: Iterable[JobNote]) -> List[Dict[str, str | None]]:
+def serialize_notes(notes: Iterable[JobNote]) -> list[dict[str, str | None]]:
     return [serialize_note(note) for note in notes]

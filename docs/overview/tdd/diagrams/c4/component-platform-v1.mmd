@@ -1,0 +1,30 @@
+%% Mermaid C4 component diagram for the uDocket web application tier
+
+%% Keep this in sync with docs/src/overview/tdd.md §3.1 component breakdown
+
+C4Container
+    title uDocket Web Application Components (v1)
+
+    Container_Boundary(Web, "Web App", "Django ASGI") {
+        Component(API, "REST API", "Django REST Framework", "Case management + approvals")
+        Component(SSE, "SSE Publisher", "Channels layer", "Streams job/case updates")
+        Component(Portal, "Client Portal", "Django templates", "Client document delivery")
+        Component(Admin, "Staff UI", "React", "Operations tooling")
+        Component(Auth, "Auth Middleware", "Keycloak OIDC", "Session + org scoping")
+    }
+
+    ComponentDb(DB, "Postgres", "RDS", "RLS enforced DB")
+    ComponentQueue(Queue, "Redis/Celery", "Redis", "Task distribution")
+    Component_Ext(SettingsAPI, "Settings Service", "FastAPI", "Settings snapshots")
+    Component_Ext(GuardianAPI, "Guardian", "FastAPI", "READY/QUARANTINED decisions")
+    Component_Ext(LPEAPI, "Localization & Policy", "FastAPI", "PolicyContext lookup")
+
+    Rel(API, Queue, "Dispatch jobs", "AMQP")
+    Rel(SSE, Queue, "Consume job updates", "Redis")
+    Rel(Admin, API, "REST/JSON")
+    Rel(Portal, API, "REST/JSON")
+    Rel(Auth, SettingsAPI, "Fetch org settings")
+    Rel(API, GuardianAPI, "Submit artifact for review")
+    Rel(API, LPEAPI, "Fetch PolicyContext")
+    Rel(API, DB, "RLS queries", "SQL")
+    Rel(SSE, DB, "Read latest state", "SQL")

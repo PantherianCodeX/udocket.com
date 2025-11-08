@@ -1,0 +1,24 @@
+%% pipeline-overview-v1.mmd
+flowchart LR
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
+    classDef artifact fill:#ecf8ff,stroke:#2684ff,stroke-width:1.2px,color:#111;
+
+    Intake["Case Intake / Audio Upload"]:::stage
+    Transcribe["Transcribe Pipeline"]:::stage
+    Analyze["Analyze Pipeline"]:::stage
+    Atoms["Atoms Index"]:::artifact
+    Compose["Compose Pipeline"]:::stage
+    Guardian["Guardian & QA Gates"]:::gate
+    Deliver["Deliverables + Manifests"]:::artifact
+
+    Intake -->|Audio file / Intake data| Transcribe
+    Transcribe -->|`transcript.txt` + `transcript_v1.json`| Analyze
+    Analyze -->|Canonical analysis artifacts| Compose
+    Analyze -. feeds .-> Atoms
+    Atoms -. citations .-> Compose
+    Compose --> Guardian --> Deliver
+
+    Guardian -. waiver / retry .-> Compose
+    Analyze -. rerun lanes .-> Analyze
+    Transcribe -. retry policy .-> Transcribe

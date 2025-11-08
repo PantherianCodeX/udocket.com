@@ -1,9 +1,11 @@
 # pyright: strict
 """Case tool panel presenter helpers."""
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from django.urls import reverse
 
@@ -14,8 +16,8 @@ from apps.platform.jobs.notes import serialize_notes
 
 from ..constants import CASE_JOB_TABLE_COLUMNS, DEFAULT_TABLE_FILTERS, GLOBAL_JOB_TABLE_COLUMNS
 from ..presenters.alerts import build_case_team_alerts
-from ..presenters.utils import render_notes_panel_html, status_class, user_label
 from ..presenters.jobs import friendly_job_title, jobs_by_agent
+from ..presenters.utils import render_notes_panel_html, status_class, user_label
 from .analysis_llm import build_analysis_llm_context
 from .case_fields import prepare_case_fields
 from .case_memberships import case_owner_labels, case_owner_memberships
@@ -27,24 +29,24 @@ def table_config(
     panel_key: str,
     title: str,
     pill: str | None,
-    rows: Sequence[Dict[str, Any]],
-    columns: Sequence[Dict[str, Any]],
+    rows: Sequence[dict[str, Any]],
+    columns: Sequence[dict[str, Any]],
     column_ids: Sequence[str],
-    filters: Sequence[Dict[str, Any]],
+    filters: Sequence[dict[str, Any]],
     empty_message: str,
     show_identifiers: bool,
     case_id: str,
-    limit_value: Optional[int] = None,
+    limit_value: int | None = None,
     limit_options: Sequence[int] | None = None,
-    total_count: Optional[int] = None,
-    pagination: Optional[Dict[str, Any]] = None,
-    param_prefix: Optional[str] = None,
-    filter_param_names: Optional[Sequence[str]] = None,
+    total_count: int | None = None,
+    pagination: dict[str, Any] | None = None,
+    param_prefix: str | None = None,
+    filter_param_names: Sequence[str] | None = None,
     filters_active: int = 0,
     has_advanced_filters: bool = False,
-) -> Dict[str, Any]:
-    filter_lookup: Dict[str, Dict[str, Any]] = {}
-    filters_list: List[Dict[str, Any]] = []
+) -> dict[str, Any]:
+    filter_lookup: dict[str, dict[str, Any]] = {}
+    filters_list: list[dict[str, Any]] = []
     for item in filters:
         entry = dict(item)
         key = entry.get("key") or entry.get("id")
@@ -53,7 +55,7 @@ def table_config(
             filter_lookup[key] = entry
         filters_list.append(entry)
     pagination_payload = dict(pagination or {})
-    columns_payload: List[Dict[str, Any]] = []
+    columns_payload: list[dict[str, Any]] = []
     for column in columns:
         column_payload = dict(column)
         filter_id = column_payload.get("filter_id")
@@ -72,11 +74,21 @@ def table_config(
     pagination_payload.setdefault("page_size", default_page_size)
     pagination_payload.setdefault("start", pagination_payload.get("start", 0))
     pagination_payload.setdefault("end", pagination_payload.get("end", 0))
-    pagination_payload.setdefault("has_previous", pagination_payload.get("has_previous", default_page > 1))
-    pagination_payload.setdefault("has_next", pagination_payload.get("has_next", default_page < default_pages))
-    pagination_payload.setdefault("previous_page", pagination_payload.get("previous_page", max(default_page - 1, 1)))
-    pagination_payload.setdefault("next_page", pagination_payload.get("next_page", min(default_page + 1, default_pages)))
-    pagination_payload.setdefault("display_count", pagination_payload.get("display_count", len(rows)))
+    pagination_payload.setdefault(
+        "has_previous", pagination_payload.get("has_previous", default_page > 1)
+    )
+    pagination_payload.setdefault(
+        "has_next", pagination_payload.get("has_next", default_page < default_pages)
+    )
+    pagination_payload.setdefault(
+        "previous_page", pagination_payload.get("previous_page", max(default_page - 1, 1))
+    )
+    pagination_payload.setdefault(
+        "next_page", pagination_payload.get("next_page", min(default_page + 1, default_pages))
+    )
+    pagination_payload.setdefault(
+        "display_count", pagination_payload.get("display_count", len(rows))
+    )
     pagination_payload.setdefault("first_page", pagination_payload.get("first_page", 1))
     pagination_payload.setdefault("last_page", pagination_payload.get("last_page", default_pages))
 
@@ -106,7 +118,9 @@ def table_config(
     }
 
 
-def status_payload(progress_lookup: Dict[str, Dict[str, Any]], key: str, default_status: str = "Created") -> Dict[str, Any]:
+def status_payload(
+    progress_lookup: dict[str, dict[str, Any]], key: str, default_status: str = "Created"
+) -> dict[str, Any]:
     item = progress_lookup.get(key)
     if not item:
         return {
@@ -127,31 +141,31 @@ def build_tool_panels(
     case: Case,
     *,
     jobs: Sequence[Job],
-    progress_items: List[Dict[str, Any]],
-    job_rows: List[Dict[str, Any]],
-    telemetry_map: Dict[str, Dict[str, Any]],
-    transcript_artifacts: Dict[str, CaseArtifact],
-    analysis_modules: List[Dict[str, Any]],
-    artifacts: List[Dict[str, Any]],
-    memberships: List[CaseMembership],
-    latest_job: Optional[Job],
-    latest_job_telemetry: Optional[Dict[str, Any]],
-    job_summary: Dict[str, Any],
-    all_job_rows: Optional[List[Dict[str, Any]]] = None,
-    job_summary_last_dt: Optional[datetime] = None,
+    progress_items: list[dict[str, Any]],
+    job_rows: list[dict[str, Any]],
+    telemetry_map: dict[str, dict[str, Any]],
+    transcript_artifacts: dict[str, CaseArtifact],
+    analysis_modules: list[dict[str, Any]],
+    artifacts: list[dict[str, Any]],
+    memberships: list[CaseMembership],
+    latest_job: Job | None,
+    latest_job_telemetry: dict[str, Any] | None,
+    job_summary: dict[str, Any],
+    all_job_rows: list[dict[str, Any]] | None = None,
+    job_summary_last_dt: datetime | None = None,
     user_can_review: bool = False,
     return_url: str = "",
     job_row_limit: int = 25,
     job_row_total: int = 0,
     job_limit_choices: Sequence[int] = (),
-    job_filters: Optional[Sequence[Dict[str, Any]]] = None,
-    job_pagination: Optional[Dict[str, Any]] = None,
-    job_param_prefix: Optional[str] = None,
-    job_param_names: Optional[Sequence[str]] = None,
+    job_filters: Sequence[dict[str, Any]] | None = None,
+    job_pagination: dict[str, Any] | None = None,
+    job_param_prefix: str | None = None,
+    job_param_names: Sequence[str] | None = None,
     job_has_advanced_filters: bool = False,
     job_filters_active: int = 0,
     active_key: str | None = None,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     progress_lookup = {item["key"]: item for item in progress_items}
     analysis_lookup = {module["key"]: module for module in analysis_modules}
     team_alerts = build_case_team_alerts(case, jobs)
@@ -164,9 +178,9 @@ def build_tool_panels(
         "count": 0,
     }
 
-    def _panel_from_definition(definition_key: str) -> Dict[str, Any]:
+    def _panel_from_definition(definition_key: str) -> dict[str, Any]:
         definition = get_tool_definition(definition_key)
-        panel: Dict[str, Any] = {
+        panel: dict[str, Any] = {
             "key": definition.key,
             "label": definition.label,
             "description": definition.description,
@@ -182,7 +196,7 @@ def build_tool_panels(
         panel["notes_enabled"] = definition.notes_enabled
         return panel
 
-    def _notes_panel(notes: Dict[str, Any]) -> str:
+    def _notes_panel(notes: dict[str, Any]) -> str:
         return render_notes_panel_html(
             job_id=notes.get("job_id"),
             entries=notes.get("entries"),
@@ -203,7 +217,7 @@ def build_tool_panels(
 
     all_rows_iterable = all_job_rows or job_rows
 
-    transcript_sources: List[Dict[str, Any]] = []
+    transcript_sources: list[dict[str, Any]] = []
     for row in all_rows_iterable:
         job = row.get("job")
         telem = row.get("telemetry") or {}
@@ -212,11 +226,13 @@ def build_tool_panels(
         job_id = str(getattr(job, "id", ""))
         if not job_id:
             continue
-        agent = (telem.get("agent") or {})
+        agent = telem.get("agent") or {}
         agent_type = str(agent.get("type") or "").lower()
         meta = telem.get("metadata") or {}
         job_kind = str(meta.get("job_kind") or "").lower()
-        if not any(word in agent_type for word in ("transcription", "speech", "audio")) and not job_kind.startswith("audio"):
+        if not any(
+            word in agent_type for word in ("transcription", "speech", "audio")
+        ) and not job_kind.startswith("audio"):
             continue
         transcript_payload = telem.get("transcript") or {}
         path = transcript_payload.get("path")
@@ -236,26 +252,36 @@ def build_tool_panels(
             }
         )
 
-    artifacts_by_type: Dict[str, List[Dict[str, Any]]] = {}
+    artifacts_by_type: dict[str, list[dict[str, Any]]] = {}
     for artifact in artifacts:
         artifacts_by_type.setdefault(str(artifact.get("type", "")).upper(), []).append(artifact)
 
     for bucket in ("SUMMARY", "TIMELINE", "TRANSCRIPT", "QUESTIONNAIRE"):
         artifacts_by_type.setdefault(bucket, [])
 
-    panels: Dict[str, Dict[str, Any]] = {}
+    panels: dict[str, dict[str, Any]] = {}
 
     case_status = status_payload(progress_lookup, "case_setup")
     field_map = {field["name"]: field for field in case_fields}
-    field_groups: List[Dict[str, Any]] = []
+    field_groups: list[dict[str, Any]] = []
 
-    def _group(label: str, keys: List[str]) -> None:
+    def _group(label: str, keys: list[str]) -> None:
         items = [field_map[key] for key in keys if key in field_map]
         if items:
             field_groups.append({"title": label, "fields": items})
 
     _group("Case Overview", ["title", "client_name", "client_position", "opposing_party"])
-    _group("Scheduling & Court", ["court_location", "court_level", "court_division", "court_case_number", "court_date", "filing_deadline"])
+    _group(
+        "Scheduling & Court",
+        [
+            "court_location",
+            "court_level",
+            "court_division",
+            "court_case_number",
+            "court_date",
+            "filing_deadline",
+        ],
+    )
     _group("Client Notes", ["notes"])
 
     representation_choices = list(Case.Representation.choices)
@@ -369,7 +395,9 @@ def build_tool_panels(
     panels[case_panel["key"]] = case_panel
 
     transcription_status = status_payload(progress_lookup, "transcription", "Not Started")
-    transcription_jobs = jobs_by_agent(job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True)
+    transcription_jobs = jobs_by_agent(
+        job_rows, keywords=("transcription", "speech", "audio"), include_conversion=True
+    )
 
     transcribe_panel = _panel_from_definition("transcribe")
     transcribe_panel.update(
@@ -394,7 +422,11 @@ def build_tool_panels(
         latest_job_title = None
         latest_downloads: list[dict[str, Any]] = []
         if latest_job:
-            latest_artifact = (transcript_artifacts or {}).get(str(latest_job.id)) if transcript_artifacts else None
+            latest_artifact = (
+                (transcript_artifacts or {}).get(str(latest_job.id))
+                if transcript_artifacts
+                else None
+            )
             latest_job_title = friendly_job_title(
                 latest_job,
                 latest_job_telemetry,
@@ -404,15 +436,16 @@ def build_tool_panels(
             downloads = (latest_payload or {}).get("downloads") or []
             latest_downloads = [download for download in downloads if download.get("url")]
 
-        notes_payload = next((row.get("notes") for row in job_rows if row.get("job") == latest_job), None)
+        notes_payload = next(
+            (row.get("notes") for row in job_rows if row.get("job") == latest_job), None
+        )
         transcribe_notes = notes_payload or empty_notes.copy()
         if latest_job:
             serialized_notes = serialize_notes(JobNote.objects.filter(job=latest_job))
             latest_entry = serialized_notes[0] if serialized_notes else None
             updated_at = latest_entry.get("created_at") if latest_entry else None
             updated_by = (
-                latest_entry.get("created_by_label")
-                or latest_entry.get("created_by")
+                latest_entry.get("created_by_label") or latest_entry.get("created_by")
                 if latest_entry
                 else None
             )
@@ -486,13 +519,14 @@ def build_tool_panels(
     if not return_url:
         return_url = reverse("ui-case-detail", kwargs={"case_id": case.id})
 
-    analysis_llm_cache: Dict[str, Any] | None = None
+    analysis_llm_cache: dict[str, Any] | None = None
 
-    def _analysis_llm() -> Dict[str, Any]:
+    def _analysis_llm() -> dict[str, Any]:
         nonlocal analysis_llm_cache
         if analysis_llm_cache is None:
             analysis_llm_cache = build_analysis_llm_context(case, return_url=return_url)
         return analysis_llm_cache
+
     analyze_status = status_payload(progress_lookup, "analyze", "Not Started")
     analyze_module = analysis_lookup.get("analyze") or {}
     analyze_latest = analyze_module.get("latest") or {}
@@ -514,11 +548,16 @@ def build_tool_panels(
     )
     analyze_panel["meta"] = [
         {"label": "Summaries", "value": len(analyze_history) + (1 if analyze_latest else 0)},
-        {"label": "Approved transcripts", "value": sum(1 for src in transcript_sources if src.get("approved"))},
+        {
+            "label": "Approved transcripts",
+            "value": sum(1 for src in transcript_sources if src.get("approved")),
+        },
     ]
     analyze_notes = analyze_module.get("notes") or empty_notes.copy()
     analyze_panel["notes"] = analyze_notes
-    analyze_panel["notes_panel_html"] = analyze_module.get("notes_panel_html") if _expand("analyze") else ""
+    analyze_panel["notes_panel_html"] = (
+        analyze_module.get("notes_panel_html") if _expand("analyze") else ""
+    )
     if _expand("analyze"):
         llm_map = _analysis_llm()
         analyze_panel["body_context"] = {
@@ -591,7 +630,9 @@ def build_tool_panels(
     ]
     compose_notes = compose_module.get("notes") or empty_notes.copy()
     compose_panel["notes"] = compose_notes
-    compose_panel["notes_panel_html"] = compose_module.get("notes_panel_html") if _expand("compose") else ""
+    compose_panel["notes_panel_html"] = (
+        compose_module.get("notes_panel_html") if _expand("compose") else ""
+    )
     if _expand("compose"):
         llm_map = _analysis_llm()
         compose_panel["body_context"] = {
@@ -653,13 +694,15 @@ def build_tool_panels(
     return panels
 
 
-def _organization_member_options(case: Case) -> List[Dict[str, str]]:
-    options: List[Dict[str, str]] = []
+def _organization_member_options(case: Case) -> list[dict[str, str]]:
+    options: list[dict[str, str]] = []
     for membership in case.organization.memberships.select_related("user"):
         user = membership.user
         if not user:
             continue
-        options.append({"value": str(user.id), "label": getattr(user, "display_name", user.username)})
+        options.append(
+            {"value": str(user.id), "label": getattr(user, "display_name", user.username)}
+        )
     return options
 
 

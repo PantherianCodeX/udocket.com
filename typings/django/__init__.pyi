@@ -5,7 +5,7 @@
 
 from .http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse, Http404, QueryDict
 # Re-export commonly imported submodules to satisfy "from django import template/shortcuts"
-from . import template, shortcuts
+from . import template, shortcuts, utils
 
 __all__ = [
     "HttpRequest",
@@ -16,4 +16,5 @@ __all__ = [
     "QueryDict",
     "template",
     "shortcuts",
+    "utils",
 ]

@@ -1,0 +1,40 @@
+error_codes:
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Idempotency payload hash mismatch or stale version when retrying job controls."
+    client_action: "Re-fetch job state, regenerate the Idempotency-Key, and retry once with the updated payload."
+    related_metrics:
+      - job_api_error_total
+      - idempotency_conflict_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Guardian or residency guard, or a budget hold, prevented job execution."
+    client_action: "Surface Guardian reason or budget hold, remediate policy or quota before retrying."
+    related_metrics:
+      - job_api_error_total
+  - code: INTEGRITY_ERROR
+    http_status: 412
+    audit_required: true
+    description: "Upload finalize detected a hash mismatch against staged content."
+    client_action: "Re-upload chunks with the correct digest and avoid blind retries until integrity matches."
+    related_metrics:
+      - job_api_error_total
+      - upload_finalize_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "Downstream provider or queue paused (PAUSED_AWAITING_PROVIDER, circuit open)."
+    client_action: "Respect backoff, surface degraded status to operators, and retry when health probes recover."
+    related_metrics:
+      - job_api_error_total
+      - job_dependency_degraded_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Org or job-kind concurrency ceiling exceeded."
+    client_action: "Honor Retry-After, queue retries with exponential backoff, and reduce burst size."
+    related_metrics:
+      - job_api_error_total
+      - job_rate_limit_total

@@ -1,0 +1,53 @@
+error_codes:
+  - code: SCHEMA_POLICY_BLOCK
+    http_status: 400
+    audit_required: false
+    description: "Request payload failed schema validation or was missing required policy context."
+    client_action: "Fix the payload, rerun submission; repeated failures escalate to RB-GUARD-QUEUE."
+    related_metrics:
+      - guardian_api_error_total
+      - guardian_detector_errors_total
+  - code: RESIDENCY_POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Residency or waiver policy prohibits processing (for example, provider drift or missing attestation)."
+    client_action: "Coordinate with Settings or Reference Manager waivers, update residency catalog, and retry once cleared."
+    related_metrics:
+      - guardian_api_error_total
+      - guardian_policy_block_total
+  - code: POLICY_FORBIDDEN_PATTERN
+    http_status: 403
+    audit_required: true
+    description: "Detectors matched forbidden content such as PII/PHI patterns, legal hold signals, or leakage."
+    client_action: "Follow Guardian remediation guidance, redact or waive content before resubmission."
+    related_metrics:
+      - guardian_policy_block_total
+  - code: CLASSIFIER_LOW_CONFIDENCE
+    http_status: 409
+    audit_required: true
+    description: "ML detectors produced low-confidence spans that require manual review."
+    client_action: "Surface the decision to reviewers; expect WARN/manual decision instead of automatic retry."
+    related_metrics:
+      - guardian_api_error_total
+  - code: PARENT_NOT_APPROVED
+    http_status: 409
+    audit_required: true
+    description: "Upstream artifact reverted or lacks PASS while a dependant artifact was submitted."
+    client_action: "Approve or restore the parent artifact, then resubmit once lineage is consistent."
+    related_metrics:
+      - guardian_api_error_total
+  - code: GUARDIAN_SUBMISSION_TIMEOUT
+    http_status: 503
+    audit_required: true
+    description: "Queue processing exceeded timeout or a detector became unavailable."
+    client_action: "Workers auto-retry; clients may poll status; escalate if repeated via guardian_submission_timeout_total."
+    related_metrics:
+      - guardian_submission_timeout_total
+  - code: QUARANTINED
+    http_status: 423
+    audit_required: true
+    description: "Guardian quarantined the artifact due to detector or policy breach."
+    client_action: "Resolve the root cause, obtain manual clearance via POST /guardian/quarantine, then rerun the pipeline."
+    related_metrics:
+      - guardian_api_error_total
+      - guardian_policy_block_total

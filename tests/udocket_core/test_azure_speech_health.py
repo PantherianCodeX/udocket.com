@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from packages.udocket_core.agents.common.azure_speech import (
+from packages.core.agents.common.azure_speech import (
     AzureSpeechHealthConfig,
     ensure_azure_speech_health,
 )

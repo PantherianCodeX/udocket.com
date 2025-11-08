@@ -1,15 +1,12 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Sequence
+
+from collections.abc import Sequence
+from typing import Any
 from urllib.parse import quote
 
 from django.urls import reverse
 
 from apps.platform.cases.models import Case
-from packages.udocket_core.agents.compose import COMPOSE_STAGE_PROFILES
-from packages.udocket_core.agents.analyze_lib import ANALYZE_STAGE_PROFILES, AnalyzeConfig
-from packages.udocket_core.llm import load_llm_settings
-from packages.udocket_core.utils.json import stringify_json
-
 from apps.platform.operations.llm import (
     build_provider_registry,
     ensure_default_llm_configuration,
@@ -18,10 +15,16 @@ from apps.platform.operations.llm import (
     get_org_provider_credentials,
     load_provider_catalog,
 )
+from packages.common.json_utils import stringify_json
+from packages.core.agents.analyze_lib import ANALYZE_STAGE_PROFILES, AnalyzeConfig
+from packages.core.agents.compose import COMPOSE_STAGE_PROFILES
+from packages.core.llm import load_llm_settings
 
 
-def collect_provider_chain(provider_chain: Sequence[str], default_chain: Sequence[str]) -> List[str]:
-    sequence: List[str] = []
+def collect_provider_chain(
+    provider_chain: Sequence[str], default_chain: Sequence[str]
+) -> list[str]:
+    sequence: list[str] = []
     for name in provider_chain:
         value = str(name or "").strip().lower()
         if value and value not in sequence:
@@ -32,7 +35,7 @@ def collect_provider_chain(provider_chain: Sequence[str], default_chain: Sequenc
     return sequence
 
 
-def _stage_profile_hint(stage_key: str, *, target: str) -> Dict[str, Any] | None:
+def _stage_profile_hint(stage_key: str, *, target: str) -> dict[str, Any] | None:
     if target in {"summary", "analyze"}:
         profile = ANALYZE_STAGE_PROFILES.get(stage_key)
     elif target == "compose":
@@ -50,8 +53,10 @@ def _stage_profile_hint(stage_key: str, *, target: str) -> Dict[str, Any] | None
     }
 
 
-def _stage_definitions_for_target(*, llm_settings, target: str, stage_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, str]]:
-    stage_defs: List[Dict[str, str]] = []
+def _stage_definitions_for_target(
+    *, llm_settings, target: str, stage_map: dict[str, dict[str, Any]]
+) -> list[dict[str, str]]:
+    stage_defs: list[dict[str, str]] = []
     seen: set[str] = set()
 
     for assignment in llm_settings.assignments.values():
@@ -66,7 +71,7 @@ def _stage_definitions_for_target(*, llm_settings, target: str, stage_map: Dict[
         )
         seen.add(assignment.stage_key)
 
-    for raw_key in stage_map.keys():
+    for raw_key in stage_map:
         stage_key = str(raw_key)
         if stage_key in seen:
             continue
@@ -76,14 +81,20 @@ def _stage_definitions_for_target(*, llm_settings, target: str, stage_map: Dict[
     return stage_defs
 
 
-def build_llm_stage_configs(*, target: str, llm_settings, stage_map: Dict[str, Dict[str, Any]], provider_registry: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_llm_stage_configs(
+    *,
+    target: str,
+    llm_settings,
+    stage_map: dict[str, dict[str, Any]],
+    provider_registry: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
     stage_map = stage_map or {}
     stage_defs = _stage_definitions_for_target(
         llm_settings=llm_settings,
         target=target,
         stage_map=stage_map,
     )
-    stage_configs: List[Dict[str, Any]] = []
+    stage_configs: list[dict[str, Any]] = []
 
     for stage in stage_defs:
         stage_key = stage.get("key")
@@ -96,8 +107,10 @@ def build_llm_stage_configs(*, target: str, llm_settings, stage_map: Dict[str, D
             if assignment and assignment.providers
             else (provider_configs[0]["value"] if provider_configs else "azure")
         )
-        selected_model = assignment.model if assignment and getattr(assignment, "model", None) else ""
-        selected_options: Dict[str, Any] = dict(assignment.options) if assignment else {}
+        selected_model = (
+            assignment.model if assignment and getattr(assignment, "model", None) else ""
+        )
+        selected_options: dict[str, Any] = dict(assignment.options) if assignment else {}
         selected_max_tokens: int | None = None
 
         override_payload = stage_map.get(stage_key)
@@ -140,7 +153,9 @@ def build_llm_stage_configs(*, target: str, llm_settings, stage_map: Dict[str, D
     return stage_configs
 
 
-def _build_llm_urls(target: str, *, return_url: str, active_config: Dict[str, Any] | None) -> Dict[str, str]:
+def _build_llm_urls(
+    target: str, *, return_url: str, active_config: dict[str, Any] | None
+) -> dict[str, str]:
     encoded_return_url = quote(return_url, safe="")
 
     def _with_next(url: str) -> str:
@@ -163,8 +178,10 @@ def _build_llm_urls(target: str, *, return_url: str, active_config: Dict[str, An
     }
 
 
-def _configured_stages(stage_configs: List[Dict[str, Any]], stage_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    configured: List[Dict[str, Any]] = []
+def _configured_stages(
+    stage_configs: list[dict[str, Any]], stage_map: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    configured: list[dict[str, Any]] = []
     for stage in stage_configs:
         override = stage_map.get(stage["key"])
         if not override:
@@ -182,7 +199,7 @@ def _configured_stages(stage_configs: List[Dict[str, Any]], stage_map: Dict[str,
     return configured
 
 
-def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict[str, Any]]:
+def build_analysis_llm_context(case: Case, *, return_url: str) -> dict[str, dict[str, Any]]:
     try:
         analyze_cfg = AnalyzeConfig.from_env()
     except Exception:  # noqa: BLE001
@@ -200,7 +217,7 @@ def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict
 
     default_chain = list(analyze_cfg.provider_chain or ["azure"])
 
-    def _build_target(target: str) -> Dict[str, Any]:
+    def _build_target(target: str) -> dict[str, Any]:
         config_list = get_org_llm_configurations(str(case.organization_id), target=target)
         active_config = get_llm_configuration(
             organization_id=str(case.organization_id),
@@ -224,7 +241,9 @@ def build_analysis_llm_context(case: Case, *, return_url: str) -> Dict[str, Dict
             stage_map=stage_map,
             provider_registry=provider_registry,
         )
-        chain = collect_provider_chain(active_config.get("provider_chain", []) if active_config else [], default_chain)
+        chain = collect_provider_chain(
+            active_config.get("provider_chain", []) if active_config else [], default_chain
+        )
 
         return {
             "target": target,

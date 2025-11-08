@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+
 import pytest
-import os
+
+from config.paths import resolve_storage_root
 from tests._typing import SettingsFixture
 
 # E2E tests are expensive; skip entire module unless explicitly enabled
@@ -82,7 +84,7 @@ def test_audio_normalization_exercises_conversion(tmp_path):
     _ensure_ffmpeg()
     variants = _make_test_variants()
 
-    from packages.udocket_core.agents import normalize_audio
+    from packages.core.agents import normalize_audio
 
     # Already target format should not convert
     ok_local = _copy_to_tmp(variants["wav_ok"], tmp_path)
@@ -116,7 +118,7 @@ def test_transcription_agent_on_demand_e2e(tmp_path):
     case_dir = tmp_path / "storage" / "media" / "cases" / "CASE-E2E"
     case_dir.mkdir(parents=True, exist_ok=True)
 
-    from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig
+    from packages.core.agents import TranscriptionAgent, TranscriptionConfig
 
     cfg = TranscriptionConfig.from_env()
     agent = TranscriptionAgent(cfg)
@@ -175,7 +177,7 @@ def test_transcribe_task_on_demand_e2e(tmp_path, settings: SettingsFixture):
     case = Case.objects.create(id="CASE-E2E-TASK", title="E2E Transcribe Task", organization=org)
 
     # Place mp3 under the case's audio folder to mirror typical layout
-    case_audio_dir = Path(settings.STORAGE_ROOT) / "media" / "cases" / str(case.id) / "audio"
+    case_audio_dir = resolve_storage_root() / "media" / "cases" / str(case.id) / "audio"
     case_audio_dir.mkdir(parents=True, exist_ok=True)
     src_mp3 = variants["mp3_bad"]
     audio_path = case_audio_dir / f"{str('JOB-TASK')}__sample.mp3"
@@ -223,7 +225,7 @@ def test_transcribe_task_batch_diarization_e2e(tmp_path, settings: SettingsFixtu
 
     variants = _dialogue_variants()
     src_wav = variants["wav_ok"]
-    case_audio_dir = Path(settings.STORAGE_ROOT) / "media" / "cases" / str(case.id) / "audio"
+    case_audio_dir = resolve_storage_root() / "media" / "cases" / str(case.id) / "audio"
     case_audio_dir.mkdir(parents=True, exist_ok=True)
     audio_path = case_audio_dir / f"{'JOB-BATCH-DIAR'}__dialogue.wav"
     shutil.copy2(src_wav, audio_path)
@@ -270,7 +272,7 @@ def test_transcribe_task_batch_convert_and_diarize_e2e(tmp_path, settings: Setti
 
     variants = _dialogue_variants()
     src_bad = variants["m4a_bad"]
-    case_audio_dir = Path(settings.STORAGE_ROOT) / "media" / "cases" / str(case.id) / "audio"
+    case_audio_dir = resolve_storage_root() / "media" / "cases" / str(case.id) / "audio"
     case_audio_dir.mkdir(parents=True, exist_ok=True)
     audio_path = case_audio_dir / f"{'JOB-BATCH-CONV'}__dialogue.m4a"
     shutil.copy2(src_bad, audio_path)

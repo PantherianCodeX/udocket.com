@@ -1,24 +1,17 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import environ
 
+from apps.platform.config.runtime_checks import validate_runtime_configuration
+from config.paths import ensure_storage_root, resolve_repo_root
 from config.settings import settings
 
-BASE_DIR = Path(__file__).resolve().parents[4]  # repo root (/app)
+BASE_DIR = resolve_repo_root()
 env = environ.Env()
 
-storage_root_path = settings.ensure_storage_root()
-if not storage_root_path.exists():
-    fallback_root = (BASE_DIR / "storage").resolve()
-    try:
-        fallback_root.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-    else:
-        storage_root_path = fallback_root
+storage_root_path = ensure_storage_root()
 storage_config = settings.storage
 STORAGE_ROOT = str(storage_config.root)
 
@@ -37,9 +30,7 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "drf_spectacular",
-    "django_filters",
     "guardian",
-    "rules",
     "simple_history",
     "mozilla_django_oidc",
     "apps.platform.jobs.apps.JobsConfig",
@@ -209,10 +200,8 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "context": {
-            "()": "packages.udocket_core.logging.context_formatter.ContextualFormatter",
-            "fmt": (
-                "%(asctime)s %(levelname)s %(name)s: %(message)s%(context_suffix)s"
-            ),
+            "()": "packages.core.logging.context_formatter.ContextualFormatter",
+            "fmt": ("%(asctime)s %(levelname)s %(name)s: %(message)s%(context_suffix)s"),
             "defaults": {
                 "event": "-",
                 "component": "-",
@@ -288,3 +277,6 @@ OIDC_CASE_ID_FIELD = oidc_config.case_id_field
 OIDC_CASE_ROLE_FIELD = oidc_config.case_role_field
 OIDC_CASE_ROLE_MAP = dict(oidc_config.case_role_map)
 OIDC_CASE_DEFAULT_ROLE = oidc_config.case_default_role
+
+# Validate critical configuration at import time to fail fast when misconfigured.
+validate_runtime_configuration()

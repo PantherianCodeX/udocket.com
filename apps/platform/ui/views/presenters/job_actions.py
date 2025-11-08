@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # pyright: strict
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 from apps.platform.jobs.models import Job
 
@@ -10,12 +10,12 @@ from ..constants import CANCELABLE_STATUSES, RESTARTABLE_STATUSES
 
 
 def build_job_action_entries(
-    job: Optional[Job],
-    telemetry: Optional[JobTelemetryPayload],
+    job: Job | None,
+    telemetry: JobTelemetryPayload | None,
     *,
     can_review: bool,
     is_child: bool,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     if not job:
         return []
 
@@ -27,10 +27,10 @@ def build_job_action_entries(
     transcript_payload = as_dict(telem.get("transcript"))
     audio_payload = as_dict(telem.get("audio"))
 
-    artifact_entry: Optional[Dict[str, Any]] = None
+    artifact_entry: dict[str, Any] | None = None
     artifacts_raw = telem.get("artifacts")
     if isinstance(artifacts_raw, list):
-        for candidate in cast(List[Any], artifacts_raw):
+        for candidate in cast(list[Any], artifacts_raw):
             if isinstance(candidate, dict):
                 artifact_entry = as_dict(candidate)
                 break
@@ -40,14 +40,14 @@ def build_job_action_entries(
     source_job_id = meta.get("source_job_id")
     is_analyze = any(token in job_kind for token in ("analyze", "summary"))
 
-    sections: List[Dict[str, Any]] = []
+    sections: list[dict[str, Any]] = []
 
-    def _add_section(label: str) -> List[Dict[str, Any]]:
-        section: Dict[str, Any] = {"label": label, "items": []}
+    def _add_section(label: str) -> list[dict[str, Any]]:
+        section: dict[str, Any] = {"label": label, "items": []}
         sections.append(section)
         return section["items"]
 
-    workflow_items: List[Dict[str, Any]] = []
+    workflow_items: list[dict[str, Any]] = []
     if status in CANCELABLE_STATUSES:
         workflow_items.append(
             {
@@ -75,7 +75,7 @@ def build_job_action_entries(
     if workflow_items:
         _add_section("Workflow").extend(workflow_items)
 
-    review_items: List[Dict[str, Any]] = []
+    review_items: list[dict[str, Any]] = []
     if not is_analyze and can_review and status == Job.Status.SUCCEEDED:
         review_items.append(
             {
@@ -98,7 +98,7 @@ def build_job_action_entries(
     if review_items:
         _add_section("Review").extend(review_items)
 
-    files_items: List[Dict[str, Any]] = []
+    files_items: list[dict[str, Any]] = []
     if is_analyze:
         summary_artifact_id = meta.get("summary_artifact_id")
         if not summary_artifact_id and artifact_entry and artifact_entry.get("type") == "SUMMARY":
@@ -155,7 +155,7 @@ def build_job_action_entries(
     if files_items:
         _add_section("Files & Logs").extend(files_items)
 
-    detail_items: List[Dict[str, Any]] = []
+    detail_items: list[dict[str, Any]] = []
     if meta:
         detail_items.append(
             {
@@ -169,7 +169,7 @@ def build_job_action_entries(
     if detail_items:
         _add_section("Details").extend(detail_items)
 
-    navigation_items: List[Dict[str, Any]] = []
+    navigation_items: list[dict[str, Any]] = []
     if job_kind == "audio_conversion" and source_job_id:
         navigation_items.append(
             {
@@ -183,7 +183,7 @@ def build_job_action_entries(
         _add_section("Navigation").extend(navigation_items)
 
     if not is_child:
-        danger_items: List[Dict[str, Any]] = [
+        danger_items: list[dict[str, Any]] = [
             {
                 "label": "Delete job",
                 "action": "delete",

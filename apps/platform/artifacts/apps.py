@@ -1,3 +1,5 @@
+from importlib import import_module
+
 from django.apps import AppConfig
 
 
@@ -8,6 +10,6 @@ class ArtifactsConfig(AppConfig):
 
     def ready(self) -> None:  # pragma: no cover - import side effects
         try:
-            from . import signals  # noqa: F401
+            import_module("apps.platform.artifacts.signals")
         except Exception:
             pass

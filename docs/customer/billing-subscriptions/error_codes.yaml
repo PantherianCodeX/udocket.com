@@ -1,0 +1,33 @@
+error_codes:
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: Plan or subscription payload failed schema validation (pricing tiers, effective dates, billing contact data).
+    client_action: Correct the request body and rerun once validation passes; reference plan catalog guardrails.
+    related_metrics:
+      - billing_api_error_total
+      - billing_plan_update_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: true
+    description: Subscription state changed since the caller fetched it (pending change or grace period overlap).
+    client_action: Refresh subscription state, resolve pending changes, and resubmit with the latest version.
+    related_metrics:
+      - billing_api_error_total
+      - billing_subscription_conflict_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: Finance approval or compliance policy prevented plan activation or subscription change.
+    client_action: Obtain required Finance/Compliance approval, update Settings overrides, then retry.
+    related_metrics:
+      - billing_api_error_total
+      - billing_policy_block_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: External billing provider (Stripe) reported degraded health or webhook replay backlog.
+    client_action: Pause billing mutations, monitor provider status, and resume once health recovers; follow RB-BILLING-PAYMENT.
+    related_metrics:
+      - billing_api_error_total
+      - billing_payment_failed_total

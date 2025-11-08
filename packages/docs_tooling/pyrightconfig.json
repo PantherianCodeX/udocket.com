@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "include": [
+    "src/doc_tools"
+  ],
+  "reportMissingTypeStubs": "warning",
+  "reportMissingImports": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownArgumentType": "warning",
+  "reportUnknownParameterType": "warning",
+  "reportAttributeAccessIssue": "warning",
+  "executionEnvironments": [
+    {
+      "root": "src/doc_tools",
+      "extraPaths": ["..", "../..", "src"]
+    }
+  ]
+}

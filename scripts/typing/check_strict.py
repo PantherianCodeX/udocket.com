@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 if __package__ in {None, ""}:  # pragma: no cover - script entrypoint
     import sys as _sys
@@ -131,7 +131,9 @@ def _run_pyright(path: str, extra_args: Sequence[str], focus: bool) -> ToolResul
         print(payload_str, end="")
         return ToolResult(max(result.returncode, 1), 0)
 
-    filtered = [d for d in diagnostics if _pyright_relative_filter(str(d.get("filePath", "")), target)]
+    filtered = [
+        d for d in diagnostics if _pyright_relative_filter(str(d.get("filePath", "")), target)
+    ]
 
     if not filtered:
         print(f"pyright: no diagnostics for {path}")

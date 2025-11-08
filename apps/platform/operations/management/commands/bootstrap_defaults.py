@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Optional
+from typing import Any
 
 from django.core.management.base import BaseCommand, CommandParser
 
@@ -18,8 +18,10 @@ from apps.platform.operations.bootstrap import (
 
 class Command(BaseCommand):
     help = (
-        "Bootstrap the local platform using environment defaults (superuser, organization, presets). "
-        "Set PLATFORM_BOOTSTRAP_ENABLED=1 to run automatically or pass --force for a one-off execution."
+        "Bootstrap the local platform using environment defaults "
+        "(superuser, organization, presets). "
+        "Set PLATFORM_BOOTSTRAP_ENABLED=1 to run automatically "
+        "or pass --force for a one-off execution."
     )
 
     def add_arguments(self, parser: CommandParser) -> None:
@@ -37,7 +39,9 @@ class Command(BaseCommand):
 
         if not config.enabled:
             self.stdout.write(
-                self.style.WARNING("Bootstrap disabled (PLATFORM_BOOTSTRAP_ENABLED not set). Skipping setup.")
+                self.style.WARNING(
+                    "Bootstrap disabled (PLATFORM_BOOTSTRAP_ENABLED not set). Skipping setup."
+                )
             )
             return
 
@@ -47,7 +51,7 @@ class Command(BaseCommand):
         self._log_presets(summary)
         self.stdout.write(self.style.SUCCESS("Bootstrap complete."))
 
-    def _log_superuser(self, config: Optional[SuperuserConfig], summary: BootstrapSummary) -> None:
+    def _log_superuser(self, config: SuperuserConfig | None, summary: BootstrapSummary) -> None:
         if config is None:
             self.stdout.write("Superuser creation skipped (DJANGO_SUPERUSER_* not fully defined).")
             return
@@ -58,7 +62,9 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"Superuser '{config.username}' already up to date.")
 
-    def _log_organization(self, config: Optional[OrganizationConfig], summary: BootstrapSummary) -> None:
+    def _log_organization(
+        self, config: OrganizationConfig | None, summary: BootstrapSummary
+    ) -> None:
         if config is None:
             self.stdout.write("Organization bootstrap skipped (no configuration found).")
             return

@@ -15,7 +15,7 @@ from apps.platform.operations import tasks
 from apps.platform.operations.services import compose as compose_service
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations.utils import read_job_meta, update_job_meta
-from packages.udocket_core.agents.compose_lib import ComposeResult
+from packages.core.agents.compose_lib import ComposeResult
 from tests._typing import MonkeyPatch, SettingsFixture
 
 

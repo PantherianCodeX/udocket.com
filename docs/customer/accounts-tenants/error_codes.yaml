@@ -1,0 +1,25 @@
+error_codes:
+  - code: VALIDATION_ERROR
+    http_status: 400
+    audit_required: false
+    description: Tenant payload failed schema validation or residency selection rules.
+    client_action: Correct the request body (domains, residency, legal artefacts) and resubmit.
+    related_metrics:
+      - accounts_api_error_total
+      - tenant_activation_latency_seconds
+  - code: CONFLICT
+    http_status: 409
+    audit_required: true
+    description: Tenant already exists or lifecycle state prevents the requested transition.
+    client_action: Refresh tenant state, resolve outstanding provisioning/offboarding steps, then retry.
+    related_metrics:
+      - accounts_api_error_total
+      - tenant_event_conflict_total
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: Residency, compliance hold, or approval policy forbids processing the request.
+    client_action: Coordinate with Compliance/Records to clear the hold or obtain approval, then retry once unblocked.
+    related_metrics:
+      - accounts_api_error_total
+      - tenant_suspension_active_total

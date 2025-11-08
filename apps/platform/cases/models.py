@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date
-from typing import Any, TYPE_CHECKING, Optional, cast
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any, cast
 
 from django.conf import settings
 from django.db import models
 from simple_history.models import HistoricalRecords
+
+from packages.common.django.typing import TypedManager, get_typed_manager
 
 if TYPE_CHECKING:
     from apps.platform.accounts.models import Organization, User
 
 
 class CaseQuerySet(models.QuerySet["Case"]):
-    def for_user(self, user: Any) -> "CaseQuerySet":
+    def for_user(self, user: Any) -> CaseQuerySet:
         from apps.platform import tenancy
 
         return tenancy.scope_cases(self, user)
@@ -26,6 +28,7 @@ class CaseManager(models.Manager["Case"]):
 
     def for_user(self, user: Any) -> CaseQuerySet:
         return self.get_queryset().for_user(user)
+
 
 class Case(models.Model):
     objects = CaseManager()
@@ -72,7 +75,7 @@ class Case(models.Model):
 
     id: models.CharField[str, str] = models.CharField(primary_key=True, max_length=36)
     title: models.CharField[str, str] = models.CharField(max_length=200)
-    organization: models.ForeignKey["Organization", "Organization"] = models.ForeignKey(
+    organization: models.ForeignKey[Organization, Organization] = models.ForeignKey(
         "accounts.Organization",
         on_delete=models.PROTECT,
         related_name="cases",
@@ -103,23 +106,23 @@ class Case(models.Model):
     )
     legal_aid: models.BooleanField[bool, bool] = models.BooleanField(default=False)
     pro_bono: models.BooleanField[bool, bool] = models.BooleanField(default=False)
-    court_date: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
+    court_date: models.DateTimeField[datetime | None, datetime | None] = models.DateTimeField(
         null=True,
         blank=True,
     )
-    filing_deadline: models.DateField[Optional[date], Optional[date]] = models.DateField(
+    filing_deadline: models.DateField[date | None, date | None] = models.DateField(
         null=True,
         blank=True,
     )
     notes: models.TextField[str, str] = models.TextField(blank=True)
-    reviewer: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
+    reviewer: models.ForeignKey[User, User | None] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="cases_reviewing",
     )
-    client_user: models.ForeignKey["User", Optional["User"]] = models.ForeignKey(
+    client_user: models.ForeignKey[User, User | None] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
@@ -128,7 +131,7 @@ class Case(models.Model):
     )
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True)
     updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now=True)
-    history: HistoricalRecords["Case"] = HistoricalRecords()
+    history: HistoricalRecords[Case] = HistoricalRecords()
 
     objects = CaseManager()
 
@@ -142,11 +145,11 @@ class Case(models.Model):
 
 class CaseMembership(models.Model):
     @classmethod
-    def typed_objects(cls) -> models.Manager["CaseMembership"]:
-        return cast(models.Manager["CaseMembership"], cls.objects)
+    def typed_objects(cls) -> TypedManager[CaseMembership]:
+        return get_typed_manager(cls)
 
     @classmethod
-    def scoped(cls) -> models.Manager["CaseMembership"]:
+    def scoped(cls) -> TypedManager[CaseMembership]:
         return cls.typed_objects()
 
     class Role(models.TextChoices):
@@ -164,7 +167,7 @@ class CaseMembership(models.Model):
         on_delete=models.CASCADE,
         related_name="memberships",
     )
-    user: models.ForeignKey["User", "User"] = models.ForeignKey(
+    user: models.ForeignKey[User, User] = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="case_memberships",

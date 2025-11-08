@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 # pyright: strict
-from typing import List, Optional
-
 from django.db.utils import IntegrityError
 
 from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
-from apps.platform.jobs.utils import unique_title
 from apps.platform.operations.storage import ops_dir as storage_ops_dir
-from packages.udocket_core.utils.json import read_json_object
+from packages.common.json_utils import read_json_object
+from packages.common.text import unique_title
 
 from .common import JobTelemetryPayload, as_dict
 from .presenters.jobs import friendly_job_title  # lazy usage inside helpers
 
 
-def candidate_transcript_paths(job: Job, telemetry: Optional[JobTelemetryPayload]) -> List[str]:
-    paths: List[str] = []
+def candidate_transcript_paths(job: Job, telemetry: JobTelemetryPayload | None) -> list[str]:
+    paths: list[str] = []
     if isinstance(job.transcript_path, str) and job.transcript_path:
         paths.append(job.transcript_path)
     transcript_payload = as_dict((telemetry or {}).get("transcript"))
@@ -27,7 +25,7 @@ def candidate_transcript_paths(job: Job, telemetry: Optional[JobTelemetryPayload
     return paths
 
 
-def default_transcript_title(job: Job, telemetry: Optional[JobTelemetryPayload]) -> str:
+def default_transcript_title(job: Job, telemetry: JobTelemetryPayload | None) -> str:
     transcript_payload = as_dict((telemetry or {}).get("transcript"))
     title_value = transcript_payload.get("title")
     if isinstance(title_value, str) and title_value.strip():
@@ -39,11 +37,15 @@ def default_transcript_title(job: Job, telemetry: Optional[JobTelemetryPayload])
     return friendly_job_title(job, telemetry)
 
 
-def unique_transcript_title(case_id: str, base_title: str, organization_id: Optional[str] = None) -> str:
+def unique_transcript_title(
+    case_id: str, base_title: str, organization_id: str | None = None
+) -> str:
     base = (base_title or "").strip() or "Transcript"
     base = base[:180]
     titles: set[str] = set(
-        CaseArtifact.objects.filter(case_id=case_id, type="TRANSCRIPT").values_list("title", flat=True)
+        CaseArtifact.objects.filter(case_id=case_id, type="TRANSCRIPT").values_list(
+            "title", flat=True
+        )
     )
     try:
         ops_dir = storage_ops_dir(case_id, organization_id)
@@ -73,11 +75,11 @@ def ensure_transcript_artifact(
     case_id: str,
     case: Case,
     job: Job,
-    telemetry: Optional[JobTelemetryPayload] = None,
-    title: Optional[str] = None,
-    organization_id: Optional[str] = None,
+    telemetry: JobTelemetryPayload | None = None,
+    title: str | None = None,
+    organization_id: str | None = None,
     metadata_source: str = "ui.transcript_promote",
-) -> Optional[CaseArtifact]:
+) -> CaseArtifact | None:
     artifact = (
         CaseArtifact.objects.filter(case_id=str(case_id), job_id=str(job.id), type="TRANSCRIPT")
         .order_by("-created_at")

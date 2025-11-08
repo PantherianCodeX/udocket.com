@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.udocket_core.llm.config import (
+from packages.core.llm.config import (
     LLMProvider,
     LLMProviderModel,
     LLMSettings,

@@ -1,11 +1,10 @@
-from django.conf import settings
-from django.db import migrations, models
 import django.db.models.deletion
 import simple_history.models
+from django.conf import settings
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -114,9 +113,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [
-                    models.Index(
-                        fields=["case_id", "type"], name="artifact_case_type_idx"
-                    ),
+                    models.Index(fields=["case_id", "type"], name="artifact_case_type_idx"),
                     models.Index(fields=["created_at"], name="artifact_created_idx"),
                 ],
                 "unique_together": {("case_id", "type", "title")},

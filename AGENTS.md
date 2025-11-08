@@ -2,31 +2,31 @@
 
 This document defines how automation and contributors should add and operate "agents" in the uDocket stack. It covers the current transcription agent and lays down clear conventions for future agents such as summarization, timelines, and relationship/graph extraction.
 
-Note: This is the root guide. For area‑specific practices (UI, operations, jobs, artifacts, accounts, authorization, core libs, config, infra, tests), also read the AGENTS.md files colocated in those directories. When working in any area, you must follow the closest AGENTS.md in that subtree.
+**Single source:** This is the only AGENTS guide. All area-specific copies have been removed; reference this file (and the TDD’s engineering standards in §2.3) whenever you need binding guidance.
 
-Quick index of AGENTS guides in this repo:
-- apps/platform/AGENTS.md
-- apps/platform/ui/AGENTS.md
-- apps/platform/operations/AGENTS.md
-- apps/platform/jobs/AGENTS.md
-- apps/platform/cases/AGENTS.md
-- apps/platform/artifacts/AGENTS.md
-- apps/platform/accounts/AGENTS.md
-- apps/platform/authorization/AGENTS.md
-- packages/udocket_core/AGENTS.md
-- packages/udocket_core/agents/compose/AGENTS.md
-- config/AGENTS.md
-- infra/AGENTS.md
-- tests/AGENTS.md
+## Engineering standards (binding) {#agent-engineering-standards}
+
+- **Type-first development.** Before editing logic, introduce the strongly typed primitives the file needs (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers, or helper classes). Provider payloads must be represented by precise types or local stubs—never raw dicts. Missing third-party stubs are added alongside the change (no TODOs).
+- **Zero tolerance for `Any`.** New code may not add `typing.Any`. When touching legacy code, remove Any annotations as part of the change. Casts are a last resort: keep them in helper functions with a short comment explaining the invariant they protect. Never add `# type: ignore` or lint ignores; fix the root cause instead.
+- **Strict Python 3.12+.** Use modern syntax (`match/case`, `StrEnum`, `dataclasses`, `contextlib.asynccontextmanager`, `zoneinfo`). Delete compatibility branches for earlier Python versions and refuse polyfills/back-compat shims.
+- **Separation of concerns.** Main modules orchestrate flows; supporting modules provide models and pure helpers. Do not mix HTTP/Django concerns with LangGraph orchestration or disk IO in the same function. Extract shared helpers to `packages/common` when they are framework-agnostic, otherwise keep them in package-scoped `utils.py`. Module-level helpers stay short and single-purpose.
+- **Quality over speed.** Restructure when the design demands it. Keep functions small (prefer <40 LOC) and files cohesive. Document invariants whenever you add or change behavior.
+- **Testing discipline.** Every touched module must remain ≥90% line coverage (unit + property tests). Add property tests for determinism (UUIDs, manifests, approvals) whenever you add new data structures. Integration tests cover Celery tasks, Guardian/Signer interactions, and settings activation. No change merges without green tests.
+- **Tooling requirements.** Run commands through the provided containers/venvs (`make ...`, `uv run --project …`). Never install ad-hoc dependencies via `pip`. Docs/spec changes must pass `doc_tools.check_links` and MkDocs builds.
+- **Helper placement & wrappers.** Cross-cutting helpers (JSON, hashing, parsing) belong in `packages/common`. Agent-specific helpers live alongside the agent implementation. Use thin wrappers (value objects) around primitive strings/IDs instead of passing raw literals between layers.
+- **No back-compat.** When removing deprecated APIs or flags, delete the compat code entirely. Do not add toggles to support “old” behavior—migrations happen in one direction.
+- **Flow of control.** Entry-point modules validate inputs, snapshot settings, and delegate to type-safe helpers. They never mutate global state or perform best-effort retries outside the shared retry utilities.
+- **Additional expectations.** Always update specs (this file + TDD §2.3) when you introduce new behaviors, include Guardian/Settings impacts in PR descriptions, and keep ops/audit logging additive and deterministic.
 
 ## Overview
+
 - Services:
   - `apps/platform` (Django + Channels + Celery): primary UI, API surface, and background workers.
-- Core agent implementation lives in `packages/udocket_core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
+- Core agent implementation lives in `packages/core/agents/transcribe_lib.py` (Azure Speech, Canada regions only).
   - Modes: `on-demand` (local stream) and `batch` (Azure Batch Transcription via HTTPS SAS URL).
   - Diarization: supported in `batch` mode only.
   - Outputs: timestamped transcript `.txt`, per-job JSON metadata, append-only ops audit JSONL.
-- Storage layout (per-case): `storage/media/cases/<CASE_ID>/`
+- Storage layout (per-case, tenant scoped): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`
   - `audio/` original uploads as `<job_id>__<original_name>`
   - `transcript/` transcript files as `<job_id>__transcript.txt`
   - `ops/` logs, metadata, and ops audit files
@@ -35,11 +35,13 @@ Quick index of AGENTS guides in this repo:
 - Database: SQLite by default (or Postgres) with tables `cases`, `jobs`
 
 ## Agent Contract (all agents)
+
 To make agents composable and observable when executed inside Celery workers, follow this contract:
-- Implement the `TranscriptionAgent` interface (see `packages/udocket_core/agents/transcribe_lib.py`).
+
+- Implement the `TranscriptionAgent` interface (see `packages/core/agents/transcribe_lib.py`).
   - Accepts structured config (`TranscriptionConfig`) instead of CLI flags.
   - Read configuration from `.env` where relevant, mirroring `config/settings.py` keys.
-- Return a `TranscriptionResult` object; raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
+- Return a `TranscriptionResult` (from `packages.common.agents`) and raise rich exceptions for recoverable errors (the task layer records metadata and updates the UI).
 - Deterministic outputs:
   - Write artifacts with stable, case-scoped names and versioning (e.g., `_v2` suffix) when re-running the same job.
 - Ops logging:
@@ -48,21 +50,23 @@ To make agents composable and observable when executed inside Celery workers, fo
 - Security & locality:
   - Canada-only Azure regions (`canadacentral` or `canadaeast`). Do not send PII to non-Canadian services by default.
 
-Reference patterns exist in `packages/udocket_core/agents/transcribe_lib.py`.
+Reference patterns exist in `packages/core/agents/transcribe_lib.py`.
 
 ## Current Transcription Agent
-- Entry: `packages/udocket_core/agents/transcribe_lib.py`
+
+- Entry: `packages/core/agents/transcribe_lib.py`
 - Inputs: local file path or HTTPS SAS URL (batch mode), language, diarization flag (batch only)
 - Outputs:
-  - Transcript: `storage/media/cases/<case>/transcript/<job_id>__transcript.txt`
+  - Transcript: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/transcript/<job_id>__transcript.txt`
     - Header includes case, source name, hash(es), language, region, duration, timestamp
     - Body contains text with interval timestamps unless diarization already provides timing
-  - Job meta (per job): `storage/media/cases/<case>/ops/<job_id>_transcription_log.json`
-  - Human log (per job): `storage/media/cases/<case>/ops/<job_id>_transcription.log`
-  - Case ops audit: `storage/media/cases/<case>/ops/ops_transcription.jsonl`
-- One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"/app/storage/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
+  - Job meta (per job): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/<job_id>_transcription_log.json`
+  - Human log (per job): `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/<job_id>_transcription.log`
+  - Case ops audit: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/ops_transcription.jsonl`
+- One-line JSON to stdout on success, e.g.: `{ "status":"ok", "transcript_file":"${STORAGE_ROOT}/media/.../transcript/<job>__transcript.txt", "region":"canadacentral", "language":"en-CA", "attempts":1, "duration_s":732.5 }`
 
 ## Analysis Agents
+
 The repository hosts agents that consume transcripts and emit analysis artifacts. Use the following conventions.
 
 - Common input discovery:
@@ -70,7 +74,7 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
   - Agents should accept `--input <path>` to override, and `--case`, `--case-dir`, `--outdir` similarly to the transcriber.
 
 - Output directory:
-  - Write to `storage/media/cases/<case>/analysis/` and `storage/media/cases/<case>/ops/`.
+  - Write to `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/analysis/` and `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/ops/`.
   - Use per-job or per-run names with the same prefix style when tied to a transcription job: `<job_id>__<artifact>.<ext>`.
 
 - Analyze agent
@@ -110,10 +114,10 @@ The repository hosts agents that consume transcripts and emit analysis artifacts
 To avoid future confusion, the table below captures the canonical naming conventions for every first-party agent. Always refer to the *tool* (UI panel, Celery task wrapper, job kind) separately from the *artifacts* it emits.
 
 | Tool / Agent | UI label & panel key | `job_kind` / `agent_type` | Primary artifacts (types & filenames) | Notes |
-|--------------|----------------------|---------------------------|----------------------------------------|-------|
-| Transcribe   | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
-| Analyze      | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
-| Compose      | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), bundle/QA reports, compose ops logs | LangGraph pipeline with parallel lanes, guard rails, and QA gating. |
+| --- | --- | --- | --- | --- |
+| Transcribe | `Transcribe` / `transcribe` | `transcription` | `transcript/<job_id>__transcript.txt`, ops logs | Produces audio conversions when needed. |
+| Analyze | `Analyze` / `analyze` | `analyze` | Stage outputs written under `analysis/` (summary JSON+MD, outline, timeline seeds, entity hints, case brief, optional staff report). Approved outputs generate individual artifacts automatically. | Stage outputs are stored on disk immediately; artifacts are promoted versions exposed in the UI once approved. |
+| Compose | `Compose` / `compose` | `compose` | Client & lawyer deliverables (`compose_client_v1.*`, `compose_lawyer_v1.*`), bundle/QA reports, compose ops logs | LangGraph pipeline with parallel lanes, guard rails, and QA gating. |
 | Timeline (future standalone) | `Timeline` / `timeline` | `timeline` | To-be-defined `timeline_v2.*` assets | When run independently, should still read latest summary outputs. |
 
 General guidelines:
@@ -124,11 +128,13 @@ General guidelines:
 - Dependency flags in presenters/components must describe artifacts (`has_summary`, `has_timeline`, etc.) rather than tools. Avoid introducing aliases that duplicate the same concept under different names.
 
 ## Worker Integration
+
 - Celery tasks in `apps.platform.operations.tasks` orchestrate uploads, call `TranscriptionAgent.transcribe`, and persist telemetry.
 - To integrate new agents, add Celery tasks that wrap your agent implementation and emit job/case websocket updates via `send_job_update`/`send_case_update`.
 - Ensure agents write artifacts under the case path, update ops metadata, and keep runtimes within configured Celery soft/hard timeouts.
 
 ## Configuration & Environment
+
 - Required (see `.env.example`):
   - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (`canadacentral` or `canadaeast`)
   - `LANGUAGE`, `STORAGE_ROOT`, `DATABASE_URL`
@@ -137,19 +143,23 @@ General guidelines:
   - Set `DEBUG=1` to enable SDK-level logs into `ops/` for transcription.
 
 ## Tools (Editors)
+
 - Manual Edit: common tool to edit text artifacts (Markdown/JSON) as a child job action; saving creates a version proposal requiring Reviewer approval.
 - Agent Edit: interactive chat editor (LLM) that modifies the artifact; same approval/versioning semantics as Manual Edit.
 
 ## Intake, Questionnaire, and Interview Guidance
+
 - Intake panel includes a “Generate Questionnaire” tool (LLM panel), using per‑org seed questions and forms; result is Markdown, editable via Manual/Agent Edit, and used during interviews.
 - Interview page is a per‑case hub with live checklist, notes, and call logging; sessions append minimal audit lines.
 
 ## Approvals & Roles
+
 - Reviewer role is part of default seed roles; approvals are configurable per page/tool (required reviewer count, allowed roles) in Org Settings.
   - `BATCH_HASH_REMOTE=1` and `BATCH_HASH_MAX_MB` to record remote SHA-256 and MD5 (if present) when using batch mode.
 
 ## File & Naming Conventions
-- Per-case directory: `storage/media/cases/<CASE_ID>/`
+
+- Per-case directory: `storage/media/tenants/<ORG_ID>/cases/<CASE_ID>/`
   - `audio/<job>__<original>` — upload payloads
   - `transcript/<job>__transcript.txt` — primary transcript
   - `analysis/` — outputs from summarization, timelines, entities/graphs (proposed standard)
@@ -158,33 +168,38 @@ General guidelines:
 - Audit streams: `ops/ops_<agent>.jsonl`
 
 ## Coding Guidelines
+
 - Language: Python 3.12.
 - Style: type-annotated functions; avoid one-letter names; no inline comments unless essential.
 - Strong typing:
   - Read and follow `docs/typing-roadmap.md` and `docs/typing_refactor_plan.md` before touching code.
-  - Per-module enforcement: `packages/udocket_core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/udocket_core/logging` and `pyright packages/udocket_core/logging`). Do not introduce `Any` or untyped defs there.
+  - Per-module enforcement: `packages/core/logging` must remain mypy/pyright clean (CI enforces `mypy packages/core/logging` and `pyright packages/core/logging`). Do not introduce `Any` or untyped defs there.
   - When editing other modules, remove `Any` usage, add precise types, and reduce pyright warnings in that scope. Never add `# type: ignore` without an accompanying TODO referencing the typing roadmap.
   - Annotate pytest fixtures and helper lambdas per the typing roadmap; prefer `TypedDict`/`Protocol` for structured payloads.
-- Stub dependencies: install `apps/platform/requirements.txt` (which bundles the Django and DRF stub packages) so Pyright has Django/DRF annotations locally.
+- Stub dependencies: run `uv sync --frozen --group dev --project apps/platform` to ensure Pyright and Django/DRF stubs are installed before editing. Activation isn’t required—invoke tools with `uv run --project apps/platform …` so the right interpreter is picked automatically.
 - Dependencies: avoid heavyweight or networked services unless approved; prefer Azure services in Canadian regions.
 - Error handling: fail fast with clear messages; write structured meta and human logs; never raise without logging. Never introduce provider/model fallback logic—jobs must use the exact configured provider chain and raise actionable errors if initialization fails.
 - Refactors spanning many files should rely on helper scripts (add them under `scripts/` when reusable) instead of manual editing. Always run `pyright` to surface import/function issues across the tree before finishing a refactor.
 - Version control: keep diffs minimal and focused; avoid unrelated refactors.
 
 ## Local Development
-- Start stack: `docker compose up --build`
+
+- Start stack: `PROJECT_NAME=udocket-dev make stack.up`
   - Django platform (primary UI/API): `http://localhost:8000`
+- Sync dependencies locally before running management commands: `uv sync --frozen --group dev --no-install-project --project apps/platform`
 - Create a case via the platform UI and upload audio from the case page.
 - The Celery worker (`platform_worker` service) picks up jobs automatically and writes outputs under the case directory.
 - To exercise the agent manually, open a Django shell and invoke the `TranscriptionAgent`:
+
   ```python
-  from packages.udocket_core.agents import TranscriptionAgent, TranscriptionConfig
+
+  from packages.core.agents import TranscriptionAgent, TranscriptionConfig
   cfg = TranscriptionConfig.from_env()
   agent = TranscriptionAgent(cfg)
   agent.transcribe(
-      input="/app/storage/media/cases/<CASE>/audio/<job>__file.wav",
+      input=f"{STORAGE_ROOT}/media/cases/<CASE>/audio/<job>__file.wav",
       case_id="<CASE>",
-      case_dir=Path("/app/storage/media/cases/<CASE>"),
+      case_dir=Path(STORAGE_ROOT) / "media" / "cases" / "<CASE>",
       job_id="<JOB>",
       language="en-CA",
       mode="batch",
@@ -193,20 +208,23 @@ General guidelines:
   ```
 
 ## Operational Notes
+
 - Diarization is only supported in batch mode. The platform UI enforces this.
 - Region guardrails are enforced by both settings validation and the agent.
 - Duration limits are configurable via env (e.g., `MAX_MINUTES`).
 - All agents should prefer additive file outputs and append-only audit logs.
 
 ## Troubleshooting
+
 - 400 on upload: check `ALLOWED_AUDIO_MIME`.
 - Batch fails quickly: ensure Azure Speech tier Standard (S0) and correct region; Free (F0) is not supported by Batch API.
 - On-demand no speech: verify input is PCM WAV 16 kHz mono (agent auto-converts via ffmpeg when possible).
 - Missing Azure SDKs: ensure `azure-cognitiveservices-speech` and `azure-storage-blob` are installed in the platform runtime.
 
 ## Roadmap Alignment (summaries, timelines, relationships)
+
 - Analyze: produce layered analyses (short, detailed) with links to timeline events and seed timeline/entity extraction.
 - Timelines: merge diarized offsets and transcript segments into normalized events with speakers and labels.
 - Relationships: derive entities and edges with evidence back-pointers to transcript timestamps.
 - All of the above should follow the contract here to ensure the Admin UI and API can surface artifacts consistently as features land.
- - Platform migration to Django/DRF/Channels and end-to-end authorization/IAM integration: see `docs/ROADMAP.md`.
+- Platform migration to Django/DRF/Channels and end-to-end authorization/IAM integration: see `docs/ROADMAP.md`.

@@ -8,8 +8,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from apps.platform.artifacts.registry import ARTIFACT_FIELD_REGISTRY
-from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.authorization.capabilities import role_capabilities
+from apps.platform.authorization.models import PermissionPreset, Role
 from apps.platform.tenancy import accessible_organization_ids
 
 
@@ -40,7 +40,10 @@ def registry_fields(_request):
     """Return the artifact field registry for Permission Builder UIs."""
     out = {
         atype: {
-            fname: {"default_actions": list(meta.default_actions or ()), "description": meta.description}
+            fname: {
+                "default_actions": list(meta.default_actions or ()),
+                "description": meta.description,
+            }
             for fname, meta in fields.items()
         }
         for atype, fields in ARTIFACT_FIELD_REGISTRY.items()
@@ -88,7 +91,9 @@ def list_roles(request):
         return guard
 
     user = getattr(request, "user", None)
-    role_qs = Role.objects.select_related("organization").prefetch_related("presets").order_by("name")
+    role_qs = (
+        Role.objects.select_related("organization").prefetch_related("presets").order_by("name")
+    )
     role_qs = _filter_by_org(role_qs, user)
 
     roles = []

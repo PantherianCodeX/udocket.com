@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Mapping as MappingABC
-from typing import Iterable, Mapping, Sequence, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 
-from apps.platform.cases.models import CaseMembership
 from apps.platform.accounts.models import User as AppUser
+from apps.platform.cases.models import CaseMembership
 from apps.platform.jobs.models import Job
 from apps.platform.tenancy import scope_jobs
+from packages.common.json_utils import coerce_str
 
 GroupName = str
 JsonPayload = Mapping[str, object]
@@ -34,7 +36,7 @@ def _scope_kwargs(scope: Mapping[str, object]) -> Mapping[str, object]:
     return cast(Mapping[str, object], {})
 
 
-def _require_channel_layer(layer: "ChannelLayerProtocol | None") -> "ChannelLayerProtocol":
+def _require_channel_layer(layer: ChannelLayerProtocol | None) -> ChannelLayerProtocol:
     if layer is None:
         msg = "Channel layer is not configured for websocket consumer"
         raise RuntimeError(msg)
@@ -195,11 +197,22 @@ class JobStreamConsumer(AsyncJsonWebsocketConsumer):
         if not job_ids:
             return []
         qs = Job.objects.filter(pk__in=job_ids)
+        granted: list[str] = []
         if getattr(settings, "PLATFORM_DEV_OPEN", True):
-            return [str(pk) for pk in qs.values_list("pk", flat=True)]
+            for pk in list(qs.values_list("pk", flat=True)):
+                pk_str = coerce_str(pk)
+                if pk_str is None:
+                    continue
+                granted.append(pk_str)
+            return granted
         user_value = self.scope.get("user")
         scoped = scope_jobs(qs, user_value)
-        return [str(pk) for pk in scoped.values_list("pk", flat=True)]
+        for pk in list(scoped.values_list("pk", flat=True)):
+            pk_str = coerce_str(pk)
+            if pk_str is None:
+                continue
+            granted.append(pk_str)
+        return granted
 
     @database_sync_to_async
     def _authorized_case_ids(self, case_ids: Sequence[str]) -> list[str]:
@@ -209,20 +222,20 @@ class JobStreamConsumer(AsyncJsonWebsocketConsumer):
             return [str(case_id) for case_id in case_ids]
         user_value = self.scope.get("user")
         user_lookup: AppUser | int | None
-        if isinstance(user_value, AppUser):
-            user_lookup = user_value
-        elif isinstance(user_value, int):
+        if isinstance(user_value, AppUser) or isinstance(user_value, int):
             user_lookup = user_value
         else:
             user_lookup = None
         if not user_value or not getattr(user_value, "is_authenticated", False):
             return []
-        return [
-            str(case_id)
-            for case_id in CaseMembership.objects.filter(
-                case_id__in=case_ids, user=user_lookup
-            ).values_list("case_id", flat=True)
-        ]
+        granted: list[str] = []
+        qs = CaseMembership.objects.filter(case_id__in=case_ids, user=user_lookup)
+        for case_id in list(qs.values_list("case_id", flat=True)):
+            case_str = coerce_str(case_id)
+            if case_str is None:
+                continue
+            granted.append(case_str)
+        return granted
 
 
 class JobConsumer(AsyncJsonWebsocketConsumer):
@@ -254,7 +267,12 @@ class JobConsumer(AsyncJsonWebsocketConsumer):
         try:
             job = Job.objects.get(pk=job_id)
         except Job.DoesNotExist:
-            return {"type": "job.update", "event": "snapshot", "job_id": job_id, "status": "UNKNOWN"}
+            return {
+                "type": "job.update",
+                "event": "snapshot",
+                "job_id": job_id,
+                "status": "UNKNOWN",
+            }
         return {
             "type": "job.update",
             "event": "snapshot",
@@ -272,9 +290,7 @@ class JobConsumer(AsyncJsonWebsocketConsumer):
             return True
         user_value = self.scope.get("user")
         user_lookup: AppUser | int | None
-        if isinstance(user_value, AppUser):
-            user_lookup = user_value
-        elif isinstance(user_value, int):
+        if isinstance(user_value, AppUser) or isinstance(user_value, int):
             user_lookup = user_value
         else:
             user_lookup = None
@@ -315,9 +331,7 @@ class CaseConsumer(AsyncJsonWebsocketConsumer):
             return True
         user_value = self.scope.get("user")
         user_lookup: AppUser | int | None
-        if isinstance(user_value, AppUser):
-            user_lookup = user_value
-        elif isinstance(user_value, int):
+        if isinstance(user_value, AppUser) or isinstance(user_value, int):
             user_lookup = user_value
         else:
             user_lookup = None

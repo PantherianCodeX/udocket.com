@@ -1,0 +1,7 @@
+extends: substitution
+message: "Use cross-ref format: TDD §X.Y, Service §N.M, App.<letter>."
+level: error
+ignorecase: true
+swap:
+  'Section [0-9]+\.[0-9]+': 'TDD §$0'
+  'Appendix ([A-Z])': 'App.$1'

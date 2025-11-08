@@ -1,0 +1,25 @@
+%% atoms-pipeline-v1.mmd
+flowchart TD
+    classDef step fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef action fill:#ecf8ff,stroke:#2684ff,stroke-width:1.1px,color:#111;
+    classDef decision fill:#fff0f0,stroke:#d14545,stroke-width:1.2px,color:#111;
+    classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
+
+    Segments["Transcript segments\n(uuid, speaker, ts, text)"]:::artifact
+    Candidates["Candidate extraction\n(heuristics + LLM assist)"]:::step
+    Canonical["Canonicalise statement\n(normalise, detect negation)"]:::action
+    UUID["Assign deterministic UUID"]:::action
+    Merge["Merge & dedupe claims\n(aggregate evidence, speakers)"]:::step
+    Score["Score confidence\n(corroboration, negation, LLM)"]:::step
+    LinkTimeline["Link to timeline events"]:::action
+    LinkEntities["Link to entities/roles"]:::action
+    SummaryChecks["Compute SummaryCheck\nstatuses"]:::step
+    Index["AtomsIndex"]:::artifact
+    Debug[(Optional atoms_v1.json)]:::artifact
+
+    Segments --> Candidates --> Canonical --> UUID --> Merge --> Score --> Index
+    Index --> LinkTimeline
+    Index --> LinkEntities
+    Index --> SummaryChecks
+    SummaryChecks --> Index
+    Index -. debug flag .-> Debug

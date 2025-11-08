@@ -1,7 +1,6 @@
- 
 from django.urls import path
-from apps.platform.ui import views
 
+from apps.platform.ui import views
 
 urlpatterns = [
     path("favicon.ico", views.favicon, name="ui-favicon"),
@@ -67,7 +66,11 @@ urlpatterns = [
         name="ui-case-llm-provider-delete",
     ),
     path("cases/<str:case_id>/title", views.case_update_title, name="ui-case-update-title"),
-    path("cases/<str:case_id>/jobs/<uuid:job_id>/detail/", views.case_job_detail_panel, name="ui-case-job-detail"),
+    path(
+        "cases/<str:case_id>/jobs/<uuid:job_id>/detail/",
+        views.case_job_detail_panel,
+        name="ui-case-job-detail",
+    ),
     path(
         "cases/<str:case_id>/jobs/<uuid:job_id>/title/form/",
         views.case_job_title_form,
@@ -85,8 +88,14 @@ urlpatterns = [
     ),
     path("cases/<str:case_id>/jobs/<uuid:job_id>/row/", views.case_job_row, name="ui-case-job-row"),
     path("cases/<str:case_id>/jobs/new", views.create_job, name="ui-job-create"),
-    path("cases/<str:case_id>/assign-reviewer/", views.case_assign_reviewer, name="ui-case-assign-reviewer"),
-    path("cases/<str:case_id>/assign-client/", views.case_assign_client, name="ui-case-assign-client"),
+    path(
+        "cases/<str:case_id>/assign-reviewer/",
+        views.case_assign_reviewer,
+        name="ui-case-assign-reviewer",
+    ),
+    path(
+        "cases/<str:case_id>/assign-client/", views.case_assign_client, name="ui-case-assign-client"
+    ),
     path("jobs/", views.jobs, name="ui-jobs"),
     path("artifacts/", views.artifacts_index, name="ui-artifacts"),
     path("audit/permissions/", views.permissions_overview, name="ui-permissions"),

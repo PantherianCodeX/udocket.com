@@ -2,6 +2,25 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Docs: Render Mermaid (all)",
+      "type": "shell",
+      "command": "npm run mmd:all",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docs: Build site (MkDocs)",
+      "type": "shell",
+      "command": "bash scripts/docs/build_site.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docs: Build TDD PDF (Pandoc)",
+      "type": "shell",
+      "command": "bash scripts/docs/build_pdf_tdd.sh",
+      "problemMatcher": []
+    },
+    {
       "label": "docker: up deps (postgres, redis)",
       "type": "shell",
       "command": "docker compose up -d postgres redis",
@@ -19,13 +38,13 @@
     {
       "label": "typecheck: mypy (core logging)",
       "type": "shell",
-      "command": "mypy packages/udocket_core/logging",
+      "command": "mypy packages/core/logging",
       "problemMatcher": []
     },
     {
       "label": "typecheck: pyright (core logging)",
       "type": "shell",
-      "command": "pyright packages/udocket_core/logging",
+      "command": "pyright packages/core/logging",
       "problemMatcher": []
     },
     {

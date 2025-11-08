@@ -16,7 +16,7 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.operations import tasks as op_tasks
 from apps.platform.operations.utils import read_job_meta, update_job_meta
 from apps.platform.operations.models import LLMConfiguration
-from packages.udocket_core.agents.analyze_lib import AnalyzeResult
+from packages.core.agents.analyze_lib import AnalyzeResult
 from apps.platform.operations.storage import tenant_case_root
 from tests._typing import DatabaseFixture, MonkeyPatch, SettingsFixture
 

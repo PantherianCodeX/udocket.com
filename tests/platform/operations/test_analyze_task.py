@@ -11,7 +11,7 @@ from apps.platform.cases.models import Case
 from apps.platform.jobs.models import Job
 from apps.platform.operations.storage import ensure_case_dirs
 from apps.platform.operations import tasks
-from packages.udocket_core.agents.analyze_lib import AnalyzeResult
+from packages.core.agents.analyze_lib import AnalyzeResult
 from tests._typing import MonkeyPatch, SettingsFixture
 
 

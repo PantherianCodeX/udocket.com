@@ -19,11 +19,7 @@ def emit(
 ) -> None:
     try:
         user = getattr(request, "user", None) if request is not None else None
-        actor = (
-            getattr(user, "username", None)
-            or getattr(user, "email", None)
-            or "anonymous"
-        )
+        actor = getattr(user, "username", None) or getattr(user, "email", None) or "anonymous"
         payload = dict(data) if data is not None else {}
         AuditEvent.typed_objects().create(
             ts=timezone.now(),

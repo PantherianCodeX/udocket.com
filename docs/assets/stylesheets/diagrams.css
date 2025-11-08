@@ -1,0 +1,99 @@
+:root {
+  --diagram-scale-factor: 1;
+}
+
+.md-typeset figure.full-width-diagram {
+  display: block;
+  margin: 3rem auto;
+  text-align: center;
+}
+
+.md-typeset figure.full-width-diagram > a {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.md-typeset figure.full-width-diagram img.diagram {
+  display: block;
+  margin: 0 auto;
+  height: auto;
+  max-width: 100%;
+}
+
+.md-typeset figure.full-width-diagram figcaption {
+  display: block;
+  margin-top: 0.8rem;
+  font-size: 0.9em;
+  color: var(--md-typeset-color);
+}
+
+.glightbox-container .gslide {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto !important;
+}
+
+.glightbox-container .gslide-content,
+.glightbox-container .gslide-media,
+.glightbox-container .gslide-image {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.glightbox-container .gslide-image img {
+  width: auto;
+  height: auto;
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain !important;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* When zoomed (>1x), allow using more of the screen */
+.glightbox-container.glb-zoomed .gslide-image img {
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+}
+.glightbox-container.glb-zoomed .gslide-content,
+.glightbox-container.glb-zoomed .gslide-media,
+.glightbox-container.glb-zoomed .gslide-image {
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  overflow: visible !important;
+}
+
+/* Panzoom stage wrapper to stabilize transforms */
+.glightbox-container .pz-stage {
+  width: auto;
+  height: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  touch-action: none;
+  transform-origin: center center !important;
+}
+.glightbox-container .pz-stage > img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.glightbox-container.glb-zoomed .pz-stage {
+  width: auto;
+  height: auto;
+}
+
+/* Allow glightbox inner container to grow when zoomed */
+.glightbox-container.glb-zoomed .ginner-container {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: 100vh !important;
+}
+
+.glightbox-container .gslide-image img.is-panning {
+  cursor: grabbing;
+}

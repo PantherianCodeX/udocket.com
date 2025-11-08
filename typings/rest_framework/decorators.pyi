@@ -5,10 +5,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Iterable, TypeVar
 
-from rest_framework.response import Response
 
-
-F = TypeVar("F", bound=Callable[..., Response])
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def action(
@@ -23,4 +21,3 @@ def action(
 
 
 __all__ = ["action"]
-

@@ -1,10 +1,7 @@
 from __future__ import annotations
 
- 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
-
 import uuid
-from typing import Optional
 
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.http import require_http_methods
@@ -50,10 +47,9 @@ def case_assign_reviewer(request: HttpRequest, case_id: str) -> HttpResponse:
             membership.save(update_fields=["role"])
         case.reviewer = reviewer
         case.save(update_fields=["reviewer", "updated_at"])
-    else:
-        if case.reviewer_id is not None:
-            case.reviewer = None
-            case.save(update_fields=["reviewer", "updated_at"])
+    elif case.reviewer_id is not None:
+        case.reviewer = None
+        case.save(update_fields=["reviewer", "updated_at"])
 
     return case_progress_response(request, case)
 
@@ -74,7 +70,7 @@ def case_assign_client(request: HttpRequest, case_id: str) -> HttpResponse:
     email = (request.POST.get("client_email") or "").strip()
     name = (request.POST.get("client_name") or "").strip()
 
-    client_user: Optional[User] = None
+    client_user: User | None = None
     if client_id:
         try:
             client_user = User.objects.get(pk=client_id)

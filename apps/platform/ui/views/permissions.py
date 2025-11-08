@@ -2,9 +2,6 @@ from __future__ import annotations
 
 # pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-
-from typing import Dict, List
-
 from django.conf import settings
 from django.db import models
 from django.http import HttpRequest, HttpResponse
@@ -29,7 +26,7 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
     dev_open = getattr(settings, "PLATFORM_DEV_OPEN", False)
     org_ids = accessible_organization_ids(user)
 
-    registry: Dict[str, Dict[str, Dict[str, object]]] = {
+    registry: dict[str, dict[str, dict[str, object]]] = {
         artifact_type: {
             field: {
                 "default_actions": list(meta.default_actions or ()),
@@ -45,7 +42,9 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
         .prefetch_related("capabilities")
         .order_by("name")
     )
-    role_qs = Role.objects.select_related("organization").prefetch_related("presets").order_by("name")
+    role_qs = (
+        Role.objects.select_related("organization").prefetch_related("presets").order_by("name")
+    )
 
     if not (dev_open and (not user or not getattr(user, "is_authenticated", False))):
         if org_ids:
@@ -59,7 +58,7 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
             preset_qs = preset_qs.filter(organization__isnull=True)
             role_qs = role_qs.filter(organization__isnull=True)
 
-    presets: List[Dict[str, object]] = []
+    presets: list[dict[str, object]] = []
     for preset in preset_qs:
         caps = sorted(pc.capability for pc in preset.capabilities.all())
         presets.append(
@@ -75,7 +74,7 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
             }
         )
 
-    roles: List[Dict[str, object]] = []
+    roles: list[dict[str, object]] = []
     for role in role_qs:
         caps = role_capabilities(role.name, organization_id=role.organization_id)
         roles.append(
@@ -92,7 +91,10 @@ def permissions_overview(request: HttpRequest) -> HttpResponse:
 
     section = {
         "title": "Permission Catalog",
-        "subtitle": "Browse artifact fields, presets, and roles. Editing remains in the legacy admin while we finalize parity.",
+        "subtitle": (
+            "Browse artifact fields, presets, and roles. Editing remains in the legacy "
+            "admin while we finalize parity."
+        ),
         "body_template": "platform_ui/permissions/_section_body.html",
         "body_context": {
             "registry": registry,

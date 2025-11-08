@@ -2,9 +2,8 @@ from __future__ import annotations
 
 # pyright: strict
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownParameterType=false, reportAttributeAccessIssue=false
-
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from django.http import HttpRequest
 
@@ -12,19 +11,24 @@ from apps.platform.artifacts.models import CaseArtifact
 from apps.platform.cases.models import Case, CaseMembership
 from apps.platform.jobs.models import Job
 
-from ..presenters.utils import status_class, user_label
 from ..presenters.jobs import (
     job_most_recent_timestamp,
     latest_jobs_by_agent,
     map_job_status,
     select_agent,
 )
-from .analysis_modules import artifact_payload, analysis_modules_context as _analysis_modules_context
+from ..presenters.utils import status_class, user_label
 from .analysis_llm import build_analysis_llm_context as _build_analysis_llm_context
-from .tool_panels import build_tool_panels as _build_tool_panels, table_config as _table_config
+from .analysis_modules import (
+    analysis_modules_context as _analysis_modules_context,
+)
+from .analysis_modules import (
+    artifact_payload,
+)
 from .case_memberships import case_assignment_lists, case_owner_details
+from .tool_panels import build_tool_panels as _build_tool_panels
+from .tool_panels import table_config as _table_config
 from .tool_registry import iter_tool_definitions
-
 
 build_tool_panels = _build_tool_panels
 table_config = _table_config
@@ -46,14 +50,14 @@ __all__ = [
 
 def build_case_progress(
     case: Case,
-    jobs: List[Job],
-    telemetry_map: Dict[str, Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    jobs: list[Job],
+    telemetry_map: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
     latest = latest_jobs_by_agent(jobs, telemetry_map)
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
 
     setup_status = "Approved" if case.reviewer_id and case.client_user_id else "Created"
-    setup_detail_parts: List[str] = []
+    setup_detail_parts: list[str] = []
     if case.reviewer:
         setup_detail_parts.append(f"Reviewer: {user_label(case.reviewer)}")
     if case.client_user:
@@ -119,24 +123,26 @@ def build_case_progress(
     return items
 
 
-
-
 def case_progress_context(
     case: Case,
-    jobs: List[Job],
-    telemetry_map: Dict[str, Dict[str, Any]],
-    memberships: Optional[List[CaseMembership]] = None,
-) -> Dict[str, Any]:
+    jobs: list[Job],
+    telemetry_map: dict[str, dict[str, Any]],
+    memberships: list[CaseMembership] | None = None,
+) -> dict[str, Any]:
     assignments = case_assignment_lists(case, memberships)
     progress_items = build_case_progress(case, jobs, telemetry_map)
-    transcription_item = next((item for item in progress_items if item.get("key") == "transcription"), None)
+    transcription_item = next(
+        (item for item in progress_items if item.get("key") == "transcription"), None
+    )
     return {
         "progress_items": progress_items,
         "reviewer_candidates": assignments["reviewer_candidates"],
         "client_candidates": assignments["client_candidates"],
         "current_reviewer_label": user_label(case.reviewer) if case.reviewer else None,
         "current_client_label": user_label(case.client_user) if case.client_user else None,
-        "transcription_review_status": transcription_item.get("status") if transcription_item else None,
+        "transcription_review_status": transcription_item.get("status")
+        if transcription_item
+        else None,
     }
 
 
@@ -145,12 +151,12 @@ def collect_case_artifacts(
     case: Case,
     *,
     exclude_audio: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     user = getattr(request, "user", None)
     qs = CaseArtifact.scoped().for_user(user).filter(case_id=str(case.id))
     if exclude_audio:
         qs = qs.exclude(type__iexact="AUDIO")
-    artifacts: List[Dict[str, Any]] = []
+    artifacts: list[dict[str, Any]] = []
     for artifact in qs.order_by("-created_at"):
         payload = artifact_payload(artifact)
         payload["type"] = artifact.type
@@ -158,8 +164,8 @@ def collect_case_artifacts(
     return artifacts
 
 
-def build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    cards: List[Dict[str, Any]] = []
+def build_case_developer_cards(panels: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
     for definition in iter_tool_definitions():
         panel = panels.get(definition.key)
         if not panel:
@@ -180,11 +186,11 @@ def build_case_developer_cards(panels: Dict[str, Dict[str, Any]]) -> List[Dict[s
 def build_case_header_context(
     case: Case,
     *,
-    panels: Dict[str, Dict[str, Any]],
-    case_fields: List[Dict[str, Any]],
-    memberships: List[CaseMembership],
-    job_summary_last_update: Optional[datetime],
-) -> Dict[str, Any]:
+    panels: dict[str, dict[str, Any]],
+    case_fields: list[dict[str, Any]],
+    memberships: list[CaseMembership],
+    job_summary_last_update: datetime | None,
+) -> dict[str, Any]:
     owner_details = case_owner_details(memberships)
     owners = [item["label"] for item in owner_details]
     reviewer_detail = (
@@ -197,7 +203,7 @@ def build_case_header_context(
     )
     client_label = user_label(case.client_user) if case.client_user else None
 
-    activity_candidates: List[Tuple[Optional[datetime], Optional[str]]] = []
+    activity_candidates: list[tuple[datetime | None, str | None]] = []
     for panel in panels.values():
         updated = panel.get("updated_at")
         label = panel.get("label")
@@ -216,8 +222,12 @@ def build_case_header_context(
     last_activity_ts = activity_candidates[0][0] if activity_candidates else None
     last_activity_label = activity_candidates[0][1] if activity_candidates else None
 
-    next_hearing_field = next((field for field in case_fields if field["name"] == "court_date"), None)
-    filing_deadline_field = next((field for field in case_fields if field["name"] == "filing_deadline"), None)
+    next_hearing_field = next(
+        (field for field in case_fields if field["name"] == "court_date"), None
+    )
+    filing_deadline_field = next(
+        (field for field in case_fields if field["name"] == "filing_deadline"), None
+    )
 
     return {
         "title": case.title,

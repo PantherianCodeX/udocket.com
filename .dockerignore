@@ -2,43 +2,48 @@
 .git
 .gitignore
 
-# Python environments & caches
+# Local env/config
 .env
 .env.*
+.devcontainer/
+.vscode/
+.github/
+docker-compose*.yml
+
+# Python caches/environments
+__pycache__/
+*.pyc
 .pytype/
 .pyre/
 **/.venv/
+opt/venv/
 **/.pytest_cache/
 **/.mypy_cache/
 **/.typewiz_cache/
-**/__pycache__/
 
-# Node / tooling caches
+# Node/tool caches
 node_modules/
 .cache/
 
-# Dev-only typing helpers
-typings/
-
-# Local-only tooling & docs
-.devcontainer/
-.github/
-docker-compose*.yml
-docs/
-docs_old/
-scripts/
-tests/
-reports/
-**/*.md
-__AUTO__
-
-# BuildKit/Buildx caches
-.docker/
-
-# Local storage & emulator data
+# Workspace outputs & local storage
+out/
 storage/
+apps/storage/
 __blobstorage__/
 __azurite_db_*.json
 
-# IDE state
-.vscode/
+# Dev-only helper trees
+typings/
+tooling/
+scripts/
+tests/
+docs/
+docs-old/
+
+# Docs tooling artifacts
+packages/docs_tooling/build/
+packages/docs_tooling/site/
+packages/docs_tooling/docs/_assets/mermaid/
+
+# BuildKit cache dirs
+.docker/

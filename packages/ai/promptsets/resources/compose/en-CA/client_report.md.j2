@@ -1,0 +1,17 @@
+---
+version: 1
+description: Client deliverable baseline prompt.
+required_placeholders:
+  - client_name
+  - summary_markdown
+allowed_placeholders:
+  - client_name
+  - summary_markdown
+  - recommendations
+---
+# {{ client_name }} — Case Brief
+{{ summary_markdown }}
+
+{% if recommendations %}## Recommended Actions
+{{ recommendations }}
+{% endif %}

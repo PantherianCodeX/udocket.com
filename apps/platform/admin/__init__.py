@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from django.db.models import QuerySet
 from django.http import HttpRequest
 
@@ -13,7 +11,7 @@ from apps.platform.accounts.utils import get_active_admin_org
 class TenantScopedAdminMixin:
     """Align Django admin access with tenancy-aware UI scoping."""
 
-    tenant_field: Optional[str] = "organization"
+    tenant_field: str | None = "organization"
 
     def scope_queryset(self, request: HttpRequest, queryset: QuerySet) -> QuerySet:
         """Subclasses must return a queryset filtered to user-visible rows."""
@@ -79,7 +77,7 @@ class TenantScopedAdminMixin:
             return queryset
         return queryset.filter(**{model_field: active_org.id})
 
-    def _active_org_id(self, request: HttpRequest) -> Optional[str]:
+    def _active_org_id(self, request: HttpRequest) -> str | None:
         active_org = get_active_admin_org(request)
         return getattr(active_org, "id", None)
 

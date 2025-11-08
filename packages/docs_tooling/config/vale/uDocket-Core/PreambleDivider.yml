@@ -1,0 +1,7 @@
+extends: existence
+message: "Preamble entries must end with '**|**'."
+level: error
+nonword: true
+scope: raw
+tokens:
+  - (?m)^\*\*(Purpose|Contract|State|Failures & handling|Observability|Breadcrumbs):\*\*.*(?<!\*\*\|\*\*)$

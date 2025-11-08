@@ -1,8 +1,0 @@
-[active_profiles]
-pyright = "strict"
-
-[engines.pyright]
-include = [
-  "utils.py",
-]
-

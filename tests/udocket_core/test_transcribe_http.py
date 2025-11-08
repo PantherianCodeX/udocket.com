@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from packages.udocket_core.agents.common.azure_speech import (
+from packages.core.agents.common.azure_speech import (
     AzureSpeechClient,
     AzureSpeechClientConfig,
     AzureSpeechError,

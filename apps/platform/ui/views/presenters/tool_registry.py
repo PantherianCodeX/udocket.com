@@ -7,10 +7,11 @@ or capability requirements throughout the codebase. The roadmap calls for a
 ToolDefinition registry that typed callers can reference when composing panel
 payloads or exposing tooling in other surfaces (API, websocket payloads, etc.).
 """
+
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Mapping, Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -29,9 +30,9 @@ class ToolDefinition:
     description: str
     body_template: str
     notes_enabled: bool = True
-    alerts_key: Optional[str] = None
-    llm_target: Optional[str] = None
-    job_endpoint_template: Optional[str] = None
+    alerts_key: str | None = None
+    llm_target: str | None = None
+    job_endpoint_template: str | None = None
     default_actions: Sequence[str] = field(default_factory=tuple)
     artifact_types: Sequence[str] = field(default_factory=tuple)
     data_attributes: Mapping[str, str] = field(default_factory=dict)
@@ -41,7 +42,9 @@ _REGISTRY: dict[str, ToolDefinition] = {
     "intake": ToolDefinition(
         key="intake",
         label="Intake",
-        description="Manage intake details, assignments, and questionnaire artifacts for this case.",
+        description=(
+            "Manage intake details, assignments, and questionnaire artifacts for this case."
+        ),
         body_template="platform_ui/tools/case_details.html",
         notes_enabled=True,
     ),
@@ -57,7 +60,9 @@ _REGISTRY: dict[str, ToolDefinition] = {
     "analyze": ToolDefinition(
         key="analyze",
         label="Analyze",
-        description="Generate layered summaries and companion analysis artifacts from approved transcripts.",
+        description=(
+            "Generate layered summaries and companion analysis artifacts from approved transcripts."
+        ),
         body_template="platform_ui/tools/analyze.html",
         notes_enabled=True,
         alerts_key="analyze",
@@ -69,7 +74,9 @@ _REGISTRY: dict[str, ToolDefinition] = {
     "compose": ToolDefinition(
         key="compose",
         label="Compose",
-        description="Generate client and lawyer-ready deliverables from approved summaries and transcripts.",
+        description=(
+            "Generate client and lawyer-ready deliverables from approved summaries and transcripts."
+        ),
         body_template="platform_ui/tools/compose.html",
         notes_enabled=True,
         alerts_key="compose",

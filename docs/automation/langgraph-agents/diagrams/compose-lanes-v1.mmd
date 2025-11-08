@@ -1,0 +1,50 @@
+%% compose-lanes-v1.mmd
+%% Detailed Compose lane flow with targeted revision directives
+flowchart TD
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef lane fill:#ecf8ff,stroke:#2684ff,stroke-width:1.1px,color:#111;
+    classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
+    classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
+
+    Context["ComposeContext\n(summary_v1.json + artifacts)"]:::stage
+
+    subgraph ClientLane["Client lane"]
+        direction TB
+        CDraft["Draft client deliverable"]:::lane
+        CChecks["Structure & compliance guards"]:::gate
+        CFactual["Factuality guard\n(atom citations)"]:::gate
+        CQA["Client lane QA"]:::gate
+    end
+
+    subgraph LawyerLane["Lawyer lane"]
+        direction TB
+        LDraft["Draft lawyer deliverable"]:::lane
+        LChecks["Structure & compliance guards"]:::gate
+        LFactual["Factuality guard\n(atom citations)"]:::gate
+        LQA["Lawyer lane QA"]:::gate
+    end
+
+    subgraph BundleLane["Bundle lane (optional)"]
+        direction TB
+        BDraft["Draft bundle excerpt"]:::lane
+        BQA["Bundle QA"]:::gate
+    end
+
+    Revision["Revision directives\n(section-scoped prompts)"]:::directive
+    CrossQA["Cross-lane QA\n(staff & QA reports)"]:::gate
+    Finalize["Version artifacts + manifests"]:::stage
+
+    Context --> CDraft --> CChecks --> CFactual --> CQA --> CrossQA
+    Context --> LDraft --> LChecks --> LFactual --> LQA --> CrossQA
+    Context --> BDraft --> BQA --> CrossQA
+
+    CChecks -->|issue| Revision --> CDraft
+    CFactual -->|issue| Revision
+    CQA -->|issue| Revision
+    LChecks -->|issue| Revision --> LDraft
+    LFactual -->|issue| Revision
+    LQA -->|issue| Revision
+    BQA -->|issue| Revision --> BDraft
+    CrossQA -->|issue| Revision
+
+    CrossQA --> Finalize

@@ -1,0 +1,38 @@
+%% Mermaid class diagram: Agent orchestration classes v1
+%%{init: {"flowchart": {"htmlLabels": false}, "class": {"htmlLabels": false}, "state": {"htmlLabels": false}, "er": {"htmlLabels": false}, "journey": {"htmlLabels": false}, "timeline": {"htmlLabels": false}}}%%
+classDiagram
+  class PipelineCatalog {
+    +getDefinition(agentType)
+    +listStages(pipelineId)
+    -definitions: Map
+  }
+  class PipelineDefinition {
+    +pipelineId: UUID
+    +graphVersion: String
+    +stages: List<StageDefinition>
+  }
+  class StageDefinition {
+    +stageId: String
+    +nodeId: String
+    +toolIds: List
+    +retryPolicy: RetryPolicy
+  }
+  class GraphRunner {
+    +run(definition, context)
+    +resume(definition, checkpoint)
+    -toolRegistry: ToolRegistry
+  }
+  class ToolRegistry {
+    +resolve(toolId)
+    +validate(toolSpec)
+  }
+  class RetryPolicy {
+    +maxAttempts: Int
+    +backoff: Duration
+  }
+
+  PipelineCatalog --> PipelineDefinition : returns
+  PipelineDefinition --> StageDefinition : aggregates
+  GraphRunner --> PipelineDefinition : executes
+  GraphRunner --> ToolRegistry : consults
+  StageDefinition --> RetryPolicy : configures

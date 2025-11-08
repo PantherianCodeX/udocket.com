@@ -1,0 +1,38 @@
+error_codes:
+  - code: POLICY_BLOCK
+    http_status: 403
+    audit_required: true
+    description: "Guardian or residency guard rejected a pipeline launch or artifact promotion."
+    client_action: "Present Guardian reason codes, remediate policy inputs, or seek waiver approval before retrying."
+    related_metrics:
+      - agent_guardian_block_total
+      - agent_api_error_total
+  - code: CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Idempotency key replay with a different payload or stale manifest version."
+    client_action: "Read the latest manifest, regenerate the payload, and retry with a fresh Idempotency-Key."
+    related_metrics:
+      - agent_api_error_total
+  - code: PROVIDER_DEGRADED
+    http_status: 503
+    audit_required: true
+    description: "LLM provider or speech service unavailable and fallback chain exhausted."
+    client_action: "Record degraded status, halt automatic retries, and resume once health probes report recovery."
+    related_metrics:
+      - agent_api_error_total
+  - code: QUARANTINED
+    http_status: 423
+    audit_required: true
+    description: "Generated artifact or intermediate output quarantined pending Guardian review."
+    client_action: "Route to reviewer workflow, capture remediation notes, and relaunch only after clearance."
+    related_metrics:
+      - agent_guardian_block_total
+  - code: RATE_LIMIT
+    http_status: 429
+    audit_required: false
+    description: "Org or agent exceeded concurrency or FinOps budgets."
+    client_action: "Honour Retry-After, shed background runs, and reschedule once the budget resets."
+    related_metrics:
+      - agent_api_error_total
+      - agent_rate_limit_total

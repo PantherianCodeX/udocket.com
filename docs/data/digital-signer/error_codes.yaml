@@ -1,0 +1,39 @@
+error_codes:
+  - code: SIGNATURE_MANIFEST_INVALID
+    http_status: 409
+    audit_required: true
+    description: "Manifest hash mismatch, missing TSA evidence, or unsupported format detected before release."
+    client_action: "Investigate manifest diff, regenerate evidence via ops/signer/validate_manifests.py, then retry the submission."
+    related_metrics:
+      - signer_api_error_total
+      - signer_signature_policy_violation_total
+  - code: SIGNING_PIPELINE_BLOCKED
+    http_status: 503
+    audit_required: true
+    description: "Signing queue halted due to FIPS waiver expiry, trust-root drift, or Guardian quarantine."
+    client_action: "Follow RB-SIGN-INCIDENT or RB-SIGN-TSA, refresh waivers or trust roots, and resubmit once the pipeline resumes."
+    related_metrics:
+      - signer_api_error_total
+      - signer_pipeline_blocked_total
+  - code: SIGNATURE_POLICY_MISMATCH
+    http_status: 409
+    audit_required: true
+    description: "Requested policy does not match Settings (sign.signature_policies[]) or deliverable class."
+    client_action: "Align the request payload with the active policy or update Settings; avoid blind retries."
+    related_metrics:
+      - signer_signature_policy_violation_total
+  - code: SIGN_IDEMPOTENCY_CONFLICT
+    http_status: 409
+    audit_required: false
+    description: "Replayed signing request with differing payload or digest."
+    client_action: "Generate a new Idempotency-Key, ensure the canonical payload remains unchanged, and retry once."
+    related_metrics:
+      - signer_api_error_total
+  - code: SIGNATURE_REPLAY_MISMATCH
+    http_status: 412
+    audit_required: true
+    description: "Replay verification detected output drift versus the stored manifest."
+    client_action: "Quarantine the artifact, run replay validation (ops/scripts/signer/replay_signature.py), and remediate before reissuing."
+    related_metrics:
+      - signer_api_error_total
+      - signer_signature_policy_violation_total

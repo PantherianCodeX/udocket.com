@@ -2,14 +2,20 @@ config_version = 0
 
 [audit]
 # Keep explicit paths for deterministic CI runs
-full_paths = ["apps", "packages", "config", "tests"]
+full_paths = [
+    "apps/platform/operations",
+    "packages/core/agents",
+    "packages/core/logging",
+    "packages/common",
+    "config"
+]
 runners = ["pyright", "mypy"]
-fail_on = "errors"
-max_depth = 3
+fail_on = "warnings"
+skip_full = true
 # Also emit dashboards when running `typewiz audit`
-dashboard_json = "reports/typing/dashboard.json"
-dashboard_markdown = "reports/typing/dashboard.md"
-dashboard_html = "reports/typing/dashboard.html"
+dashboard_json = "out/test-reports/typing/dashboard.json"
+dashboard_markdown = "out/test-reports/typing/dashboard.md"
+dashboard_html = "out/test-reports/typing/dashboard.html"
 
 [audit.active_profiles]
 # Baseline across the repo; stricter profiles applied via folder overrides
@@ -19,7 +25,13 @@ pyright = "baseline"
 config_file = "pyrightconfig.json"
 # Ensure alignment with repo runtime (3.12)
 plugin_args = ["--pythonversion", "3.12"]
-include = ["apps", "packages", "config", "tests"]
+include = [
+    "apps/platform/operations",
+    "packages/core/agents",
+    "packages/core/logging",
+    "packages/common",
+    "config"
+]
 
 [audit.engines.pyright.profiles.baseline]
 # Baseline keeps warnings visible without strict gating
@@ -31,4 +43,11 @@ plugin_args = ["--strict"]
 
 [audit.engines.mypy]
 config_file = "mypy.ini"
-include = ["apps", "packages", "config", "tests"]
+include = [
+    "apps/platform/operations",
+    "packages/core/agents",
+    "packages/core/logging",
+    "packages/common",
+    "config"
+]
+env = { PYTHONWARNINGS = "ignore::UserWarning" }

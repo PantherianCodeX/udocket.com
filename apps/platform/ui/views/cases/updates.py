@@ -1,22 +1,14 @@
 from __future__ import annotations
 
- 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false
-
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
-from django.http import HttpRequest, HttpResponse, JsonResponse, HttpResponseBadRequest
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from ..auth import ensure_authenticated
-from ..contexts import compute_case_tool_state, get_case_and_org
-from ..presenters.case_fields import case_field_specs
-from .helpers import check_case_update_permission, render_case_panel_with_refresh
-from packages.udocket_core.llm import load_llm_settings
-from .membership import reconcile_case_memberships
 from apps.platform.operations.llm import (
     delete_llm_configuration,
     delete_org_provider_credential,
@@ -28,7 +20,14 @@ from apps.platform.operations.llm import (
     upsert_llm_configuration,
     upsert_org_provider_credential,
 )
-from packages.udocket_core.utils.json import parse_json_value
+from packages.common.json_utils import parse_json_value
+from packages.core.llm import load_llm_settings
+
+from ..auth import ensure_authenticated
+from ..contexts import compute_case_tool_state, get_case_and_org
+from ..presenters.case_fields import case_field_specs
+from .helpers import check_case_update_permission, render_case_panel_with_refresh
+from .membership import reconcile_case_memberships
 
 
 @require_http_methods(["POST"])
@@ -59,8 +58,8 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     if permission_denied:
         return permission_denied
 
-    form_errors: Dict[str, str] = {}
-    case_updates: Dict[str, Any] = {}
+    form_errors: dict[str, str] = {}
+    case_updates: dict[str, Any] = {}
     specs = case_field_specs()
 
     for spec in specs:
@@ -97,7 +96,9 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
     reviewer_id = (request.POST.get("reviewer_id") or "").strip()
     client_user_id = (request.POST.get("client_user_id") or "").strip()
     owner_id = (request.POST.get("owner_id") or "").strip()
-    contributor_ids = set((request.POST.getlist("contributor_ids") or []) if hasattr(request, "POST") else [])
+    contributor_ids = set(
+        (request.POST.getlist("contributor_ids") or []) if hasattr(request, "POST") else []
+    )
     representation_value = (request.POST.get("representation") or "").strip()
     engagement_value = (request.POST.get("engagement_model") or "standard").strip().lower()
 
@@ -109,7 +110,7 @@ def case_details_update(request: HttpRequest, case_id: str) -> HttpResponse:
             panel_body["form_errors"] = form_errors
         return render(request, "platform_ui/tools/_panel.html", {"panel": panel}, status=400)
 
-    update_fields: List[str] = []
+    update_fields: list[str] = []
     for field_name, value in case_updates.items():
         if hasattr(case, field_name) and getattr(case, field_name) != value:
             setattr(case, field_name, value)
@@ -197,9 +198,7 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
     llm_settings = load_llm_settings()
     stage_targets = llm_settings.stage_targets()
     if target not in stage_targets:
-        existing_configs = get_org_llm_configurations(
-            str(organization_id), target=target
-        )
+        existing_configs = get_org_llm_configurations(str(organization_id), target=target)
         if not existing_configs:
             return HttpResponseBadRequest("Unknown LLM target.")
 
@@ -220,8 +219,16 @@ def case_llm_settings(request: HttpRequest, case_id: str) -> HttpResponse:
         if not name:
             name = f"{target.title()} configuration"
         description = str(config_payload.get("description") or "").strip()
-        stage_map = config_payload.get("stage_map") if isinstance(config_payload.get("stage_map"), dict) else None
-        provider_chain = config_payload.get("provider_chain") if isinstance(config_payload.get("provider_chain"), list) else None
+        stage_map = (
+            config_payload.get("stage_map")
+            if isinstance(config_payload.get("stage_map"), dict)
+            else None
+        )
+        provider_chain = (
+            config_payload.get("provider_chain")
+            if isinstance(config_payload.get("provider_chain"), list)
+            else None
+        )
         set_default = bool(config_payload.get("set_default"))
         updated_config = upsert_llm_configuration(
             organization_id=str(organization_id),
@@ -291,8 +298,14 @@ def case_llm_providers(request: HttpRequest, case_id: str) -> HttpResponse:
     if not provider_key:
         return HttpResponseBadRequest("Provider is required.")
 
-    display_name = str(payload.get("display_name") or catalog.get(provider_key, {}).get("display_name") or provider_key)
-    endpoint = str(payload.get("endpoint") or catalog.get(provider_key, {}).get("default_endpoint") or "").strip()
+    display_name = str(
+        payload.get("display_name")
+        or catalog.get(provider_key, {}).get("display_name")
+        or provider_key
+    )
+    endpoint = str(
+        payload.get("endpoint") or catalog.get(provider_key, {}).get("default_endpoint") or ""
+    ).strip()
     api_key = payload.get("api_key")
     if api_key == "":  # allow clearing key
         api_key = None

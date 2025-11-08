@@ -2,8 +2,8 @@ from __future__ import annotations
 
 # pyright: strict
 import logging
+from typing import cast
 from uuid import UUID
-from typing import Dict, Optional, cast
 
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count
@@ -18,17 +18,17 @@ from apps.platform.jobs.models import Job, JobNote
 from apps.platform.tenancy import scope_jobs
 
 from .auth import ensure_authenticated
-from .contexts import get_case_and_org, job_detail_context, user_can_review_case
 from .constants import GLOBAL_JOB_TABLE_COLUMNS
-from .presenters.cases import table_config
-from .presenters.job_actions import build_job_action_entries
-from .presenters.jobs import build_job_rows
-from .selectors import job_telemetry_map
+from .contexts import get_case_and_org, job_detail_context, user_can_review_case
 from .job_tables import build_job_table_state
 
 # Backwards-compatible exports for tests and legacy imports
 from .jobs_actions import create_job as create_job
 from .jobs_actions import transcribe_job_task as transcribe_job_task
+from .presenters.cases import table_config
+from .presenters.job_actions import build_job_action_entries
+from .presenters.jobs import build_job_rows
+from .selectors import job_telemetry_map
 
 __all__ = [
     "jobs",
@@ -67,22 +67,19 @@ def jobs(request: HttpRequest) -> HttpResponse:
     telemetry_map = job_telemetry_map(jobs_page, request)
 
     job_ids = [str(job.id) for job in jobs_page]
-    transcript_artifacts: Dict[str, CaseArtifact] = {}
+    transcript_artifacts: dict[str, CaseArtifact] = {}
     if job_ids:
-        for art in (
-            CaseArtifact.objects.filter(job_id__in=job_ids, type="TRANSCRIPT")
-            .order_by("-created_at")
+        for art in CaseArtifact.objects.filter(job_id__in=job_ids, type="TRANSCRIPT").order_by(
+            "-created_at"
         ):
-            job_id_value = cast(Optional[str], getattr(art, "job_id", None))
+            job_id_value = cast(str | None, getattr(art, "job_id", None))
             if job_id_value and job_id_value not in transcript_artifacts:
                 transcript_artifacts[job_id_value] = art
 
-    note_counts: Dict[str, int] = {}
+    note_counts: dict[str, int] = {}
     if jobs_page:
         note_count_rows = (
-            JobNote.objects.filter(job__in=jobs_page)
-            .values("job_id")
-            .annotate(count=Count("id"))
+            JobNote.objects.filter(job__in=jobs_page).values("job_id").annotate(count=Count("id"))
         )
         note_counts = {str(row["job_id"]): int(row["count"]) for row in note_count_rows}
 
@@ -95,9 +92,9 @@ def jobs(request: HttpRequest) -> HttpResponse:
 
     user = getattr(request, "user", None)
     for row in flat_rows:
-        job_obj: Optional[Job] = row.get("job")
+        job_obj: Job | None = row.get("job")
         can_review = False
-        case_obj: Optional[Case] = None
+        case_obj: Case | None = None
         if job_obj:
             case_obj = getattr(job_obj, "case", None)
             if isinstance(case_obj, Case):
@@ -123,25 +120,25 @@ def jobs(request: HttpRequest) -> HttpResponse:
         if job_obj and getattr(job_obj, "case_id", None):
             cases_seen.add(str(job_obj.case_id))
     jobs_table = table_config(
-            panel_key="jobs",
-            title="Jobs",
-            pill="Live updates",
-            rows=display_rows,
-            columns=GLOBAL_JOB_TABLE_COLUMNS,
-            column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
-            filters=table_state.filters,
-            empty_message="No jobs yet.",
-            show_identifiers=False,
-            case_id=None,
-            limit_value=table_state.page_size,
-            limit_options=table_state.limit_choices,
-            total_count=table_state.pagination.get("total", job_display_count),
-            pagination=table_state.pagination,
-            param_prefix=table_state.param_prefix,
-            filter_param_names=table_state.param_names,
-            filters_active=table_state.active_filters,
-            has_advanced_filters=table_state.has_advanced_filters,
-        )
+        panel_key="jobs",
+        title="Jobs",
+        pill="Live updates",
+        rows=display_rows,
+        columns=GLOBAL_JOB_TABLE_COLUMNS,
+        column_ids=[col["id"] for col in GLOBAL_JOB_TABLE_COLUMNS],
+        filters=table_state.filters,
+        empty_message="No jobs yet.",
+        show_identifiers=False,
+        case_id=None,
+        limit_value=table_state.page_size,
+        limit_options=table_state.limit_choices,
+        total_count=table_state.pagination.get("total", job_display_count),
+        pagination=table_state.pagination,
+        param_prefix=table_state.param_prefix,
+        filter_param_names=table_state.param_names,
+        filters_active=table_state.active_filters,
+        has_advanced_filters=table_state.has_advanced_filters,
+    )
 
     context = {
         "active_org": organization,
@@ -159,7 +156,10 @@ def jobs(request: HttpRequest) -> HttpResponse:
         "section": {
             "pretitle": f"Jobs · {organization.name}",
             "title": "Recent transcription jobs",
-            "subtitle": "Track automations across this tenant, including their status, agent, and originating case.",
+            "subtitle": (
+                "Track automations across this tenant, including their status, agent, "
+                "and originating case."
+            ),
             "stats": [
                 {
                     "label": "Displayed",
@@ -185,7 +185,9 @@ def job_detail_panel(request: HttpRequest, job_id: UUID) -> HttpResponse:
         if auth_response:
             return auth_response
 
-        jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by").filter(pk=job_id)
+        jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by").filter(
+            pk=job_id
+        )
         job = scope_jobs(jobs_qs, getattr(request, "user", None)).first()
         if not job:
             raise Http404
@@ -201,7 +203,7 @@ def job_detail_panel(request: HttpRequest, job_id: UUID) -> HttpResponse:
         return HttpResponse(
             '<div class="space-y-2 text-xs text-rose-200">'
             "<p>Unable to load job detail.</p>"
-            f"<p class=\"font-mono text-[10px] text-rose-300\">{exc}</p>"
+            f'<p class="font-mono text-[10px] text-rose-300">{exc}</p>'
             "</div>",
             status=500,
         )
@@ -231,13 +233,11 @@ def case_job_detail_panel(request: HttpRequest, case_id: str, job_id: UUID) -> H
     except Http404:
         raise
     except Exception as exc:  # noqa: BLE001
-        log.exception(
-            "case_job_detail_panel error", extra={"job_id": job_id, "case_id": case_id}
-        )
+        log.exception("case_job_detail_panel error", extra={"job_id": job_id, "case_id": case_id})
         return HttpResponse(
             '<div class="space-y-2 text-xs text-rose-200">'
             "<p>Unable to load job detail.</p>"
-            f"<p class=\"font-mono text-[10px] text-rose-300\">{exc}</p>"
+            f'<p class="font-mono text-[10px] text-rose-300">{exc}</p>'
             "</div>",
             status=500,
         )

@@ -1,33 +1,22 @@
 from __future__ import annotations
 
-# pyright: strict
-
-from collections.abc import Iterable, Mapping, Sequence
 import importlib
 import logging
+
+# pyright: strict
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, TypeAlias, cast
 
 try:  # pragma: no cover - Python < 3.11 fallback
     from typing import NotRequired, Required, TypedDict
 except ImportError:  # pragma: no cover - use typing_extensions when stdlib lacks PEP 655 types
-    from typing_extensions import NotRequired, Required, TypedDict
+    from typing import NotRequired, Required
+
+    from typing_extensions import TypedDict
 
 from django.db import transaction
 
-from packages.udocket_core.llm.config import (
-    LLMProvider,
-    LLMProviderModel,
-    LLMSettings,
-    PROVIDERS_PATH,
-    load_llm_settings,
-)
-from packages.udocket_core.llm.runtime import (
-    ChatClientError,
-    build_chat_client,
-    build_provider_runtime_config,
-)
-from packages.udocket_core.agents.common.llm_health import ensure_llm_client_health
-from packages.udocket_core.utils.json import (
+from packages.common.json_utils import (
     JSONObject,
     JSONValue,
     coerce_float,
@@ -38,12 +27,24 @@ from packages.udocket_core.utils.json import (
     coerce_str,
     coerce_str_list,
     normalize_json_object,
-    read_json_object,
+)
+from packages.core.agents.common.llm_health import ensure_llm_client_health
+from packages.core.llm.config import (
+    LLMConfigError,
+    LLMProvider,
+    LLMProviderModel,
+    LLMSettings,
+    load_llm_settings,
+)
+from packages.core.llm.runtime import (
+    ChatClientError,
+    build_chat_client,
+    build_provider_runtime_config,
 )
 
 _analyze_src: Iterable[str]
 try:
-    _mod = importlib.import_module("packages.udocket_core.agents.analyze_lib")
+    _mod = importlib.import_module("packages.core.agents.analyze_lib")
     _analyze_src = getattr(_mod, "DISALLOWED_PROVIDERS", ())
 except Exception:  # pragma: no cover - fallback when analyzer unavailable
     _analyze_src = ()
@@ -52,7 +53,6 @@ _ANALYZE_DISALLOWED_PROVIDERS: set[str] = {str(name) for name in _analyze_src}
 
 from .crypto import decrypt_secret, encrypt_secret
 from .models import LLMConfiguration, LLMProviderCredential
-
 
 log = logging.getLogger("udocket.operations.llm")
 
@@ -198,9 +198,7 @@ def _model_attr(
     return model_meta.get(attr)
 
 
-def _model_options_dict(
-    model_meta: LLMProviderModel | Mapping[str, Any]
-) -> JSONDict:
+def _model_options_dict(model_meta: LLMProviderModel | Mapping[str, Any]) -> JSONDict:
     options_value = _model_attr(model_meta, "options")
     if isinstance(options_value, Mapping):
         mapping_value = cast(Mapping[object, object], options_value)
@@ -235,9 +233,7 @@ def serialize_llm_configuration(config: LLMConfiguration) -> LLMConfigurationPay
     raw_stage_map = config.stage_map
     stage_map = _clean_stage_map(cast(Mapping[str, Any] | None, raw_stage_map))
     provider_chain = [
-        provider.strip().lower()
-        for provider in (config.provider_chain or [])
-        if provider.strip()
+        provider.strip().lower() for provider in (config.provider_chain or []) if provider.strip()
     ]
     updated_at = config.updated_at.isoformat() if config.updated_at else None
     return {
@@ -281,9 +277,7 @@ def get_llm_configuration(
         config = qs.order_by("-is_default", "name").first()
         return serialize_llm_configuration(config) if config else None
     try:
-        config = LLMConfiguration.typed_objects().get(
-            organization_id=organization_id, id=config_id
-        )
+        config = LLMConfiguration.typed_objects().get(organization_id=organization_id, id=config_id)
     except LLMConfiguration.DoesNotExist:
         return None
     if target and config.target != target:
@@ -324,15 +318,17 @@ def upsert_llm_configuration(
                     target=target,
                 ).update(is_default=False)
                 config.is_default = True
-            config.save(update_fields=[
-                "name",
-                "description",
-                "target",
-                "stage_map",
-                "provider_chain",
-                "is_default",
-                "updated_at",
-            ])
+            config.save(
+                update_fields=[
+                    "name",
+                    "description",
+                    "target",
+                    "stage_map",
+                    "provider_chain",
+                    "is_default",
+                    "updated_at",
+                ]
+            )
             return serialize_llm_configuration(config)
 
     if set_default:
@@ -354,9 +350,7 @@ def upsert_llm_configuration(
 
 
 def delete_llm_configuration(*, organization_id: str, config_id: str) -> None:
-    LLMConfiguration.typed_objects().filter(
-        organization_id=organization_id, id=config_id
-    ).delete()
+    LLMConfiguration.typed_objects().filter(organization_id=organization_id, id=config_id).delete()
 
 
 def ensure_default_llm_configuration(
@@ -367,18 +361,27 @@ def ensure_default_llm_configuration(
     provider_chain: Iterable[str] | None = None,
     llm_settings: LLMSettings | None = None,
 ) -> LLMConfigurationPayload | None:
-    existing = LLMConfiguration.typed_objects().filter(
-        organization_id=organization_id,
-        target=target,
-        is_default=True,
-    ).first()
+    existing = (
+        LLMConfiguration.typed_objects()
+        .filter(
+            organization_id=organization_id,
+            target=target,
+            is_default=True,
+        )
+        .first()
+    )
     if existing:
         return serialize_llm_configuration(existing)
 
-    candidate = LLMConfiguration.typed_objects().filter(
-        organization_id=organization_id,
-        target=target,
-    ).order_by("name").first()
+    candidate = (
+        LLMConfiguration.typed_objects()
+        .filter(
+            organization_id=organization_id,
+            target=target,
+        )
+        .order_by("name")
+        .first()
+    )
     if candidate:
         candidate.is_default = True
         candidate.save(update_fields=["is_default", "updated_at"])
@@ -417,21 +420,61 @@ def ensure_default_llm_configuration(
     return serialize_llm_configuration(config)
 
 
+def _serialize_provider_model(model: LLMProviderModel) -> JSONDict:
+    payload: JSONDict = {
+        "label": model.label,
+        "cost_tier": model.cost_tier,
+        "options": dict(model.options),
+    }
+    if model.max_output_tokens is not None:
+        payload["max_output_tokens"] = model.max_output_tokens
+    if model.context_window_tokens is not None:
+        payload["context_window_tokens"] = model.context_window_tokens
+    if model.max_input_tokens is not None:
+        payload["max_input_tokens"] = model.max_input_tokens
+    if model.max_chunk_chars is not None:
+        payload["max_chunk_chars"] = model.max_chunk_chars
+    if model.chunk_overlap_tokens is not None:
+        payload["chunk_overlap_tokens"] = model.chunk_overlap_tokens
+    if model.max_prompt_chars is not None:
+        payload["max_prompt_chars"] = model.max_prompt_chars
+    if model.max_prompt_segments is not None:
+        payload["max_prompt_segments"] = model.max_prompt_segments
+    if model.default_temperature is not None:
+        payload["default_temperature"] = model.default_temperature
+    if model.deployment_env:
+        payload["deployment_env"] = model.deployment_env
+    if model.origin:
+        payload["origin"] = model.origin
+    payload["default_enabled"] = model.default_enabled
+    return payload
+
+
+def _serialize_provider(provider: LLMProvider) -> JSONDict:
+    models_payload: dict[str, JSONDict] = {
+        model_name: _serialize_provider_model(model_obj)
+        for model_name, model_obj in provider.models.items()
+    }
+    payload: JSONDict = {
+        "display_name": provider.display_name,
+        "description": provider.description,
+        "category": provider.category,
+        "hosted_creators": list(provider.hosted_creators),
+        "env_requirements": list(provider.env_requirements),
+        "api_kind": provider.api_kind,
+        "default_endpoint": provider.default_endpoint,
+        "requires_api_key": provider.requires_api_key,
+    }
+    payload["models"] = coerce_json_value(models_payload)
+    return payload
+
+
 def _provider_catalog() -> dict[str, JSONDict]:
     try:
-        payload = read_json_object(PROVIDERS_PATH)
-    except OSError:
+        settings = load_llm_settings()
+    except LLMConfigError:
         return {}
-    providers_payload = payload.get("providers")
-    if not isinstance(providers_payload, Mapping):
-        return {}
-    catalog: dict[str, JSONDict] = {}
-    for provider_name_obj, provider_cfg in providers_payload.items():
-        if isinstance(provider_cfg, Mapping):
-            catalog[provider_name_obj] = coerce_json_object(provider_cfg)
-        else:
-            catalog[provider_name_obj] = {}
-    return catalog
+    return {name: _serialize_provider(provider) for name, provider in settings.providers.items()}
 
 
 def load_provider_catalog() -> dict[str, JSONDict]:
@@ -454,16 +497,16 @@ def get_org_provider_credentials(
             "provider": record.provider,
             "display_name": record.display_name,
             "endpoint": record.endpoint,
-        "models": models_payload,
-        "has_api_key": bool(record.api_key_encrypted),
-        "metadata": metadata_payload,
-        "is_enabled": record.is_enabled,
-    }
+            "models": models_payload,
+            "has_api_key": bool(record.api_key_encrypted),
+            "metadata": metadata_payload,
+            "is_enabled": record.is_enabled,
+        }
     return creds
 
 
 def _catalog_models_to_options(
-    models: Mapping[str, LLMProviderModel | Mapping[str, Any]]
+    models: Mapping[str, LLMProviderModel | Mapping[str, Any]],
 ) -> list[ProviderModelOption]:
     options: list[ProviderModelOption] = []
     for model_name, model_meta in models.items():
@@ -489,7 +532,9 @@ def _catalog_models_to_options(
             "name": model_name,
             "value": model_name,
             "label": str(label_raw) if isinstance(label_raw, str) and label_raw else model_name,
-            "cost_tier": str(cost_tier_raw) if isinstance(cost_tier_raw, str) and cost_tier_raw else "standard",
+            "cost_tier": str(cost_tier_raw)
+            if isinstance(cost_tier_raw, str) and cost_tier_raw
+            else "standard",
             "options": options_dict,
         }
 
@@ -525,9 +570,7 @@ def _catalog_models_to_options(
     return options
 
 
-def _credential_models_to_options(
-    models: Sequence[Mapping[str, Any]]
-) -> list[ProviderModelOption]:
+def _credential_models_to_options(models: Sequence[Mapping[str, Any]]) -> list[ProviderModelOption]:
     options: list[ProviderModelOption] = []
     for item in models:
         name_value = item.get("name") or item.get("id")
@@ -536,12 +579,12 @@ def _credential_models_to_options(
             continue
         deployment_env_value = item.get("deployment_env")
         deployment_env = (
-            str(deployment_env_value)
-            if isinstance(deployment_env_value, str)
-            else None
+            str(deployment_env_value) if isinstance(deployment_env_value, str) else None
         )
         options_value = item.get("options")
-        options_dict = normalize_json_object(options_value, drop_empty_keys=True, drop_nullish_values=True)
+        options_dict = normalize_json_object(
+            options_value, drop_empty_keys=True, drop_nullish_values=True
+        )
         if deployment_env and "azure_deployment" not in options_dict:
             options_dict["azure_deployment"] = deployment_env
 
@@ -549,7 +592,9 @@ def _credential_models_to_options(
             "name": name,
             "value": name,
             "label": str(item.get("label")) if isinstance(item.get("label"), str) else name,
-            "cost_tier": str(item.get("cost_tier")) if isinstance(item.get("cost_tier"), str) else "standard",
+            "cost_tier": str(item.get("cost_tier"))
+            if isinstance(item.get("cost_tier"), str)
+            else "standard",
             "options": options_dict,
         }
 
@@ -676,7 +721,9 @@ def evaluate_provider_setup(
             issues.append("Replace the placeholder resource name in the Azure endpoint")
         # Determine whether a deployment is provided either in provider metadata
         # or in at least one enabled model's options/payload.
-        deployment = metadata_dict.get("azure_deployment") or metadata_dict.get("default_deployment")
+        deployment = metadata_dict.get("azure_deployment") or metadata_dict.get(
+            "default_deployment"
+        )
         if not deployment:
             # Look for deployment on any enabled model
             try:
@@ -707,9 +754,7 @@ def evaluate_provider_setup(
     if not sanitized_models:
         issues.append("Add at least one model before enabling this provider")
     else:
-        any_enabled = any(
-            _is_truthy_flag(model.get("enabled", True)) for model in sanitized_models
-        )
+        any_enabled = any(_is_truthy_flag(model.get("enabled", True)) for model in sanitized_models)
         if not any_enabled:
             issues.append("Enable at least one model before enabling this provider")
     issues_json: list[JSONValue] = [s for s in issues]
@@ -742,15 +787,11 @@ def build_provider_registry(
     credentials_map = provider_credentials or get_org_provider_credentials(organization_id)
     if supported_providers is None:
         supported_set = {
-            name
-            for name in settings.providers.keys()
-            if name not in _ANALYZE_DISALLOWED_PROVIDERS
+            name for name in settings.providers.keys() if name not in _ANALYZE_DISALLOWED_PROVIDERS
         }
     else:
         supported_set = {
-            name
-            for name in supported_providers
-            if name not in _ANALYZE_DISALLOWED_PROVIDERS
+            name for name in supported_providers if name not in _ANALYZE_DISALLOWED_PROVIDERS
         }
 
     registry: dict[str, JSONDict] = {}
@@ -805,8 +846,7 @@ def build_provider_registry(
             "configured": is_ready,
             "enabled": enabled,
             "status": status,
-            "default_endpoint": provider.default_endpoint
-            or catalog_entry.get("default_endpoint"),
+            "default_endpoint": provider.default_endpoint or catalog_entry.get("default_endpoint"),
             "requires_api_key": bool(
                 catalog_entry.get("requires_api_key")
                 if "requires_api_key" in catalog_entry
@@ -823,9 +863,7 @@ def build_provider_registry(
             "category": getattr(provider, "category", "creator"),
             "hosted_creators": list(getattr(provider, "hosted_creators", [])),
         }
-        registry[provider_name] = {
-            k: coerce_json_value(v) for k, v in entry_catalog.items()
-        }
+        registry[provider_name] = {k: coerce_json_value(v) for k, v in entry_catalog.items()}
 
     for provider_name, credential in credentials_map.items():
         if provider_name in registry:
@@ -842,9 +880,7 @@ def build_provider_registry(
                 if option_value:
                     merged_models[option_value] = coerce_json_object(option)
             if merged_models:
-                existing["models"] = [
-                    coerce_json_object(opt) for opt in merged_models.values()
-                ]
+                existing["models"] = [coerce_json_object(opt) for opt in merged_models.values()]
             endpoint_override = credential.get("endpoint")
             if isinstance(endpoint_override, str) and endpoint_override:
                 existing["endpoint"] = endpoint_override
@@ -902,9 +938,7 @@ def build_provider_registry(
     return registry
 
 
-def get_provider_secret_with_metadata(
-    organization_id: str, provider: str
-) -> JSONDict | None:
+def get_provider_secret_with_metadata(organization_id: str, provider: str) -> JSONDict | None:
     try:
         record = LLMProviderCredential.typed_objects().get(
             organization_id=organization_id, provider=provider
@@ -1049,7 +1083,9 @@ def run_live_model_probe(
     model_name_value = prepared.get("name")
     model_name = str(model_name_value) if isinstance(model_name_value, str) else ""
     options_value = prepared.get("options")
-    options_payload = normalize_json_object(options_value, drop_empty_keys=True, drop_nullish_values=True)
+    options_payload = normalize_json_object(
+        options_value, drop_empty_keys=True, drop_nullish_values=True
+    )
     credential_payload: dict[str, Any] = {
         "endpoint": endpoint,
         "api_key": api_key,

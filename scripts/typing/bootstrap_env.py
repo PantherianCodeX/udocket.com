@@ -3,18 +3,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from datetime import datetime, timezone
+import shutil
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable, List, Tuple
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
     from scripts.typing.common import (  # type: ignore[import-not-found]
-        CACHE_ROOT,
         PROJECT_ROOT,
         ensure_cache_dir,
         load_manifest,
@@ -26,7 +25,6 @@ if __package__ in {None, ""}:
     )
 else:
     from .common import (
-        CACHE_ROOT,
         PROJECT_ROOT,
         ensure_cache_dir,
         load_manifest,
@@ -54,7 +52,7 @@ HELPER_NAME = "bootstrap_env"
 HELPER_VERSION = "0.1.0"
 
 
-def _load_package_list(extra_file: Path | None) -> List[str]:
+def _load_package_list(extra_file: Path | None) -> list[str]:
     packages: list[str] = []
     seen: set[str] = set()
     for item in DEFAULT_STUB_PACKAGES + OPTIONAL_STUB_PACKAGES:
@@ -94,7 +92,7 @@ def _write_cache(packages: Iterable[str]) -> None:
     payload = {
         "packages": package_list,
         "hash": hashlib.sha256("\0".join(package_list).encode("utf-8")).hexdigest(),
-        "recordedAt": datetime.now(timezone.utc).isoformat(),
+        "recordedAt": datetime.now(UTC).isoformat(),
     }
     BOOTSTRAP_CACHE.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -109,13 +107,16 @@ def _needs_install(packages: Iterable[str]) -> bool:
 
 def _install_packages(
     python_exe: Path, packages: Iterable[str]
-) -> Tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     installed: list[str] = []
     failed: list[str] = []
     skipped_optional: list[str] = []
     for package in packages:
         try:
-            run_command([str(python_exe), "-m", "pip", "install", package], check=True)
+            run_command(
+                ["uv", "pip", "install", "--quiet", "--python", str(python_exe), package],
+                check=True,
+            )
         except RuntimeError as exc:  # pragma: no cover - pip error formatting varies
             message = str(exc)
             if package in OPTIONAL_STUB_SET and "No matching distribution" in message:
@@ -146,11 +147,28 @@ def _run_pyright_stats() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bootstrap typing environment stubs.")
-    parser.add_argument("--venv", default=".venv", help="Path to virtual environment containing Python executable.")
-    parser.add_argument("--packages-file", type=Path, help="Optional newline-delimited list of additional packages.")
-    parser.add_argument("--check-only", action="store_true", help="Do not install packages; exit with 0 if up to date, 1 otherwise.")
-    parser.add_argument("--no-stats", action="store_true", help="Skip running pyright --stats after installation.")
+    parser.add_argument(
+        "--venv", default=".venv", help="Path to virtual environment containing Python executable."
+    )
+    parser.add_argument(
+        "--packages-file", type=Path, help="Optional newline-delimited list of additional packages."
+    )
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Do not install packages; exit with 0 if up to date, 1 otherwise.",
+    )
+    parser.add_argument(
+        "--no-stats", action="store_true", help="Skip running pyright --stats after installation."
+    )
     args = parser.parse_args()
+
+    if shutil.which("uv") is None:
+        print(
+            "uv CLI not found in PATH. Install it from https://astral.sh/uv "
+            "(e.g. `pip install uv` or use the official installer)."
+        )
+        return 1
 
     venv_path = (PROJECT_ROOT / args.venv).resolve()
     package_list = _load_package_list(args.packages_file if args.packages_file else None)
@@ -173,13 +191,9 @@ def main() -> int:
             _write_cache(installed)
         package_list = installed
         if skipped:
-            print(
-                "Skipped optional stub packages: " + ", ".join(sorted(set(skipped)))
-            )
+            print("Skipped optional stub packages: " + ", ".join(sorted(set(skipped))))
         if failed:
-            print(
-                "Skipped packages due to install errors: " + ", ".join(sorted(failed))
-            )
+            print("Skipped packages due to install errors: " + ", ".join(sorted(failed)))
     else:
         print("Stub packages already up to date; skipping installation.")
 
@@ -190,14 +204,14 @@ def main() -> int:
         name=HELPER_NAME,
         version=HELPER_VERSION,
         status=status,
-        last_run=datetime.now(timezone.utc),
+        last_run=datetime.now(UTC),
     )
 
     if not args.no_stats:
         stats_output = _run_pyright_stats()
         record_pyright_stats(manifest, command="pyright --stats", stdout=stats_output)
 
-    manifest["recordedAt"] = datetime.now(timezone.utc).isoformat()
+    manifest["recordedAt"] = datetime.now(UTC).isoformat()
     save_manifest(manifest)
 
     return 0

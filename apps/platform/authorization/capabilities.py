@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Iterable, Optional, Tuple
+from typing import Any
 
 from django.conf import settings
 from django.db.models import Q
 
 from apps.platform.authorization.models import (
-    PermissionPreset,
     PresetCapability,
     Role,
     RoleCapability,
@@ -77,7 +77,7 @@ BASE_CAPABILITIES: set[str] = set().union(*DEFAULT_CAPS.values())
 
 
 @lru_cache(maxsize=1)
-def _cached_capability_choices() -> Tuple[tuple[str, str], ...]:
+def _cached_capability_choices() -> tuple[tuple[str, str], ...]:
     dynamic: set[str] = set()
     try:
         dynamic = set(PresetCapability.objects.values_list("capability", flat=True))
@@ -94,7 +94,8 @@ def capability_choices(*, force_refresh: bool = False) -> list[tuple[str, str]]:
         _cached_capability_choices.cache_clear()
     return list(_cached_capability_choices())
 
-def _roles_for_name(role_name: str, organization_id: Optional[str]) -> Iterable[Role]:
+
+def _roles_for_name(role_name: str, organization_id: str | None) -> Iterable[Role]:
     qs = Role.objects.filter(name__iexact=role_name)
     if organization_id:
         qs = qs.filter(Q(organization__id=organization_id) | Q(organization__isnull=True))
@@ -103,7 +104,7 @@ def _roles_for_name(role_name: str, organization_id: Optional[str]) -> Iterable[
     return qs
 
 
-def _caps_from_db(role_name: str, organization_id: Optional[str]) -> set[str]:
+def _caps_from_db(role_name: str, organization_id: str | None) -> set[str]:
     caps: set[str] = set()
     try:
         for role in _roles_for_name(role_name, organization_id):
@@ -115,7 +116,7 @@ def _caps_from_db(role_name: str, organization_id: Optional[str]) -> set[str]:
     return caps
 
 
-def role_capabilities(role_name: str, organization_id: Optional[str] = None) -> set[str]:
+def role_capabilities(role_name: str, organization_id: str | None = None) -> set[str]:
     caps = set(DEFAULT_CAPS.get(role_name, set()))
     caps.update(_caps_from_db(role_name, organization_id))
     try:
@@ -130,8 +131,6 @@ def role_capabilities(role_name: str, organization_id: Optional[str] = None) -> 
     except Exception:
         pass
     return caps
-
-
 
 
 def has_capability(user: Any, case_id: str | None, capability: str) -> bool:

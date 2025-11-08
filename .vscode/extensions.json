@@ -1,5 +1,10 @@
 {
     "recommendations": [
-        "ms-python.mypy-type-checker"
+        "ms-python.mypy-type-checker",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "DavidAnson.vscode-markdownlint",
+        "yzhang.Markdown-All-in-One",
+        "bierner.markdown-preview-github-styles",
     ]
 }

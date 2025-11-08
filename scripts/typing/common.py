@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, MutableMapping
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = PROJECT_ROOT / "docs"
@@ -81,7 +82,7 @@ def upsert_helper_record(
                     "version": version,
                     "status": status,
                     "lastRun": (
-                        last_run.astimezone(timezone.utc).isoformat()
+                        last_run.astimezone(UTC).isoformat()
                         if last_run
                         else helper.get("lastRun")
                     ),
@@ -95,11 +96,7 @@ def upsert_helper_record(
                 "name": name,
                 "version": version,
                 "status": status,
-                "lastRun": (
-                    last_run.astimezone(timezone.utc).isoformat()
-                    if last_run
-                    else None
-                ),
+                "lastRun": (last_run.astimezone(UTC).isoformat() if last_run else None),
             }
         )
     manifest["helpers"] = sorted(helpers, key=lambda item: item.get("name", ""))
@@ -114,7 +111,7 @@ def record_pyright_stats(
     manifest["pyrightStats"] = {
         "command": command,
         "output": stdout,
-        "recordedAt": datetime.now(timezone.utc).isoformat(),
+        "recordedAt": datetime.now(UTC).isoformat(),
     }
 
 
@@ -125,7 +122,7 @@ def append_strict_manifest(path: Path) -> None:
         existing = json.loads(STRICT_MANIFEST_PATH.read_text(encoding="utf-8"))
     entry = {
         "path": str(path.relative_to(PROJECT_ROOT)),
-        "verifiedAt": datetime.now(timezone.utc).isoformat(),
+        "verifiedAt": datetime.now(UTC).isoformat(),
     }
     filtered = [item for item in existing if item.get("path") != entry["path"]]
     filtered.append(entry)

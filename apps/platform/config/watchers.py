@@ -15,4 +15,3 @@ class PythonAndHTMLFilter(PythonFilter):
         if lowered.endswith(self._extra_suffixes):
             return True
         return super().__call__(change, path)
-

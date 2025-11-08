@@ -6,10 +6,10 @@ from typing import Any, Dict, List
 
 import pytest
 
-import packages.udocket_core.agents.analyze_lib as analyze_lib
+import packages.core.agents.analyze_lib as analyze_lib
 
-from packages.udocket_core.agents import build_analyze_graph, langgraph_orchestrator
-from packages.udocket_core.agents.analyze_lib import (
+from packages.core.agents import build_analyze_graph, langgraph_orchestrator
+from packages.core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
     ANALYZE_STAGE_PROFILES,
     StageRuntime,
@@ -22,21 +22,21 @@ from packages.udocket_core.agents.analyze_lib import (
     parse_transcript,
     _normalize_stage_map,
 )
-from packages.udocket_core.agents.analyze.stages import (
+from packages.core.agents.analyze.stages import (
     EntityStageResult,
     OutlineStageResult,
     SummaryStageResult,
     TimelineStageResult,
     generate_summary_payload,
 )
-from packages.udocket_core.agents.analyze.stages.outline_stage import generate_outline as outline_generate
-from packages.udocket_core.llm.config import (
+from packages.core.agents.analyze.stages.outline_stage import generate_outline as outline_generate
+from packages.core.llm.config import (
     LLMProvider,
     LLMProviderModel,
     LLMSettings,
     LLMStageAssignment,
 )
-from packages.udocket_core.llm.runtime import ChatClientError
+from packages.core.llm.runtime import ChatClientError
 from tests._typing import MonkeyPatch
 
 
@@ -170,7 +170,11 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
             "exhibits": [],
             "legal_refs": [],
         }
-        return OutlineStageResult(outline, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
+        return OutlineStageResult(
+            outline,
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            (),
+        )
 
     def fake_timeline(**_: Any) -> TimelineStageResult:
         events = [
@@ -184,7 +188,11 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
                 "labels": ["summary"],
             }
         ]
-        return TimelineStageResult(events, {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12})
+        return TimelineStageResult(
+            events,
+            {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+            (),
+        )
 
     def fake_entities(**_: Any) -> EntityStageResult:
         hints = {
@@ -211,29 +219,34 @@ def _install_stage_stubs(monkeypatch: pytest.MonkeyPatch, summary_text: str | No
                 }
             ],
         }
-        return EntityStageResult(hints, {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9})
+        return EntityStageResult(
+            hints,
+            {"prompt_tokens": 6, "completion_tokens": 3, "total_tokens": 9},
+            (),
+        )
 
     def fake_summary(**_: Any) -> SummaryStageResult:
         return SummaryStageResult(
             data=summary_payload,
             markdown=summary_text,
             usage={"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
+            prompts=(),
         )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_outline",
+        "packages.core.agents.analyze.utils.generate_outline",
         fake_outline,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_timeline",
+        "packages.core.agents.analyze.utils.generate_timeline",
         fake_timeline,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_entities",
+        "packages.core.agents.analyze.utils.generate_entities",
         fake_entities,
     )
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_summary_payload",
+        "packages.core.agents.analyze.utils.generate_summary_payload",
         fake_summary,
     )
 
@@ -457,10 +470,11 @@ def test_stage_temperature_and_max_tokens_override(monkeypatch: MonkeyPatch, tmp
             data={"executive_summary": {"bullets": ["Summary"]}},
             markdown="# Summary\n\n## Executive summary\n- Summary\n",
             usage={"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+            prompts=(),
         )
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_summary_payload",
+        "packages.core.agents.analyze.utils.generate_summary_payload",
         capture_summary,
     )
 
@@ -554,6 +568,94 @@ def test_outline_chunk_splitting_on_empty_completion():
     assert any(count <= 12 for count in llm_stub.calls)
 
 
+def test_outline_identity_is_deterministic() -> None:
+    segments = [
+        TranscriptSegment(ts=0.0, speaker="SPK_1", text="Applicant describes the dispute and desired remedy."),
+        TranscriptSegment(ts=45.0, speaker="SPK_2", text="Respondent outlines deadlines and prior orders."),
+    ]
+    parse = TranscriptParse(
+        header_lines=[],
+        segments=segments,
+        body_text="\n".join(seg.text for seg in segments),
+        diarized=True,
+    )
+    intake = {"client_name": "Alex Applicant", "opposing_party": "Morgan Respondent", "client_position": "Applicant"}
+
+    payload = {
+        "parties": {
+            "client": {"name": "Alex Applicant", "role": "Applicant"},
+            "opposing": {"name": "Morgan Respondent", "role": "Respondent"},
+            "counsel": [{"name": "Jordan Counsel", "for": "Alex Applicant"}],
+        },
+        "issues": [
+            {
+                "id": "ISSUE-PRIMARY",
+                "title": "Primary dispute",
+                "description": "Summary of the main dispute.",
+                "stance_client": "Seeks relief",
+                "stance_opposing": "Opposes relief",
+                "status": "RAISED",
+            }
+        ],
+        "claims_and_remedies": [
+            {
+                "claim": "Damages",
+                "remedy_requested": "Monetary compensation",
+                "amounts": ["5000"],
+                "jurisdictional_notes": None,
+            }
+        ],
+        "facts": [
+            {
+                "ts": 12.5,
+                "speaker": "SPK_1",
+                "text": "Key fact described in transcript.",
+                "tags": ["transcript"],
+            }
+        ],
+        "deadlines": [{"label": "Filing deadline", "date": "2025-05-01", "ts": None, "basis": "Court order"}],
+        "orders_and_directions": [{"date": "2024-11-15", "ts": None, "text": "Disclosure order"}],
+        "exhibits": [{"id": "EX-1", "description": "Contract", "cited_ts": [12.5]}],
+        "legal_refs": [{"citation": "Civil Code s.10", "context": "Damages provision"}],
+    }
+
+    class StaticClient:
+        def chat(self, *, messages, temperature, max_tokens, response_format):  # type: ignore[no-untyped-def]
+            return json.dumps(payload), {"prompt_tokens": 50, "completion_tokens": 25, "total_tokens": 75}
+
+    def _generate() -> OutlineStageResult:
+        return outline_generate(
+            parse=parse,
+            intake=intake,
+            context_snippet="\n".join(seg.text for seg in segments),
+            case_brief={},
+            llm_client=StaticClient(),
+            temperature=0.0,
+            max_tokens=2000,
+        )
+
+    first = _generate()
+    second = _generate()
+
+    first_issue = first.outline["issues"][0]
+    second_issue = second.outline["issues"][0]
+    assert first_issue["uuid"] == second_issue["uuid"]
+    assert first_issue["uuid"]
+
+    first_fact = first.outline["facts"][0]
+    second_fact = second.outline["facts"][0]
+    assert first_fact["uuid"] == second_fact["uuid"]
+
+    parties1 = first.outline["parties"]
+    parties2 = second.outline["parties"]
+    assert parties1["client"]["uuid"] == parties2["client"]["uuid"]
+    assert parties1["counsel"][0]["uuid"] == parties2["counsel"][0]["uuid"]
+
+    for section in ("claims_and_remedies", "deadlines", "orders_and_directions", "exhibits", "legal_refs"):
+        assert first.outline[section][0]["uuid"]
+        assert first.outline[section][0]["uuid"] == second.outline[section][0]["uuid"]
+
+
 def test_build_context_respects_config_limits(tmp_path):
     transcript = tmp_path / "demo.txt"
     _write_transcript(
@@ -621,7 +723,7 @@ def test_analyze_agent_raises_on_stage_failure(monkeypatch: MonkeyPatch, tmp_pat
         raise RuntimeError("outline failure")
 
     monkeypatch.setattr(
-        "packages.udocket_core.agents.analyze.utils.generate_outline",
+        "packages.core.agents.analyze.utils.generate_outline",
         boom,
     )
 

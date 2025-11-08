@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 from uuid import UUID
 
 from django.conf import settings
@@ -10,14 +10,14 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.platform.artifacts.models import CaseArtifact
+from apps.platform.operations.utils import append_job_log, update_job_meta
+from packages.common.json_utils import stringify_json
 
 from ..auth import ensure_authenticated
 from ..contexts import job_detail_context, user_can_review_case
 from ..selectors import job_telemetry_payload
 from ..transcripts import ensure_transcript_artifact
 from .utils import CaseArtifactLike, resolve_job
-from apps.platform.operations.utils import append_job_log, update_job_meta
-from packages.udocket_core.utils.json import stringify_json
 
 
 @require_http_methods(["GET"])
@@ -55,28 +55,32 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
     if dev_open:
         can_edit = True
     elif user and getattr(user, "is_authenticated", False):
-        if case.reviewer_id and str(user.id) == str(case.reviewer_id):
-            can_edit = True
-        elif user_can_review_case(user, case):
+        if (
+            case.reviewer_id
+            and str(user.id) == str(case.reviewer_id)
+            or user_can_review_case(user, case)
+        ):
             can_edit = True
     if not can_edit:
         return HttpResponse("Forbidden", status=403)
 
     new_title = (request.POST.get("title") or "").strip()
-    title_error: Optional[str] = None
+    title_error: str | None = None
     if not new_title:
         title_error = "Title cannot be empty."
 
     telemetry_dict = job_telemetry_payload(job, request, ui_mode=True)
 
-    artifact: Optional[CaseArtifact] = (
+    artifact: CaseArtifact | None = (
         CaseArtifact.objects.filter(case_id=str(case.id), job_id=str(job.id), type="TRANSCRIPT")
         .order_by("-created_at")
         .first()
     )
 
     if not title_error:
-        conflict_qs = CaseArtifact.objects.filter(case_id=str(case.id), type="TRANSCRIPT", title=new_title)
+        conflict_qs = CaseArtifact.objects.filter(
+            case_id=str(case.id), type="TRANSCRIPT", title=new_title
+        )
         if artifact:
             conflict_qs = conflict_qs.exclude(pk=artifact.pk)
         if conflict_qs.exists():
@@ -106,23 +110,27 @@ def case_job_update_title(request: HttpRequest, case_id: str, job_id: UUID) -> H
         )
         context["case"] = case
         context["job_title"] = new_title or context.get("job_title")
-        return render(request, "platform_ui/components/jobs/job_detail_title_form.html", context, status=400)
+        return render(
+            request, "platform_ui/components/jobs/job_detail_title_form.html", context, status=400
+        )
 
     assert artifact is not None
     artifact_obj: CaseArtifactLike = cast(CaseArtifactLike, artifact)
 
     artifact_obj.title = new_title
     raw_metadata = getattr(artifact_obj, "metadata", None)
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     if isinstance(raw_metadata, dict):
-        metadata = dict(cast(Dict[str, Any], raw_metadata))
+        metadata = dict(cast(dict[str, Any], raw_metadata))
     else:
         metadata = {}
-    metadata.update({
-        "transcript_title": new_title,
-        "job_title": new_title,
-        "title_updated_at": timezone.now().isoformat(),
-    })
+    metadata.update(
+        {
+            "transcript_title": new_title,
+            "job_title": new_title,
+            "title_updated_at": timezone.now().isoformat(),
+        }
+    )
     if user and getattr(user, "is_authenticated", False):
         metadata["title_updated_by"] = str(getattr(user, "id", ""))
     artifact_obj.metadata = metadata

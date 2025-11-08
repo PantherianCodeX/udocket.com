@@ -1,0 +1,17 @@
+{
+  "securityLevel": "strict",
+  "themeVariables": {
+    "fontFamily": "\"DejaVu Sans\", \"Trebuchet MS\", Arial, sans-serif",
+    "fontSize": "18px",
+    "sequenceFontSize": "18px",
+    "actorFontSize": "18px",
+    "noteFontSize": "16px",
+    "sequenceNumberFontSize": "16px"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "wrap": true,
+    "diagramPadding": 8
+  },
+  "themeCSS": ".edgeLabel text,.edgeLabel tspan{dominant-baseline:middle;alignment-baseline:middle;fill:#1f2328!important;text-anchor:middle;}.edgeLabel rect.background{fill:rgba(248,250,252,0.94);stroke:#9370db;stroke-width:0.5px;rx:6;ry:6;}.erDiagram rect{rx:8;ry:8;}.erDiagram .entityBox{fill:#f5f0ff;stroke:#7c60c0;}"
+}

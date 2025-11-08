@@ -61,16 +61,18 @@ except Exception:  # Fallback when dependency unavailable (dev bootstrap)
             if self._is_open(request):
                 return True
             action = self._resolve_action(request, view)
-            setattr(request, "_access_policy_obj", obj)
+            request._access_policy_obj = obj
             try:
                 return self._evaluate(request, view, action)
             finally:
                 if hasattr(request, "_access_policy_obj"):
                     delattr(request, "_access_policy_obj")
 
+
 from django.conf import settings
-from apps.platform.cases.models import Case, CaseMembership
+
 from apps.platform.authorization.capabilities import has_capability
+from apps.platform.cases.models import Case, CaseMembership
 
 
 class _MembershipMixin:
@@ -192,7 +194,9 @@ class _MembershipMixin:
             return True
         if self._has_cap(request, view, "case.update"):
             return True
-        if CaseMembership.objects.filter(case_id=case_id, user=user, role=CaseMembership.Role.REVIEWER).exists():
+        if CaseMembership.objects.filter(
+            case_id=case_id, user=user, role=CaseMembership.Role.REVIEWER
+        ).exists():
             return True
         try:
             case = Case.objects.get(pk=case_id)
@@ -226,26 +230,66 @@ class _MembershipMixin:
 
 class CaseAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
-        {"action": ["list", "retrieve", "jobs_summary", "jobs_detail"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {
+            "action": ["list", "retrieve", "jobs_summary", "jobs_detail"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "is_case_member",
+        },
         {"action": ["create"], "principal": "*", "effect": "allow", "condition": "can_create_case"},
-        {"action": ["update", "partial_update"], "principal": "*", "effect": "allow", "condition": "can_manage_case"},
+        {
+            "action": ["update", "partial_update"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "can_manage_case",
+        },
         {"action": ["destroy"], "principal": "*", "effect": "deny"},
     ]
 
 
 class JobAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
-        {"action": ["list", "retrieve", "telemetry"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
-        {"action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"], "principal": "*", "effect": "allow", "condition": "can_manage_jobs"},
-        {"action": ["status", "bulk_status"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {
+            "action": ["list", "retrieve", "telemetry"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "is_case_member",
+        },
+        {
+            "action": ["create", "upload", "analyze_summary", "analyze_timeline", "analyze_graph"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "can_manage_jobs",
+        },
+        {
+            "action": ["status", "bulk_status"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "is_case_member",
+        },
         {"action": ["notes"], "principal": "*", "effect": "allow", "condition": "can_review_job"},
-        {"action": ["download", "logs"], "principal": "*", "effect": "allow", "condition": "can_download_artifacts"},
-        {"action": ["approve", "reject"], "principal": "*", "effect": "allow", "condition": "is_case_member"},
+        {
+            "action": ["download", "logs"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "can_download_artifacts",
+        },
+        {
+            "action": ["approve", "reject"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "is_case_member",
+        },
         {"action": ["destroy", "update", "partial_update"], "principal": "*", "effect": "deny"},
     ]
 
 
 class ArtifactAccessPolicy(_MembershipMixin, AccessPolicy):
     statements = [
-        {"action": ["list", "retrieve"], "principal": "*", "effect": "allow", "condition": "can_view_artifacts"},
+        {
+            "action": ["list", "retrieve"],
+            "principal": "*",
+            "effect": "allow",
+            "condition": "can_view_artifacts",
+        },
     ]

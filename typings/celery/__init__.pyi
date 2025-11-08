@@ -23,8 +23,19 @@ class CeleryConfig(Protocol):
     worker_hijack_root_logger: bool
 
 
+class _Inspect:
+    def active(self) -> Any: ...
+    def reserved(self) -> Any: ...
+    def scheduled(self) -> Any: ...
+
+
+class _Control:
+    def inspect(self) -> _Inspect | None: ...
+
+
 class Celery:
     conf: CeleryConfig
+    control: _Control
 
     def __init__(self, main: str, broker: str | None = ..., backend: str | None = ..., **kwargs: Any) -> None: ...
     def config_from_object(self, obj: str | object, *, namespace: str | None = ...) -> None: ...

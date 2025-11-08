@@ -1,0 +1,98 @@
+name: Docs Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  render-diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          check-latest: true
+      - name: Add uv
+        uses: astral-sh/setup-uv@v2
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y chromium
+      - name: Install Node deps
+        working-directory: packages/docs_tooling
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+        run: npm ci
+      - name: Add local node binaries to PATH
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$PWD/packages/docs_tooling/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Render Mermaid diagrams
+        working-directory: packages/docs_tooling
+        run: bash tools/render_mermaid.sh --all
+
+  docs-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v2
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing system dependencies..." >> "$GITHUB_STEP_SUMMARY"
+          sudo apt-get update
+          sudo apt-get install -y chromium
+          printf '%s\n' "System dependencies installed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install documentation Python tooling
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing documentation dependencies..." >> "$GITHUB_STEP_SUMMARY"
+          uv sync --frozen --extra dev
+          printf '%s\n' "Documentation dependencies installed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          check-latest: true
+      - name: Install Node deps
+        working-directory: packages/docs_tooling
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Installing Node dependencies..." >> "$GITHUB_STEP_SUMMARY"
+          npm ci
+          printf '%s\n' "Node dependencies installed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Add local node binaries to PATH
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Adding local Node binaries to PATH..." >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$PWD/packages/docs_tooling/node_modules/.bin" >> "$GITHUB_PATH"
+          printf '%s\n' "Local Node binaries added to PATH." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Vale CLI
+        env:
+          VALE_VERSION: 3.7.1
+        run: |
+          set -euo pipefail
+          printf 'Installing Vale CLI version %s...\n' "$VALE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_Linux_64-bit.tar.gz" -o vale.tar.gz
+          tar -xzf vale.tar.gz vale
+          sudo mv vale /usr/local/bin/vale
+          rm -f vale.tar.gz
+          printf '%s\n' "Vale CLI installed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Run documentation lint suite
+        working-directory: packages/docs_tooling
+        run: |
+          set -euo pipefail
+          printf '%s\n' "Running documentation lint suite..." >> "$GITHUB_STEP_SUMMARY"
+          uv run python -m docs.tools.manage_docs --lint
+          printf '%s\n' "Documentation lint suite completed." >> "$GITHUB_STEP_SUMMARY"

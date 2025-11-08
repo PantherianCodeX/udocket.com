@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # pyright: strict
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from django.core.exceptions import PermissionDenied
 from django.db import models
@@ -29,11 +29,12 @@ from .presenters.jobs import build_job_rows
 from .selectors import job_telemetry_map
 
 
-def _organization_artifacts(request: HttpRequest, organization) -> List[Dict[str, Any]]:
+def _organization_artifacts(request: HttpRequest, organization) -> list[dict[str, Any]]:
     user = getattr(request, "user", None)
-    artifacts: List[Dict[str, Any]] = []
+    artifacts: list[dict[str, Any]] = []
     queryset = (
-        CaseArtifact.scoped().for_user(user)
+        CaseArtifact.scoped()
+        .for_user(user)
         .filter(organization=organization)
         .exclude(type__iexact="AUDIO")
         .select_related("case_fk")
@@ -51,7 +52,9 @@ def _organization_artifacts(request: HttpRequest, organization) -> List[Dict[str
     return artifacts
 
 
-def _guardian_dataset(request: HttpRequest, organization) -> Tuple[List[Dict[str, Any]], Dict[str, Any], List[Dict[str, Any]]]:
+def _guardian_dataset(
+    request: HttpRequest, organization
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     artifacts = _organization_artifacts(request, organization)
     reviews = collect_guardian_reviews(artifacts)
     stats = guardian_stats_from_reviews(reviews)
@@ -62,25 +65,26 @@ def _guardian_dataset(request: HttpRequest, organization) -> Tuple[List[Dict[str
 def _guardian_jobs(
     request: HttpRequest,
     organization,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     jobs_qs = Job.objects.select_related("case", "case__organization", "reviewed_by").filter(
         organization=organization
     )
-    jobs_list = list(scope_jobs(jobs_qs.order_by("-created_at"), getattr(request, "user", None))[:200])
+    jobs_list = list(
+        scope_jobs(jobs_qs.order_by("-created_at"), getattr(request, "user", None))[:200]
+    )
     telemetry_map = job_telemetry_map(jobs_list, request)
 
     job_ids = [str(job.id) for job in jobs_list]
-    transcript_artifacts: Dict[str, CaseArtifact] = {}
+    transcript_artifacts: dict[str, CaseArtifact] = {}
     if job_ids:
-        for art in (
-            CaseArtifact.objects.filter(job_id__in=job_ids, type="TRANSCRIPT")
-            .order_by("-created_at")
+        for art in CaseArtifact.objects.filter(job_id__in=job_ids, type="TRANSCRIPT").order_by(
+            "-created_at"
         ):
             job_id_value = getattr(art, "job_id", None)
             if job_id_value and job_id_value not in transcript_artifacts:
                 transcript_artifacts[job_id_value] = art
 
-    note_counts: Dict[str, int] = {}
+    note_counts: dict[str, int] = {}
     if jobs_list:
         note_rows = (
             JobNote.objects.filter(job__in=jobs_list)
@@ -96,7 +100,7 @@ def _guardian_jobs(
         note_counts=note_counts,
     )
 
-    guardian_rows: List[Dict[str, Any]] = []
+    guardian_rows: list[dict[str, Any]] = []
     for row in flat_rows:
         if row.get("is_child"):
             continue
@@ -151,7 +155,7 @@ def guardian_overview(request: HttpRequest) -> HttpResponse:
                 "label": "Permissions catalog",
                 "href": "/audit/permissions/",
                 "variant": "default",
-            }
+            },
         ],
         "stats": [
             {

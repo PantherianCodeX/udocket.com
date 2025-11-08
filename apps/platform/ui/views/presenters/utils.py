@@ -2,11 +2,12 @@ from __future__ import annotations
 
 # pyright: strict
 import re
-from typing import Any, Dict, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from django.template.loader import render_to_string
 
-from ..constants import STATUS_SORT_ORDER, STATUS_CLASS_MAP
+from ..constants import STATUS_CLASS_MAP, STATUS_SORT_ORDER
 
 
 def safe_lower(value: Any) -> str:
@@ -75,7 +76,7 @@ def render_notes_panel_html(
     user_can_add: bool,
 ) -> str:
     job_identifier = str(job_id) if job_id is not None else ""
-    context: Dict[str, Any] = {
+    context: dict[str, Any] = {
         "job_id": job_identifier,
         "notes_entries": list(entries or []),
         "notes_updated_at": updated_at,

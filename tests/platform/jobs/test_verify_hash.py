@@ -16,6 +16,7 @@ from tests._typing import DatabaseFixture, SettingsFixture
 def _setup_case_with_job(settings: SettingsFixture, storage_root: Path, *, mismatch: bool = False) -> tuple[Job, User, str]:
     settings.PLATFORM_DEV_OPEN = True
     settings.STORAGE_ROOT = str(storage_root)
+    settings.MEDIA_ROOT = str(storage_root / "media")
 
     org = Organization.objects.create(name="Verify Org")
     case = Case.objects.create(id="CASE-VERIFY", title="Verify Case", organization=org)

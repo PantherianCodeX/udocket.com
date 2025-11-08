@@ -1,0 +1,20 @@
+%% compose-overview-v1.mmd
+%% High-level Compose pipeline with revision feedback
+flowchart TD
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
+    classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
+    classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
+
+    Context["Assemble ComposeContext\n(summary, timeline, entities, policies)"]:::stage
+    RoleLanes["Launch role lanes\n(client, lawyer, bundle)"]:::stage
+    LaneQA["Lane QA & guardrails"]:::gate
+    CrossQA["Cross-lane QA"]:::gate
+    Revision["Revision directives\n(section-scoped instructions)"]:::directive
+    Finalize["Finalize + version artifacts"]:::stage
+    Guardian["Guardian promotion"]:::gate
+    Deliverables["Deliverables + manifests"]:::artifact
+
+    Context --> RoleLanes --> LaneQA --> CrossQA --> Finalize --> Guardian --> Deliverables
+    LaneQA -->|issue| Revision --> RoleLanes
+    CrossQA -->|issue| Revision

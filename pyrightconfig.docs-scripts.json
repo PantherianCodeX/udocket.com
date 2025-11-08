@@ -1,0 +1,29 @@
+{
+  "pythonVersion": "3.12",
+  "stubPath": "typings",
+  "typeCheckingMode": "strict",
+  "include": [
+    "packages/docs_tooling/src/doc_tools"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "packages/docs_tooling/src/doc_tools",
+      "extraPaths": [
+        ".",
+        "packages/docs_tooling/src",
+        "typings"
+      ]
+    }
+  ],
+  "reportMissingTypeStubs": "error",
+  "reportAttributeAccessIssue": "error",
+  "reportMissingImports": "error",
+  "reportUnusedImport": "error",
+  "reportUnusedVariable": "error",
+  "reportUnusedClass": "error",
+  "reportUnusedFunction": "error",
+  "reportArgumentType": "error",
+  "reportUnnecessaryTypeIgnoreComment": "error",
+  "reportUnnecessaryCast": "error",
+  "reportUnnecessaryIsInstance": "error"
+}

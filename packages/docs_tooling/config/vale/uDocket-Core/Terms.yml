@@ -1,0 +1,14 @@
+extends: existence
+message: "Use the canonical term: '%s'."
+level: suggestion
+scope: text
+ignorecase: false
+nonword: true
+tokens:
+  - 'Artifact'
+  - 'Work Product'
+  - 'Candidate Deliverable'
+  - 'Guardian'
+  - 'Localization & Policy Engine'
+exceptions:
+  - 'artifact'

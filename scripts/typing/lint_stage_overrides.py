@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
-from packages.udocket_core.agents.analyze_lib import (
+from packages.core.agents.analyze_lib import (
     LLM_STAGE_KEYS,
     StageOverride,
     _normalize_stage_map,
@@ -13,7 +13,6 @@ from packages.udocket_core.agents.analyze_lib import (
 
 if __package__ in {None, ""}:
     import sys
-
     from pathlib import Path as _Path
 
     sys.path.append(str(_Path(__file__).resolve().parents[2]))
@@ -50,18 +49,16 @@ def lint_stage_map(stage_map: Mapping[str, Mapping[str, object]]) -> list[str]:
 def write_normalized(path: Path, stage_map: Mapping[str, Mapping[str, object]]) -> None:
     normalized = _normalize_stage_map(stage_map)
     # only keep canonical keys
-    canonical = {
-        key: normalized[key]
-        for key in sorted(normalized.keys())
-        if key in VALID_STAGES
-    }
+    canonical = {key: normalized[key] for key in sorted(normalized.keys()) if key in VALID_STAGES}
     path.write_text(json.dumps(canonical, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Lint analyze stage override maps.")
     parser.add_argument("stage_map", type=Path, help="Path to stage map JSON file.")
-    parser.add_argument("--fix", action="store_true", help="Rewrite file with normalized stage map.")
+    parser.add_argument(
+        "--fix", action="store_true", help="Rewrite file with normalized stage map."
+    )
     args = parser.parse_args()
 
     path = args.stage_map if args.stage_map.is_absolute() else PROJECT_ROOT / args.stage_map

@@ -4,8 +4,8 @@ from typing import Dict
 
 import pytest
 
-from packages.udocket_core.llm.config import LLMProvider, LLMProviderModel
-from packages.udocket_core.llm.runtime import build_provider_runtime_config
+from packages.core.llm.config import LLMProvider, LLMProviderModel
+from packages.core.llm.runtime import build_provider_runtime_config
 from tests._typing import MonkeyPatch
 
 

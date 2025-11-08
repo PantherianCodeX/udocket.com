@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "udocket-platform"
+version = "0.1.0"
+description = "uDocket Django platform and worker processes."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "LicenseRef-Proprietary"
+dependencies = [
+    "Django>=5.2.7,<5.3",
+    "django-environ>=0.12.0",
+    "pydantic-settings>=2.11.0,<3",
+    "djangorestframework>=3.16.1",
+    "drf-spectacular>=0.28.0",
+    "django-guardian>=3.2.0",
+    "drf-access-policy>=1.5.0",
+    "mozilla-django-oidc>=4.0.1",
+    "djangorestframework-simplejwt[crypto]>=5.5.1",
+    "psycopg[binary]>=3.2.10",
+    "channels>=4.3.1",
+    "channels-redis>=4.3.0",
+    "asgiref>=3.10.0",
+    "redis>=6.4.0",
+    "daphne>=4.2.1",
+    "celery>=5.5.3",
+    "django-celery-beat>=2.8.1",
+    "django-celery-results>=2.6.0",
+    "PyYAML>=6.0.3",
+    "azure-storage-blob>=12.27.0",
+    "django-simple-history>=3.10.1",
+    "azure-cognitiveservices-speech>=1.46.0,<2",
+    "docxtpl>=0.20.1,<0.21",
+    "langgraph>=0.6.10,<0.7",
+    "Pillow>=12.0.0,<13",
+    "requests>=2.32.5,<3",
+    "typing-extensions>=4.15.0,<5",
+    "urllib3>=2.5.0,<3",
+    "watchfiles>=0.24.0,<0.25",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*" ]
+exclude = ["packages.common"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-django",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "watchfiles",
+    "pyright",
+    "mypy",
+    "django-stubs[compatible-mypy]",
+    "djangorestframework-stubs",
+    "channels-stubs",
+    "types-requests",
+    "types-requests-oauthlib",
+    "types-redis",
+    "types-PyYAML",
+    "types-python-jose",
+    "types-pyOpenSSL",
+    "types-cffi",
+    "types-setuptools",
+    "types-oauthlib",
+    "types-python-dateutil",
+    "types-pyasn1",
+    "celery-stubs",
+    "flake8",
+    "black",
+    "bandit",
+    "django-upgrade",
+    "typewiz @ git+https://github.com/PantherianCodeX/typewiz@v0.1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-django",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "watchfiles",
+    "pyright",
+    "mypy",
+    "django-stubs[compatible-mypy]",
+    "djangorestframework-stubs",
+    "channels-stubs",
+    "types-requests",
+    "types-requests-oauthlib",
+    "types-redis",
+    "types-PyYAML",
+    "types-python-jose",
+    "types-pyOpenSSL",
+    "types-cffi",
+    "types-setuptools",
+    "types-oauthlib",
+    "types-python-dateutil",
+    "types-pyasn1",
+    "celery-stubs",
+    "flake8",
+    "black",
+    "bandit",
+    "django-upgrade",
+    "typewiz @ git+https://github.com/PantherianCodeX/typewiz@v0.1.1",
+]

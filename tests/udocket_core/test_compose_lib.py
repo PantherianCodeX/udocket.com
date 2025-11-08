@@ -9,8 +9,8 @@ from docx import Document as DocxDocument
 
 import pytest
 
-from packages.udocket_core.agents.compose.context import assemble_context
-from packages.udocket_core.agents.compose_lib import (
+from packages.core.agents.compose.context import assemble_context
+from packages.core.agents.compose_lib import (
     ComposeAgent,
     ComposeConfig,
     ComposeResult,
@@ -26,10 +26,10 @@ from packages.udocket_core.agents.compose_lib import (
     LANE_CONFIGS,
     QA_REVIEWER_STATUS_OK,
 )
-from packages.udocket_core.agents.compose.state import QAReviewerResult, _merge_lane_outcomes
-from packages.udocket_core.agents.compose.orchestrator import ComposeOrchestrator
-from packages.udocket_core.utils.json import JSONObject
-from packages.udocket_core.agents.compose.errors import ComposeStageError
+from packages.core.agents.compose.state import QAReviewerResult, _merge_lane_outcomes
+from packages.core.agents.compose.orchestrator import ComposeOrchestrator
+from packages.common.json_utils import JSONObject
+from packages.core.agents.compose.errors import ComposeStageError
 from tests._typing import MonkeyPatch
 
 
@@ -257,9 +257,9 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
         raise AssertionError(f"Unexpected stage: {stage}")
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, fake_invoke)
 
@@ -374,9 +374,9 @@ This section omits required references and headings.
         raise AssertionError(f"Unexpected stage: {stage}")
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, fake_invoke)
 
@@ -480,9 +480,9 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
         raise AssertionError(stage)
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, fake_invoke)
 
@@ -578,9 +578,9 @@ def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyP
         return qa_response, {"prompt_tokens": 10, "completion_tokens": 5}, "stub", "stub-model"
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, failing_invoke)
 
@@ -618,9 +618,9 @@ def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyP
         return qa_response, {"prompt_tokens": 10, "completion_tokens": 5}, "stub", "stub-model"
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, resume_invoke)
 
@@ -921,15 +921,15 @@ def test_editor_rejects_unchanged_document(monkeypatch: MonkeyPatch) -> None:
         return response, {"prompt_tokens": 5, "completion_tokens": 5}, "stub", "stub-model"
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, fake_invoke)
 
     fake_qa_step = _make_fake_qa_step("# Staff Report\n\nAll checks passed.")
     monkeypatch.setattr(
-        "packages.udocket_core.agents.compose.orchestrator.ComposeOrchestrator._qa_reviewer_step",
+        "packages.core.agents.compose.orchestrator.ComposeOrchestrator._qa_reviewer_step",
         fake_qa_step,
     )
     directive = LaneActionDirective(action="editor", revision_brief="Clarify tone.")
@@ -1009,9 +1009,9 @@ def test_compose_agent_without_qa(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
         raise AssertionError(f"Unexpected stage: {stage}")
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, fake_invoke)
 
@@ -1097,9 +1097,9 @@ def test_compose_agent_releases_when_qa_attention_persists(tmp_path: Path, monke
         raise AssertionError(f"Unexpected stage: {stage}")
 
     for target in (
-        "packages.udocket_core.agents.compose.orchestrator.invoke_llm",
-        "packages.udocket_core.agents.compose.llm_runtime.invoke_llm",
-        "packages.udocket_core.agents.compose.qa.invoke_llm",
+        "packages.core.agents.compose.orchestrator.invoke_llm",
+        "packages.core.agents.compose.llm_runtime.invoke_llm",
+        "packages.core.agents.compose.qa.invoke_llm",
     ):
         monkeypatch.setattr(target, fake_invoke)
 

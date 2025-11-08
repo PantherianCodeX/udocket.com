@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from packages.udocket_core.agents.analyze.stages.entity_stage import (
+from packages.core.agents.analyze.stages.entity_stage import (
     _assign_entity_defaults,
     _assign_relation_defaults,
 )
-from packages.udocket_core.agents.analyze.stages.timeline_stage import _normalize_event
+from packages.core.agents.analyze.stages.timeline_stage import _normalize_event
 
 
 def test_normalize_event_preserves_uuid():
