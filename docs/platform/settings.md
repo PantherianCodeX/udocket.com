@@ -199,6 +199,10 @@ ______________________________________________________________________
 **References:** Appendix C seed bundles, §4 State management.
 **Breadcrumbs:** Implementation `apps/platform/settings/services/pipeline_bundle.py`, tests `tests/platform/settings/test_pipeline_bundle.py`.
 
+- Detailed lane layouts, artifact counts, and QA semantics remain in
+  `docs/automation/langgraph-agents.md`; SR stores versioned manifests and
+  enforces activation policy but never re-documents pipeline internals.
+
 - Assistant knobs (`assistant.retrieval.sources[]`, `assistant.moderation.tiers[]`, `assistant.citation.style`) share validator framework ensuring alignment with shared assets.
 - Activations altering definitions or rollouts tag `change_class="system"`, require change ticket linkage, and follow blue/green rollout gates.
 
@@ -213,6 +217,9 @@ ______________________________________________________________________
 **Breadcrumbs:** Catalog sync `apps/platform/settings/services/tool_catalog.py`, tests `tests/platform/settings/test_tool_catalog.py`.
 
 - `GET /api/v1/settings/tools/catalog` returns effective catalog JSON for operators and editors.
+
+Tool definitions and their runtime contracts live in the LangGraph spec; Settings
+only curates exposure/allowlist rules and publishes the audited catalog.
 
 ### 2.7 LLM profiles & moderation controls (normative)
 

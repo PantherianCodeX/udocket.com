@@ -1,0 +1,52 @@
+%% analyze-pipeline-v1.mmd
+flowchart LR
+    classDef stage fill:#f5f5ff,stroke:#445,stroke-width:1.2px,color:#111;
+    classDef lane fill:#ecf8ff,stroke:#2684ff,stroke-width:1.1px,color:#111;
+    classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
+    classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
+
+    Input["AN_INPUT_DISCOVERY<br/>Load transcript_v1.json + intake + metadata"]:::stage
+    AtomsExtract["AN_ATOMS_EXTRACT<br/>canonical atoms"]:::stage
+    AtomsIndex["AtomsIndex<br/>(canonical, citations)"]:::artifact
+
+    subgraph Lanes[Analyze LangGraph Lanes]
+        direction TB
+        Outline["AN_OUTLINE_DRAFT<br/>Outline lane"]:::lane
+        Timeline["AN_TIMELINE_BUILD<br/>Timeline lane"]:::lane
+        Entities["AN_ENTITIES_EXTRACT<br/>Entities lane"]:::lane
+        Issues["AN_ISSUES_EXTRACT<br/>Issues lane"]:::lane
+        Gaps["AN_GAPS_EXTRACT<br/>Gaps lane"]:::lane
+        Flags["AN_FLAGS_EXTRACT<br/>Flags / Alerts lane"]:::lane
+    end
+
+    Summary["AN_SUMMARY_DRAFT<br/>(summary_v1.json)"]:::stage
+    Staff["AN_STAFF_REPORT<br/>(staff_report_v1.md)"]:::stage
+    QA["AN_LANE_QA / AN_EVAL<br/>schema + coverage + atom checks"]:::gate
+    QAJoin["AN_QA_JOIN<br/>Aggregate lane verdicts"]:::stage
+    Finalize["AN_FINALIZE_WRITE<br/>version artifacts + ops manifests"]:::stage
+
+    Input --> AtomsExtract --> AtomsIndex
+    AtomsIndex --> Outline
+    AtomsIndex --> Timeline
+    AtomsIndex --> Entities
+    AtomsIndex --> Issues
+    AtomsIndex --> Gaps
+    AtomsIndex --> Flags
+
+    Outline --> Summary
+    Timeline --> Summary
+    Entities --> Summary
+    Issues --> Summary
+    Gaps --> Summary
+    Flags --> Summary
+
+    Summary --> Staff --> QA --> QAJoin --> Finalize
+    QA -->|Requeue Outline| Outline
+    QA -->|Requeue Timeline| Timeline
+    QA -->|Requeue Entities| Entities
+    QA -->|Requeue Issues| Issues
+    QA -->|Requeue Gaps| Gaps
+    QA -->|Requeue Flags| Flags
+    QA -->|Requeue Summary| Summary
+
+    AtomsExtract -. optional debug .-> AD[(atoms_v1.json)]

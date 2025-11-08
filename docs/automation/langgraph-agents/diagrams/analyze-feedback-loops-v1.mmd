@@ -17,12 +17,13 @@ flowchart TD
         Issues["Issues lane"]:::lane
         Gaps["Gaps lane"]:::lane
         Flags["Flags & alerts lane"]:::lane
-        Summary["Summary composer\n(summary_v1.json)"]:::stage
+        Summary["Summary composer<br/>(summary_v1.json)"]:::stage
         Staff["Staff report writer"]:::stage
     end
 
-    QA["QA lane\n(schema + coverage)"]:::gate
-    Directive["Revision directives\n(lane-specific instructions)"]:::directive
+    QA["QA lane<br/>(schema + coverage)"]:::gate
+    QAJoin["QA join<br/>(aggregate verdicts)"]:::stage
+    Directive["Revision directives<br/>(lane-specific instructions)"]:::directive
     Manifest["Write artifacts + ops manifests"]:::stage
 
     Input --> Outline
@@ -38,7 +39,7 @@ flowchart TD
     Issues --> Summary
     Gaps --> Summary
     Flags --> Summary
-    Summary --> Staff --> QA --> Manifest
+    Summary --> Staff --> QA --> QAJoin --> Manifest
 
     QA -->|issue| Directive
     Directive -->|targeted edit| Outline

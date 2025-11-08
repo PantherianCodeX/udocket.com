@@ -116,6 +116,7 @@ ______________________________________________________________________
 - Inputs: structured transcript JSON (`transcript/<job_id>__transcript_v1.json`, text fallback only when JSON is unavailable), intake/questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts, lane concurrency ceilings, token budgets, and deterministic idempotency keys (`uuid5(job_id, stage_fingerprint)`).
 - Parallel lanes: LangGraph fans out from `InputDiscovery` into outline, timeline, entities/relations, issues, gaps, and flags/alerts lanes. Lanes share the typed `AnalyzeState` mapping, emit deterministic UUIDs, and enforce JSON Schemas before merging into `SummaryDraft`, `StaffReport`, and `QAReview` nodes.
 - Lane QA: every lane emits a `LaneResult` payload backed by `AnalyzeLaneResult` (Pydantic) with `status`, `artifacts[]`, `evidence_refs[]`, and `uuid_dirty_set[]`. The `LaneQA` node validates schema parity, atom coverage, questionnaire completeness, and intake alignment before deciding whether to advance, request a focused revision, or quarantine.
+- QA join: `AN_QA_JOIN` aggregates all lane QA verdicts (outline, timeline, entities/relations, issues, gaps, flags/alerts, staff report, summary) and blocks artifact emission until every lane reports `advance`. When any lane requests `revise`, the join node forwards directives and the pipeline requeues only the failing lanes.
 - Outputs: discrete artifacts under `analysis/` — `outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json` — plus per-run metadata JSON and `ops/ops_summary.jsonl` audit entries. `_v{n}` suffixes apply on reruns without touching prior files.
 - Finalize-only writes: only `Finalize` nodes persist artifacts to disk; lane nodes write to state or scratch space. Revisions never overwrite existing files; new versions use `_v{n}` suffixes.
 - Summary lane: consumes all upstream JSON artifacts (not Analyze Markdown) to generate canonical `summary_v1.json`; Compose reads this JSON directly. Markdown render happens after JSON validation so staff edits always trace back to the canonical JSON.
@@ -123,7 +124,7 @@ ______________________________________________________________________
 - Retry, cancellation, and resume: LangGraph checkpoints persist in Postgres via the shared checkpointer so retries reuse the last successful state. Cancellation halts active nodes, marks manifests with `cancel_requested`, and resumes only when checkpoint digests still match the pipeline definition and settings snapshot.
 
 <figure class="full-width-diagram">
-  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/analyze-pipeline-v3.svg" alt="Analyze pipeline">
+  <img class="diagram" src="../build/diagrams/automation/langgraph-agents/analyze-pipeline-v1.svg" alt="Analyze pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Analyze LangGraph pipeline with atom-fed lanes, QA feedback loops, and artifact emission</figcaption>
 </figure>
 
@@ -148,6 +149,7 @@ ______________________________________________________________________
 
 - Node catalog: Analyze reuses the Compose-style LangGraph idioms — `LaneDraft`, `LaneQA`, `LaneRevision`, and `LaneFinalize` nodes per artifact lane — so Compose and Analyze share operational semantics, cost controls, and observability. Nodes register under `packages.core.agents.analyze.graph` and expose typed signatures (`AnalyzeState -> AnalyzeState`).
 - Lane QA decisions: each `LaneQA` node executes schema validation, atom cross-checks, intake/questionnaire verification, and deterministic heuristics (e.g., minimum evidence count per issue). Outcomes map to `{"advance", "revise", "quarantine"}`; the node records a `LaneQAResult` payload plus structured findings for ops metadata.
+- QA join (`AN_QA_JOIN`): aggregates lane verdicts, enforces “all lanes green” before `AN_FINALIZE_WRITE`, and emits consolidated QA findings (`qa_report_v1.json`). When a lane requests revision, QA join emits a `LaneRevisionDirective` back to that lane and keeps the other lane outputs frozen.
 - Revision directives: when `revise`, QA constructs an `AnalyzeRevisionDirective` describing failing UUIDs, acceptance criteria, prompts, and `preserve_spans[]`. LangGraph routes back to the same lane’s `LaneRevision` node, which swaps the instruction set, clamps temperature/length, and merges the new slice into the existing artifact while keeping preserved spans byte-identical.
 - Freeze & merge rules: preserved spans enforce hash equality; revised spans carry deterministic UUIDv5 derived from `(job_id, lane_id, canonical_content)` so retries remain idempotent. If QA escalates to `quarantine`, the lane halts, emits `status="blocked"`, and records findings for review.
 - QA fan-in: once all lane QA nodes report `advance`, a `QAJoin` node assembles `qa_report_v1.json` summarizing findings, completeness scores, and directives executed. Any lingering revisions block finalize until their dirty set clears, aligning Analyze with Compose’s QA gating discipline.
@@ -169,7 +171,8 @@ Lane QA emits structured findings that include metric values, pass/fail checks, 
 - Inputs: canonical Analyze artifacts (`summary_v1.json|.md`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`), intake data, deliverable templates (DOCX/Markdown), and lane concurrency budgets.
 - Lanes: parallel client and lawyer deliverable pipelines (draft → editor passes → lane QA), optional bundle excerpt, followed by cross-lane QA review and final packaging. Lanes share shared context (summary JSON + structured artifacts) but render voice-specific outputs.
 - Outputs: client and lawyer deliverables (`docs/<job_id>__compose_client_v1.md|.docx`, `docs/<job_id>__compose_lawyer_v1.md|.docx`), bundle excerpt Markdown (if enabled), compose staff report (`docs/<job_id>__compose_staff_report_v1.md`), compose QA report (`docs/<job_id>__compose_qa_report_v1.md` / `.json`), per-run metadata JSON, and `ops/ops_compose.jsonl` audit lines.
-- Finalize-only writes: only `Finalize` nodes persist artifacts to disk; lane nodes write to state or scratch space. Revisions never overwrite existing files; new versions use `_v{n}` suffixes.
+- Assembly nodes: each active lane includes a deterministic `*_ASSEMBLE` stage that programmatically embeds JSON context into Markdown/DOCX templates immediately after lane QA passes and before any cross-lane QA. Assemblies are pure functions and do not touch storage.
+- Finalize-only writes: Finalize nodes read the already-assembled payloads, version artifacts (`_v1`, `_v2`, …), compute SHA-256 manifests, and write ops JSON/JSONL entries; no other node writes to disk.
 - Safety: lane validators enforce forbidden patterns, required sections, link limits, and voice guidance; promotion requires QA PASS.
 - Factuality guard: Compose relies on citations embedded in canonical Analyze artifacts (driven by Atoms) and enforces minimum citation thresholds per deliverable section before promotion.
 - Revision directives: QA nodes emit structured `RevisionDirective` payloads that name the failing sections, preserve passing segments, and provide edit-specific prompts for the same drafting agent. Directives include citation expectations and acceptance criteria to minimise thrash.
@@ -201,6 +204,39 @@ Lane QA emits structured findings that include metric values, pass/fail checks, 
   <img class="diagram" src="../build/diagrams/automation/langgraph-agents/relationship-pipeline-v1.svg" alt="Relationship agent pipeline">
   <figcaption style="font-size: 0.9em; color: #555;">Future relationship agent pipeline with edge-level revision directives to prevent unnecessary rewrites</figcaption>
 </figure>
+
+### 2.5 Stage capability catalog (binding)
+
+- Capability classes: LangGraph pipelines route provider work through capability-first `AgentTask` values instead of artifact-specific names.
+  - `GENERATE` — long-form narrative generation (summary lanes, staff reports, Compose drafts).
+  - `EXTRACT` — structured extraction/classification (outline/timeline/entities/issues/gaps/flags/alerts, bundle excerpt seeds).
+  - `EVAL` — evaluation/QA/factuality scoring (lane QA, cross-lane QA, staff QA reports).
+  - `EMBED` — embedding/vectorization (retrieval prep, future similarity search).
+  - `ATOMS` — deterministic atomisation with optional LLM assists (input discovery + citations); falls back to `EXTRACT` if no provider call is required.
+- Stage keys: every LangGraph node carries a typed `StageKey` (`StageKey` StrEnum) that records intent, schema, dependencies, and retries. A typed `StageMap` (exported in `packages/automation/pipelines/stage_map.py`) maps each `StageKey` to `{agent_task, llm_profile_id, model_hint, depends_on[], retry_budget, cost_ceiling}` so routing stays deterministic.
+- Canonical Analyze stage keys (`AN_*`) map to capability classes as follows:
+
+| StageKey | Capability (`AgentTask`) | Purpose |
+| --- | --- | --- |
+| `AN_INPUT_DISCOVERY` | — (pure) | Load transcript JSON, intake, questionnaire payloads. |
+| `AN_ATOMS_EXTRACT` | `ATOMS` | Canonical atoms with citations + UUID5. |
+| `AN_OUTLINE_DRAFT`, `AN_TIMELINE_BUILD`, `AN_ENTITIES_EXTRACT`, `AN_ISSUES_EXTRACT`, `AN_GAPS_EXTRACT`, `AN_FLAGS_EXTRACT` | `EXTRACT` | Structured JSON artifacts feeding summary + Compose. |
+| `AN_SUMMARY_DRAFT`, `AN_STAFF_REPORT` | `GENERATE` | Narrative outputs assembled from upstream JSON (no raw transcript). |
+| `AN_LANE_QA`, `AN_EVAL` | `EVAL` | Schema/citation/coverage QA with atom cross-checks. |
+| `AN_FINALIZE_WRITE` | — (pure) | Versioned writes + SHA-256 manifests + ops JSON/JSONL. |
+
+- Canonical Compose stage keys (`CO_*`) map similarly:
+
+| StageKey | Capability (`AgentTask`) | Purpose |
+| --- | --- | --- |
+| `CO_CONTEXT_BUILD` | — (pure) | Assemble ComposeContext from Analyze artifacts + intake. |
+| `CO_CLIENT_DRAFT`, `CO_LAWYER_DRAFT`, `CO_BUNDLE_DRAFT` | `GENERATE` | Role-specific drafting using structured summary JSON. |
+| `CO_CLIENT_GUARDS`, `CO_LAWYER_GUARDS`, `CO_BUNDLE_GUARDS`, `CO_CLIENT_FACTUAL`, `CO_LAWYER_FACTUAL`, `CO_BUNDLE_FACTUAL`, `CO_LANE_QA` | `EVAL` | Lane-level structural, policy, and factuality gates. |
+| `CO_CLIENT_ASSEMBLE`, `CO_LAWYER_ASSEMBLE`, `CO_BUNDLE_ASSEMBLE` | — (pure) | Programmatic template embedding once lane QA passes. |
+| `CO_CROSS_QA`, `CO_QA_REVIEW` | `EVAL` | Cross-lane QA and staff QA reporting. |
+| `CO_FINALIZE_WRITE` | — (pure) | Version deliverables, compute hashes, emit manifests/ops logs. |
+
+- New stage keys must register in the StageMap, include JSON Schema references, and stay capability-aligned. Diagram callouts (see §2.2, §2.3) label StageKeys to keep engineers, QA, and ops in sync.
 
 ______________________________________________________________________
 

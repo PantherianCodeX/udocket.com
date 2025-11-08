@@ -670,7 +670,7 @@ enums.quarantine_reason: managed via Reference Manager (list in §5.2.4)
 - Case root: `storage/media/<ORG_ID>/cases/<CASE_ID>/` with categories:
   - `audio/<job_id>__<original>` — original uploads and normalized audio
   - `transcript/<job_id>__transcript.txt` — primary transcripts
-  - `analysis/` — Analyze outputs (summaries, outlines, seeds, hints, staff reports)
+  - `analysis/` — Analyze outputs (see `docs/automation/langgraph-agents.md` for the authoritative inventory)
   - `docs/` — Compose deliverables (client/lawyer, bundle, QA/staff reports) and portal messaging attachments (`ATTACHMENT_*`)
   - `ops/` — human logs, per-run JSON, and append-only `ops_<agent>.jsonl` audit streams
 - Integrity: compute and persist `content_sha256` for all immutable artifacts; manifests include SHA-256 of outputs and `settings_snapshot_sha256` for provenance. Batch mode may record remote hashes (`BATCH_HASH_REMOTE=1`, `BATCH_HASH_MAX_MB`).
@@ -886,63 +886,36 @@ Example
 
 ## 6) Agent ecosystem
 
-**Purpose:** Provide a high-level view of the LangGraph-powered agent suite (Transcribe, Analyze, Compose, Timeline, Relationship) and show how they collaborate with Settings, Guardian, and Worker Cluster. **|**
-**Contract:** Canonical pipelines, inputs/outputs, manifests, and QA guardrails are defined in [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); this section highlights integration edges and shared dependencies other services rely on. **|**
-**State:** Agents persist transcript text + JSON, the internal Analyze `AtomsIndex`, discrete analysis artifacts (outline, timeline, entities, issues, gaps, flags, alerts, summary JSON, staff report MD, QA report JSON), compose deliverables, manifests, and audit streams under `storage/media/tenants/<ORG_ID>/cases/<case>/`. Settings stores pipeline/tool configuration and region allowlists; Worker Cluster orchestrates LangGraph jobs; Guardian verdicts gate promotion. **|**
-**Failures & handling:** Failure taxonomy (`TRANSIENT`, `POLICY`, `INPUT`, `INTEGRITY`, `CONCURRENCY`, `REGION_POLICY`) is defined in the LangGraph agents spec; Worker Cluster retries and Guardian quarantines apply consistently across pipelines. **|**
-**Observability:** Dashboards “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs”, lane-level metrics (`agent_lane_duration_seconds`, `agent_lane_queue_wait_seconds`, `agent_lane_schema_fail_total`, `atoms_extracted_total`), and audit JSONL streams provide traceability; quality targets remain anchored in the LangGraph agents spec. **|**
-**Breadcrumbs:** Canonical design [`../automation/langgraph-agents.md`](../automation/langgraph-agents.md); runtime `packages/core/agents/langgraph_orchestrator.py`; analyze stages `packages/core/agents/analyze/stages/`; compose orchestrator `packages/core/agents/compose/orchestrator.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
-**References:** §3 (platform architecture), §5 (artifact lifecycle), §§7–8 (Guardian & Signer summaries), Appendices I & U, LangGraph agents spec §§1–10, spec schemas `spec/schemas/agents/`.
+**Purpose:** Summarize how the LangGraph-powered agent suite (Transcribe, Analyze, Compose, Timeline, Relationship) slots into the broader platform. **|**
+**Contract:** The canonical source for pipeline definitions, inputs/outputs, manifests, QA guardrails, and observability is [`docs/automation/langgraph-agents.md`](../automation/langgraph-agents.md). This TDD only highlights the interfaces other services rely on. **|**
+**State:** Agents persist transcripts, analysis outputs, deliverables, manifests, and audit streams exactly as defined in the LangGraph spec. Settings publishes the effective pipeline configuration, Guardian enforces policy verdicts, and Worker Cluster coordinates run-time execution. **|**
+**Failures & handling:** Failure classes (`TRANSIENT`, `POLICY`, `INPUT`, `INTEGRITY`, `CONCURRENCY`, `REGION_POLICY`) and retry behaviour come from the LangGraph spec; Worker Cluster and Guardian simply consume the taxonomy. **|**
+**Observability:** Dashboards such as “Agent Pipelines – Activation”, “LangGraph QA”, and “Agent Shadow Runs”, plus metrics (`agent_lane_duration_seconds`, `agent_lane_queue_wait_seconds`, `agent_lane_schema_fail_total`, `atoms_extracted_total`) and audit JSONL streams expose health to operators; any additions must be reflected in the LangGraph spec before landing here. **|**
+**Breadcrumbs:** LangGraph spec; runtime `packages/core/agents/langgraph_orchestrator.py`; Analyze stages `packages/core/agents/analyze/stages/`; Compose orchestrator `packages/core/agents/compose/orchestrator.py`; Celery tasks `apps/platform/operations/tasks/agents.py`; QA harness `tests/agents/test_langgraph_acceptance.py`. **|**
 
-### 6.1 LangGraph orchestration (summary)
+### 6.1 LangGraph orchestration (overview)
 
 - *Primary spec:* [`LangGraph agents §3`](../automation/langgraph-agents.md#3-api-contract).
-- GraphRunner (LangGraph `>=0.2,<0.3`) compiles the Transcribe → Analyze → Compose DAG with explicit fan-out/fan-in nodes: Analyze runs outline, timeline, entities, issues, gaps, and flags lanes in parallel before converging into summary, staff, and QA stages; Compose retains client/lawyer/bundle lanes with QA gating. Finalize nodes remain the sole writers for deterministic artifacts and share the same `StateGraph` idioms.
-- Settings (`agents.pipeline.*`, `agents.tools.*`) declare pipelines, lane concurrency, region allowlists, and idempotency keys; activation lints enforce schema hashes and contract tests prior to rollout.
-- LangGraph checkpoints persist in Postgres (shared DB) with per-node `idempotency_key = sha256(job_id || pipeline_id || node_id || graph_version || input_hash)` so retries + resumes stay deterministic. Resumes require matching settings snapshots and manifest hashes; divergences raise `E_INTEGRITY_MISMATCH`.
-- Execution boundary: `packages/core` owns the LangGraph runtime, schemas, and job services; `apps/platform` invokes those services via Celery for orchestration + UX, preserving core/service separation for future deployment targets.
-- Assistant pipelines reuse the same activation pathway, ensuring retrieval, moderation, and responder lanes inherit identical policy controls and manifest discipline.
+- Pipelines are declared in Settings (`agents.pipeline.*`, `agents.tools.*`) and compiled by the LangGraph runtime inside `packages/core`. `apps/platform` invokes those services via Celery so orchestration stays service-agnostic.
+- Checkpointing, idempotency keys, and resume semantics are owned by the LangGraph spec. This document only records that checkpoints live in Postgres and that settings snapshots must match before resuming a job.
 
-### 6.2 Transcription pipeline (summary)
+### 6.2 Pipelines (overview)
 
-- *Primary spec:* [`LangGraph agents §2.1`](../automation/langgraph-agents.md#21-transcription-agent-binding).
-- Modes: streaming and batch ingestion of local files or HTTPS SAS URLs. Inputs capture language, region (validated against Settings allowlists), diarisation flag (batch only), and provider choices.
-- Outputs: transcript text `transcript/<job_id>__transcript.txt`, structured transcript JSON `transcript/<job_id>__transcript_v1.json` (segment UUIDs, speaker roster, hashes), per-run meta JSON `ops/<job_id>__transcription_log.json`, human log, and `ops/ops_transcription.jsonl` audit append.
-- Capability negotiation ensures format/language support before dispatch; retries follow provider budgets with exponential backoff; conversion to PCM WAV (ffmpeg) is captured in manifest metadata for forensic review.
+- *Transcribe:* [`LangGraph agents §2.1`](../automation/langgraph-agents.md#21-transcription-agent-binding) defines ingestion modes, structured transcript outputs, and ops/audit expectations. This TDD only notes that Storage, Settings, and Guardian integrate with the emitted manifests.
+- *Analyze:* [`LangGraph agents §2.2`](../automation/langgraph-agents.md#22-analyze-agent-binding) owns lane definitions, QA join requirements, AtomsIndex handling, and the artifact matrix. Other services simply consume the published artifacts and manifests.
+- *Compose:* [`LangGraph agents §2.3`](../automation/langgraph-agents.md#23-compose-agent-binding) specifies the client/lawyer/bundle lanes, QA join/release flow, and deliverable manifests. Manual/agent edits follow the spec’s approval lifecycle.
+- *Timeline & Relationship:* [`LangGraph agents §2.4`](../automation/langgraph-agents.md#24-timeline-relationship-agents-roadmap-informative) tracks roadmap agents that extend Analyze outputs. Until those sections move to “binding”, this TDD only references the spec.
 
-### 6.3 Analyze pipeline (summary)
-
-- *Primary spec:* [`LangGraph agents §2.2`](../automation/langgraph-agents.md#22-analyze-agent-binding).
-- Inputs: structured transcript JSON (text fallback only when JSON is unavailable), intake questionnaire artifacts, DOCX outline template headers, case metadata, Settings overrides for prompts and lane concurrency.
-- Parallel lanes emit discrete artifacts: `analysis/<job_id>__outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, summary JSON (`summary_v1.json`), staff report Markdown (`staff_report_v1.md`), QA report JSON (`qa_report_v1.json`). All records carry deterministic UUIDs (`uuid5` signatures) and schema_version headers.
-- Lane QA & revisions: each lane produces an `AnalyzeLaneResult` payload consumed by `LaneQA`. Outcomes are `advance`, `revise`, or `quarantine`. Revision requests emit `AnalyzeRevisionDirective` schemas (targets + preserve spans) so reruns only rewrite failing slices; good data stays byte-identical across passes.
-- Atom layer: transcript segments flow through an internal extraction pipeline that canonicalises statements, detects negation cues, assigns deterministic UUIDs, aggregates evidence, and produces an `AtomsIndex`. Downstream lanes consume the index to attach citations, detect conflicts, and populate `SummaryCheck` verdicts surfaced in `qa_report_v1.json`. Optional debug dumps (`analysis/<job_id>__atoms_v1.json`) remain feature-flagged (`ANALYZE_SAVE_ATOMS`).
-- QA gates validate JSON Schema compliance, atom-backed evidence linking, and questionnaire coverage before finalize persists artifacts; reruns create `_v{n}` versions while preserving manifests and audit history (`ops/ops_summary.jsonl`).
-
-### 6.4 Compose pipeline (summary)
-
-- *Primary spec:* [`LangGraph agents §2.3`](../automation/langgraph-agents.md#23-compose-agent-binding).
-- Inputs: canonical Analyze artifacts (`summary_v1.json|.md`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`), intake data, deliverable templates (DOCX/Markdown), and policy settings. No dependence on Analyze Markdown since summary JSON is canonical.
-- Dual deliverable lanes (client, lawyer) draft in parallel with dedicated editor passes and QA reviewers; optional bundle excerpt runs alongside. Outputs: client/lawyer deliverables (`docs/<job_id>__compose_client_v1.*`, `docs/<job_id>__compose_lawyer_v1.*`), bundle excerpt, QA/staff reports, manifests, and `ops/ops_compose.jsonl` audit lines.
-- Policy lints and Guardian gating enforce forbidden content, required sections, link limits, and region compliance before promotion. Manual/agent edits produce new artifact versions subject to reviewer approval.
-- Factuality guard relies on atom-derived citations embedded in canonical Analyze artifacts; sections must meet citation thresholds before delivery artifacts promote.
-
-### 6.5 Timeline & relationship pipelines (summary)
-
-- *Primary spec:* [`LangGraph agents §2.4`](../automation/langgraph-agents.md#24-timeline-relationship-agents-roadmap-informative).
-- Roadmap agents consume Analyze timeline/events and entities JSON to build richer chronological views and relationship graphs, preserving UUID lineage and evidence pointers.
-- Graduation to binding requires QA + shadow metrics to meet thresholds; roadmap tracked in LangGraph agents §10. Outputs will reuse the `analysis/<job_id>__timeline_v1.json` and `entities_v1.json` signatures to avoid duplication.
-
-### 6.6 Manifests, lineage, and failure taxonomy (summary)
+### 6.3 Manifests, lineage, and failure taxonomy (overview)
 
 - *Primary spec:* [`LangGraph agents §4–§5`](../automation/langgraph-agents.md#4-state-management).
-- Manifests capture input hashes, settings snapshot SHA, pipeline + graph versions, tool usage, region assignments, prompt provenance, and artifact checksums (including schema_version). Audit JSONL streams remain append-only.
-- Failure classes map to error codes (`E_TRANSIENT_PROVIDER`, `E_POLICY_FORBIDDEN`, `E_INPUT_INVALID`, `E_INTEGRITY_MISMATCH`, `E_CONCURRENCY_LIMIT`, `E_REGION_POLICY`); Worker Cluster propagates retries/backoff and surfaces SSE updates to the UI.
+- Manifests capture the immutable evidence needed for audits (input hashes, snapshot SHA, pipeline/graph versions, tool usage, etc.). They are described in the spec and merely referenced here so downstream systems know where to look.
+- Failure taxonomy and observability hooks map directly to the spec. Worker Cluster, Guardian, and Ops tooling must not invent alternative codes or metrics.
 
-### 6.7 Quality, security, and operations (summary)
+### 6.4 Quality, security, and operations (summary)
 
 - *Primary spec:* [`LangGraph agents §6–§9`](../automation/langgraph-agents.md#6-observability).
-- Quality KPIs include transcription accuracy, timeline/entity coverage, issue/gap precision, deliverable QA pass rate, and cost/time budgets; results land in `analysis/<job_id>__qa_report_v1.json` and compose QA artifacts.
+- Quality KPIs (accuracy, coverage, QA pass rate, cost/time budgets) and the artifacts that capture them are spelled out in the LangGraph spec; this TDD only tracks that Ops dashboards consume those metrics.
 - Region enforcement is policy-driven—Settings allowlists gate providers and regions; Guardian audits waivers; manifests log region selections for every lane. HIPAA/SPI controls and Guardian policy integration ensure data handling remains compliant across regions.
 - Operational procedures (pipeline activation, rollbacks, shadow runs) follow LangGraph spec; Ops runbooks `RB-AGENT-*` cover drills, cancellation, and incident playbooks referenced in §8–§9.
 
@@ -2057,52 +2030,11 @@ General rules
 
 Ingestion inputs (binding)
 
-| Artifact type | Purpose | Notes |
-|---|---|---|
-| EXHIBIT_RAW | Original exhibit uploads (PDF/image/archive) | Stored under `docs/raw/`; Guardian enforces format allowlist prior to parsing. |
-| EXHIBIT_TEXT | Parsed/ocr text companion for exhibits | Linked to `EXHIBIT_RAW` via `source.inputs[]`; feeds Analyze search. |
-| COURT_DOC_RAW | Court filings or orders as uploaded | Similar handling to `EXHIBIT_RAW`; maintains original casing. |
-| COURT_DOC_TEXT | Structured text extraction for court documents | Used for diffing, timeline extraction, and Compose references. |
-| EMAIL_RFC822 | Raw RFC822 email payloads (including headers) | Stored encrypted; normalized to `EMAIL_TEXT` and attachments. |
-| EMAIL_TEXT | Parsed email body (plaintext/HTML converted) | Preserves header metadata for Guardian/Compose citations. |
-| EMAIL_ATTACHMENTS | Individual artifacts emitted per attachment | Guardian scans each attachment; retained under case `docs/attachments/`. |
-| FINANCIALS_RAW | Spreadsheet or CSV financial uploads | Normalized before conversion; preserved for audit. |
-| FINANCIALS_TABLE | Structured table representation of financial artifacts | Stored as JSON/CSV; downstream analytics consume. |
-| MEMO_TEXT\_\* | Staff/comms memos with deterministic suffix per template | Used by Guardian to validate memo templates and approvals. |
-
-Artifact table
-
-| Artifact type | Directory / pattern | Exclusive | Manifest pointer | Notes |
-|---|---|---|---|---|
-| TRANSCRIPT | `transcript/<job_id>__transcript.txt` | **Yes** | `<transcript>.manifest.json` | Header includes case, source, language, hashes |
-| AUDIO_NORMALIZED | `audio/<job_id>__<normalized_name>` | No | n/a | PCM 16 kHz mono copy for reproducibility |
-| OUTLINE_JSON | `analysis/<job_id>__outline_v1.json` | No | `<outline>.manifest.json` | Hierarchical outline for Compose |
-| TIMELINE_JSON | `timeline/<job_id>__timeline_v1.json` | No | `<timeline>.manifest.json` | Normalized timeline events (speakers, timestamps, UUID anchors) |
-| ENTITIES_JSON | `analysis/<job_id>__entitIES_v1.json` | No | `<entities>.manifest.json` | Deterministic UUID per entity/relationship |
-| ISSUES_JSON | `analysis/<job_id>__issues_v1.json` | No | `<issues>.manifest.json` | Issues presented or evident |
-| FACTS_JSON | `analysis/<job_id>__facts_v1.md` | No | `<facts>.manifest.json` | Facts as they are presented |
-| GAPS_JSON | `analysis/<job_id>__gaps_v1.md` | No | `<gaps>.manifest.json` | information gaps and other unknowns |
-| REPORT_MD | `analysis/<job_id>__analyze_report_v1.md` | No | `<report>.manifest.json` | Human readable report containing internal notes, QA logs and run logs |
-| COMPOSE_CLIENT_MD/DOCX | `docs/<job_id>__compose_client_v1.md\|docx`  | **Yes** | `<compose_client>.manifest.json` | |
-| COMPOSE_LAWYER_MD/DOCX | `docs/<job_id>__compose_lawyer_v1.md\|docx`  | **Yes** | `<compose_lawyer>.manifest.json` | |
-| COMPOSE_BUNDLE_EXCERPT_MD | `docs/<job_id>__compose_bundle_v1.md` | **Yes** | `<compose_bundle>.manifest.json` | Excerpt for bundle |
-| COMPOSE_STAFF_REPORT_MD | `docs/<job_id>__compose_staff_report_v1.md` | No | `<compose_staff_report>.manifest.json` | QA staff notes |
-| COMPOSE_QA_REPORT_MD | `docs/<job_id>__compose_qa_report_v1.md` | No | `<compose_qa_report>.manifest.json` | QA outcomes |
-| DPIA_RECORD | `privacy/<job_id>__dpia_v1.json\|md`         | No | `<dpia>.manifest.json` | |
-| ROPA_RECORD | `privacy/<job_id>__ropa_v1.json\|md`         | No | `<ropa>.manifest.json` | |
-| AUDIT_SEAL | `ops/<timestamp>__audit_seal_v1.json` | No | `<audit_seal>.manifest.json` | Rolling Merkle root |
-| SIGNATURE_CERT | `docs/<job_id>__signature_cert_v1.json` | No | `<signature_cert>.manifest.json` | Signer certificate bundle |
-| ATTACHMENT_RAW | `docs/<job_id>__attachment_raw_v1.bin` | No | `<attachment_raw>.manifest.json` | Source binary for portal messaging/client uploads; Guardian-gated |
-| ATTACHMENT_TEXT | `docs/<job_id>__attachment_text_v1.json\|md` | No | `<attachment_text>.manifest.json` | |
-| ERASURE_JOURNAL | `privacy/<job_id>__erasure_journal_v1.json` | No | `<erasure_journal>.manifest.json` | Hard-purge DSAR evidence; subject hashed with HKDF salt |
-| DESTRUCTION_CERT | `privacy/<job_id>__destruction_cert_v1.json` | No | `<destruction_cert>.manifest.json` | Case-level destruction attestation; links retention trigger + tombstone IDs |
-| CHAT_SESSION_JSON | `ops/<session_id>__chat_staff.jsonl` | No | `<chat_session>.manifest.json` | Staff Copilot conversation log with citations + moderation metadata |
-| CHAT_SESSION_CLIENT_JSON | `ops/<session_id>__chat_client.jsonl` | No | `<chat_client_session>.manifest.json` | Client portal chat conversation; portal-visible subset; Guardian-audited |
-| CHAT_SUMMARY_JSON | `analysis/<job_id>__chat_summary_v1.json` | No | `<chat_summary>.manifest.json` | Optional summarization of chat session; includes references and moderation outcome |
-| AGENT_EDIT_PROPOSAL_MD | `analysis/<job_id>__edit_proposal_v1.md` | No | `<agent_edit_proposal>.manifest.json` | AI-assisted edit proposal human-reviewed before promotion |
-| AGENT_EDIT_DIFF_JSON | `analysis/<job_id>__edit_diff_v1.json` | No | `<agent_edit_diff>.manifest.json` | Machine-readable diff for Agent edit proposals |
-
-- **NOTE:** Replace "v1" with v{n}
+Artifact inventories, directory patterns, and manifest naming conventions are now
+maintained exclusively in [`docs/automation/langgraph-agents.md`](../automation/langgraph-agents.md).
+Refer to that spec when you need concrete file names or schema references; this
+TDD only calls out that artifacts live under `storage/media/…` with manifests and
+audit trails attached.
 
 ### D.1 Chat assistant artifacts (binding)
 
