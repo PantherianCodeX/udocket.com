@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from doc_tools.config import paths
-from doc_tools.common.doc_utils import derive_doc_label, parse_front_matter, read_markdown_lines, stringify
+from doc_tools.common.doc_utils import read_doc_label
 from doc_tools.common.nav_utils import collect_entries, find_section
 
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
@@ -22,18 +22,6 @@ def discover_appendices(directory: Path) -> list[Path]:
         for path in directory.glob("*.md")
         if path.is_file() and not path.name.startswith("_")
     )
-
-
-def _parse_label(path: Path) -> str:
-    try:
-        lines = read_markdown_lines(path)
-    except OSError:
-        return path.stem.replace("_", " ").title()
-    front = parse_front_matter(lines)
-    if not front:
-        return path.stem.replace("_", " ").title()
-    title = stringify(front.get("title", "")) or path.stem
-    return derive_doc_label(title, fallback=path.stem)
 
 
 def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) -> bool:
@@ -58,7 +46,8 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
     # Append new files alphabetically.
     for rel in sorted(remaining_targets):
         path = remaining_targets[rel]
-        label = _parse_label(path)
+        fallback_label = path.stem.replace("_", " ").title()
+        label = read_doc_label(path, fallback=fallback_label)
         managed_lines.append(f"{ITEM_INDENT}- {label}: {rel}")
 
     static_lines = [

@@ -14,11 +14,10 @@ from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
     auto_generated_header,
     begin_auto_generated_marker,
-    derive_doc_label,
     end_auto_generated_marker,
     mkdocs_slug,
-    parse_front_matter,
-    stringify,
+    read_doc_label,
+    read_markdown_lines,
     write_or_check,
 )
 DOCS_DIR = paths.DOCS_ROOT
@@ -96,19 +95,6 @@ def iter_source_files() -> Iterable[Path]:
                 continue
             seen.add(path)
             yield path
-
-
-def read_doc_label(lines: Sequence[str], path: Path) -> str:
-    """Return a short label derived from the document title/front matter."""
-
-    front = parse_front_matter(lines)
-    if front:
-        title = stringify(front.get("title", ""))
-    else:
-        title = ""
-
-    fallback = path.stem.replace("tdd-", "").replace("-", " ").title()
-    return derive_doc_label(title, fallback=fallback)
 
 
 def extract_runbook_sections(lines: Sequence[str]) -> list[list[str]]:
@@ -217,11 +203,12 @@ def build_catalog() -> tuple[list[str], list[Heading]]:
     toc_headings: list[Heading] = []
 
     for path in iter_source_files():
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = read_markdown_lines(path)
         sections = extract_runbook_sections(lines)
         if not sections:
             continue
-        label = read_doc_label(lines, path)
+        fallback_label = path.stem.replace("tdd-", "").replace("-", " ").title()
+        label = read_doc_label(path, fallback=fallback_label)
         for section in sections:
             if catalog_lines and catalog_lines[-1].strip():
                 catalog_lines.append("")

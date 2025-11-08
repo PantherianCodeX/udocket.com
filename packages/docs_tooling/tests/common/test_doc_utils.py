@@ -201,6 +201,34 @@ def test_iter_markdown_tables_requires_separator() -> None:
     assert tables == []
 
 
+def test_read_doc_label_prefers_front_matter(tmp_path: Path) -> None:
+    target = tmp_path / "doc.md"
+    target.write_text(
+        "---\n"
+        "title: Sample Runbook\n"
+        "---\n"
+        "# Heading\n",
+        encoding="utf-8",
+    )
+
+    assert du.read_doc_label(target, fallback="Fallback") == "Sample Runbook"
+
+
+def test_read_doc_label_heading_prefix(tmp_path: Path) -> None:
+    target = tmp_path / "adr.md"
+    target.write_text("# ADR-0001 - Important Decision\nBody", encoding="utf-8")
+
+    label = du.read_doc_label(target, fallback="Fallback", heading_prefixes=("ADR",))
+
+    assert label == "Important Decision"
+
+
+def test_read_doc_label_missing_file(tmp_path: Path) -> None:
+    target = tmp_path / "missing.md"
+
+    assert du.read_doc_label(target, fallback="Fallback") == "Fallback"
+
+
 def test_auto_generated_comment_with_command_sequence() -> None:
     comment = du.auto_generated_comment(refresh_command=["python", "-m", "tool.build"])
     assert comment == "<!-- AUTO-GENERATED: Run `python -m tool.build` to refresh. -->"

@@ -220,6 +220,55 @@ def derive_doc_label(title: str, *, fallback: str) -> str:
     return cleaned or fallback
 
 
+def _strip_heading_prefix(value: str, prefixes: Sequence[str] | None) -> str:
+    if not prefixes:
+        return value.strip()
+    normalized = value.strip()
+    for prefix in prefixes:
+        pattern = re.compile(
+            rf"^{re.escape(prefix)}(?:[-\s]*\d+)?\s*(?:[-—:]\s*)?(?P<body>.+)$",
+            re.IGNORECASE,
+        )
+        match = pattern.match(normalized)
+        if match:
+            candidate = match.group("body").strip()
+            if candidate:
+                return candidate
+    return normalized
+
+
+def read_doc_label(
+    path: Path,
+    *,
+    fallback: str | None = None,
+    heading_prefixes: Sequence[str] | None = None,
+) -> str:
+    """Return a human-friendly label derived from front matter or first heading."""
+
+    default_label = fallback or path.stem
+    try:
+        lines = read_markdown_lines(path)
+    except OSError:
+        return default_label
+
+    front_matter = parse_front_matter(lines)
+    if front_matter:
+        candidate = stringify(front_matter.get("title", ""))
+        if candidate:
+            return derive_doc_label(candidate, fallback=default_label)
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip()
+            heading = _strip_heading_prefix(heading, heading_prefixes)
+            if heading:
+                return derive_doc_label(heading, fallback=default_label)
+            break
+
+    return default_label
+
+
 def replace_marked_section(original: str, begin: str, end: str, replacement: str) -> str:
     """Replace the content enclosed by *begin* and *end* markers in *original*."""
 

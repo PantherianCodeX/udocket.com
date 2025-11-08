@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from doc_tools.config import paths
+from doc_tools.common.doc_utils import read_doc_label
 from doc_tools.common.nav_utils import collect_entries, find_section
 
 MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
@@ -24,26 +25,6 @@ def discover_adrs(directory: Path) -> list[Path]:
     )
 
 
-def _derive_label(path: Path) -> str:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return path.stem
-    for raw in lines:
-        stripped = raw.strip()
-        if stripped.startswith("#"):
-            heading = stripped.lstrip("#").strip()
-            if "—" in heading:
-                _, remainder = heading.split("—", 1)
-                return remainder.strip() or path.stem
-            if "-" in heading:
-                prefix, remainder = heading.split("-", 1)
-                if prefix.strip().upper().startswith("ADR"):
-                    return remainder.strip() or path.stem
-            return heading or path.stem
-    return path.stem
-
-
 def _build_entries(adrs: list[Path], existing: dict[str, str]) -> list[str]:
     overview: Path | None = None
     others: list[Path] = []
@@ -55,11 +36,11 @@ def _build_entries(adrs: list[Path], existing: dict[str, str]) -> list[str]:
     lines: list[str] = [f"{INDEX_INDENT}- {INDEX_LABEL}:"]
     if overview:
         rel = overview.relative_to(paths.DOCS_ROOT).as_posix()
-        label = existing.get(rel) or _derive_label(overview)
+        label = existing.get(rel) or read_doc_label(overview, heading_prefixes=("ADR",))
         lines.append(f"{ITEM_INDENT}- {label}: {rel}")
     for adr in others:
         rel = adr.relative_to(paths.DOCS_ROOT).as_posix()
-        label = existing.get(rel) or _derive_label(adr)
+        label = existing.get(rel) or read_doc_label(adr, heading_prefixes=("ADR",))
         lines.append(f"{ITEM_INDENT}- {label}: {rel}")
     return lines
 
