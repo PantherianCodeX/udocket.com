@@ -7,7 +7,6 @@ _ERROR_UNSUPPORTED_LANGUAGE = "Unsupported language code: {value}"
 
 def ensure_language(value: str | LanguageCode | None) -> LanguageCode:
     """Return a supported LanguageCode, defaulting to en-CA."""
-
     if isinstance(value, LanguageCode):
         return value
     if value is None:

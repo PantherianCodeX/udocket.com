@@ -27,6 +27,7 @@
     'build_entity_hints',
     'draft_markdown',
     'qa_and_finalize',
+    'qa_join',
   ];
   const ANALYZE_STAGE_LABELS = {
     pipeline: 'Pipeline',
@@ -38,6 +39,7 @@
     build_entity_hints: 'Entity hints',
     draft_markdown: 'Draft summary',
     qa_and_finalize: 'QA and finalize',
+    qa_join: 'QA join',
   };
   const ANALYZE_STATUS_PRESENTATION = {
     pending: { label: 'Pending', className: 'text-slate-400' },

@@ -45,6 +45,13 @@ from packages.common.operations import ComposeStageMap, optional_json_object
 from packages.common.text import unique_title
 from automation.agents import AnalyzeAgent as _AnalyzeAgent, get_ai_client
 from automation.agents import AnalyzeConfig
+from automation.langgraph import build_analyze_graph_v1
+from packages.common.agents import (
+    StageKey,
+    StageOverrideConfig,
+    parse_stage_overrides,
+    stage_overrides_to_json,
+)
 from packages.core.llm.config import load_llm_settings as _load_llm_settings
 
 log = logging.getLogger("apps.platform.operations.tasks.analyze")
@@ -234,13 +241,17 @@ def analyze_job(
         _get_provider_secret_with_metadata,
     )
     collect_requested_providers_fn = cast(
-        Callable[[Sequence[str], Sequence[str], ComposeStageMap | None], list[str]],
+        Callable[
+            [Sequence[str], Sequence[str], ComposeStageMap | None, Mapping[StageKey, StageOverrideConfig] | None],
+            list[str],
+        ],
         getattr(
             tasks_module,
             "collect_requested_providers",
             _collect_requested_providers,
         ),
     )
+    get_ai_client_fn = getattr(tasks_module, "get_ai_client", get_ai_client)
     analyze_agent_cls = getattr(tasks_module, "AnalyzeAgent", _AnalyzeAgent)
     send_case_update_fn = getattr(tasks_module, "send_case_update", _send_case_update)
     audit_emit_fn = getattr(tasks_module, "audit_emit", _audit_emit)
@@ -332,9 +343,16 @@ def analyze_job(
     if active_config_id:
         base_meta["active_llm_config_id"] = active_config_id
 
-    stage_map = ComposeStageMap.from_mapping(
+    raw_stage_map = (
         optional_json_object(config_payload.get("stage_map")) if config_payload else None
     )
+    parsed_stage_overrides = parse_stage_overrides(raw_stage_map)
+    normalized_stage_map_payload = (
+        stage_overrides_to_json(parsed_stage_overrides)
+        if parsed_stage_overrides
+        else raw_stage_map
+    )
+    stage_map = ComposeStageMap.from_mapping(normalized_stage_map_payload)
     provider_chain_override: Sequence[str] = (
         tuple(config_payload["provider_chain"])
         if config_payload and config_payload["provider_chain"]
@@ -346,6 +364,7 @@ def analyze_job(
         tuple(analyze_config.provider_chain),
         config_chain,
         stage_map,
+        parsed_stage_overrides,
     )
 
     provider_credentials: dict[str, Mapping[str, object]] = {}
@@ -364,11 +383,28 @@ def analyze_job(
             hint_payload[str(key)] = value
         transcript_hint_payload = hint_payload
 
-    ai_client = get_ai_client()
+    ai_client: object | None = None
     try:
-        agent = analyze_agent_cls(analyze_config, ai_client=ai_client)
+        ai_client = get_ai_client_fn()
+    except Exception as exc:  # noqa: BLE001
+        if analyze_agent_cls is _AnalyzeAgent:
+            raise
+        log.warning(
+            "AI client unavailable for custom AnalyzeAgent; continuing without",
+            extra={"job_id": job_id, "case_id": case_id},
+            exc_info=exc,
+        )
+    try:
+        agent = analyze_agent_cls(
+            analyze_config,
+            ai_client=ai_client,
+            langgraph_builder=build_analyze_graph_v1,
+        )
     except TypeError:
-        agent = analyze_agent_cls(analyze_config)
+        try:
+            agent = analyze_agent_cls(analyze_config, ai_client=ai_client)
+        except TypeError:
+            agent = analyze_agent_cls(analyze_config)
 
     def _sanitize_details(details: Mapping[str, object]) -> dict[str, object]:
         sanitized: dict[str, object] = {}
@@ -408,6 +444,7 @@ def analyze_job(
             transcript_hint=transcript_hint_payload,
             provider_chain=config_chain or analyze_config.provider_chain,
             stage_map=stage_map.to_dict(),
+             stage_overrides=parsed_stage_overrides or None,
             provider_credentials=provider_credentials or None,
             progress_callback=_progress,
         )

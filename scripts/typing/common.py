@@ -6,9 +6,10 @@ from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from config.paths import REPO_ROOT
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = REPO_ROOT
 DOCS_ROOT = PROJECT_ROOT / "docs"
 TYPING_DOCS_ROOT = DOCS_ROOT / "typing"
 MANIFEST_PATH = TYPING_DOCS_ROOT / "automation_manifest.json"

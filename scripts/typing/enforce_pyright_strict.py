@@ -12,8 +12,8 @@ import argparse
 import json
 from collections.abc import Iterable
 from pathlib import Path
+from config.paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "docs" / "typing" / "automation_manifest.json"
 STRICT_PRAGMA = "# pyright: strict"
 

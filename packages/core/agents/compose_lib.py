@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from packages.common.agents import StageKey, StageOverrideConfig, normalize_stage_override_mapping
 from packages.common.json_utils import (
     JSONArray,
     JSONObject,
@@ -71,8 +72,30 @@ class _LaneEditorStep(Protocol):
 
 logger = logging.getLogger("udocket.compose.agent")
 
+_STAGE_OVERRIDE_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "compose.client.revise": ("compose.client.draft",),
+    "compose.lawyer.revise": ("compose.lawyer.draft",),
+}
+
 
 QA_REVIEWER_STATUS_OK = {"ok", "pass", "approved"}
+
+
+def _expand_stage_overrides(
+    overrides: Mapping[str, StageOverrideConfig],
+) -> dict[str, StageOverrideConfig]:
+    expanded = dict(overrides)
+    if not overrides:
+        return expanded
+    for stage_name, fallback_keys in _STAGE_OVERRIDE_FALLBACKS.items():
+        if stage_name in expanded:
+            continue
+        for key in fallback_keys:
+            config = overrides.get(key)
+            if config is not None:
+                expanded[stage_name] = config
+                break
+    return expanded
 
 
 def _stable_doc_fingerprint(document: str) -> str:
@@ -114,6 +137,7 @@ class ComposeAgent:
         *,
         compose_run: ComposeRun | None = None,
         log_context: ComposeLogContext | None = None,
+        stage_overrides: Mapping[str, StageOverrideConfig] | None = None,
     ) -> ComposeOrchestrator:
         return ComposeOrchestrator(
             config=self.config,
@@ -123,6 +147,7 @@ class ComposeAgent:
             prompts=self.prompts,
             compose_run=compose_run,
             log_context=log_context,
+            stage_overrides=stage_overrides,
         )
 
     def _log_context_from_state(self, state: ComposeState) -> ComposeLogContext:
@@ -215,6 +240,7 @@ class ComposeAgent:
         provider_credentials: Mapping[str, Mapping[str, Any]] | None = None,
         progress_callback: Callable[[str, str, JSONObject], None] | None = None,
         resume: bool = False,
+        stage_overrides: Mapping[str | StageKey, StageOverrideConfig] | None = None,
     ) -> ComposeResult:
         case_dir = Path(case_dir)
         docs_dir = case_dir / "docs"
@@ -329,7 +355,14 @@ class ComposeAgent:
         else:
             run_tracker.record("compose.resume", state)
 
-        orchestrator = self._new_orchestrator(compose_run=run_tracker, log_context=log_context)
+        normalized_stage_overrides = normalize_stage_override_mapping(stage_overrides)
+        runtime_stage_overrides = _expand_stage_overrides(normalized_stage_overrides)
+
+        orchestrator = self._new_orchestrator(
+            compose_run=run_tracker,
+            log_context=log_context,
+            stage_overrides=runtime_stage_overrides,
+        )
         if self.config.enable_async:
 
             async def _invoke_async() -> ComposeState:

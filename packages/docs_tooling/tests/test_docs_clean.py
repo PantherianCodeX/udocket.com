@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
+from config.paths import REPO_ROOT
 
 
 def test_docs_clean_no_render() -> None:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = REPO_ROOT
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8").splitlines()
     try:
         start = next(idx for idx, line in enumerate(makefile) if line.startswith("docs.clean:"))

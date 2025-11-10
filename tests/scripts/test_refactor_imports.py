@@ -13,7 +13,8 @@ import pytest
 MODULE_PATH = Path(__file__).resolve().parents[2] / "tooling" / "scripts" / "refactor_imports.py"
 FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "refactor_imports"
 SPEC = importlib.util.spec_from_file_location("refactor_imports", MODULE_PATH)
-assert SPEC and SPEC.loader
+assert SPEC
+assert SPEC.loader
 _module = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = _module
 SPEC.loader.exec_module(_module)
@@ -53,13 +54,15 @@ def test_cli_apply_updates_files(tmp_path: Path) -> None:
     target = tmp_path / "example.py"
     _ = target.write_text("import alpha.beta as ab\n", encoding="utf-8")
 
-    exit_code = MODULE.main([
-        "--root",
-        str(tmp_path),
-        "--map",
-        "alpha.beta=core.gamma",
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(tmp_path),
+            "--map",
+            "alpha.beta=core.gamma",
+            "--apply",
+        ],
+    )
     assert exit_code == 0
     assert target.read_text(encoding="utf-8") == "import core.gamma as ab\n"
 
@@ -81,13 +84,15 @@ def test_mapping_file_support(tmp_path: Path) -> None:
     mapping_file = tmp_path / "mappings.txt"
     _ = mapping_file.write_text("# comment\nold.module=new.module\n", encoding="utf-8")
 
-    exit_code = MODULE.main([
-        "--root",
-        str(tmp_path),
-        "--mapping-file",
-        str(mapping_file),
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(tmp_path),
+            "--mapping-file",
+            str(mapping_file),
+            "--apply",
+        ],
+    )
     assert exit_code == 0
     assert target.read_text(encoding="utf-8") == "import new.module\n"
 
@@ -101,13 +106,15 @@ def test_ensure_import_respects_docstring_and_future(tmp_path: Path) -> None:
     dest = tmp_path / "api.py"
     shutil.copy2(FIXTURE_ROOT / "api.py", dest)
 
-    exit_code = MODULE.main([
-        "--root",
-        str(tmp_path),
-        "--ensure-import",
-        "api.py:tests.helpers:new_helper",
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(tmp_path),
+            "--ensure-import",
+            "api.py:tests.helpers:new_helper",
+            "--apply",
+        ],
+    )
     assert exit_code == 0
     contents = dest.read_text(encoding="utf-8").splitlines()
     injected_line = "from tests.helpers import new_helper"
@@ -121,13 +128,15 @@ def test_export_map_updates_real_module(tmp_path: Path) -> None:
     dest = tmp_path / "__init__.py"
     shutil.copy2(FIXTURE_ROOT / "__init__.py", dest)
 
-    exit_code = MODULE.main([
-        "--root",
-        str(tmp_path),
-        "--export-map",
-        "run_audit=execute_audit",
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(tmp_path),
+            "--export-map",
+            "run_audit=execute_audit",
+            "--apply",
+        ],
+    )
     assert exit_code == 0
     text = dest.read_text(encoding="utf-8")
     assert '"execute_audit"' in text
@@ -164,16 +173,21 @@ def test_git_discovery_limits_to_tracked_files(tmp_path: Path) -> None:
     _write(untracked, "import alpha.module\n")
     _ = subprocess.run(["git", "add", str(tracked.relative_to(repo))], cwd=repo, check=True)
     _ = subprocess.run(
-        ["git", "commit", "-m", "add tracked"], cwd=repo, check=True, capture_output=True
+        ["git", "commit", "-m", "add tracked"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
-    exit_code = MODULE.main([
-        "--root",
-        str(repo),
-        "--map",
-        "alpha.module=beta.module",
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(repo),
+            "--map",
+            "alpha.module=beta.module",
+            "--apply",
+        ],
+    )
     assert exit_code == 0
     assert tracked.read_text(encoding="utf-8") == "import beta.module\n"
     # Untracked file untouched because git discovery only lists tracked files
@@ -190,17 +204,22 @@ def test_no_use_git_processes_untracked_files(tmp_path: Path) -> None:
     _write(untracked, "from source import item\n")
     _ = subprocess.run(["git", "add", str(tracked.relative_to(repo))], cwd=repo, check=True)
     _ = subprocess.run(
-        ["git", "commit", "-m", "add tracked"], cwd=repo, check=True, capture_output=True
+        ["git", "commit", "-m", "add tracked"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
-    exit_code = MODULE.main([
-        "--root",
-        str(repo),
-        "--map",
-        "source=dest",
-        "--no-use-git",
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(repo),
+            "--map",
+            "source=dest",
+            "--no-use-git",
+            "--apply",
+        ],
+    )
     assert exit_code == 0
     assert tracked.read_text(encoding="utf-8") == "from dest import item\n"
     assert untracked.read_text(encoding="utf-8") == "from dest import item\n"
@@ -213,14 +232,16 @@ def test_prefer_relative_rewrites_when_possible(tmp_path: Path) -> None:
     target = module_dir / "module.py"
     _ = target.write_text("from pkg.sub.utils_old import helper\n", encoding="utf-8")
 
-    exit_code = MODULE.main([
-        "--root",
-        str(root),
-        "--map",
-        "pkg.sub.utils_old=pkg.sub.utils",
-        "--prefer-relative",
-        "--apply",
-    ])
+    exit_code = MODULE.main(
+        [
+            "--root",
+            str(root),
+            "--map",
+            "pkg.sub.utils_old=pkg.sub.utils",
+            "--prefer-relative",
+            "--apply",
+        ],
+    )
 
     assert exit_code == 0
     assert target.read_text(encoding="utf-8") == "from .utils import helper\n"

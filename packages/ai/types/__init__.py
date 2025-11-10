@@ -34,17 +34,23 @@ class DataClassification(StrEnum):
 
 
 class AgentTask(StrEnum):
-    """Canonical agent task identifiers used for routing and telemetry."""
+    """Capability-first agent task identifiers used for routing and telemetry."""
 
-    SUMMARIZE = "summarize"
-    OUTLINE = "outline"
-    TIMELINE = "timeline"
-    ENTITIES = "entities"
-    RELATIONSHIP = "relationship"  # alias for backward compat
-    COMPOSE = "compose"
-    QA_REVIEW = "qa_review"
-    CHAT = "chat"
+    GENERATE = "generate"
+    EXTRACT = "extract"
+    EVAL = "eval"
     EMBED = "embed"
+    ATOMS = "atoms"
+    CHAT = "chat"
+
+    # Backwards-compatible aliases (artifact-scoped names map to capabilities)
+    SUMMARIZE = "generate"
+    OUTLINE = "extract"
+    TIMELINE = "extract"
+    ENTITIES = "extract"
+    RELATIONSHIP = "extract"
+    COMPOSE = "generate"
+    QA_REVIEW = "eval"
 
 
 @dataclass(slots=True, frozen=True)

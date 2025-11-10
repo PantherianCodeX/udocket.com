@@ -10,7 +10,8 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from config.paths import REPO_ROOT
+
 REQUIREMENTS_DIR = REPO_ROOT / "requirements"
 
 Project = tuple[str, Path, Iterable[str | None]]

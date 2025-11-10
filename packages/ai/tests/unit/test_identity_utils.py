@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from packages.ai.utils.identity import NAMESPACE_AI, deterministic_uuid
 
+UUID_VERSION = 5
+
 
 def test_deterministic_uuid_stable() -> None:
     first = deterministic_uuid(namespace="summary", content="case-123")
@@ -13,4 +15,4 @@ def test_deterministic_uuid_namespace_variation() -> None:
     a = deterministic_uuid(namespace="summary", content="case-123")
     b = deterministic_uuid(namespace="compose", content="case-123")
     assert a != b
-    assert NAMESPACE_AI.version == 5
+    assert NAMESPACE_AI.version == UUID_VERSION

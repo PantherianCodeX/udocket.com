@@ -461,6 +461,21 @@ class AnalyzePipeline:
         )
         return state
 
+    def qa_join(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        self._notify_stage("qa_join", "start")
+        required_keys = ("outline_result", "timeline_result", "entity_result", "summary_result")
+        missing = [key for key in required_keys if key not in state]
+        if missing:
+            missing_csv = ", ".join(missing)
+            raise RuntimeError(f"QA join missing stage outputs: {missing_csv}")
+        state["qa_join_status"] = "ready"
+        self._notify_stage(
+            "qa_join",
+            "complete",
+            lanes=len(required_keys),
+        )
+        return state
+
     def write_ops_and_artifacts(self, state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         self._notify_stage("write_ops_and_artifacts", "start")
         parse: TranscriptParse = state["parse"]

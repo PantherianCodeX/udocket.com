@@ -1,5 +1,6 @@
 """Safety and moderation hooks namespace.
 
-Actual implementations arrive in later phases of the refactor."""
+Actual implementations arrive in later phases of the refactor.
+"""
 
 from __future__ import annotations

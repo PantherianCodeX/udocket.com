@@ -65,13 +65,54 @@ class AnalyzeNodeImpl(Protocol):
 
     def qa_and_finalize(self, state: State) -> State | None: ...
 
+    def qa_join(self, state: State) -> State | None: ...
+
     def write_ops_and_artifacts(self, state: State) -> State | None: ...
+
+
+class ComposeNodeImpl(Protocol):
+    def context_builder(self, state: State) -> State | None: ...
+
+    def client_lane_draft(self, state: State) -> State | None: ...
+
+    def client_lane_qa(self, state: State) -> State | None: ...
+
+    def client_lane_editor(self, state: State) -> State | None: ...
+
+    def client_lane_revise(self, state: State) -> State | None: ...
+
+    def lawyer_lane_draft(self, state: State) -> State | None: ...
+
+    def lawyer_lane_qa(self, state: State) -> State | None: ...
+
+    def lawyer_lane_editor(self, state: State) -> State | None: ...
+
+    def lawyer_lane_revise(self, state: State) -> State | None: ...
+
+    def qa_join(self, state: State) -> State | None: ...
+
+    def write_release_artifacts(self, state: State) -> State | None: ...
 
 
 @dataclass(frozen=True)
 class AnalyzeGraph:
     graph: _CompiledGraphProtocol
     entry: str = "input_discovery"
+    nodes: tuple[str, ...] = field(default_factory=tuple)
+
+    def invoke(self, state: State | None = None) -> State:
+        if not hasattr(self.graph, "invoke"):
+            raise RuntimeError(
+                "LangGraph not available; install langgraph to use this orchestrator"
+            )
+        starter: State = dict(state) if state is not None else {}
+        return self.graph.invoke(starter)
+
+
+@dataclass(frozen=True)
+class ComposeGraph:
+    graph: _CompiledGraphProtocol
+    entry: str = "context_builder"
     nodes: tuple[str, ...] = field(default_factory=tuple)
 
     def invoke(self, state: State | None = None) -> State:
@@ -92,6 +133,7 @@ _NODE_ORDER = (
     "build_entity_hints",
     "draft_markdown",
     "qa_and_finalize",
+    "qa_join",
     "write_ops_and_artifacts",
 )
 
@@ -171,6 +213,8 @@ def enable_langgraph_debug_logging(force: bool = False) -> None:
 __all__ = [
     "AnalyzeGraph",
     "AnalyzeNodeImpl",
+    "ComposeGraph",
+    "ComposeNodeImpl",
     "build_analyze_graph",
     "enable_langgraph_debug_logging",
 ]

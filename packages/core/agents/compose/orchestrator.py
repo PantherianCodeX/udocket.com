@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
+from packages.common.agents import StageOverrideConfig
 from packages.common.json_utils import (
     JSONArray,
     JSONObject,
@@ -60,6 +61,7 @@ class ComposeOrchestrator:
         prompts: ComposePromptConfig,
         compose_run: ComposeRun | None = None,
         log_context: ComposeLogContext | None = None,
+        stage_overrides: Mapping[str, StageOverrideConfig] | None = None,
     ) -> None:
         self.config: ComposeConfig = config
         self.settings: LLMSettings = settings
@@ -67,12 +69,16 @@ class ComposeOrchestrator:
         self._qa_ok_status = frozenset(status.lower() for status in qa_ok_status)
         self.prompts = prompts
         self._run_tracker = compose_run
+        self._stage_overrides: dict[str, StageOverrideConfig] = dict(stage_overrides or {})
         if log_context is not None:
             self._log_context = log_context
         elif compose_run is not None:
             self._log_context = compose_run.log_context
         else:
             self._log_context = ComposeLogContext(case_id="unknown", job_id="unknown")
+
+    def _stage_override(self, stage_name: str) -> StageOverrideConfig | None:
+        return self._stage_overrides.get(stage_name)
 
     def run(
         self,
@@ -520,6 +526,7 @@ class ComposeOrchestrator:
             provider_credentials=provider_credentials,
             config=self.config,
             settings=self.settings,
+            stage_override=self._stage_override(stage_name),
         )
         lane_state.revision_brief = None
         lane_state.document = document
@@ -1013,6 +1020,7 @@ class ComposeOrchestrator:
             provider_credentials=provider_credentials,
             logger=self.logger,
             system_prompt=prompts.system_prompt if prompts else "",
+            stage_override=self._stage_override(stage_name),
         )
         lane_state.record_usage(stage_name, usage)
         lane_state.providers.append(provider)
@@ -1365,6 +1373,7 @@ class ComposeOrchestrator:
             provider_credentials=provider_credentials,
             config=self.config,
             settings=self.settings,
+            stage_override=self._stage_override(stage_name),
         )
         try:
             parsed = json.loads(response)

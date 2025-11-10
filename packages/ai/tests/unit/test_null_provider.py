@@ -36,7 +36,7 @@ def test_null_provider_summary_payloads_are_empty() -> None:
     summary = provider.summarize(
         SummarizeRequest(context=_context(), transcript="text"),
     )
-    assert summary.summary_text == ""
+    assert not summary.summary_text
     compose = provider.compose(ComposeRequest(context=_context(), summary_text="body"))
     assert compose.client_markdown is None
     timeline = provider.extract_timeline(

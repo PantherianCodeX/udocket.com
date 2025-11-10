@@ -6,6 +6,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from config.paths import REPO_ROOT
 from typing import TYPE_CHECKING
 
 from packages.common.text import slugify
@@ -21,7 +22,6 @@ except ValueError:
 else:
     sys.path.append(str(THIS_DIR))
 
-REPO_ROOT = THIS_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 

@@ -4,17 +4,17 @@ flowchart TD
     classDef action fill:#ecf8ff,stroke:#2684ff,stroke-width:1.1px,color:#111;
     classDef decision fill:#fff0f0,stroke:#d14545,stroke-width:1.2px,color:#111;
 
-    Ingest["Input Discovery\n(local path / HTTPS SAS)"]:::stage
+    Ingest["Input Discovery<br/>(local path / HTTPS SAS)"]:::stage
     Validate["Validate format + allowlists"]:::stage
-    Normalize["Normalize / convert audio\n(ffmpeg)"]:::action
+    Normalize["Normalize / convert audio<br/>(ffmpeg)"]:::action
     Health["Azure Speech health check"]:::stage
-    Mode["Select mode\n(batch vs streaming)"]:::stage
+    Mode["Select mode<br/>(batch vs streaming)"]:::stage
     RunBatch["Queue batch transcription"]:::stage
     RunStream["Run streaming transcription"]:::stage
     RetryDecision{Retry budget?}:::decision
-    Outputs["Write artifacts\n• transcript.txt\n• transcript_v1.json\n• ops logs / manifests"]:::stage
-    Audit["Append audit JSONL\n`ops/ops_transcription.jsonl`"]:::action
-    Guardian["Guardian policy check\n(region / diarisation)"]:::stage
+    Outputs["Write artifacts<br/>• transcript.txt<br/>• transcript_v1.json<br/>• ops logs / manifests"]:::stage
+    Audit["Append audit JSONL<br/>`ops/ops_transcription.jsonl`"]:::action
+    Guardian["Guardian policy check<br/>(region / diarisation)"]:::stage
 
     Ingest --> Validate --> Normalize --> Health --> Mode
     Mode -->|Batch| RunBatch --> RetryDecision

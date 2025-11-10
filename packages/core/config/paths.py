@@ -49,10 +49,21 @@ def resolve_analyze_defaults_path(cfg: CoreSettings | None = None) -> Path:
     return resolve_config_dir() / "services" / "analyze" / "defaults.json"
 
 
+# Convenience constants so callers can avoid repeated resolution
+DATA_ROOT: Path = resolve_data_root()
+LLM_PROVIDERS_PATH: Path = resolve_llm_providers_path()
+LLM_ASSIGNMENTS_PATH: Path = resolve_llm_assignments_path()
+ANALYZE_DEFAULTS_PATH: Path = resolve_analyze_defaults_path()
+
+
 __all__ = [
     "resolve_package_root",
     "resolve_data_root",
     "resolve_llm_providers_path",
     "resolve_llm_assignments_path",
     "resolve_analyze_defaults_path",
+    "DATA_ROOT",
+    "LLM_PROVIDERS_PATH",
+    "LLM_ASSIGNMENTS_PATH",
+    "ANALYZE_DEFAULTS_PATH",
 ]

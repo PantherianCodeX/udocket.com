@@ -14,7 +14,6 @@ _ERROR_TRANSCRIPT_EMPTY = "SummarizeRequest.transcript must not be empty"
 
 def ensure_request_invariants(request: SummarizeRequest) -> None:
     """Example invariant: transcript must not be empty."""
-
     if not request.transcript.strip():
         raise ValueError(_ERROR_TRANSCRIPT_EMPTY)
 

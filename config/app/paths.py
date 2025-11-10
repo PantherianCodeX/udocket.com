@@ -84,6 +84,7 @@ def _django_storage_root() -> Path | None:
 
 
 __all__ = [
+    "REPO_ROOT",
     "ensure_storage_root",
     "resolve_app_root",
     "resolve_config_dir",

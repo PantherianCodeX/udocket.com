@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 def ai_settings_from_llm(llm_settings: LLMSettings) -> AISettings:
     """Convert core LLM settings into AISettings."""
-
     provider_accounts: list[ProviderAccount] = []
     for provider in llm_settings.providers.values():
         default_model_name = _default_model_name(provider.models.keys())
@@ -55,8 +54,9 @@ def ai_settings_from_llm(llm_settings: LLMSettings) -> AISettings:
             for provider_name in providers
         )
     capability_limits = (
-        CapabilityLimit(task=AgentTask.SUMMARIZE, max_concurrent=2),
-        CapabilityLimit(task=AgentTask.COMPOSE, max_concurrent=1),
+        CapabilityLimit(task=AgentTask.GENERATE, max_concurrent=2),
+        CapabilityLimit(task=AgentTask.EXTRACT, max_concurrent=4),
+        CapabilityLimit(task=AgentTask.EVAL, max_concurrent=2),
     )
     return AISettings(
         providers=tuple(provider_accounts),
@@ -74,15 +74,21 @@ def _default_model_name(model_names: Iterable[str] | None) -> str | None:
 
 def _task_for_stage(stage_key: str) -> AgentTask | None:
     normalized = stage_key.lower()
-    if "compose" in normalized:
-        return AgentTask.COMPOSE
-    if "timeline" in normalized:
-        return AgentTask.TIMELINE
-    if "entity" in normalized:
-        return AgentTask.ENTITIES
-    if "summary" in normalized:
-        return AgentTask.SUMMARIZE
-    if "context" in normalized:
+    if "atoms" in normalized:
+        return AgentTask.ATOMS
+    if any(
+        token in normalized
+        for token in ("compose", "summary", "staff", "draft")
+    ):
+        return AgentTask.GENERATE
+    if any(
+        token in normalized
+        for token in ("timeline", "entity", "relation", "issue", "gap", "flag", "alert")
+    ):
+        return AgentTask.EXTRACT
+    if "qa" in normalized or "guard" in normalized or "check" in normalized or "eval" in normalized:
+        return AgentTask.EVAL
+    if "context" in normalized or "helper" in normalized or "chat" in normalized:
         return AgentTask.CHAT
     return None
 

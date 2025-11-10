@@ -6,37 +6,40 @@ flowchart TD
     classDef gate fill:#fff8e1,stroke:#b36b00,stroke-width:1.2px,color:#111;
     classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
 
-    Context["ComposeContext\n(summary_v1.json + artifacts)"]:::stage
+    Context["ComposeContext<br/>(summary_v1.json + artifacts)"]:::stage
 
     subgraph ClientLane["Client lane"]
         direction TB
         CDraft["Draft client deliverable"]:::lane
         CChecks["Structure & compliance guards"]:::gate
-        CFactual["Factuality guard\n(atom citations)"]:::gate
+        CFactual["Factuality guard<br/>(atom citations)"]:::gate
         CQA["Client lane QA"]:::gate
+        CAssemble["CLIENT_ASSEMBLE<br/>programmatic templating"]:::stage
     end
 
     subgraph LawyerLane["Lawyer lane"]
         direction TB
         LDraft["Draft lawyer deliverable"]:::lane
         LChecks["Structure & compliance guards"]:::gate
-        LFactual["Factuality guard\n(atom citations)"]:::gate
+        LFactual["Factuality guard<br/>(atom citations)"]:::gate
         LQA["Lawyer lane QA"]:::gate
+        LAssemble["LAWYER_ASSEMBLE<br/>programmatic templating"]:::stage
     end
 
     subgraph BundleLane["Bundle lane (optional)"]
         direction TB
         BDraft["Draft bundle excerpt"]:::lane
         BQA["Bundle QA"]:::gate
+        BAssemble["BUNDLE_ASSEMBLE<br/>programmatic templating"]:::stage
     end
 
-    Revision["Revision directives\n(section-scoped prompts)"]:::directive
-    CrossQA["Cross-lane QA\n(staff & QA reports)"]:::gate
+    Revision["Revision directives<br/>(section-scoped prompts)"]:::directive
+    CrossQA["Cross-lane QA<br/>(staff & QA reports)"]:::gate
     Finalize["Version artifacts + manifests"]:::stage
 
-    Context --> CDraft --> CChecks --> CFactual --> CQA --> CrossQA
-    Context --> LDraft --> LChecks --> LFactual --> LQA --> CrossQA
-    Context --> BDraft --> BQA --> CrossQA
+    Context --> CDraft --> CChecks --> CFactual --> CQA --> CAssemble --> CrossQA
+    Context --> LDraft --> LChecks --> LFactual --> LQA --> LAssemble --> CrossQA
+    Context --> BDraft --> BQA --> BAssemble --> CrossQA
 
     CChecks -->|issue| Revision --> CDraft
     CFactual -->|issue| Revision

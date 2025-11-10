@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from packages.ai.api import (
     AIClient,
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 class DefaultAIClient(AIClient):
     """Router that delegates to registered ProviderAdapter instances."""
 
+    @override
     def __init__(
         self,
         *,
@@ -46,6 +47,7 @@ class DefaultAIClient(AIClient):
         residency_policy: ResidencyPolicy | None = None,
         egress_policy: EgressPolicy | None = None,
     ) -> None:
+        super().__init__()
         self._settings: AISettings = settings
         self._providers: Mapping[ProviderName, ProviderAdapter] = providers
         self._residency_policy: ResidencyPolicy = residency_policy or AllowAllResidencyPolicy()
@@ -53,32 +55,38 @@ class DefaultAIClient(AIClient):
         self._egress_policy: EgressPolicy = allowed
         self._routes: RouteRegistry = self._build_registry(settings)
 
+    @override
     def summarize(self, request: SummarizeRequest) -> SummarizeResult:
-        adapter = self._resolve_adapter(AgentTask.SUMMARIZE)
+        adapter = self._resolve_adapter(AgentTask.GENERATE)
         return adapter.summarize(request)
 
+    @override
     def compose(self, request: ComposeRequest) -> ComposeResult:
-        adapter = self._resolve_adapter(AgentTask.COMPOSE)
+        adapter = self._resolve_adapter(AgentTask.GENERATE)
         return adapter.compose(request)
 
+    @override
     def extract_timeline(
         self,
         request: TimelineExtractionRequest,
     ) -> TimelineExtractionResult:
-        adapter = self._resolve_adapter(AgentTask.TIMELINE)
+        adapter = self._resolve_adapter(AgentTask.EXTRACT)
         return adapter.extract_timeline(request)
 
+    @override
     def extract_entities(
         self,
         request: EntityExtractionRequest,
     ) -> EntityExtractionResult:
-        adapter = self._resolve_adapter(AgentTask.ENTITIES)
+        adapter = self._resolve_adapter(AgentTask.EXTRACT)
         return adapter.extract_entities(request)
 
+    @override
     def chat(self, request: ChatRequest) -> ChatResult:
         adapter = self._resolve_adapter(AgentTask.CHAT)
         return adapter.chat(request)
 
+    @override
     def embed(self, request: EmbeddingRequest) -> EmbeddingResult:
         adapter = self._resolve_adapter(AgentTask.EMBED)
         return adapter.embed(request)
@@ -101,7 +109,8 @@ class DefaultAIClient(AIClient):
             registry[task] = tuple(entries)
         return registry
 
-    def _route_name(self, provider: ProviderName, model: ModelName) -> RouteName:
+    @staticmethod
+    def _route_name(provider: ProviderName, model: ModelName) -> RouteName:
         return RouteName(f"{provider}:{model}")
 
     def _resolve_binding(self, task: AgentTask) -> RouteBinding:

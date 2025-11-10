@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, override
 
 import requests
 
@@ -60,25 +60,30 @@ class AzureOpenAIAdapter(ProviderAdapter):
     egress_policy: EgressPolicy
 
     @property
+    @override
     def name(self) -> ProviderName:
         return self.config.name
 
     @property
+    @override
     def region(self) -> Region:
         return self.config.region
 
     @property
+    @override
     def supported_tasks(self) -> tuple[AgentTask, ...]:
         return (
             AgentTask.CHAT,
             AgentTask.EMBED,
         )
 
+    @override
     def available_models(self, task: AgentTask) -> tuple[ModelName, ...]:
         if task in self.supported_tasks:
             return (ModelName(self.config.deployment),)
         return ()
 
+    @override
     def summarize(
         self,
         request: SummarizeRequest,
@@ -86,10 +91,12 @@ class AzureOpenAIAdapter(ProviderAdapter):
         message = "Summarize not wired to Azure adapter yet"
         raise NotImplementedError(message)
 
+    @override
     def compose(self, request: ComposeRequest) -> ComposeResult:  # pragma: no cover - not wired yet
         message = "Compose not wired to Azure adapter yet"
         raise NotImplementedError(message)
 
+    @override
     def extract_timeline(
         self,
         request: TimelineExtractionRequest,
@@ -97,6 +104,7 @@ class AzureOpenAIAdapter(ProviderAdapter):
         message = "Timeline extraction not wired to Azure adapter yet"
         raise NotImplementedError(message)
 
+    @override
     def extract_entities(
         self,
         request: EntityExtractionRequest,
@@ -104,14 +112,17 @@ class AzureOpenAIAdapter(ProviderAdapter):
         message = "Entity extraction not wired to Azure adapter yet"
         raise NotImplementedError(message)
 
+    @override
     def chat(self, request: ChatRequest) -> ChatResult:
         payload = self._invoke_chat(request)
         return ChatResult(messages=payload.messages, metrics=payload.metrics)
 
+    @override
     def embed(self, request: EmbeddingRequest) -> EmbeddingResult:
         message = "Embedding not implemented for Azure adapter"
         raise NotImplementedError(message)
 
+    @override
     def describe_route(self, *, task: AgentTask, model: ModelName) -> RouteName | None:
         return RouteName(f"{self.name}:{task.value}:{model}")
 

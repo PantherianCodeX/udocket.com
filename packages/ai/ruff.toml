@@ -1,0 +1,15 @@
+# Apply every Ruff lint to this package with modern Python defaults.
+target-version = "py312"
+line-length = 100
+preview = true
+
+[lint]
+select = ["ALL"]
+ignore = ["CPY", "D", "DOC"]
+
+[lint.per-file-ignores]
+"packages/ai/tests/**/*.py" = ["S101", "PLR2004"]
+
+[lint.isort]
+known-first-party = ["packages.ai"]
+combine-as-imports = true

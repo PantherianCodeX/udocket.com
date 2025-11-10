@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from ..api import (
+    from packages.ai.api import (
         ChatRequest,
         ChatResult,
         ComposeRequest,
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
         TimelineExtractionRequest,
         TimelineExtractionResult,
     )
-    from ..types import AgentTask, Region
-    from ..types.identifiers import ModelName, ProviderName, RouteName
+    from packages.ai.types import AgentTask, Region
+    from packages.ai.types.identifiers import ModelName, ProviderName, RouteName
 
 
 @runtime_checkable

@@ -10,18 +10,17 @@ from typing import Any, Sequence, cast
 
 import yaml
 
+from config.paths import REPO_ROOT
 from .settings import (
     resolve_build_root,
     resolve_config_root,
     resolve_doc_builds_root,
     resolve_docs_root,
     resolve_package_root,
-    resolve_repo_root,
     resolve_diagram_index_path,
 )
 
 
-REPO_ROOT = resolve_repo_root()
 DOCS_PACKAGE_ROOT = resolve_package_root()
 DOCS_ROOT = resolve_docs_root()
 CONFIG_ROOT = resolve_config_root()
@@ -97,4 +96,3 @@ __all__ = [
     "area_path",
     "load_service_areas",
 ]
-

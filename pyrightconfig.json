@@ -56,8 +56,7 @@
     "apps/platform/jobs",
     "apps/platform/tenancy.py",
     "apps/platform/ui",
-    "packages/docs_tooling/src/doc_tools",
-    "packages/docs_tooling/tests",
+    
     "typings/vendor",
     "typings/external_stubs",
     "scripts"
@@ -66,7 +65,21 @@
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["apps", "typings"]
+      "extraPaths": ["apps", "automation", "services"],
+      "venvPath": "opt",
+      "venv": "venv"
+    },
+    {
+      "root": "packages/docs_tooling",
+      "extraPaths": ["src", ".."],
+      "venvPath": "packages/docs_tooling",
+      "venv": ".venv"
+    },
+    {
+      "root": "packages/udocket_core",
+      "extraPaths": ["src", ".."],
+      "venvPath": "packages/udocket_core",
+      "venv": ".venv"
     }
   ]
   ,

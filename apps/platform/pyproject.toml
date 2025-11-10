@@ -28,7 +28,7 @@ dependencies = [
     "celery>=5.5.3",
     "django-celery-beat>=2.8.1",
     "django-celery-results>=2.6.0",
-    "PyYAML>=6.0.3",
+    "PyYAML>=6.0.3,<7",
     "azure-storage-blob>=12.27.0",
     "django-simple-history>=3.10.1",
     "azure-cognitiveservices-speech>=1.46.0,<2",
@@ -72,9 +72,12 @@ dev = [
     "celery-stubs",
     "flake8",
     "black",
+    "ruff",
+    "mypy",
+    "pyright",
     "bandit",
     "django-upgrade",
-    "typewiz @ git+https://github.com/PantherianCodeX/typewiz@v0.1.1",
+    "typewiz @ file:///udocket/deps/typewiz"
 ]
 
 [project.optional-dependencies]
@@ -104,6 +107,9 @@ dev = [
     "flake8",
     "black",
     "bandit",
+    "ruff",
+    "mypy",
+    "pyright",
     "django-upgrade",
-    "typewiz @ git+https://github.com/PantherianCodeX/typewiz@v0.1.1",
+    "typewiz @ file:///udocket/deps/typewiz"
 ]

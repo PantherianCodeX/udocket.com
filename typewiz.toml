@@ -1,53 +1,51 @@
+# typewiz configuration template
+# Save this file as typewiz.toml in the root of your project.
 config_version = 0
 
 [audit]
-# Keep explicit paths for deterministic CI runs
-full_paths = [
-    "apps/platform/operations",
-    "packages/core/agents",
-    "packages/core/logging",
-    "packages/common",
-    "config"
-]
+# Uncomment and adjust to pin the directories scanned during full audits.
+# full_paths = ["src", "tests"]
+
+# Engines that run by default (pyright and mypy ship with typewiz).
 runners = ["pyright", "mypy"]
-fail_on = "warnings"
-skip_full = true
-# Also emit dashboards when running `typewiz audit`
-dashboard_json = "out/test-reports/typing/dashboard.json"
-dashboard_markdown = "out/test-reports/typing/dashboard.md"
-dashboard_html = "out/test-reports/typing/dashboard.html"
 
+# Configure failure thresholds or output destinations as needed:
+# fail_on = "warnings"           # choices: never, warnings, errors
+# manifest_path = "typewiz/manifest.json"
+# dashboard_json = "typewiz/dashboard.json"
+# dashboard_markdown = "typewiz/dashboard.md"
+# dashboard_html = "typewiz/dashboard.html"
+
+# Select default profiles per engine here, or via `typewiz audit --profile`.
 [audit.active_profiles]
-# Baseline across the repo; stricter profiles applied via folder overrides
-pyright = "baseline"
+# pyright = "baseline"
+# mypy = "strict"
 
+# Per-engine settings apply globally.
 [audit.engines.pyright]
-config_file = "pyrightconfig.json"
-# Ensure alignment with repo runtime (3.12)
-plugin_args = ["--pythonversion", "3.12"]
-include = [
-    "apps/platform/operations",
-    "packages/core/agents",
-    "packages/core/logging",
-    "packages/common",
-    "config"
-]
-
-[audit.engines.pyright.profiles.baseline]
-# Baseline keeps warnings visible without strict gating
-plugin_args = ["--warnings"]
+# plugin_args = ["--verifytypes"]
+# include = ["packages/api"]
+# exclude = ["packages/legacy"]
+# config_file = "configs/pyrightconfig.json"
 
 [audit.engines.pyright.profiles.strict]
-inherit = "baseline"
-plugin_args = ["--strict"]
+# inherit = "baseline"
+# plugin_args = ["--strict"]
 
 [audit.engines.mypy]
-config_file = "mypy.ini"
-include = [
-    "apps/platform/operations",
-    "packages/core/agents",
-    "packages/core/logging",
-    "packages/common",
-    "config"
-]
-env = { PYTHONWARNINGS = "ignore::UserWarning" }
+# plugin_args = ["--strict"]
+# include = ["src"]
+# config_file = "configs/mypy.ini"
+
+# To scope settings to a folder, create a typewiz.dir.toml file in that
+# directory. Example contents:
+#
+#   [active_profiles]
+#   pyright = "strict"
+#
+#   [engines.pyright]
+#   plugin_args = ["--warnings"]
+#   include = ["."]
+#   exclude = ["tests"]
+#
+# Files named typewiz.dir.toml or .typewizdir.toml are discovered recursively.

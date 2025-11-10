@@ -7,6 +7,11 @@ export UV_LINK_MODE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+VENV_DIR="${UV_PROJECT_ENVIRONMENT:-$ROOT/.venv}"
+export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
+export VIRTUAL_ENV="$VENV_DIR"
+export PATH="$VENV_DIR/bin:${PATH}"
+
 printf '[devcontainer] Preparing build cache scaffolding…\n'
 ./scripts/setup_buildx_cache.sh
 
@@ -16,7 +21,7 @@ printf '[devcontainer] Priming platform build cache…\n'
 printf '[devcontainer] Syncing platform environment (dev group)…\n'
 pushd apps/platform >/dev/null
 uv sync --frozen --group dev --no-install-project
-VENV_PY="/opt/venv/bin/python"
+VENV_PY="$VENV_DIR/bin/python"
 printf '[devcontainer] Refreshing vendored stubs…\n'
 HASH_DIR="$ROOT/.cache/devcontainer"
 mkdir -p "$HASH_DIR"
@@ -42,10 +47,9 @@ else
 fi
 popd >/dev/null
 
-printf '[devcontainer] Syncing docs toolbox environment…\n'
-pushd packages/docs_tooling >/dev/null
-uv sync --frozen --group dev
-popd >/dev/null
+if ! grep -Fq '/udocket/.venv/bin/activate' /root/.bashrc; then
+  printf '\n[ -f /udocket/.venv/bin/activate ] && source /udocket/.venv/bin/activate\n' >> /root/.bashrc
+fi
 
 printf '[devcontainer] Initializing Codex home and port…\n'
 ./scripts/devcontainer/setup_codex_home.sh

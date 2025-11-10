@@ -222,6 +222,7 @@ def test_compose_agent_parallel_lanes(tmp_path: Path, monkeypatch: MonkeyPatch) 
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return client_doc, {"prompt_tokens": 100, "completion_tokens": 200}, "stub", "stub-model"
@@ -345,6 +346,7 @@ This section omits required references and headings.
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             call_counts[stage] += 1
@@ -451,6 +453,7 @@ def test_compose_agent_docx_template(tmp_path: Path, monkeypatch: MonkeyPatch) -
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return client_doc, {"prompt_tokens": 80, "completion_tokens": 120}, "stub", "stub-model"
@@ -565,6 +568,7 @@ def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyP
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return client_doc, {"prompt_tokens": 80, "completion_tokens": 150}, "stub", "stub-model"
@@ -608,6 +612,7 @@ def test_compose_agent_resume_from_snapshot(tmp_path: Path, monkeypatch: MonkeyP
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return client_doc, {"prompt_tokens": 80, "completion_tokens": 150}, "stub", "stub-model"
@@ -761,7 +766,7 @@ def test_compose_agent_async_mode(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
     monkeypatch.setattr(
         ComposeAgent,
         "_new_orchestrator",
-        lambda self, compose_run=None, log_context=None: DummyOrchestrator(
+        lambda self, compose_run=None, log_context=None, stage_overrides=None: DummyOrchestrator(
             config=self.config,
             settings=self.settings,
             logger=self.logger,
@@ -769,6 +774,7 @@ def test_compose_agent_async_mode(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
             prompts=self.prompts,
             compose_run=compose_run,
             log_context=log_context,
+            stage_overrides=stage_overrides,
         ),
     )
 
@@ -916,6 +922,7 @@ def test_editor_rejects_unchanged_document(monkeypatch: MonkeyPatch) -> None:
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         response = json.dumps({"document": base_doc, "change_log": []})
         return response, {"prompt_tokens": 5, "completion_tokens": 5}, "stub", "stub-model"
@@ -995,6 +1002,7 @@ def test_compose_agent_without_qa(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return CLIENT_VALID_DOC, {"prompt_tokens": 80, "completion_tokens": 160}, "stub", "stub-model"
@@ -1066,6 +1074,7 @@ def test_compose_agent_releases_when_qa_attention_persists(tmp_path: Path, monke
         provider_credentials: Mapping[str, JSONObject],
         config: ComposeConfig,
         settings: object,
+        stage_override: object | None = None,
     ) -> ClientResponse:
         if stage == "compose.client.draft":
             return CLIENT_VALID_DOC, {"prompt_tokens": 70, "completion_tokens": 140}, "stub", "stub-model"

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>typewiz Dashboard</title>
+  <style>
+    :root{color-scheme:light dark;}
+    body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:2rem;background:#f5f5f5;color:#1f2330;}
+    h1,h2{color:#2b4b80;}
+    table{border-collapse:collapse;width:100%;margin-bottom:1.5rem;background:white;}
+    th,td{border:1px solid #d0d7e2;padding:0.5rem;text-align:left;}
+    th{background:#e8edf7;}
+    section{margin-bottom:2rem;}
+    .metrics{display:flex;flex-wrap:wrap;gap:1.5rem;}
+    .metric{background:white;border:1px solid #d0d7e2;padding:1rem;border-radius:6px;min-width:8rem;text-align:center;}
+    .metric strong{display:block;font-size:1.5rem;}
+    .tabs{display:flex;gap:0.75rem;margin:1.5rem 0;}
+    .tabs button{border:1px solid #2b4b80;background:white;color:#2b4b80;padding:0.45rem 1rem;border-radius:999px;cursor:pointer;font-weight:600;}
+    .tabs button.active{background:#2b4b80;color:white;}
+    .tab-pane{margin-top:1.5rem;}
+    .has-js .tab-pane{display:none;}
+    .has-js .tab-pane.active{display:block;}
+    .no-js .tabs{display:none;}
+    code{background:#eef1fb;padding:0.1rem 0.35rem;border-radius:4px;}
+    details{background:white;border:1px solid #d0d7e2;border-radius:8px;margin-bottom:1rem;padding:0.75rem;}
+    details[open]>summary{margin-bottom:0.5rem;}
+    summary{cursor:pointer;font-weight:600;}
+  </style>
+</head>
+<body class="no-js" data-default-tab="overview">
+  <h1>typewiz Dashboard</h1>
+  <p><strong>Generated:</strong> 2025-11-09T21:07:55.037818+00:00<br />
+     <strong>Project root:</strong> /udocket</p>
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab-target="overview" role="tab" aria-selected="false">Overview</button>
+    <button type="button" data-tab-target="engines" role="tab" aria-selected="false">Engine Details</button>
+    <button type="button" data-tab-target="hotspots" role="tab" aria-selected="false">Hotspots</button>
+    <button type="button" data-tab-target="readiness" role="tab" aria-selected="false">Readiness</button>
+    <button type="button" data-tab-target="runs" role="tab" aria-selected="false">Run Logs</button>
+  </nav>
+  <section class="tab-pane" data-tab-pane="overview">
+    <section>
+      <h2>Severity Totals</h2>
+      <div class="metrics">
+        <div class="metric"><strong>880</strong>Errors</div>
+        <div class="metric"><strong>1113</strong>Warnings</div>
+        <div class="metric"><strong>0</strong>Information</div>
+      </div>
+    </section>
+    <section>
+      <h2>Run Summary</h2>
+      <table>
+        <thead><tr><th>Run</th><th>Errors</th><th>Warnings</th><th>Information</th><th>Total</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td>pyright:current</td><td>255</td><td>249</td><td>0</td><td>504</td><td><code>pyright --outputjson --project /udocket/pyrightconfig.json</code></td></tr>
+          <tr><td>pyright:full</td><td>623</td><td>864</td><td>0</td><td>1487</td><td><code>pyright --outputjson apps packages config tests</code></td></tr>
+          <tr><td>mypy:current</td><td>1</td><td>0</td><td>0</td><td>1</td><td><code>/opt/venv/bin/python -m mypy --config-file /udocket/mypy.ini --no-pretty</code></td></tr>
+          <tr><td>mypy:full</td><td>1</td><td>0</td><td>0</td><td>1</td><td><code>/opt/venv/bin/python -m mypy --config-file /udocket/mypy.ini --hide-error-context --no-error-summary --show-error-codes --no-pretty apps packages config tests</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Category Totals</h2>
+      <table>
+        <thead><tr><th>Category</th><th>Total diagnostics</th></tr></thead>
+        <tbody>
+          <tr><td>general</td><td>1561</td></tr>
+          <tr><td>unknownChecks</td><td>323</td></tr>
+          <tr><td>unusedSymbols</td><td>77</td></tr>
+          <tr><td>optionalChecks</td><td>32</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </section>
+  <section class="tab-pane" data-tab-pane="engines">
+    <h2>Engine Details</h2>
+    <details class="engine-options" open>
+      <summary><strong>pyright:current</strong></summary>
+      <ul>
+        <li>Profile: <code>strict</code></li>
+        <li>Include paths: <code>packages/common</code>, <code>apps/platform/admin</code>, <code>apps/platform/authorization</code>, <code>apps/platform/jobs/serializers.py</code>, <code>apps/platform/jobs/telemetry.py</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>apps/platform/ui/views/jobs_actions/title.py</code>, <code>apps/platform/ui/views/cases/helpers.py</code>, <code>apps/platform/ui/views/presenters/analysis_llm.py</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Exclude paths: <code>packages/common</code>, <code>apps/platform/admin</code>, <code>apps/platform/authorization</code>, <code>apps/platform/jobs</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>apps/platform/ui/views</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Folder overrides:<ul>
+          <li><code>packages/common</code>: include=<code>packages/common</code>, exclude=<code>packages/common</code></li>
+          <li><code>apps/platform/admin</code>: include=<code>apps/platform/admin</code>, exclude=<code>apps/platform/admin</code></li>
+          <li><code>apps/platform/authorization</code>: include=<code>apps/platform/authorization</code>, exclude=<code>apps/platform/authorization</code></li>
+          <li><code>apps/platform/jobs</code>: include=<code>apps/platform/jobs/serializers.py</code>, <code>apps/platform/jobs/telemetry.py</code>, exclude=<code>apps/platform/jobs</code></li>
+          <li><code>apps/platform/operations</code>: include=<code>apps/platform/operations</code>, exclude=<code>apps/platform/operations</code></li>
+          <li><code>packages/core/agents</code>: include=<code>packages/core/agents</code>, exclude=<code>packages/core/agents</code></li>
+          <li><code>packages/core/logging</code>: include=<code>packages/core/logging</code>, exclude=<code>packages/core/logging</code></li>
+          <li><code>apps/platform/ui/views</code>: include=<code>apps/platform/ui/views/jobs_actions/title.py</code>, <code>apps/platform/ui/views/cases/helpers.py</code>, <code>apps/platform/ui/views/presenters/analysis_llm.py</code>, exclude=<code>apps/platform/ui/views</code></li>
+          <li><code>packages/core/agents/analyze</code>: include=<code>packages/core/agents/analyze</code>, exclude=<code>packages/core/agents/analyze</code></li>
+          <li><code>packages/core/agents/common</code>: include=<code>packages/core/agents/common</code>, exclude=<code>packages/core/agents/common</code></li>
+        </ul></li>
+      </ul>
+    </details>
+    <details class="engine-options" open>
+      <summary><strong>pyright:full</strong></summary>
+      <ul>
+        <li>Profile: <code>strict</code></li>
+        <li>Include paths: <code>packages/common</code>, <code>apps/platform/admin</code>, <code>apps/platform/authorization</code>, <code>apps/platform/jobs/serializers.py</code>, <code>apps/platform/jobs/telemetry.py</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>apps/platform/ui/views/jobs_actions/title.py</code>, <code>apps/platform/ui/views/cases/helpers.py</code>, <code>apps/platform/ui/views/presenters/analysis_llm.py</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Exclude paths: <code>packages/common</code>, <code>apps/platform/admin</code>, <code>apps/platform/authorization</code>, <code>apps/platform/jobs</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>apps/platform/ui/views</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Folder overrides:<ul>
+          <li><code>packages/common</code>: include=<code>packages/common</code>, exclude=<code>packages/common</code></li>
+          <li><code>apps/platform/admin</code>: include=<code>apps/platform/admin</code>, exclude=<code>apps/platform/admin</code></li>
+          <li><code>apps/platform/authorization</code>: include=<code>apps/platform/authorization</code>, exclude=<code>apps/platform/authorization</code></li>
+          <li><code>apps/platform/jobs</code>: include=<code>apps/platform/jobs/serializers.py</code>, <code>apps/platform/jobs/telemetry.py</code>, exclude=<code>apps/platform/jobs</code></li>
+          <li><code>apps/platform/operations</code>: include=<code>apps/platform/operations</code>, exclude=<code>apps/platform/operations</code></li>
+          <li><code>packages/core/agents</code>: include=<code>packages/core/agents</code>, exclude=<code>packages/core/agents</code></li>
+          <li><code>packages/core/logging</code>: include=<code>packages/core/logging</code>, exclude=<code>packages/core/logging</code></li>
+          <li><code>apps/platform/ui/views</code>: include=<code>apps/platform/ui/views/jobs_actions/title.py</code>, <code>apps/platform/ui/views/cases/helpers.py</code>, <code>apps/platform/ui/views/presenters/analysis_llm.py</code>, exclude=<code>apps/platform/ui/views</code></li>
+          <li><code>packages/core/agents/analyze</code>: include=<code>packages/core/agents/analyze</code>, exclude=<code>packages/core/agents/analyze</code></li>
+          <li><code>packages/core/agents/common</code>: include=<code>packages/core/agents/common</code>, exclude=<code>packages/core/agents/common</code></li>
+        </ul></li>
+      </ul>
+    </details>
+    <details class="engine-options" open>
+      <summary><strong>mypy:current</strong></summary>
+      <ul>
+        <li>Include paths: <code>packages/common</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Exclude paths: <code>packages/common</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Folder overrides:<ul>
+          <li><code>packages/common</code>: include=<code>packages/common</code>, exclude=<code>packages/common</code></li>
+          <li><code>apps/platform/operations</code>: include=<code>apps/platform/operations</code>, exclude=<code>apps/platform/operations</code></li>
+          <li><code>packages/core/agents</code>: include=<code>packages/core/agents</code>, exclude=<code>packages/core/agents</code></li>
+          <li><code>packages/core/logging</code>: include=<code>packages/core/logging</code>, exclude=<code>packages/core/logging</code></li>
+          <li><code>packages/core/agents/analyze</code>: include=<code>packages/core/agents/analyze</code>, exclude=<code>packages/core/agents/analyze</code></li>
+          <li><code>packages/core/agents/common</code>: include=<code>packages/core/agents/common</code>, exclude=<code>packages/core/agents/common</code></li>
+        </ul></li>
+      </ul>
+    </details>
+    <details class="engine-options" open>
+      <summary><strong>mypy:full</strong></summary>
+      <ul>
+        <li>Include paths: <code>packages/common</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Exclude paths: <code>packages/common</code>, <code>apps/platform/operations</code>, <code>packages/core/agents</code>, <code>packages/core/logging</code>, <code>packages/core/agents/analyze</code>, <code>packages/core/agents/common</code></li>
+        <li>Folder overrides:<ul>
+          <li><code>packages/common</code>: include=<code>packages/common</code>, exclude=<code>packages/common</code></li>
+          <li><code>apps/platform/operations</code>: include=<code>apps/platform/operations</code>, exclude=<code>apps/platform/operations</code></li>
+          <li><code>packages/core/agents</code>: include=<code>packages/core/agents</code>, exclude=<code>packages/core/agents</code></li>
+          <li><code>packages/core/logging</code>: include=<code>packages/core/logging</code>, exclude=<code>packages/core/logging</code></li>
+          <li><code>packages/core/agents/analyze</code>: include=<code>packages/core/agents/analyze</code>, exclude=<code>packages/core/agents/analyze</code></li>
+          <li><code>packages/core/agents/common</code>: include=<code>packages/core/agents/common</code>, exclude=<code>packages/core/agents/common</code></li>
+        </ul></li>
+      </ul>
+    </details>
+  </section>
+  <section class="tab-pane" data-tab-pane="hotspots">
+    <h2>Hotspots</h2>
+    <section>
+      <h3>Common Diagnostic Rules</h3>
+      <table>
+        <thead><tr><th>Rule</th><th>Count</th></tr></thead><tbody>
+          <tr><td><code>reportAttributeAccessIssue</code></td><td>566</td></tr>
+          <tr><td><code>reportMissingModuleSource</code></td><td>358</td></tr>
+          <tr><td><code>reportCallIssue</code></td><td>187</td></tr>
+          <tr><td><code>reportUnknownVariableType</code></td><td>154</td></tr>
+          <tr><td><code>reportMissingImports</code></td><td>150</td></tr>
+          <tr><td><code>reportArgumentType</code></td><td>107</td></tr>
+          <tr><td><code>reportUnknownMemberType</code></td><td>89</td></tr>
+          <tr><td><code>reportIndexIssue</code></td><td>85</td></tr>
+          <tr><td><code>reportUnnecessaryTypeIgnoreComment</code></td><td>51</td></tr>
+          <tr><td><code>reportUnusedVariable</code></td><td>48</td></tr>
+          <tr><td><code>reportUnknownArgumentType</code></td><td>29</td></tr>
+          <tr><td><code>reportUntypedFunctionDecorator</code></td><td>29</td></tr>
+          <tr><td><code>reportOptionalSubscript</code></td><td>29</td></tr>
+          <tr><td><code>reportUnusedImport</code></td><td>23</td></tr>
+          <tr><td><code>reportUntypedBaseClass</code></td><td>12</td></tr>
+          <tr><td><code>reportFunctionMemberAccess</code></td><td>12</td></tr>
+          <tr><td><code>reportUndefinedVariable</code></td><td>11</td></tr>
+          <tr><td><code>reportUnknownParameterType</code></td><td>10</td></tr>
+          <tr><td><code>reportReturnType</code></td><td>6</td></tr>
+          <tr><td><code>reportUnusedFunction</code></td><td>6</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h3>Top Folder Hotspots</h3>
+      <table>
+        <thead><tr><th>Folder</th><th>Errors</th><th>Warnings</th><th>Information</th><th>Runs</th></tr></thead><tbody>
+          <tr><td>packages</td><td>480</td><td>384</td><td>0</td><td>2</td></tr>
+          <tr><td>tests</td><td>302</td><td>609</td><td>0</td><td>1</td></tr>
+          <tr><td>packages/docs_tooling</td><td>256</td><td>332</td><td>0</td><td>2</td></tr>
+          <tr><td>packages/docs_tooling/tests</td><td>226</td><td>274</td><td>0</td><td>2</td></tr>
+          <tr><td>tests/packages</td><td>181</td><td>128</td><td>0</td><td>1</td></tr>
+          <tr><td>tests/packages/core</td><td>181</td><td>128</td><td>0</td><td>1</td></tr>
+          <tr><td>packages/common</td><td>132</td><td>16</td><td>0</td><td>2</td></tr>
+          <tr><td>packages/common/prompts.py</td><td>106</td><td>2</td><td>0</td><td>2</td></tr>
+          <tr><td>packages/core</td><td>92</td><td>30</td><td>0</td><td>2</td></tr>
+          <tr><td>packages/core/agents</td><td>84</td><td>26</td><td>0</td><td>2</td></tr>
+          <tr><td>tests/platform</td><td>82</td><td>462</td><td>0</td><td>1</td></tr>
+          <tr><td>config</td><td>66</td><td>3</td><td>0</td><td>1</td></tr>
+          <tr><td>config/app</td><td>66</td><td>3</td><td>0</td><td>1</td></tr>
+          <tr><td>config/app/settings.py</td><td>66</td><td>2</td><td>0</td><td>1</td></tr>
+          <tr><td>tests/platform/ui</td><td>30</td><td>174</td><td>0</td><td>1</td></tr>
+          <tr><td>apps</td><td>30</td><td>117</td><td>0</td><td>2</td></tr>
+          <tr><td>apps/platform</td><td>30</td><td>117</td><td>0</td><td>2</td></tr>
+          <tr><td>apps/platform/operations</td><td>30</td><td>114</td><td>0</td><td>2</td></tr>
+          <tr><td>tests/operations</td><td>28</td><td>2</td><td>0</td><td>1</td></tr>
+          <tr><td>tests/operations/test_bootstrap.py</td><td>28</td><td>2</td><td>0</td><td>1</td></tr>
+          <tr><td>packages/docs_tooling/src</td><td>20</td><td>18</td><td>0</td><td>2</td></tr>
+          <tr><td>packages/common/agents</td><td>20</td><td>0</td><td>0</td><td>2</td></tr>
+          <tr><td>tests/platform/test_platform_flow.py</td><td>12</td><td>13</td><td>0</td><td>1</td></tr>
+          <tr><td>packages/docs_tooling/node_modules</td><td>10</td><td>16</td><td>0</td><td>2</td></tr>
+          <tr><td>tests/platform/operations</td><td>8</td><td>30</td><td>0</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h3>Top File Hotspots</h3>
+      <table>
+        <thead><tr><th>File</th><th>Errors</th><th>Warnings</th></tr></thead><tbody>
+          <tr><td>tests/packages/core/test_analyze_lib.py</td><td>130</td><td>63</td></tr>
+          <tr><td>config/app/settings.py</td><td>66</td><td>2</td></tr>
+          <tr><td>packages/common/prompts.py</td><td>53</td><td>1</td></tr>
+          <tr><td>packages/common/prompts.py</td><td>53</td><td>1</td></tr>
+          <tr><td>tests/operations/test_bootstrap.py</td><td>28</td><td>2</td></tr>
+          <tr><td>packages/docs_tooling/tests/test_manage_docs.py</td><td>20</td><td>11</td></tr>
+          <tr><td>packages/docs_tooling/tests/test_manage_docs.py</td><td>20</td><td>11</td></tr>
+          <tr><td>packages/core/agents/compose/prompt_config.py</td><td>20</td><td>1</td></tr>
+          <tr><td>packages/core/agents/compose/prompt_config.py</td><td>20</td><td>1</td></tr>
+          <tr><td>tests/packages/core/llm/test_llm_azure_client.py</td><td>18</td><td>2</td></tr>
+          <tr><td>apps/platform/operations/crypto.py</td><td>13</td><td>1</td></tr>
+          <tr><td>apps/platform/operations/crypto.py</td><td>13</td><td>1</td></tr>
+          <tr><td>tests/platform/test_platform_flow.py</td><td>12</td><td>13</td></tr>
+          <tr><td>packages/docs_tooling/tests/build/test_pdf_build.py</td><td>12</td><td>4</td></tr>
+          <tr><td>packages/docs_tooling/tests/build/test_pdf_build.py</td><td>12</td><td>4</td></tr>
+          <tr><td>packages/docs_tooling/tests/test_paths.py</td><td>12</td><td>1</td></tr>
+          <tr><td>packages/docs_tooling/tests/test_paths.py</td><td>12</td><td>1</td></tr>
+          <tr><td>packages/core/agents/transcribe_lib.py</td><td>11</td><td>2</td></tr>
+          <tr><td>packages/core/agents/transcribe_lib.py</td><td>11</td><td>2</td></tr>
+          <tr><td>tests/packages/core/test_guardian_agent.py</td><td>10</td><td>12</td></tr>
+          <tr><td>tests/platform/ui/test_llm_presenters.py</td><td>10</td><td>6</td></tr>
+          <tr><td>tests/packages/core/test_compose_lib.py</td><td>10</td><td>4</td></tr>
+          <tr><td>packages/core/agents/compose/orchestrator.py</td><td>10</td><td>1</td></tr>
+          <tr><td>packages/core/agents/compose/orchestrator.py</td><td>10</td><td>1</td></tr>
+          <tr><td>packages/docs_tooling/src/doc_tools/config/settings.py</td><td>10</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h3>Rule hotspots by file</h3>
+      <details><summary><code>reportArgumentType</code></summary><ul>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (60)</li>
+        <li><code>packages/docs_tooling/tests/common/test_pytest_runner.py</code> (12)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (8)</li>
+        <li><code>tests/platform/test_platform_flow.py</code> (4)</li>
+        <li><code>tests/platform/ui/test_llm_presenters.py</code> (4)</li>
+        <li><code>tests/packages/core/test_transcribe_http.py</code> (3)</li>
+        <li><code>apps/platform/operations/services/compose.py</code> (2)</li>
+        <li><code>apps/platform/operations/task_modules/analyze.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_mkdocs.py</code> (2)</li>
+        <li><code>tests/packages/core/agents/test_graph_visuals.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportAssignmentType</code></summary><ul>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportAttributeAccessIssue</code></summary><ul>
+        <li><code>tests/platform/ui/test_organization_settings.py</code> (38)</li>
+        <li><code>tests/platform/admin/test_tenant_admin.py</code> (32)</li>
+        <li><code>tests/packages/core/e2e/test_transcribe_e2e.py</code> (26)</li>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_document_controls.py</code> (22)</li>
+        <li><code>tests/platform/jobs/test_review_api.py</code> (20)</li>
+        <li><code>packages/docs_tooling/tests/build/test_postprocess_svg.py</code> (18)</li>
+        <li><code>tests/platform/accounts/test_org_resolution.py</code> (18)</li>
+        <li><code>tests/platform/ui/test_case_membership.py</code> (15)</li>
+        <li><code>tests/platform/ui/test_case_pages.py</code> (15)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_structure.py</code> (14)</li>
+      </ul></details>
+      <details><summary><code>reportCallIssue</code></summary><ul>
+        <li><code>packages/docs_tooling/tests/test_manage_docs.py</code> (38)</li>
+        <li><code>packages/docs_tooling/tests/build/test_pdf_build.py</code> (22)</li>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (20)</li>
+        <li><code>packages/docs_tooling/tests/test_paths.py</code> (16)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_mkdocs.py</code> (12)</li>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_nav_mapping.py</code> (12)</li>
+        <li><code>tests/packages/core/test_compose_lib.py</code> (9)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_asset_paths.py</code> (8)</li>
+        <li><code>tests/packages/core/test_guardian_agent.py</code> (7)</li>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_document_controls.py</code> (6)</li>
+      </ul></details>
+      <details><summary><code>reportFunctionMemberAccess</code></summary><ul>
+        <li><code>tests/packages/core/e2e/test_transcribe_e2e.py</code> (3)</li>
+        <li><code>tests/platform/test_platform_flow.py</code> (3)</li>
+        <li><code>tests/platform/operations/test_analyze_task.py</code> (2)</li>
+        <li><code>tests/platform/operations/test_compose_task.py</code> (2)</li>
+        <li><code>tests/platform/operations/test_guardian_task.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportGeneralTypeIssues</code></summary><ul>
+        <li><code>tests/platform/ui/test_job_tables.py</code> (2)</li>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportIncompatibleMethodOverride</code></summary><ul>
+        <li><code>config/app/settings.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportIndexIssue</code></summary><ul>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (78)</li>
+        <li><code>tests/platform/ui/test_llm_presenters.py</code> (6)</li>
+        <li><code>tests/automation/test_langgraph_types.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportInvalidTypeForm</code></summary><ul>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_document_controls.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/test_paths.py</code> (2)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportMissingImports</code></summary><ul>
+        <li><code>packages/docs_tooling/tests/check/test_check_structure.py</code> (6)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_templates.py</code> (6)</li>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_document_controls.py</code> (6)</li>
+        <li><code>packages/common/prompts.py</code> (4)</li>
+        <li><code>packages/docs_tooling/node_modules/katex/src/fonts/generate_fonts.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_api_error_codes.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_diagram_index.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_mkdocs.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_runbook_catalog.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_slo_index.py</code> (4)</li>
+      </ul></details>
+      <details><summary><code>reportMissingModuleSource</code></summary><ul>
+        <li><code>apps/platform/operations/views.py</code> (12)</li>
+        <li><code>apps/platform/operations/admin.py</code> (10)</li>
+        <li><code>apps/platform/operations/bootstrap.py</code> (10)</li>
+        <li><code>apps/platform/operations/consumers.py</code> (8)</li>
+        <li><code>packages/core/agents/compose/graph_visuals.py</code> (8)</li>
+        <li><code>apps/platform/operations/audit.py</code> (6)</li>
+        <li><code>apps/platform/operations/llm.py</code> (6)</li>
+        <li><code>apps/platform/operations/task_modules/guardian.py</code> (6)</li>
+        <li><code>apps/platform/operations/task_modules/recover.py</code> (6)</li>
+        <li><code>apps/platform/operations/task_modules/recover_maintenance.py</code> (6)</li>
+      </ul></details>
+      <details><summary><code>reportMissingParameterType</code></summary><ul>
+        <li><code>tests/packages/core/test_azure_speech_health.py</code> (2)</li>
+        <li><code>tests/packages/core/test_transcribe_http.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportOperatorIssue</code></summary><ul>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (1)</li>
+        <li><code>tests/packages/core/test_guardian_agent.py</code> (1)</li>
+        <li><code>tests/platform/ui/test_job_tables.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportOptionalMemberAccess</code></summary><ul>
+        <li><code>tests/packages/core/test_guardian_agent.py</code> (1)</li>
+        <li><code>tests/platform/accounts/test_claim_mapping.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportOptionalOperand</code></summary><ul>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportOptionalSubscript</code></summary><ul>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (26)</li>
+        <li><code>tests/platform/ui/test_llm_presenters.py</code> (2)</li>
+        <li><code>tests/automation/test_langgraph_types.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportReturnType</code></summary><ul>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_document_controls.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/test_paths.py</code> (2)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (1)</li>
+        <li><code>tests/packages/core/test_compose_lib.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportTypedDictNotRequiredAccess</code></summary><ul>
+        <li><code>tests/platform/test_provider_credentials_uuid.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportUndefinedVariable</code></summary><ul>
+        <li><code>packages/common/agents/results.py</code> (4)</li>
+        <li><code>tests/platform/test_platform_flow.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_structure.py</code> (2)</li>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnknownArgumentType</code></summary><ul>
+        <li><code>packages/common/prompts.py</code> (16)</li>
+        <li><code>config/app/settings.py</code> (6)</li>
+        <li><code>packages/common/agents/stage_overrides.py</code> (4)</li>
+        <li><code>packages/common/agents/results.py</code> (2)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnknownMemberType</code></summary><ul>
+        <li><code>packages/common/prompts.py</code> (30)</li>
+        <li><code>config/app/settings.py</code> (19)</li>
+        <li><code>tests/operations/test_bootstrap.py</code> (13)</li>
+        <li><code>packages/core/agents/compose/orchestrator.py</code> (10)</li>
+        <li><code>apps/platform/operations/crypto.py</code> (8)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (3)</li>
+        <li><code>packages/common/agents/results.py</code> (2)</li>
+        <li><code>packages/common/tests/test_agent_results.py</code> (2)</li>
+        <li><code>packages/core/agents/compose/prompt_config.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportUnknownParameterType</code></summary><ul>
+        <li><code>config/app/settings.py</code> (3)</li>
+        <li><code>apps/platform/operations/crypto.py</code> (2)</li>
+        <li><code>packages/common/prompts.py</code> (2)</li>
+        <li><code>tests/packages/core/test_azure_speech_health.py</code> (2)</li>
+        <li><code>tests/packages/core/test_transcribe_http.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnknownVariableType</code></summary><ul>
+        <li><code>packages/common/prompts.py</code> (46)</li>
+        <li><code>packages/core/agents/compose/prompt_config.py</code> (28)</li>
+        <li><code>config/app/settings.py</code> (24)</li>
+        <li><code>packages/docs_tooling/src/doc_tools/config/settings.py</code> (16)</li>
+        <li><code>apps/platform/operations/crypto.py</code> (14)</li>
+        <li><code>packages/core/agents/compose/orchestrator.py</code> (10)</li>
+        <li><code>packages/core/agents/transcribe_lib.py</code> (8)</li>
+        <li><code>packages/common/agents/stage_overrides.py</code> (4)</li>
+        <li><code>tests/operations/test_bootstrap.py</code> (3)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnnecessaryIsInstance</code></summary><ul>
+        <li><code>packages/common/agents/stage_overrides.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportUnnecessaryTypeIgnoreComment</code></summary><ul>
+        <li><code>packages/docs_tooling/tests/build/test_build_mkdocs.py</code> (20)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_settings_keys.py</code> (12)</li>
+        <li><code>packages/docs_tooling/tests/test_manage_docs.py</code> (6)</li>
+        <li><code>packages/docs_tooling/tests/test_lint_docs.py</code> (4)</li>
+        <li><code>tests/platform/accounts/test_org_resolution.py</code> (3)</li>
+        <li><code>packages/docs_tooling/tests/build/test_pdf_build.py</code> (2)</li>
+        <li><code>tests/packages/core/test_analyze_lib.py</code> (2)</li>
+        <li><code>tests/automation/test_stage_map.py</code> (1)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnsupportedDunderAll</code></summary><ul>
+        <li><code>packages/docs_tooling/src/doc_tools/config/settings.py</code> (2)</li>
+        <li><code>tests/scripts/fixtures/refactor_imports/__init__.py</code> (2)</li>
+        <li><code>tests/scripts/fixtures/refactor_imports/api.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUntypedBaseClass</code></summary><ul>
+        <li><code>packages/core/agents/compose/prompt_config.py</code> (8)</li>
+        <li><code>packages/common/prompts.py</code> (2)</li>
+        <li><code>packages/core/agents/transcribe_lib.py</code> (2)</li>
+      </ul></details>
+      <details><summary><code>reportUntypedFunctionDecorator</code></summary><ul>
+        <li><code>config/app/settings.py</code> (11)</li>
+        <li><code>packages/core/agents/transcribe_lib.py</code> (10)</li>
+        <li><code>packages/common/prompts.py</code> (6)</li>
+        <li><code>tests/operations/test_bootstrap.py</code> (1)</li>
+        <li><code>tests/packages/core/llm/test_llm_azure_client.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnusedFunction</code></summary><ul>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_document_controls.py</code> (2)</li>
+        <li><code>tests/conftest.py</code> (2)</li>
+        <li><code>tests/platform/test_platform_flow.py</code> (1)</li>
+        <li><code>tests/platform/ui/test_organization_settings.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnusedImport</code></summary><ul>
+        <li><code>packages/docs_tooling/node_modules/katex/src/fonts/generate_fonts.py</code> (4)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_structure.py</code> (4)</li>
+        <li><code>packages/common/agents/stage_overrides.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/test_create_adr.py</code> (2)</li>
+        <li><code>tests/platform/test_provider_credentials_uuid.py</code> (2)</li>
+        <li><code>tests/operations/test_bootstrap.py</code> (1)</li>
+        <li><code>tests/packages/core/test_guardian_agent.py</code> (1)</li>
+        <li><code>tests/platform/authorization/test_access_policies.py</code> (1)</li>
+        <li><code>tests/platform/jobs/test_download_analysis.py</code> (1)</li>
+        <li><code>tests/platform/jobs/test_telemetry_api.py</code> (1)</li>
+      </ul></details>
+      <details><summary><code>reportUnusedVariable</code></summary><ul>
+        <li><code>packages/docs_tooling/node_modules/katex/src/metrics/parse_tfm.py</code> (16)</li>
+        <li><code>tests/platform/jobs/test_review_api.py</code> (11)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_api_error_codes.py</code> (6)</li>
+        <li><code>packages/docs_tooling/tests/build/test_build_runbook_catalog.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/build/test_pdf_build.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/check/test_check_structure.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/sync/test_doc_assets.py</code> (2)</li>
+        <li><code>packages/docs_tooling/tests/sync/test_sync_nav_mapping.py</code> (2)</li>
+        <li><code>tests/platform/jobs/test_telemetry_api.py</code> (2)</li>
+        <li><code>tests/packages/core/test_compose_lib.py</code> (1)</li>
+      </ul></details>
+    </section>
+  </section>
+  <section class="tab-pane" data-tab-pane="readiness">
+    <h2>Strict Typing Readiness</h2>
+    <div class="metrics">
+      <div class="metric"><strong>0</strong>Ready</div>
+      <div class="metric"><strong>14</strong>Close</div>
+      <div class="metric"><strong>44</strong>Blocked</div>
+    </div>
+    <p><strong>Strict-ready folders:</strong> none</p>
+    <details open><summary><strong>Close to strict</strong> (14)</summary>
+      <ul>
+        <li><code>packages/ai/providers</code> (diagnostics=2) — general: 2</li>
+        <li><code>packages/core/config</code> (diagnostics=2) — general: 2</li>
+        <li><code>packages/core/llm</code> (diagnostics=2) — general: 2</li>
+        <li><code>apps/platform/middleware.py</code> (diagnostics=3) — general: 3</li>
+        <li><code>config/app/paths.py</code> (diagnostics=1) — general: 1</li>
+        <li><code>tests/automation/test_analyze_graph_bindings.py</code> (diagnostics=2) — general: 2</li>
+        <li><code>tests/automation/test_compose_graph_bindings.py</code> (diagnostics=2) — general: 2</li>
+        <li><code>tests/automation/test_langgraph_types.py</code> (diagnostics=2) — optionalChecks: 1, general: 1</li>
+        <li><code>tests/automation/test_stage_map.py</code> (diagnostics=2) — general: 2</li>
+        <li><code>tests/platform/test_runtime_checks.py</code> (diagnostics=2) — general: 2</li>
+        <li><code>tests/scripts/conftest.py</code> (diagnostics=1) — general: 1</li>
+        <li><code>tests/scripts/fixtures</code> (diagnostics=3) — general: 3</li>
+        <li>… plus 2 more</li>
+      </ul>
+    </details>
+    <details open><summary><strong>Blocked</strong> (44)</summary>
+      <ul>
+        <li><code>apps</code> (diagnostics=147) — candidate-enable-optional-checks, reportMissingModuleSource:57, reportMissingModuleSource:60, reportUnknownMemberType:4, reportUnknownVariableType:7, resolve 12 unknown-type issues</li>
+        <li><code>packages</code> (diagnostics=864) — candidate-enable-optional-checks, reportAttributeAccessIssue:70, reportCallIssue:64, reportMissingModuleSource:76, resolve 105 unknown-type issues</li>
+        <li><code>apps/platform</code> (diagnostics=147) — candidate-enable-optional-checks, reportMissingModuleSource:57, reportMissingModuleSource:60, reportUnknownMemberType:4, reportUnknownVariableType:7, resolve 12 unknown-type issues</li>
+        <li><code>packages/ai</code> (diagnostics=6) — candidate-enable-optional-checks, candidate-enable-unknown-checks, reportMissingModuleSource:3</li>
+        <li><code>packages/common</code> (diagnostics=148) — candidate-enable-optional-checks, reportUnknownArgumentType:11, reportUnknownMemberType:17, reportUnknownVariableType:25, resolve 58 unknown-type issues</li>
+        <li><code>packages/core</code> (diagnostics=122) — candidate-enable-optional-checks, reportMissingImports:7, reportMissingModuleSource:15, reportUnknownVariableType:23, resolve 39 unknown-type issues</li>
+        <li><code>packages/docs_tooling</code> (diagnostics=588) — candidate-enable-optional-checks, reportAttributeAccessIssue:68, reportCallIssue:62, reportMissingModuleSource:52, resolve 8 unknown-type issues</li>
+        <li><code>apps/platform/operations</code> (diagnostics=144) — candidate-enable-optional-checks, reportMissingModuleSource:57, reportUnknownMemberType:4, reportUnknownVariableType:7, resolve 12 unknown-type issues</li>
+        <li><code>packages/ai/tests</code> (diagnostics=4) — candidate-enable-optional-checks, candidate-enable-unknown-checks, reportMissingModuleSource:2</li>
+        <li><code>packages/common/agents</code> (diagnostics=20) — candidate-enable-optional-checks, reportUndefinedVariable:2, reportUnknownArgumentType:3, reportUnknownVariableType:2, resolve 6 unknown-type issues</li>
+        <li><code>packages/common/prompts.py</code> (diagnostics=108) — candidate-enable-optional-checks, reportUnknownArgumentType:8, reportUnknownMemberType:15, reportUnknownVariableType:23, resolve 51 unknown-type issues</li>
+        <li><code>packages/common/tests</code> (diagnostics=20) — candidate-enable-optional-checks, reportAttributeAccessIssue:2, reportCallIssue:2, reportMissingModuleSource:5, resolve 1 unknown-type issues</li>
+        <li>… plus 32 more</li>
+      </ul>
+    </details>
+    <section>
+      <h3>Per-option readiness</h3>
+      <table><thead><tr><th>Option</th><th>Ready</th><th>Close</th><th>Blocked</th><th>Close threshold</th></tr></thead><tbody>
+        <tr><td>Unknown type checks</td><td>38</td><td>1</td><td>19</td><td>2</td></tr>
+        <tr><td>Optional member checks</td><td>50</td><td>4</td><td>4</td><td>2</td></tr>
+        <tr><td>Unused symbol warnings</td><td>38</td><td>13</td><td>7</td><td>4</td></tr>
+        <tr><td>General diagnostics</td><td>0</td><td>17</td><td>41</td><td>5</td></tr>
+      </tbody></table>
+    </section>
+  </section>
+  <section class="tab-pane" data-tab-pane="runs">
+    <h2>Run Logs</h2>
+    <details class="run-log" open>
+      <summary><strong>pyright:current</strong> · command: <code>pyright --outputjson --project /udocket/pyrightconfig.json</code></summary>
+      <ul>
+        <li>Errors: 255</li>
+        <li>Warnings: 249</li>
+        <li>Information: 0</li>
+        <li>Total diagnostics: 504</li>
+        <li>Severity breakdown: {<SeverityLevel.ERROR: 'error'>: 255, <SeverityLevel.WARNING: 'warning'>: 249}</li>
+      </ul>
+    </details>
+    <details class="run-log" open>
+      <summary><strong>pyright:full</strong> · command: <code>pyright --outputjson apps packages config tests</code></summary>
+      <ul>
+        <li>Errors: 623</li>
+        <li>Warnings: 864</li>
+        <li>Information: 0</li>
+        <li>Total diagnostics: 1487</li>
+        <li>Severity breakdown: {<SeverityLevel.ERROR: 'error'>: 623, <SeverityLevel.WARNING: 'warning'>: 864}</li>
+      </ul>
+    </details>
+    <details class="run-log" open>
+      <summary><strong>mypy:current</strong> · command: <code>/opt/venv/bin/python -m mypy --config-file /udocket/mypy.ini --no-pretty</code></summary>
+      <ul>
+        <li>Errors: 1</li>
+        <li>Warnings: 0</li>
+        <li>Information: 0</li>
+        <li>Total diagnostics: 1</li>
+        <li>Severity breakdown: {<SeverityLevel.ERROR: 'error'>: 1}</li>
+      </ul>
+    </details>
+    <details class="run-log" open>
+      <summary><strong>mypy:full</strong> · command: <code>/opt/venv/bin/python -m mypy --config-file /udocket/mypy.ini --hide-error-context --no-error-summary --show-error-codes --no-pretty apps packages config tests</code></summary>
+      <ul>
+        <li>Errors: 1</li>
+        <li>Warnings: 0</li>
+        <li>Information: 0</li>
+        <li>Total diagnostics: 1</li>
+        <li>Severity breakdown: {<SeverityLevel.ERROR: 'error'>: 1}</li>
+      </ul>
+    </details>
+  </section>
+  <script>
+    (function(){
+      const body=document.body;
+      body.classList.remove('no-js');
+      body.classList.add('has-js');
+      const storageKey='typewiz-dashboard-tab';
+      const tabs=Array.from(document.querySelectorAll('[data-tab-target]'));
+      const panes=Array.from(document.querySelectorAll('[data-tab-pane]'));
+      function activate(name){
+        tabs.forEach(btn=>{const active=btn.dataset.tabTarget===name;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',String(active));});
+        panes.forEach(pane=>pane.classList.toggle('active',pane.dataset.tabPane===name));
+      }
+      let stored=null;
+      try{stored=window.localStorage.getItem(storageKey);}catch(_){}
+      const initial=tabs.some(btn=>btn.dataset.tabTarget===stored) ? stored : body.dataset.defaultTab || 'overview';
+      activate(initial);
+      tabs.forEach(btn=>btn.addEventListener('click',()=>{const name=btn.dataset.tabTarget;activate(name);try{window.localStorage.setItem(storageKey,name);}catch(_){};}));
+    })();
+  </script>
+</body>
+</html>

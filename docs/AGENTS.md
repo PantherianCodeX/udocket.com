@@ -16,7 +16,7 @@ behaviour; it only enforces cross-cutting engineering discipline.
 - **Type-first development.** Introduce the strongly typed primitives a file
   needs (dataclasses, `TypedDict`, `Protocol`, `StrEnum`, wrappers) before
   implementing logic. Provider payloads are modeled with precise types or local
-  stubs; missing third-party stubs are added alongside the change.
+  stubs; missing third-party stubs are added alongside the change. Enums mandatory, ad-hoc strings and basic data types with constrained elements **must** be Enum/StrEnum where possible and practical.
 - **Zero tolerance for `Any`.** New code must not add `typing.Any`. When touching
   legacy code, remove `Any` annotations as part of the change. Casts belong in
   helpers with brief invariant comments. Never add `# type: ignore`; fix the root
@@ -38,7 +38,9 @@ behaviour; it only enforces cross-cutting engineering discipline.
   (`make …`, `uv run --project …`). Never install ad-hoc dependencies via `pip`.
   Use the package-specific typing targets (`make typing.ai` today, wired into
   `make typing.run`) so the correct mypy/pyright/Ruff configs run inside the
-  curated environments before merging. Docs/spec changes must pass
+  curated environments before merging. All documentation tooling (`make docs.*`)
+  must run through the docs container invoked by those targets—running doc_tools
+  locally is unsupported and will drift dependencies. Docs/spec changes must pass
   `doc_tools.check.links` and MkDocs builds.
 - **Helper placement & wrappers.** Cross-cutting helpers (JSON, hashing, parsing)
   live in `packages/common`. Agent-specific helpers stay with the agent. Use thin
@@ -52,9 +54,6 @@ behaviour; it only enforces cross-cutting engineering discipline.
 - **Flow of control.** Entry-point modules validate inputs, snapshot settings,
   and delegate to type-safe helpers. They never mutate global state or implement
   bespoke retry loops outside the shared retry utilities.
-- **Change management.** Specs (TDD + LangGraph) and Guardian/Settings impacts
-  must be updated and cited in every PR description; ops/audit logging stays
-  additive and deterministic.
 
 ## Coordination & specs
 

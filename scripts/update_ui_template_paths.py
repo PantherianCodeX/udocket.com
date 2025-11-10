@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from config.paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
 
 FILE_MAPPING: dict[str, str] = {
     "apps/platform/ui/templates/platform_ui/partials/analysis_module.html": "apps/platform/ui/templates/platform_ui/components/cases/analysis_module.html",

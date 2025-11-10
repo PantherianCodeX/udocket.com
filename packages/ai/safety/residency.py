@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, override, runtime_checkable
 
 from packages.ai.errors import ResidencyViolationError
 
@@ -34,6 +34,7 @@ class AllowListResidencyPolicy(ResidencyPolicy):
 
     allowed_regions: tuple[AllowedRegion, ...]
 
+    @override
     def assert_allowed(
         self,
         *,
@@ -56,6 +57,7 @@ class AllowListResidencyPolicy(ResidencyPolicy):
 class AllowAllResidencyPolicy(ResidencyPolicy):
     """Residency policy that permits every region (useful for tests/dev)."""
 
+    @override
     def assert_allowed(
         self,
         *,

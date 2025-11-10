@@ -3,10 +3,12 @@
 # Allow overriding the Python base image (useful for mirrors/registries)
 ARG PYTHON_BASE=python:3.12-slim-bookworm
 ARG DEV_TOOLS=0
+ARG BAKE_VENV=1
 
 FROM ${PYTHON_BASE} AS python-base
 
 ARG TARGETARCH
+ARG BAKE_VENV
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -46,10 +48,6 @@ RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=
       curl \
       git
 
-# Keep pip modern once so every downstream stage benefits.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --upgrade pip
-
 # Install uv once so downstream stages share the same toolchain.
 RUN --mount=type=cache,target=/root/.cache/uv-installer,sharing=locked <<'EOF'
 set -eux
@@ -61,6 +59,19 @@ if [ ! -f "$script" ]; then
 fi
 UV_INSTALL_DIR=/usr/local/bin sh "$script"
 EOF
+
+# Keep pip modern once so every downstream stage benefits. Optionally pre-bake /opt/venv.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    set -eux; \
+    if [ "$BAKE_VENV" = "1" ]; then \
+      python -m venv --clear --upgrade-deps /opt/venv; \
+      /opt/venv/bin/python -m pip install --upgrade pip setuptools wheel; \
+      /opt/venv/bin/python -m pip --version; \
+    else \
+      python -m pip install --upgrade pip setuptools wheel; \
+      python -m pip --version; \
+    fi
+
 
 FROM python-base AS toolchain
 ARG TARGETARCH
@@ -119,18 +130,24 @@ RUN if [ "$DEV_TOOLS" = "1" ]; then \
 
 FROM toolchain AS python-deps
 ARG DEV_TOOLS
+ARG BAKE_VENV
 
 WORKDIR /udocket
 
-ENV UV_PROJECT_ENVIRONMENT=/opt/venv
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
+# Copy local typewiz code into the container
+COPY deps/typewiz /udocket/deps/typewiz
 
 COPY apps/platform/pyproject.toml apps/platform/uv.lock /udocket/apps/platform/
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --frozen --no-dev --no-install-project --project apps/platform \
- && if [ "$DEV_TOOLS" = "1" ]; then uv sync --frozen --only-group dev --no-install-project --project apps/platform; fi
+    if [ "$BAKE_VENV" = "1" ]; then \
+      export UV_PROJECT_ENVIRONMENT=/opt/venv VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:${PATH}"; \
+      uv sync --frozen --no-dev --no-install-project --project apps/platform; \
+    fi; \
+    if [ "$DEV_TOOLS" = "1" ]; then \
+      # export UV_PROJECT_ENVIRONMENT=.venv VIRTUAL_ENV=.venv PATH=".venv/bin:${PATH}"; \
+      uv sync --frozen --only-group dev --no-install-project --project apps/platform; \
+    fi;
 
 FROM python-deps AS app
 
@@ -139,9 +156,10 @@ WORKDIR /udocket
 # Copy project source last to keep dependency layers hot
 COPY . /udocket
 
-ENV UV_PROJECT_ENVIRONMENT=/opt/venv
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
+
+ENV UV_PROJECT_ENVIRONMENT=.venv
+ENV VIRTUAL_ENV=.venv
+# ENV PATH=".venv/bin:${PATH}" 
 
 EXPOSE 8000
 

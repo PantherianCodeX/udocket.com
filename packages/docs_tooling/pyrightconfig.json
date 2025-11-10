@@ -1,6 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
   "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": ".venv",
   "typeCheckingMode": "basic",
   "include": [
     "src/doc_tools"

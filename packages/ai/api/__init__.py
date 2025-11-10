@@ -198,14 +198,12 @@ class AIClient(Protocol):
 
 def summarize(request: SummarizeRequest, *, client: AIClient | None = None) -> SummarizeResult:
     """Execute the summarize agent via the configured AI client."""
-
-    return _require_client(client, AgentTask.SUMMARIZE).summarize(request)
+    return _require_client(client, AgentTask.GENERATE).summarize(request)
 
 
 def compose(request: ComposeRequest, *, client: AIClient | None = None) -> ComposeResult:
     """Execute the compose agent and return audience-specific deliverables."""
-
-    return _require_client(client, AgentTask.COMPOSE).compose(request)
+    return _require_client(client, AgentTask.GENERATE).compose(request)
 
 
 def extract_timeline(
@@ -214,8 +212,7 @@ def extract_timeline(
     client: AIClient | None = None,
 ) -> TimelineExtractionResult:
     """Normalize timeline events based on diarized transcripts."""
-
-    return _require_client(client, AgentTask.TIMELINE).extract_timeline(request)
+    return _require_client(client, AgentTask.EXTRACT).extract_timeline(request)
 
 
 def extract_entities(
@@ -224,19 +221,16 @@ def extract_entities(
     client: AIClient | None = None,
 ) -> EntityExtractionResult:
     """Derive entity/relationship hints for downstream tooling."""
-
-    return _require_client(client, AgentTask.RELATIONSHIP).extract_entities(request)
+    return _require_client(client, AgentTask.EXTRACT).extract_entities(request)
 
 
 def chat(request: ChatRequest, *, client: AIClient | None = None) -> ChatResult:
     """Run a chat-style assistant exchange."""
-
     return _require_client(client, AgentTask.CHAT).chat(request)
 
 
 def embed(request: EmbeddingRequest, *, client: AIClient | None = None) -> EmbeddingResult:
     """Request embeddings for the provided inputs."""
-
     return _require_client(client, AgentTask.EMBED).embed(request)
 
 

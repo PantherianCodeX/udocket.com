@@ -7,6 +7,7 @@ import time
 from collections.abc import Mapping
 from typing import Any, cast
 
+from packages.common.agents import StageOverrideConfig
 from packages.common.json_utils import JSONObject
 
 from ...llm import LLMSettings
@@ -48,16 +49,18 @@ def invoke_llm(
     provider_credentials: Mapping[str, JSONObject],
     config: ComposeConfig,
     settings: LLMSettings,
+    stage_override: StageOverrideConfig | None = None,
 ) -> tuple[str, dict[str, int], str, str]:
     providers = normalize_provider_chain(config.provider_chain)
     assignment = settings.stage(stage)
-    provider_name = ""
+    provider_candidates: list[str] = list(providers)
     if assignment and assignment.providers:
-        provider_name = assignment.providers[0]
-    if not provider_name and providers:
-        provider_name = providers[0]
-    if not provider_name:
-        provider_name = DEFAULT_PROVIDER_CHAIN[0]
+        provider_candidates = normalize_provider_chain(assignment.providers)
+    if stage_override and stage_override.providers:
+        provider_candidates = list(stage_override.providers)
+    if not provider_candidates:
+        provider_candidates = list(DEFAULT_PROVIDER_CHAIN)
+    provider_name = provider_candidates[0]
 
     provider_meta = settings.provider(provider_name)
     if provider_meta is None:
@@ -67,10 +70,16 @@ def invoke_llm(
 
     provider_info = cast(Any, provider_meta)
     default_model = cast(str, getattr(provider_info, "default_model", ""))
-    model_override = STAGE_MODEL_DEFAULTS.get(stage, "")
-    if stage == "compose.client.editor" and config.client_editor_model:
+    runtime_options = (
+        dict(stage_override.options) if stage_override and stage_override.options else None
+    )
+
+    model_override = (
+        stage_override.model if stage_override and stage_override.model else STAGE_MODEL_DEFAULTS.get(stage, "")
+    )
+    if stage == "compose.client.editor" and config.client_editor_model and not model_override:
         model_override = config.client_editor_model
-    elif stage == "compose.lawyer.editor" and config.lawyer_editor_model:
+    elif stage == "compose.lawyer.editor" and config.lawyer_editor_model and not model_override:
         model_override = config.lawyer_editor_model
     elif assignment and assignment.model and not model_override:
         model_override = assignment.model
@@ -86,7 +95,7 @@ def invoke_llm(
             provider=provider_meta,
             model_name=model_name,
             credential_payload=credentials,
-            options=None,
+            options=runtime_options,
         )
     except ChatClientError as exc:
         raise ComposeStageError(stage, str(exc), provider=provider_name, model=model_name) from exc
@@ -112,10 +121,11 @@ def invoke_llm(
 
     for attempt in range(1, attempts + 1):
         try:
+            max_tokens = stage_override.max_tokens if stage_override and stage_override.max_tokens else config.max_output_tokens
             content, usage = client.chat(
                 messages=payload_messages,
                 temperature=temperature,
-                max_tokens=config.max_output_tokens,
+                max_tokens=max_tokens,
                 response_format=None,
             )
             logger.debug(

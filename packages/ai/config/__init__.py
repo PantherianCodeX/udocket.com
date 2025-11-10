@@ -12,15 +12,12 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 DEFAULT_ROUTED_TASKS: tuple[AgentTask, ...] = (
-    AgentTask.SUMMARIZE,
-    AgentTask.OUTLINE,
-    AgentTask.TIMELINE,
-    AgentTask.ENTITIES,
-    AgentTask.RELATIONSHIP,
-    AgentTask.COMPOSE,
-    AgentTask.QA_REVIEW,
-    AgentTask.CHAT,
+    AgentTask.GENERATE,
+    AgentTask.EXTRACT,
+    AgentTask.EVAL,
+    AgentTask.ATOMS,
     AgentTask.EMBED,
+    AgentTask.CHAT,
 )
 
 
@@ -67,7 +64,6 @@ class AISettings:
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> AISettings:
         """Construct settings from environment variables."""
-
         data = dict(env or os.environ)
         region_value = (data.get("AZURE_OPENAI_REGION") or "").strip()
         region = Region(region_value or "default-region")
@@ -88,8 +84,9 @@ class AISettings:
             for task in DEFAULT_ROUTED_TASKS
         )
         caps = (
-            CapabilityLimit(task=AgentTask.COMPOSE, max_concurrent=1),
-            CapabilityLimit(task=AgentTask.SUMMARIZE, max_concurrent=2),
+            CapabilityLimit(task=AgentTask.GENERATE, max_concurrent=2),
+            CapabilityLimit(task=AgentTask.EXTRACT, max_concurrent=4),
+            CapabilityLimit(task=AgentTask.EVAL, max_concurrent=2),
         )
         default_language = ensure_language(data.get("UDOCKET_AI_DEFAULT_LANGUAGE"))
         return cls(
@@ -102,7 +99,6 @@ class AISettings:
 
 def load_settings(env: Mapping[str, str] | None = None) -> AISettings:
     """Convenience wrapper for constructing AISettings."""
-
     return AISettings.from_env(env)
 
 

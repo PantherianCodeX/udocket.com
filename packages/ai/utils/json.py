@@ -9,7 +9,7 @@ from dataclasses import fields, is_dataclass
 from typing import Protocol, cast, runtime_checkable
 
 JSONScalar = str | int | float | bool | None
-type JSONValue = JSONScalar | dict[str, "JSONValue"] | list["JSONValue"]
+type JSONValue = JSONScalar | dict[str, JSONValue] | list[JSONValue]
 
 
 @runtime_checkable
@@ -21,7 +21,6 @@ class HasValue(Protocol):
 
 def to_jsonable(value: object) -> JSONValue:
     """Recursively convert dataclasses and enums into JSON-friendly types."""
-
     if is_dataclass(value):
         return {field.name: to_jsonable(getattr(value, field.name)) for field in fields(value)}
     if isinstance(value, Mapping):

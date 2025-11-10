@@ -37,7 +37,7 @@ def _setup_diagram_env(tmp_path: Path) -> None:
     (diagram_dir / "alpha-flow-v1.mmd").write_text(
         "%% id: alpha-flow\n%% version: v1\nflowchart LR; A-->B;\n", encoding="utf-8"
     )
-    (diagram_dir / "alpha-other-v2.mmd").write_text("flowchart LR; B-->C;\n", encoding="utf-8")
+    (diagram_dir / "alpha-other-v1.mmd").write_text("flowchart LR; B-->C;\n", encoding="utf-8")
     beta_dir = src_dir / "services" / "beta" / "diagrams"
     beta_dir.mkdir(parents=True, exist_ok=True)
     (beta_dir / "beta-graph.mmd").write_text(
@@ -113,7 +113,9 @@ def test_render_groups_handles_empty() -> None:
     assert "_No diagrams detected._" in rendered
 
 
-def test_main_flags_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_flags_stale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _setup_diagram_env(tmp_path)
     src_dir = tmp_path / "docs"
     appendix = src_dir / "overview" / "tdd" / "appendices" / "diagrams.md"

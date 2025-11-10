@@ -23,19 +23,24 @@ services:
       network: host
       args:
         DEV_TOOLS: "1"
+        BAKE_VENV: "0"
     develop: *platform-watch
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
       CELERY_TASK_ALWAYS_EAGER: "0"
+      UV_PROJECT_ENVIRONMENT: /udocket/.venv
+      VIRTUAL_ENV: /udocket/.venv
+      PATH: /udocket/.venv/bin:$$PATH
     command:
       - sh
       - -lc
       - |
+          uv sync --frozen --group dev --no-install-project --project apps/platform && \
           python manage.py migrate && \
           python -m watchfiles \
             --target-type=command \
             --filter=apps.platform.config.watchers.PythonAndHTMLFilter \
-            --ignore-paths=/opt/venv \
+            --ignore-paths=/udocket/.venv \
             --ignore-paths=${APP_ROOT:-/udocket}/storage \
             --ignore-paths=${APP_ROOT:-/udocket}/celerybeat-schedule \
             --grace-period=0.2 \
@@ -50,6 +55,7 @@ services:
       network: host
       args:
         DEV_TOOLS: "1"
+        BAKE_VENV: "0"
     develop: *platform-watch
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
@@ -57,7 +63,7 @@ services:
     command:
       - sh
       - -c
-      - celery -A apps.platform.config.celery worker -l info
+      - uv sync --frozen --group dev --no-install-project --project apps/platform && celery -A apps.platform.config.celery worker -l info
     volumes:
       - ./storage:/udocket/storage
 
@@ -66,6 +72,7 @@ services:
       network: host
       args:
         DEV_TOOLS: "1"
+        BAKE_VENV: "0"
     develop: *platform-watch
     environment:
       DJANGO_SETTINGS_MODULE: apps.platform.config.settings.dev
@@ -73,7 +80,7 @@ services:
     command:
       - sh
       - -c
-      - celery -A apps.platform.config.celery beat -l info
+      - uv sync --frozen --group dev --no-install-project --project apps/platform && celery -A apps.platform.config.celery beat -l info
     volumes:
       - ./storage:/udocket/storage
 

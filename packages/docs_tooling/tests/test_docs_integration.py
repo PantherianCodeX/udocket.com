@@ -12,7 +12,7 @@ from doc_tools.check import structure as cs
 from doc_tools.common import doc_utils
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from config.paths import REPO_ROOT
 DOCS_SRC = REPO_ROOT / "docs"
 EXTERNAL_SCHEMES = ("http://", "https://", "mailto:", "tel:", "javascript:", "data:")
 LINK_RE = re.compile(r'href="([^"]+)"')

@@ -11,15 +11,15 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from packages.common.env import load_env_defaults
+from config.paths import REPO_ROOT
 
-_PACKAGE_ROOT = Path(__file__).resolve().parents[3]
-_REPO_ROOT = _PACKAGE_ROOT.parents[1]
+PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 
 load_env_defaults(
     env_var="DOCS_TOOLING_ENV_FILE",
     default_paths=(
-        _PACKAGE_ROOT / ".env",
-        _REPO_ROOT / ".env",
+        PACKAGE_ROOT / ".env",
+        REPO_ROOT / ".env",
     ),
 )
 
@@ -42,58 +42,30 @@ def _expand(path: Optional[Path], default: Path) -> Path:
     return path.expanduser() if path else default
 
 
-def _is_repo_root(candidate: Path) -> bool:
-    return (candidate / "docs").exists() and (candidate / "packages").exists()
-
-
-def _detect_repo_root(default: Path) -> Path:
-    if _is_repo_root(default):
-        return default
-    for parent in default.parents:
-        if _is_repo_root(parent):
-            return parent
-    return default
-
-
-def resolve_repo_root(cfg: DocToolsSettings | None = None) -> Path:
-    settings = cfg or doc_tools_settings
-    if settings.repo_root is not None:
-        return settings.repo_root.expanduser()
-    return _detect_repo_root(_REPO_ROOT)
-
-
 def resolve_package_root(cfg: DocToolsSettings | None = None) -> Path:
     settings = cfg or doc_tools_settings
-    base = _expand(settings.package_root, _PACKAGE_ROOT)
+    base = _expand(settings.package_root, PACKAGE_ROOT)
     return base
 
 
 def resolve_docs_root(cfg: DocToolsSettings | None = None) -> Path:
     settings = cfg or doc_tools_settings
-    repo_root = resolve_repo_root(settings)
-    default = repo_root / "docs"
-    return _expand(settings.docs_root, default)
+    return _expand(settings.docs_root, REPO_ROOT / "docs")
 
 
 def resolve_config_root(cfg: DocToolsSettings | None = None) -> Path:
     settings = cfg or doc_tools_settings
-    package_root = resolve_package_root(settings)
-    default = package_root / "config"
-    return _expand(settings.config_root, default)
+    return _expand(settings.config_root, PACKAGE_ROOT / "config")
 
 
 def resolve_build_root(cfg: DocToolsSettings | None = None) -> Path:
     settings = cfg or doc_tools_settings
-    package_root = resolve_package_root(settings)
-    default = package_root / "build"
-    return _expand(settings.build_root, default)
+    return _expand(settings.build_root, PACKAGE_ROOT / "build")
 
 
 def resolve_doc_builds_root(cfg: DocToolsSettings | None = None) -> Path:
     settings = cfg or doc_tools_settings
-    repo_root = resolve_repo_root(settings)
-    default = repo_root / "out" / "doc-builds"
-    return _expand(settings.doc_builds_root, default)
+    return _expand(settings.doc_builds_root, REPO_ROOT / "out" / "doc-builds")
 
 
 def resolve_diagram_index_path(cfg: DocToolsSettings | None = None) -> Path:

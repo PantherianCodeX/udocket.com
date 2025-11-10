@@ -1,6 +1,6 @@
-from __future__ import annotations
+# Copyright (c) 2025 uDocket Inc. All rights reserved.
 
-import pytest
+from __future__ import annotations
 
 from packages.ai.config.translator import ai_settings_from_llm
 from packages.ai.types import AgentTask
@@ -41,15 +41,17 @@ def _assignment(
     )
 
 
-@pytest.fixture
-def sample_llm_settings() -> LLMSettings:
+def _sample_llm_settings() -> LLMSettings:
     provider = _provider()
     assignment = _assignment()
-    return LLMSettings(providers={provider.name: provider}, assignments={assignment.stage_key: assignment})
+    return LLMSettings(
+        providers={provider.name: provider},
+        assignments={assignment.stage_key: assignment},
+    )
 
 
-def test_ai_settings_from_llm_translates_provider(sample_llm_settings: LLMSettings) -> None:
-    ai_settings = ai_settings_from_llm(sample_llm_settings)
+def test_ai_settings_from_llm_translates_provider() -> None:
+    ai_settings = ai_settings_from_llm(_sample_llm_settings())
     assert len(ai_settings.providers) == 1
     account = ai_settings.providers[0]
     assert account.name == "azure"
@@ -57,18 +59,21 @@ def test_ai_settings_from_llm_translates_provider(sample_llm_settings: LLMSettin
     assert account.allowed_regions
 
 
-def test_ai_settings_from_llm_routes(sample_llm_settings: LLMSettings) -> None:
-    ai_settings = ai_settings_from_llm(sample_llm_settings)
+def test_ai_settings_from_llm_routes() -> None:
+    ai_settings = ai_settings_from_llm(_sample_llm_settings())
     assert len(ai_settings.routes) == 1
     route = ai_settings.routes[0]
     assert route.provider == "azure"
     assert route.model == "gpt-lite"
-    assert route.task.value == "compose"
+    assert route.task is AgentTask.GENERATE
 
 
 def test_ai_settings_from_llm_skips_provider_without_models() -> None:
     provider = _provider(models={})
-    settings = LLMSettings(providers={provider.name: provider}, assignments={})
+    settings = LLMSettings(
+        providers={provider.name: provider},
+        assignments={},
+    )
     ai_settings = ai_settings_from_llm(settings)
     assert ai_settings.providers == ()
 
@@ -76,7 +81,10 @@ def test_ai_settings_from_llm_skips_provider_without_models() -> None:
 def test_ai_settings_from_llm_skips_unknown_stage() -> None:
     provider = _provider()
     assignment = _assignment(stage_key="unknown.stage", target="unknown")
-    settings = LLMSettings(providers={provider.name: provider}, assignments={assignment.stage_key: assignment})
+    settings = LLMSettings(
+        providers={provider.name: provider},
+        assignments={assignment.stage_key: assignment},
+    )
     ai_settings = ai_settings_from_llm(settings)
     assert ai_settings.routes == ()
 
@@ -84,7 +92,10 @@ def test_ai_settings_from_llm_skips_unknown_stage() -> None:
 def test_ai_settings_from_llm_uses_provider_list_for_model_name() -> None:
     provider = _provider()
     assignment = _assignment(model="", providers=["azure"])
-    settings = LLMSettings(providers={provider.name: provider}, assignments={assignment.stage_key: assignment})
+    settings = LLMSettings(
+        providers={provider.name: provider},
+        assignments={assignment.stage_key: assignment},
+    )
     ai_settings = ai_settings_from_llm(settings)
     assert ai_settings.routes[0].model == "azure"
 
@@ -92,24 +103,32 @@ def test_ai_settings_from_llm_uses_provider_list_for_model_name() -> None:
 def test_ai_settings_from_llm_drops_assignments_without_models() -> None:
     provider = _provider()
     assignment = _assignment(model="", providers=[])
-    settings = LLMSettings(providers={provider.name: provider}, assignments={assignment.stage_key: assignment})
+    settings = LLMSettings(
+        providers={provider.name: provider},
+        assignments={assignment.stage_key: assignment},
+    )
     ai_settings = ai_settings_from_llm(settings)
     assert ai_settings.routes == ()
 
 
-@pytest.mark.parametrize(
-    ("stage_key", "expected_task"),
-    [
-        ("compose.timeline", AgentTask.COMPOSE),
-        ("case.timeline", AgentTask.TIMELINE),
-        ("case.entity", AgentTask.ENTITIES),
-        ("case.summary", AgentTask.SUMMARIZE),
-        ("context.helper", AgentTask.CHAT),
-    ],
+_STAGE_CASES: tuple[tuple[str, AgentTask], ...] = (
+    ("compose.timeline", AgentTask.GENERATE),
+    ("case.timeline", AgentTask.EXTRACT),
+    ("case.entity", AgentTask.EXTRACT),
+    ("case.summary", AgentTask.GENERATE),
+    ("context.helper", AgentTask.CHAT),
+    ("case.qa", AgentTask.EVAL),
+    ("case.atoms", AgentTask.ATOMS),
 )
-def test_ai_settings_from_llm_maps_stage_to_task(stage_key: str, expected_task: AgentTask) -> None:
+
+
+def test_ai_settings_from_llm_maps_stage_to_task() -> None:
     provider = _provider()
-    assignment = _assignment(stage_key=stage_key, target=stage_key.split(".", 1)[0])
-    settings = LLMSettings(providers={provider.name: provider}, assignments={assignment.stage_key: assignment})
-    ai_settings = ai_settings_from_llm(settings)
-    assert ai_settings.routes[0].task == expected_task
+    for stage_key, expected_task in _STAGE_CASES:
+        assignment = _assignment(stage_key=stage_key, target=stage_key.split(".", 1)[0])
+        settings = LLMSettings(
+            providers={provider.name: provider},
+            assignments={assignment.stage_key: assignment},
+        )
+        ai_settings = ai_settings_from_llm(settings)
+        assert ai_settings.routes[0].task == expected_task

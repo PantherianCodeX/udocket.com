@@ -1,5 +1,10 @@
 # Automation
 
-Automation pipelines, LangGraph graphs, and agent orchestration live here per the repository tree appendix. This placeholder keeps the namespace visible while orchestration code is still hosted under packages/core.
+Automation hosts LangGraph graphs, agent pipelines, and orchestration glue.
+Implementation details live in the canonical specs:
 
-Refer to docs/overview/tdd/appendices/repository_trees.md for the binding layout contract.
+- `docs/automation/langgraph-agents.md` — pipeline contracts, stage maps, QA gates.
+- `docs/overview/tdd/appendices/repository_trees.md` — repository layout and ownership.
+
+This directory intentionally stays lean; add new code here only when the specs above
+have been updated and approved.

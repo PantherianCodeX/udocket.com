@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import override
 
 from packages.ai.types import AgentTask, Region
 from packages.ai.types.identifiers import CapabilityName, ProviderName
@@ -20,6 +21,7 @@ class ProviderNotConfiguredError(AIError):
     def __post_init__(self) -> None:
         self.task = AgentTask(self.task)
 
+    @override
     def __str__(self) -> str:
         return f"{self.detail} (task={self.task.value})"
 
@@ -35,6 +37,7 @@ class RouteNotFoundError(AIError):
     def __post_init__(self) -> None:
         self.task = AgentTask(self.task)
 
+    @override
     def __str__(self) -> str:
         provider_part = f", provider={self.provider}" if self.provider else ""
         return f"{self.detail} (task={self.task.value}{provider_part})"
@@ -50,6 +53,7 @@ class ProviderConfigurationError(AIError):
     def __post_init__(self) -> None:
         self.provider = ProviderName(self.provider)
 
+    @override
     def __str__(self) -> str:
         return f"{self.detail} (provider={self.provider})"
 
@@ -64,6 +68,7 @@ class ResidencyViolationError(AIError):
     def __post_init__(self) -> None:
         self.region = Region(self.region)
 
+    @override
     def __str__(self) -> str:
         return f"{self.detail} (region={self.region})"
 
@@ -78,6 +83,7 @@ class EgressPolicyError(AIError):
     def __post_init__(self) -> None:
         self.provider = ProviderName(self.provider)
 
+    @override
     def __str__(self) -> str:
         return f"Egress blocked for provider={self.provider}: {self.reason}"
 
@@ -94,6 +100,7 @@ class CapabilityLimitError(AIError):
         self.task = AgentTask(self.task)
         self.capability = CapabilityName(self.capability)
 
+    @override
     def __str__(self) -> str:
         return f"{self.detail} (task={self.task.value}, capability={self.capability})"
 

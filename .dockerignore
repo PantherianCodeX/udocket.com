@@ -16,7 +16,8 @@ __pycache__/
 .pytype/
 .pyre/
 **/.venv/
-opt/venv/
+.venv/
+packages/docs_tooling/.venv/
 **/.pytest_cache/
 **/.mypy_cache/
 **/.typewiz_cache/

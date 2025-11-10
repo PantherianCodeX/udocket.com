@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/opt/venv/bin/python",
+  "python.defaultInterpreterPath": ".venv/bin/python",
   "python.terminal.activateEnvironment": true,
   "python.analysis.djangoEnabled": true,
   "python.analysis.djangoSettingsModule": "apps.platform.config.settings.dev",
@@ -63,19 +63,20 @@
     "source.organizeImports.ruff": "explicit"
   },
   "ruff.path": [
-    "${workspaceFolder}/opt/venv/bin/ruff"
+    "${workspaceFolder}/.venv/bin/ruff"
   ],
   "ruff.nativeServer": "on",
   "ruff.configuration": "${workspaceFolder}/pyproject.toml",
   "mypy-type-checker.path": [
-    "${workspaceFolder}/opt/venv/bin/mypy"
+    "${workspaceFolder}/.venv/bin/mypy"
   ],
   "mypy-type-checker.interpreter": [
-    "${workspaceFolder}/opt/venv/bin/python"
+    "${workspaceFolder}/.venv/bin/python"
   ],
   "mypy-type-checker.importStrategy": "fromEnvironment",
   "mypy-type-checker.args": [
     "--config-file",
     "${workspaceFolder}/mypy.ini"
-  ]
+  ],
+
 }

@@ -37,6 +37,11 @@ from packages.core.llm.config import (
     LLMStageAssignment,
 )
 from packages.core.llm.runtime import ChatClientError
+from packages.common.agents import (
+    StageKey,
+    StageOverrideConfig,
+    normalize_stage_override_mapping,
+)
 from tests._typing import MonkeyPatch
 
 
@@ -934,11 +939,17 @@ def test_stage_map_wildcard_defaults():
 
     prefixed = {
         "analyze.*": {"provider": "azure", "model": "gpt-4o"},
-        "compose.context_builder": {"provider": "azure", "model": "gpt-4o-c"},
+        "compose.context": {"provider": "azure", "model": "gpt-4o-c"},
     }
     normalized_prefixed = _normalize_stage_map(prefixed)
     assert normalized_prefixed["analyze.build_timeline_seeds"]["model"] == "gpt-4o"
-    assert normalized_prefixed["compose.context_builder"]["model"] == "gpt-4o-c"
+    assert normalized_prefixed["compose.context"]["model"] == "gpt-4o-c"
+
+
+def test_stage_override_mapping_accepts_stage_keys():
+    override = StageOverrideConfig(providers=("azure",), model="gpt-override")
+    mapping = normalize_stage_override_mapping({StageKey.AN_SUMMARY_DRAFT: override})
+    assert mapping["analyze.draft_markdown"] is override
 
 
 def test_summary_stage_uses_json_mode():
@@ -990,7 +1001,19 @@ def test_build_analyze_graph_requires_langgraph(monkeypatch: pytest.MonkeyPatch)
         def input_discovery(self, state):
             return state
 
-        parse_transcript = context_builder = extract_outline = build_timeline_seeds = build_entity_hints = draft_markdown = qa_and_finalize = write_ops_and_artifacts = input_discovery
+        parse_transcript = (
+            context_builder
+        ) = (
+            extract_outline
+        ) = (
+            build_timeline_seeds
+        ) = (
+            build_entity_hints
+        ) = (
+            draft_markdown
+        ) = (
+            qa_and_finalize
+        ) = qa_join = write_ops_and_artifacts = input_discovery
 
     dummy = Dummy()
     monkeypatch.setattr(langgraph_orchestrator, "STATE_GRAPH_FACTORY", None)

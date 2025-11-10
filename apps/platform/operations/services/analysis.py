@@ -20,6 +20,7 @@ from packages.common.operations import (
     CaseIntakeBuilder,
     ComposeStageMap,
 )
+from packages.common.agents import StageKey, StageOverrideConfig
 
 
 def case_paths(case_id: str, organization_id: str | None = None) -> tuple[Path, Path, Path]:
@@ -166,6 +167,7 @@ def collect_requested_providers(
     config_chain: Sequence[str],
     provider_chain: Sequence[str] | None,
     stage_map: ComposeStageMap | None = None,
+    stage_overrides: Mapping[StageKey, StageOverrideConfig] | None = None,
 ) -> list[str]:
     sequence: list[str] = []
 
@@ -173,6 +175,11 @@ def collect_requested_providers(
         lowered = value.strip().lower()
         if lowered and lowered not in sequence:
             sequence.append(lowered)
+
+    if stage_overrides:
+        for override in stage_overrides.values():
+            for provider in override.providers:
+                _add(provider)
 
     if stage_map:
         for provider in stage_map.providers():

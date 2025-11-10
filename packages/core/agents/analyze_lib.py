@@ -7,13 +7,17 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from types import MappingProxyType
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from packages.common.json_utils import (
     coerce_json_object,
     coerce_object_dict,
     read_json_object,
+)
+from packages.common.agents import (
+    StageKey,
+    StageOverrideConfig,
+    normalize_stage_override_mapping,
 )
 
 from ..config.paths import resolve_analyze_defaults_path
@@ -28,7 +32,7 @@ from .analyze.utils import AnalyzePipeline, FinalizedOutputs
 from .common import TranscriptParse, parse_transcript
 from .common.io import TranscriptSegment
 from .common.llm_health import ensure_llm_client_health
-from .langgraph_orchestrator import build_analyze_graph, enable_langgraph_debug_logging
+from .langgraph_orchestrator import AnalyzeGraph, build_analyze_graph, enable_langgraph_debug_logging
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from packages.ai import AIClient
@@ -38,8 +42,7 @@ StageMap = dict[str, StageOptions]
 ProviderCredentials = Mapping[str, Mapping[str, object]]
 
 
-def _empty_mapping_proxy() -> MappingProxyType[str, object]:
-    return MappingProxyType({})
+GraphBuilder = Callable[["AnalyzePipeline"], AnalyzeGraph]
 
 
 class StageModelInfo(TypedDict):
@@ -167,79 +170,19 @@ for _attr, _stage_key in LLM_STAGE_KEYS.items():
         _STAGE_ALIAS_LOOKUP[_stage_key.split(".", 1)[1].lower()] = _stage_key
 
 
-@dataclass(frozen=True)
-class StageOverride:
-    providers: tuple[str, ...] = ()
-    model: str | None = None
-    options: Mapping[str, object] = field(default_factory=_empty_mapping_proxy)
-    max_tokens: int | None = None
-
-    @classmethod
-    def from_mapping(
-        cls,
-        payload: Mapping[str, object] | None,
-    ) -> StageOverride | None:
-        if not payload:
-            return None
-
-        providers_candidate: list[str] = []
-        raw_providers = payload.get("providers")
-        if isinstance(raw_providers, Sequence) and not isinstance(
-            raw_providers, (str, bytes, bytearray)
-        ):
-            for entry in cast(Sequence[object], raw_providers):
-                provider_name = str(entry or "").strip()
-                if provider_name:
-                    providers_candidate.append(provider_name)
-
-        raw_provider = payload.get("provider")
-        if isinstance(raw_provider, str):
-            single_provider = raw_provider.strip()
-            if single_provider:
-                providers_candidate.append(single_provider)
-
-        normalized_providers = tuple(_normalize_providers(providers_candidate))
-
-        model_value: object | None = payload.get("model")
-        model = str(model_value).strip() if isinstance(model_value, str) else None
-        if model == "":
-            model = None
-
-        options_payload = payload.get("options")
-        if isinstance(options_payload, Mapping):
-            option_items = cast(Mapping[object, object], options_payload)
-            options = MappingProxyType(
-                {str(key): value for key, value in option_items.items() if key is not None}
-            )
-        else:
-            options = _empty_mapping_proxy()
-
-        max_tokens_value = payload.get("max_tokens") or payload.get("max_output_tokens")
-        max_tokens = None
-        if max_tokens_value is not None:
-            parsed = _coerce_int(max_tokens_value, 0)
-            if parsed > 0:
-                max_tokens = parsed
-
-        if not normalized_providers and model is None and not options and max_tokens is None:
-            return None
-
-        return cls(
-            providers=normalized_providers,
-            model=model,
-            options=options,
-            max_tokens=max_tokens,
-        )
-
-
-def _build_stage_override_index(stage_map: StageMap) -> dict[str, StageOverride]:
-    overrides: dict[str, StageOverride] = {}
+def _build_stage_override_index(stage_map: StageMap) -> dict[str, StageOverrideConfig]:
+    overrides: dict[str, StageOverrideConfig] = {}
     for key, options in stage_map.items():
         canonical = _normalize_stage_identifier(key) or key
-        override = StageOverride.from_mapping(options)
-        if override is None:
+        override = StageOverrideConfig.from_payload(options)
+        if (
+            not override.providers
+            and not override.model
+            and not override.options
+            and override.max_tokens is None
+        ):
             continue
-        overrides.setdefault(canonical, override)
+        overrides[canonical] = override
     return overrides
 
 
@@ -382,6 +325,16 @@ ANALYZE_STAGE_PROFILES: dict[str, StageProfile] = {
         output_reserve_tokens=4000,
         resource_notes="Lightweight; smaller context models are acceptable.",
     ),
+    "analyze.qa_join": StageProfile(
+        stage_key="analyze.qa_join",
+        label="QA Join",
+        description="Aggregates lane QA verdicts before artifact emission.",
+        min_context_tokens=0,
+        recommended_context_tokens=0,
+        target_chunk_tokens=0,
+        output_reserve_tokens=0,
+        resource_notes="Non-LLM stage; executes locally.",
+    ),
 }
 
 
@@ -468,6 +421,7 @@ PIPELINE_NODE_ORDER = [
     "build_entity_hints",
     "draft_markdown",
     "qa_and_finalize",
+    "qa_join",
     "write_ops_and_artifacts",
 ]
 
@@ -556,6 +510,7 @@ class AnalyzeAgent:
         self,
         config: AnalyzeConfig | None = None,
         ai_client: "AIClient | None" = None,
+        langgraph_builder: GraphBuilder | None = None,
     ) -> None:
         self.config = config or AnalyzeConfig.from_env()
         self.logger = logger
@@ -563,6 +518,7 @@ class AnalyzeAgent:
         self._log_level = logging.INFO
         enable_langgraph_debug_logging(force=self.config.debug)
         self.ai_client = ai_client
+        self._langgraph_builder: GraphBuilder | None = langgraph_builder or build_analyze_graph
 
     def stage_catalog(self) -> dict[str, StageCatalogEntry]:
         settings = _load_llm_settings()
@@ -620,6 +576,7 @@ class AnalyzeAgent:
         transcript_hint: Mapping[str, object] | None = None,
         provider_chain: Sequence[str] | None = None,
         stage_map: Mapping[str, Mapping[str, object]] | None = None,
+        stage_overrides: Mapping[str | StageKey, StageOverrideConfig] | None = None,
         provider_credentials: ProviderCredentials | None = None,
         progress_callback: Callable[[str, str, Mapping[str, object]], None] | None = None,
     ) -> AnalyzeResult:
@@ -642,8 +599,11 @@ class AnalyzeAgent:
         )
 
         settings = _load_llm_settings()
-        stage_map = _normalize_stage_map(stage_map)
-        stage_overrides = _build_stage_override_index(stage_map)
+        normalized_overrides: dict[str, StageOverrideConfig] = {}
+        normalized_stage_map = _normalize_stage_map(stage_map)
+        normalized_overrides.update(_build_stage_override_index(normalized_stage_map))
+        if stage_overrides:
+            normalized_overrides.update(normalize_stage_override_mapping(stage_overrides))
         intake_mapping = intake or {}
         intake_data: dict[str, object] = {str(key): value for key, value in intake_mapping.items()}
         intake = intake_data
@@ -655,7 +615,7 @@ class AnalyzeAgent:
 
         if provider_chain is None:
             derived_chain: list[str] = []
-            for override in stage_overrides.values():
+            for override in normalized_overrides.values():
                 for provider_name in override.providers:
                     if provider_name and provider_name not in derived_chain:
                         derived_chain.append(provider_name)
@@ -698,14 +658,14 @@ class AnalyzeAgent:
                 options.update(dict(assignment.options))
 
             override_max_tokens = None
-            stage_override = stage_overrides.get(stage_key)
+            stage_override = normalized_overrides.get(stage_key)
             if stage_override is not None:
                 if stage_override.providers:
                     providers = list(stage_override.providers)
                 if stage_override.model:
                     preferred_model = stage_override.model
                 if stage_override.options:
-                    options.update(stage_override.options)
+                    options.update(dict(stage_override.options))
                 if stage_override.max_tokens is not None:
                     override_max_tokens = stage_override.max_tokens
 
@@ -942,10 +902,11 @@ class AnalyzeAgent:
     ) -> dict[str, object]:
         current_state: dict[str, object] = dict(state)
         graph = None
-        try:
-            graph = build_analyze_graph(pipeline)
-        except RuntimeError:
-            graph = None
+        if self._langgraph_builder is not None:
+            try:
+                graph = self._langgraph_builder(pipeline)
+            except RuntimeError:
+                graph = None
         if graph is not None:
             self._log(logging.DEBUG, "langgraph.invoke.start", entry=graph.entry)
             graph_result = graph.invoke(current_state)

@@ -6,12 +6,12 @@ flowchart TD
     classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
     classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
 
-    Input["Relationship inputs\n(entities_v1.json + atoms index)"]:::artifact
-    GraphInit["Seed graph from entities\n(nodes, roles, attributes)"]:::stage
+    Input["Relationship inputs<br/>(entities_v1.json + atoms index)"]:::artifact
+    GraphInit["Seed graph from entities<br/>(nodes, roles, attributes)"]:::stage
     LinkEvidence["Link evidence + transcript spans"]:::stage
-    QA["Graph QA\n(schema + residency + policy)"]:::gate
-    Revision["Revision directives\n(edge-level instructions)"]:::directive
-    Outputs["Graph artifacts\n(relationship_v1.json, hints_v1.json)"]:::artifact
+    QA["Graph QA<br/>(schema + residency + policy)"]:::gate
+    Revision["Revision directives<br/>(edge-level instructions)"]:::directive
+    Outputs["Graph artifacts<br/>(relationship_v1.json, hints_v1.json)"]:::artifact
 
     Input --> GraphInit --> LinkEvidence --> QA --> Outputs
     QA -->|issue| Revision --> GraphInit

@@ -5,6 +5,7 @@ import json
 import logging
 from collections.abc import Mapping
 
+from packages.common.agents import StageOverrideConfig
 from packages.common.json_utils import JSONObject, JSONValue, coerce_json_object, coerce_str
 
 from ...llm import LLMSettings
@@ -26,6 +27,7 @@ def run_lane_qa_review(
     provider_credentials: Mapping[str, JSONObject],
     logger: logging.Logger,
     system_prompt: str,
+    stage_override: StageOverrideConfig | None = None,
 ) -> tuple[LaneQAResult, dict[str, int], str, str]:
     """Execute QA for a single lane with resilient JSON parsing."""
 
@@ -46,6 +48,7 @@ def run_lane_qa_review(
             provider_credentials=provider_credentials,
             config=config,
             settings=settings,
+            stage_override=stage_override,
         )
 
         try:

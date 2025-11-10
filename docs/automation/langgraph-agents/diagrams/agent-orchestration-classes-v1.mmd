@@ -12,10 +12,13 @@ classDiagram
     +stages: List<StageDefinition>
   }
   class StageDefinition {
-    +stageId: String
+    +stageKey: StageKey
+    +task: AgentTask
     +nodeId: String
-    +toolIds: List
+    +llmProfileId: UUID?
+    +dependsOn: List<StageKey>
     +retryPolicy: RetryPolicy
+    +costCeiling: Currency
   }
   class GraphRunner {
     +run(definition, context)

@@ -6,23 +6,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..types import AllowedRegion
-from ..types.identifiers import ProviderName
-from .azure_openai import AzureOpenAIAdapter
-from .null import NullProvider
-from .settings import AzureOpenAIConfig
+from packages.ai.providers.azure_openai import AzureOpenAIAdapter
+from packages.ai.providers.null import NullProvider
+from packages.ai.providers.settings import AzureOpenAIConfig
+from packages.ai.types import AllowedRegion
+from packages.ai.types.identifiers import ProviderName
 
 if TYPE_CHECKING:
-    from ..config import AISettings, ProviderAccount
-    from ..safety.egress import EgressPolicy
-    from ..safety.residency import ResidencyPolicy
-    from ..secret import SecretSource
-    from .interfaces import ProviderAdapter
+    from packages.ai.config import AISettings, ProviderAccount
+    from packages.ai.providers.interfaces import ProviderAdapter
+    from packages.ai.safety.egress import EgressPolicy
+    from packages.ai.safety.residency import ResidencyPolicy
+    from packages.ai.secret import SecretSource
 
 
 def default_adapters() -> dict[ProviderName, ProviderAdapter]:
     """Return a registry containing the null provider for tests."""
-
     provider = NullProvider()
     return {provider.name: provider}
 
@@ -35,7 +34,6 @@ def adapters_from_settings(
     egress_policy: EgressPolicy,
 ) -> dict[ProviderName, ProviderAdapter]:
     """Build provider adapters from AI settings."""
-
     adapters: dict[ProviderName, ProviderAdapter] = {}
     for account in settings.providers:
         adapter = _build_adapter_for_account(

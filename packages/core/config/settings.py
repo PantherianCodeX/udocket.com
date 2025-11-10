@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from packages.common.env import load_env_defaults
 
-_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-_REPO_ROOT = _PACKAGE_ROOT.parents[2]
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+from config.paths import REPO_ROOT
 
 
 def _ensure_env_path(key: str, default: Path) -> None:
@@ -25,24 +25,24 @@ def _ensure_env_path(key: str, default: Path) -> None:
         os.environ[key] = str(default)
 
 
-_ensure_env_path("UDOCKET_CORE_DATA_ROOT", _PACKAGE_ROOT / "reference" / "data")
+_ensure_env_path("UDOCKET_CORE_DATA_ROOT", PACKAGE_ROOT / "reference" / "data")
 _ensure_env_path(
-    "UDOCKET_CORE_LLM_PROVIDERS_PATH", _REPO_ROOT / "config" / "ai" / "llm_providers.json"
+    "UDOCKET_CORE_LLM_PROVIDERS_PATH", REPO_ROOT / "config" / "ai" / "llm_providers.json"
 )
 _ensure_env_path(
     "UDOCKET_CORE_LLM_ASSIGNMENTS_PATH",
-    _REPO_ROOT / "config" / "ai" / "llm_assignments.json",
+    REPO_ROOT / "config" / "ai" / "llm_assignments.json",
 )
 _ensure_env_path(
     "UDOCKET_CORE_ANALYZE_DEFAULTS_PATH",
-    _REPO_ROOT / "config" / "services" / "analyze" / "defaults.json",
+    REPO_ROOT / "config" / "services" / "analyze" / "defaults.json",
 )
 
 load_env_defaults(
     env_var="UDOCKET_CORE_ENV_FILE",
     default_paths=(
-        _PACKAGE_ROOT / ".env",
-        _REPO_ROOT / ".env",
+        PACKAGE_ROOT / ".env",
+        REPO_ROOT / ".env",
     ),
 )
 

@@ -6,15 +6,17 @@ flowchart TD
     classDef artifact fill:#e7f6e7,stroke:#2d8a34,stroke-width:1.2px,color:#111;
     classDef directive fill:#f0f4ff,stroke:#3a5bbb,stroke-width:1.2px,color:#111;
 
-    Context["Assemble ComposeContext\n(summary, timeline, entities, policies)"]:::stage
-    RoleLanes["Launch role lanes\n(client, lawyer, bundle)"]:::stage
+    Context["Assemble ComposeContext<br/>(summary, timeline, entities, policies)"]:::stage
+    RoleLanes["Launch role lanes<br/>(client, lawyer, bundle)"]:::stage
     LaneQA["Lane QA & guardrails"]:::gate
+    LaneAssembly["Lane assembly<br/>(client + lawyer + bundle)"]:::stage
     CrossQA["Cross-lane QA"]:::gate
-    Revision["Revision directives\n(section-scoped instructions)"]:::directive
+    Revision["Revision directives<br/>(section-scoped instructions)"]:::directive
     Finalize["Finalize + version artifacts"]:::stage
     Guardian["Guardian promotion"]:::gate
     Deliverables["Deliverables + manifests"]:::artifact
 
-    Context --> RoleLanes --> LaneQA --> CrossQA --> Finalize --> Guardian --> Deliverables
+    Context --> RoleLanes --> LaneQA --> LaneAssembly --> CrossQA --> Finalize --> Guardian --> Deliverables
     LaneQA -->|issue| Revision --> RoleLanes
+    LaneAssembly -->|issue| Revision
     CrossQA -->|issue| Revision

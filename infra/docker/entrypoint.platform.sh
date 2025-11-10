@@ -40,7 +40,15 @@ if [[ "${SKIP_PLATFORM_BOOTSTRAP:-0}" == "1" ]]; then
 fi
 
 if [[ "${RUN_PLATFORM_MIGRATIONS}" == "1" ]]; then
-  run_with_retries
+  # run_with_retries
+  if python manage.py migrate; then
+    echo "[entrypoint] Database migrations applied."
+    return 0
+  fi
+  if [[ ${attempt} -ge ${RETRIES} ]]; then
+    echo "[entrypoint] Failed to run migrations after ${attempt} attempts." >&2
+    return 1
+  fi
 fi
 
 if [[ "${RUN_PLATFORM_BOOTSTRAP}" == "1" ]]; then
