@@ -6,7 +6,7 @@ import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Sequence
+from collections.abc import Sequence
 
 from doc_tools.config import paths
 
@@ -28,7 +28,7 @@ class TreeBlock:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Ensure the repository tree appendix stays aligned with the repository layout."
+        description="Ensure the repository tree appendix stays aligned with the repository layout.",
     )
     parser.add_argument(
         "--appendix",
@@ -153,16 +153,16 @@ def validate_blocks(blocks: Sequence[TreeBlock], repo_root: Path) -> list[str]:
             target = _resolve_entry_path(repo_root, entry.rel_path)
             if not target.exists():
                 issues.append(
-                    f"[repository-trees] missing path '{entry.rel_path}' in section '{block.section}'"
+                    f"[repository-trees] missing path '{entry.rel_path}' in section '{block.section}'",
                 )
                 continue
             if entry.is_dir and not target.is_dir():
                 issues.append(
-                    f"[repository-trees] expected directory for '{entry.rel_path}' in section '{block.section}'"
+                    f"[repository-trees] expected directory for '{entry.rel_path}' in section '{block.section}'",
                 )
             if not entry.is_dir and target.is_dir():
                 issues.append(
-                    f"[repository-trees] expected file for '{entry.rel_path}' in section '{block.section}'"
+                    f"[repository-trees] expected file for '{entry.rel_path}' in section '{block.section}'",
                 )
     return issues
 

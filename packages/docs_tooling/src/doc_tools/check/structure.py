@@ -27,7 +27,8 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, cast
+from typing import Any, cast
+from collections.abc import Iterable, Iterator, Sequence
 
 from doc_tools.config import paths
 from doc_tools.check.requirements import (
@@ -76,24 +77,24 @@ class TableRowSpec:
 
 @dataclass(frozen=True)
 class TableSpec:
-    header: Tuple[str, ...]
-    rows: Tuple[TableRowSpec, ...]
+    header: tuple[str, ...]
+    rows: tuple[TableRowSpec, ...]
 
 
 @dataclass(frozen=True)
 class SectionSpec:
-    numbering: Tuple[int, ...]
+    numbering: tuple[int, ...]
     level: int
     title: str
-    preamble_order: Tuple[str, ...]
-    preamble_requires_marker: Dict[str, bool]
-    tables: Tuple[TableSpec, ...]
-    yaml_schemas: Tuple[YamlSchema, ...]
-    required_markers: Tuple[str, ...]
+    preamble_order: tuple[str, ...]
+    preamble_requires_marker: dict[str, bool]
+    tables: tuple[TableSpec, ...]
+    yaml_schemas: tuple[YamlSchema, ...]
+    required_markers: tuple[str, ...]
 
 
-def build_front_matter_index(front_matter: Dict[str, Any]) -> Dict[str, List[str]]:
-    index: Dict[str, List[str]] = {}
+def build_front_matter_index(front_matter: dict[str, Any]) -> dict[str, list[str]]:
+    index: dict[str, list[str]] = {}
     for key in front_matter:
         primary = normalize_key(key)
         variants = key_variants(key)
@@ -122,8 +123,8 @@ def extract_tables(
     end: int,
     *,
     allow_optional_tags: bool,
-) -> List[TableSpec]:
-    tables: List[TableSpec] = []
+) -> list[TableSpec]:
+    tables: list[TableSpec] = []
     segment = list(lines[start:end])
     for _, table_rows in iter_markdown_tables(segment, allow_optional_tags=allow_optional_tags):
         if len(table_rows) < 2:
@@ -131,7 +132,7 @@ def extract_tables(
         header_cells = split_table_row(table_rows[0])
         if not header_cells:
             continue
-        data_rows: List[TableRowSpec] = []
+        data_rows: list[TableRowSpec] = []
         for raw_row in table_rows[2:]:
             cells = split_table_row(raw_row)
             if not cells:
@@ -149,7 +150,7 @@ def extract_tables(
             TableSpec(
                 header=tuple(header_cells),
                 rows=tuple(data_rows),
-            )
+            ),
         )
     return tables
 
@@ -193,7 +194,7 @@ def find_template(start: Path, override: Path | None) -> Path:
     raise FileNotFoundError(f"Could not locate {TEMPLATE_NAME} starting from {start}")
 
 
-def extract_numbering(title: str) -> Tuple[int, ...] | None:
+def extract_numbering(title: str) -> tuple[int, ...] | None:
     title = title.strip()
     if m := re.match(r"^(\d+)\)", title):
         return (int(m.group(1)),)
@@ -202,8 +203,8 @@ def extract_numbering(title: str) -> Tuple[int, ...] | None:
     return None
 
 
-def parse_sections(markdown: str) -> List[Tuple[Tuple[int, ...], int, str, int]]:
-    sections: List[Tuple[Tuple[int, ...], int, str, int]] = []
+def parse_sections(markdown: str) -> list[tuple[tuple[int, ...], int, str, int]]:
+    sections: list[tuple[tuple[int, ...], int, str, int]] = []
     lines = markdown.splitlines()
     for idx, line in enumerate(lines, start=1):
         m = HEADING_RE.match(line)
@@ -218,8 +219,8 @@ def parse_sections(markdown: str) -> List[Tuple[Tuple[int, ...], int, str, int]]
     return sections
 
 
-def gather_preamble(lines: Sequence[str], start_idx: int) -> List[Tuple[int, str, str]]:
-    entries: List[Tuple[int, str, str]] = []
+def gather_preamble(lines: Sequence[str], start_idx: int) -> list[tuple[int, str, str]]:
+    entries: list[tuple[int, str, str]] = []
     idx = start_idx
     while idx < len(lines):
         line = lines[idx]
@@ -237,15 +238,15 @@ def gather_preamble(lines: Sequence[str], start_idx: int) -> List[Tuple[int, str
     return entries
 
 
-def build_template_spec(template_path: Path) -> List[SectionSpec]:
+def build_template_spec(template_path: Path) -> list[SectionSpec]:
     content = template_path.read_text(encoding="utf-8")
     lines = content.splitlines()
-    specs: List[SectionSpec] = []
+    specs: list[SectionSpec] = []
     sections = parse_sections(content)
     for index, (numbering, level, title, line_no) in enumerate(sections):
         preamble_entries = gather_preamble(lines, line_no)
         order = tuple(label for _, label, _ in preamble_entries)
-        marker_map: Dict[str, bool] = {}
+        marker_map: dict[str, bool] = {}
         for _, label, body in preamble_entries:
             cleaned = body.rstrip()
             has_divider = cleaned.endswith(PREAMBLE_DIVIDER)
@@ -267,14 +268,12 @@ def build_template_spec(template_path: Path) -> List[SectionSpec]:
             len(segment_lines),
             allow_optional_tags=True,
         )
-        marker_lines: List[str] = []
+        marker_lines: list[str] = []
         for raw_line in segment_lines:
             stripped_line = raw_line.strip()
-            if stripped_line.startswith("<!-- BEGIN AUTO-GENERATED") or stripped_line.startswith(
-                "<!-- END AUTO-GENERATED"
-            ):
+            if stripped_line.startswith(("<!-- BEGIN AUTO-GENERATED", "<!-- END AUTO-GENERATED")):
                 marker_lines.append(stripped_line)
-        yaml_schemas: List[YamlSchema] = []
+        yaml_schemas: list[YamlSchema] = []
         for _, block_lines in iter_yaml_blocks(segment_lines):
             if yaml is None:
                 raise RuntimeError("PyYAML is required to validate template YAML blocks")
@@ -295,13 +294,13 @@ def build_template_spec(template_path: Path) -> List[SectionSpec]:
                 tables=tuple(tables),
                 yaml_schemas=tuple(yaml_schemas),
                 required_markers=tuple(marker_lines),
-            )
+            ),
         )
         if order:
             last_label = order[-1]
             if marker_map.get(last_label, False):
                 raise RuntimeError(
-                    f"{template_path}: last preamble entry '{last_label}' must not end with '{PREAMBLE_DIVIDER}'"
+                    f"{template_path}: last preamble entry '{last_label}' must not end with '{PREAMBLE_DIVIDER}'",
                 )
     return specs
 
@@ -339,7 +338,7 @@ def ensure_template_requirements(template_path: Path) -> None:
     if missing_controls:
         formatted = ", ".join(format_label(key) for key in missing_controls)
         raise RuntimeError(
-            f"{template_path}: document controls table missing required rows for: {formatted}"
+            f"{template_path}: document controls table missing required rows for: {formatted}",
         )
 
 
@@ -364,8 +363,8 @@ def walk_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
-def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
-    errors: List[str] = []
+def check_document_controls(path: Path, lines: Sequence[str]) -> list[str]:
+    errors: list[str] = []
     front_matter = parse_front_matter(lines)
     if not front_matter:
         errors.append(f"{path}: missing or invalid YAML front matter")
@@ -376,7 +375,7 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
     if missing_required:
         errors.append(
             f"{path}: front matter missing required keys: "
-            f"{', '.join(format_label(key) for key in missing_required)}"
+            f"{', '.join(format_label(key) for key in missing_required)}",
         )
 
     try:
@@ -399,8 +398,8 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
     if "Field" not in header_row or "Value" not in header_row:
         errors.append(f"{path}: document controls table missing 'Field'/'Value' header")
 
-    table_map: Dict[str, Tuple[str, str]] = {}
-    duplicates: List[str] = []
+    table_map: dict[str, tuple[str, str]] = {}
+    duplicates: list[str] = []
     for label, value in table_data:
         normalized = normalize_key(label)
         if normalized in table_map:
@@ -423,8 +422,8 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
             errors.append(f"{path}: front matter key '{key}' must not be empty")
 
         variants = key_variants(key)
-        match: Optional[Tuple[str, str]] = None
-        match_norm: Optional[str] = None
+        match: tuple[str, str] | None = None
+        match_norm: str | None = None
         for variant in variants:
             if variant in table_map:
                 match_norm = variant
@@ -443,11 +442,11 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
             errors.append(f"{path}: document controls field '{label}' must not be empty")
         elif not expected and actual_value:
             errors.append(
-                f"{path}: document controls field '{label}' contains '{actual_value}' but front matter is blank"
+                f"{path}: document controls field '{label}' contains '{actual_value}' but front matter is blank",
             )
         elif expected and actual_value and expected != actual_value:
             errors.append(
-                f"{path}: document controls field '{label}' value '{actual_value}' does not match front matter '{expected}'"
+                f"{path}: document controls field '{label}' value '{actual_value}' does not match front matter '{expected}'",
             )
 
     optional_labels = OPTIONAL_KEYS
@@ -460,19 +459,19 @@ def check_document_controls(path: Path, lines: Sequence[str]) -> List[str]:
 
     if DOCUMENT_CONTROLS_BEGIN not in lines or DOCUMENT_CONTROLS_END not in lines:
         errors.append(
-            f"{path}: document controls table must be wrapped with '{DOCUMENT_CONTROLS_BEGIN}' and '{DOCUMENT_CONTROLS_END}' markers"
+            f"{path}: document controls table must be wrapped with '{DOCUMENT_CONTROLS_BEGIN}' and '{DOCUMENT_CONTROLS_END}' markers",
         )
 
     return errors
 
 
-def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequence[str]) -> List[str]:
-    errors: List[str] = []
+def validate_sections(path: Path, template_specs: list[SectionSpec], lines: Sequence[str]) -> list[str]:
+    errors: list[str] = []
     content = "\n".join(lines)
     doc_sections = parse_sections(content)
     section_lookup = {num: (idx, title, level) for num, level, title, idx in doc_sections}
     section_order = {num: position for position, (num, _, _, _) in enumerate(doc_sections)}
-    section_bounds: Dict[Tuple[int, ...], Tuple[int, int]] = {}
+    section_bounds: dict[tuple[int, ...], tuple[int, int]] = {}
     for idx, (numbering, level, _, line_no) in enumerate(doc_sections):
         start_idx = line_no - 1
         next_idx = len(lines)
@@ -501,14 +500,14 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
         # Ensure heading level matches template (e.g., ## vs ###)
         if actual_level != spec.level:
             errors.append(
-                f"{path}: section {human} uses heading level {actual_level} but template requires {spec.level}"
+                f"{path}: section {human} uses heading level {actual_level} but template requires {spec.level}",
             )
 
         # Ensure heading title matches template exactly, allowing optional binding suffix
-        def _strip_suffix(value: str) -> Tuple[str, Optional[str]]:
+        def _strip_suffix(value: str) -> tuple[str, str | None]:
             stripped = value.strip()
-            if stripped.endswith('}') and '{#' in stripped:
-                attr_index = stripped.rfind('{#')
+            if stripped.endswith("}") and "{#" in stripped:
+                attr_index = stripped.rfind("{#")
                 stripped = stripped[:attr_index].rstrip()
             for suffix in (" (binding)", " (informative)", " (normative)"):
                 if stripped.endswith(suffix):
@@ -537,12 +536,12 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
 
         if not _is_title_case(actual_title_base):
             errors.append(
-                f"{path}: section {human} heading '{actual_title.strip()}' must use Title Case before suffix"
+                f"{path}: section {human} heading '{actual_title.strip()}' must use Title Case before suffix",
             )
 
         if actual_title_base != spec_title_base:
             errors.append(
-                f"{path}: section {human} heading '{actual_title.strip()}' does not match template '{spec.title.strip()}'"
+                f"{path}: section {human} heading '{actual_title.strip()}' does not match template '{spec.title.strip()}'",
             )
 
         preamble_lines = gather_preamble(lines, line_no)
@@ -563,7 +562,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                 missing = spec.preamble_order[len(preamble_lines):]
                 errors.append(f"{path}: section {human} missing preamble entries: {', '.join(missing)}")
                 continue
-            for expected, (_, actual_label, body) in zip(spec.preamble_order, preamble_lines):
+            for expected, (_, actual_label, body) in zip(spec.preamble_order, preamble_lines, strict=False):
                 if actual_label != expected:
                     errors.append(f"{path}: section {human} expected preamble entry '{expected}' but found '{actual_label}'")
                 text = body.rstrip()
@@ -572,24 +571,23 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                     text = text[: -len(PREAMBLE_DIVIDER)].rstrip()
                 if text.endswith(" *"):
                     errors.append(
-                        f"{path}: section {human} preamble entry '{actual_label}' must not end with ' *'"
+                        f"{path}: section {human} preamble entry '{actual_label}' must not end with ' *'",
                     )
                 requires_marker = spec.preamble_requires_marker.get(actual_label, False)
                 if requires_marker and not has_marker:
                     errors.append(
-                        f"{path}: section {human} preamble entry '{actual_label}' must end with '{PREAMBLE_DIVIDER}'"
+                        f"{path}: section {human} preamble entry '{actual_label}' must end with '{PREAMBLE_DIVIDER}'",
                     )
                 if not requires_marker and has_marker:
                     errors.append(
-                        f"{path}: section {human} preamble entry '{actual_label}' must not end with '{PREAMBLE_DIVIDER}'"
+                        f"{path}: section {human} preamble entry '{actual_label}' must not end with '{PREAMBLE_DIVIDER}'",
                     )
             if len(preamble_lines) > len(spec.preamble_order):
                 extras = [label for _, label, _ in preamble_lines[len(spec.preamble_order):]]
                 errors.append(f"{path}: section {human} has unexpected preamble entries: {', '.join(extras)}")
-        else:
-            if preamble_lines:
-                labels = [label for _, label, _ in preamble_lines]
-                errors.append(f"{path}: section {human} should not have preamble entries but found: {', '.join(labels)}")
+        elif preamble_lines:
+            labels = [label for _, label, _ in preamble_lines]
+            errors.append(f"{path}: section {human} should not have preamble entries but found: {', '.join(labels)}")
 
         if spec.tables:
             doc_tables = extract_tables(
@@ -601,7 +599,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
             used = [False] * len(doc_tables)
             for template_table in spec.tables:
                 header_display = " | ".join(template_table.header)
-                match_idx: Optional[int] = None
+                match_idx: int | None = None
                 for idx_table, candidate in enumerate(doc_tables):
                     if used[idx_table]:
                         continue
@@ -610,14 +608,14 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                         break
                 if match_idx is None:
                     errors.append(
-                        f"{path}: section {human} missing table with header '{header_display}'"
+                        f"{path}: section {human} missing table with header '{header_display}'",
                     )
                     continue
                 used[match_idx] = True
                 candidate_table = doc_tables[match_idx]
                 if not candidate_table.rows:
                     errors.append(
-                        f"{path}: section {human} table '{header_display}' must contain at least one data row"
+                        f"{path}: section {human} table '{header_display}' must contain at least one data row",
                     )
                 candidate_first_cells = {
                     row.first_cell for row in candidate_table.rows if row.first_cell
@@ -627,7 +625,7 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                         continue
                     if row_spec.first_cell not in candidate_first_cells:
                         errors.append(
-                            f"{path}: section {human} table '{header_display}' missing row '{row_spec.first_cell}'"
+                            f"{path}: section {human} table '{header_display}' missing row '{row_spec.first_cell}'",
                         )
 
         if spec.yaml_schemas:
@@ -659,10 +657,10 @@ def validate_sections(path: Path, template_specs: List[SectionSpec], lines: Sequ
                         candidate: Any = loaded if loaded is not None else {}
                         if schema.kind == "mapping" and isinstance(candidate, dict):
                             field_keys: set[str] = set(schema.fields.keys()) if schema.fields else set()
-                            loaded_mapping = cast(dict[str, Any], candidate)
+                            loaded_mapping = cast("dict[str, Any]", candidate)
                             if field_keys and field_keys.isdisjoint(loaded_mapping.keys()):
                                 continue
-                        validation_errors: List[str] = []
+                        validation_errors: list[str] = []
                         validate_yaml_schema(schema, candidate, [], validation_errors)
                         if validation_errors:
                             for issue in validation_errors:
@@ -686,31 +684,30 @@ def main() -> int:
         print("No markdown targets found.", file=sys.stderr)
         return 1
 
-    issues: List[str] = []
-    template_cache: Dict[Path, Tuple[bool, List[SectionSpec]]] = {}
+    issues: list[str] = []
+    template_cache: dict[Path, tuple[bool, list[SectionSpec]]] = {}
     for target in targets:
         lines = target.read_text(encoding="utf-8").splitlines()
         issues.extend(check_document_controls(target, lines))
         disabled_template = False
-        template_specs: List[SectionSpec] = []
+        template_specs: list[SectionSpec] = []
         if not args.frontmatter:
             template_path = find_template(target, args.template)
             if template_path in template_cache:
                 disabled_template, template_specs = template_cache[template_path]
+            elif template_disabled(template_path):
+                disabled_template = True
+                if template_path not in DISABLED_TEMPLATE_MESSAGES:
+                    print(
+                        f"warning: template {template_path} marked as disabled; skipping section validation.",
+                        file=sys.stderr,
+                    )
+                    DISABLED_TEMPLATE_MESSAGES.add(template_path)
+                template_cache[template_path] = (True, [])
             else:
-                if template_disabled(template_path):
-                    disabled_template = True
-                    if template_path not in DISABLED_TEMPLATE_MESSAGES:
-                        print(
-                            f"warning: template {template_path} marked as disabled; skipping section validation.",
-                            file=sys.stderr,
-                        )
-                        DISABLED_TEMPLATE_MESSAGES.add(template_path)
-                    template_cache[template_path] = (True, [])
-                else:
-                    ensure_template_requirements(template_path)
-                    template_specs = build_template_spec(template_path)
-                    template_cache[template_path] = (False, template_specs)
+                ensure_template_requirements(template_path)
+                template_specs = build_template_spec(template_path)
+                template_cache[template_path] = (False, template_specs)
         if not args.frontmatter and not disabled_template:
             issues.extend(validate_sections(target, template_specs, lines))
 

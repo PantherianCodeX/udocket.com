@@ -13,6 +13,7 @@ from typing import Callable
 
 from mkdocs.config import Config
 from mkdocs.config import config_options
+from mkdocs.commands.serve import LiveReloadServer
 from mkdocs.plugins import BasePlugin
 
 class IncludeBuildAssetsPlugin(BasePlugin):
@@ -50,7 +51,12 @@ class IncludeBuildAssetsPlugin(BasePlugin):
         if self.source_dir.exists():
             self._copy_assets(Path(config["site_dir"]))
 
-    def on_serve(self, server, config: Config, builder: Callable[[], None]):  # pragma: no cover
+    def on_serve(
+        self,
+        server: LiveReloadServer,
+        config: Config,
+        builder: Callable[[], None],
+    ) -> Callable[[], None]:  # pragma: no cover
         source_dir = self.source_dir
         if source_dir.exists():
             server.watch(str(source_dir), lambda: self._copy_assets(Path(config["site_dir"])))

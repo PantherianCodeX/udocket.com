@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from doc_tools.config.paths import (  # noqa: F401
+from doc_tools.config.paths import (
     ALL_TEMPLATE_ROOTS,
     AREA_PREFIXES,
     CONFIG_PATH,
@@ -24,22 +24,22 @@ from doc_tools.config.paths import (  # noqa: F401
 )
 
 __all__ = [
-    "REPO_ROOT",
+    "ALL_TEMPLATE_ROOTS",
+    "AREA_PREFIXES",
+    "BUILD_ROOT",
+    "CONFIG_PATH",
+    "CONFIG_ROOT",
+    "DIAGRAM_INDEX_PATH",
     "DOCS_PACKAGE_ROOT",
     "DOCS_ROOT",
-    "DIAGRAM_INDEX_PATH",
-    "CONFIG_ROOT",
-    "BUILD_ROOT",
     "DOC_BUILDS_ROOT",
-    "SITE_OUTPUT_ROOT",
-    "PDF_OUTPUT_ROOT",
-    "SITE_DEV_DIR",
     "PDF_DEV_DIR",
-    "CONFIG_PATH",
+    "PDF_OUTPUT_ROOT",
+    "REPO_ROOT",
     "SERVICE_AREAS",
-    "AREA_PREFIXES",
     "SERVICE_ROOTS",
-    "ALL_TEMPLATE_ROOTS",
+    "SITE_DEV_DIR",
+    "SITE_OUTPUT_ROOT",
     "area_path",
     "load_service_areas",
 ]

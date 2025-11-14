@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from doc_tools.config import paths
 from packages.common.text import slugify
@@ -69,8 +69,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--tags", default="", help="Comma-separated tag list.")
     parser.add_argument(
         "--date",
-        default=dt.date.today().isoformat(),
-        help="Decision date (defaults to today).",
+        default=dt.datetime.now(dt.UTC).date().isoformat(),
+        help="Decision date (defaults to today, UTC).",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print the target file without writing.")
     return parser.parse_args(argv)

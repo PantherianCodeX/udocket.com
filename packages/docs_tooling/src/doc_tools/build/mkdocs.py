@@ -4,16 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 import subprocess
 import sys
-import tempfile
+from pathlib import Path
+from subprocess import CompletedProcess
+from tempfile import TemporaryDirectory
+from typing import Final
 
 from doc_tools.config import paths
 
-REPO_ROOT = paths.REPO_ROOT
-MKDOCS_CONFIG = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
-WARNING_PATTERNS = (
+REPO_ROOT: Final[Path] = paths.REPO_ROOT
+MKDOCS_CONFIG: Final[Path] = paths.DOCS_PACKAGE_ROOT / "mkdocs.yml"
+WARNING_PATTERNS: Final[tuple[str, ...]] = (
     "contains a link",
     "does not contain an anchor",
     "not found among documentation files",
@@ -21,9 +23,11 @@ WARNING_PATTERNS = (
 
 
 def run_mkdocs(*, dry_run: bool) -> int:
-    site_dir: str | None = None
+    temp_dir: TemporaryDirectory[str] | None = None
+    site_dir: Path | None = None
     if dry_run:
-        site_dir = tempfile.mkdtemp(prefix="mkdocs-site-")
+        temp_dir = TemporaryDirectory(prefix="mkdocs-site-")
+        site_dir = Path(temp_dir.name)
     cmd = [
         "mkdocs",
         "build",
@@ -32,17 +36,17 @@ def run_mkdocs(*, dry_run: bool) -> int:
         str(MKDOCS_CONFIG),
     ]
     if site_dir is not None:
-        cmd.extend(["--site-dir", site_dir])
+        cmd.extend(["--site-dir", str(site_dir)])
     try:
-        result = subprocess.run(
+        result: CompletedProcess[str] = subprocess.run(
             cmd,
-            cwd=REPO_ROOT,
+            cwd=str(REPO_ROOT),
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
-        output = (result.stdout or "") + (result.stderr or "")
+        output_parts = [part for part in (result.stdout, result.stderr) if part]
+        output = "".join(output_parts)
         if output:
             print(output, end="")
         if result.returncode != 0:
@@ -59,8 +63,8 @@ def run_mkdocs(*, dry_run: bool) -> int:
         )
         return 1
     finally:
-        if site_dir is not None:
-            shutil.rmtree(site_dir, ignore_errors=True)
+        if temp_dir is not None:
+            temp_dir.cleanup()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -1,0 +1,275 @@
+openapi: 3.1.0
+info:
+  title: AI Module Migration Readiness API
+  version: 0.1.0
+  description: |
+    Contract covering readiness inventory, migration backlog, LangSmith evaluation exports,
+    and temporary LangFuse observability sessions for the modernization program.
+servers:
+  - url: https://ops.udocket.internal/api/v1
+paths:
+  /readiness/components:
+    get:
+      summary: List readiness records per LangGraph stage/component
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [complete, in_flight, blocked, not_started]
+        - in: query
+          name: owner_team
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful retrieval
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MigrationStageReadiness'
+  /readiness/components/{componentId}/gaps:
+    post:
+      summary: Create or update a capability gap for a component
+      parameters:
+        - in: path
+          name: componentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityGap'
+      responses:
+        '201':
+          description: Gap recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityGap'
+  /migrations/backlog:
+    get:
+      summary: Retrieve prioritized backlog for remaining modernization tasks
+      responses:
+        '200':
+          description: Backlog listing
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MigrationTask'
+  /tooling/langsmith/evaluations:
+    post:
+      summary: Ingest LangSmith evaluation evidence into readiness repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationEvidence'
+      responses:
+        '202':
+          description: Evaluation evidence accepted for processing
+  /observability/langfuse/sessions:
+    post:
+      summary: Enable a temporary LangFuse session for an R&D environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObservabilitySession'
+      responses:
+        '201':
+          description: Session enabled; includes kill-switch instructions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservabilitySession'
+  /observability/langfuse/sessions/{sessionId}:
+    delete:
+      summary: Disable an existing LangFuse session and archive traces
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Session disabled and credentials revoked
+
+components:
+  schemas:
+    MigrationStageReadiness:
+      type: object
+      required: [stage_key, status, owner_team, architecture_score, compliance_score, observability_score, cutoff_date]
+      properties:
+        stage_key:
+          type: string
+          description: Must match canonical StageKey enum
+        status:
+          type: string
+          enum: [complete, in_flight, blocked, not_started]
+        owner_team:
+          type: string
+        last_validated_at:
+          type: string
+          format: date-time
+        evidence_links:
+          type: array
+          items:
+            type: string
+            format: uri
+        architecture_score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        compliance_score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        observability_score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        cutoff_date:
+          type: string
+          format: date
+    CapabilityGap:
+      type: object
+      required: [gap_id, component_id, category, severity, owner, mitigation_plan, due_date, status]
+      properties:
+        gap_id:
+          type: string
+          format: uuid
+        component_id:
+          type: string
+        category:
+          type: string
+          enum: [architecture, tooling, telemetry, residency, risk]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        owner:
+          type: string
+        mitigation_plan:
+          type: string
+        due_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [open, in_progress, blocked, closed]
+        resolution_notes:
+          type: string
+    MigrationTask:
+      type: object
+      required: [task_id, component_id, description, dependencies, effort_points, stage_key]
+      properties:
+        task_id:
+          type: string
+        component_id:
+          type: string
+        description:
+          type: string
+        dependencies:
+          type: array
+          items:
+            type: string
+        effort_points:
+          type: integer
+        stage_key:
+          type: string
+        acceptance_gates:
+          type: array
+          items:
+            type: string
+    EvaluationEvidence:
+      type: object
+      required: [experiment_id, dataset_hash, prompt_bundle_id, metrics, run_started_at, run_completed_at, owner]
+      properties:
+        experiment_id:
+          type: string
+        dataset_hash:
+          type: string
+        prompt_bundle_id:
+          type: string
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+        run_started_at:
+          type: string
+          format: date-time
+        run_completed_at:
+          type: string
+          format: date-time
+        owner:
+          type: string
+        governance_tags:
+          type: array
+          items:
+            type: string
+        attachments:
+          type: array
+          items:
+            type: string
+            format: uri
+    ObservabilitySession:
+      type: object
+      required: [session_id, environment, sampling_rate, status, retention_days]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        environment:
+          type: string
+          enum: [dev, staging, preprod]
+        sampling_rate:
+          type: number
+          minimum: 0
+          maximum: 0.25
+        status:
+          type: string
+          enum: [enabled, disabled, scheduled_for_disable]
+        kill_switch_reference:
+          type: string
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 30
+        decommissioned_at:
+          type: string
+          format: date-time
+    VendorUsageBudget:
+      type: object
+      required: [vendor, month, allocated_amount_usd, actual_amount_usd]
+      properties:
+        vendor:
+          type: string
+          enum: [LangSmith, LangFuse]
+        month:
+          type: string
+          format: date
+        allocated_amount_usd:
+          type: number
+        actual_amount_usd:
+          type: number
+        alert_80_sent_at:
+          type: string
+          format: date-time
+        alert_100_sent_at:
+          type: string
+          format: date-time
+        variance_percent:
+          type: number
+        mitigation_plan:
+          type: string

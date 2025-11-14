@@ -10,7 +10,7 @@ from doc_tools.sync.nav import appendices
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Synchronise MkDocs navigation sections.")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show planned changes without editing files"
+        "--dry-run", action="store_true", help="Show planned changes without editing files",
     )
     return parser.parse_args(argv or sys.argv[1:])
 

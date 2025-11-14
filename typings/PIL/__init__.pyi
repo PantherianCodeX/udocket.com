@@ -1,21 +1,26 @@
 from __future__ import annotations
 
-from typing import Iterable, Protocol, Sequence, Tuple
+from typing import Any, Iterable, Protocol, Sequence, Tuple
 
 
 class ImageFile:
     width: int
     height: int
 
-    def save(self, fp, format: str | None = ..., **kwargs: object) -> None: ...
+    def save(self, fp: Any, format: str | None = ..., **kwargs: object) -> None: ...
     def load(self) -> None: ...
     def __enter__(self) -> ImageFile: ...
-    def __exit__(self, exc_type, exc, tb) -> bool | None: ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> bool | None: ...
 
 
 class ImageModule(Protocol):
     def new(self, mode: str, size: Tuple[int, int], color: object | None = ...) -> ImageFile: ...
-    def open(self, fp, mode: str | None = ..., formats: Iterable[str] | None = ...) -> ImageFile: ...
+    def open(self, fp: Any, mode: str | None = ..., formats: Iterable[str] | None = ...) -> ImageFile: ...
 
 
 class DrawContext:

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Sequence
+from collections.abc import Sequence
 
 from doc_tools.config import paths
 from doc_tools.postprocess_svg import process as postprocess_svg
@@ -22,7 +22,7 @@ def detect_cli() -> list[str]:
     if CLI_PATH.exists():
         return [str(CLI_PATH)]
     sys.stderr.write(
-        "[render-mermaid] Mermaid CLI not found. Run `npm ci` in the docs toolbox image.\n"
+        "[render-mermaid] Mermaid CLI not found. Run `npm ci` in the docs toolbox image.\n",
     )
     sys.exit(1)
 
@@ -105,7 +105,7 @@ def _gather_from_paths(paths_args: list[Path]) -> list[Path]:
 
 
 def collect_sources(
-    mode: str, repo_root: Path, src_root: Path, diff_base: str, paths_args: list[Path]
+    mode: str, repo_root: Path, src_root: Path, diff_base: str, paths_args: list[Path],
 ) -> list[Path]:
     if mode == "paths":
         return _gather_from_paths(paths_args)
@@ -159,7 +159,7 @@ def _log_render_plan(sources: Sequence[Path], out_dir: Path, src_root: Path, fmt
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Render Mermaid diagrams with consistent defaults."
+        description="Render Mermaid diagrams with consistent defaults.",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -168,10 +168,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Render every Mermaid source found under the docs tree (diagrams directories only)",
     )
     group.add_argument(
-        "--changed", action="store_true", help="Render only files changed relative to --diff-base"
+        "--changed", action="store_true", help="Render only files changed relative to --diff-base",
     )
     group.add_argument(
-        "--paths", nargs="*", default=None, help="Explicit Mermaid source file paths"
+        "--paths", nargs="*", default=None, help="Explicit Mermaid source file paths",
     )
     parser.add_argument(
         "--out-dir",
@@ -180,7 +180,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Destination directory for rendered diagrams",
     )
     parser.add_argument(
-        "--format", choices=["svg", "png"], default="svg", help="Rendered output format"
+        "--format", choices=["svg", "png"], default="svg", help="Rendered output format",
     )
     parser.add_argument(
         "--diff-base",

@@ -34,7 +34,7 @@ def _check_cross_catalog_localcode_uniqueness(catalogs: list[CourtCatalog]) -> N
     seen: dict[str, tuple[str, str]] = {}  # code -> (court_key, jurisdiction_key)
     errors: list[str] = []
 
-    def scan_court(court: Court, juris_key: str):
+    def scan_court(court: Court, juris_key: str) -> None:
         for seq in (court.hearing_codes, court.filing_codes, court.order_codes):
             for item in seq:
                 code = item.code.code

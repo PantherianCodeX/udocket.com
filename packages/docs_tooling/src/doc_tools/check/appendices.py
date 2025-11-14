@@ -7,7 +7,7 @@ import argparse
 import sys
 from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 from doc_tools.config import paths
 from doc_tools.common import doc_utils
@@ -51,7 +51,7 @@ def collect_targets(paths: Iterable[Path]) -> Iterator[Path]:
                 yield resolved
 
 
-def expected_fields(front_matter: dict[str, object]) -> "OrderedDict[str, str]":
+def expected_fields(front_matter: dict[str, object]) -> OrderedDict[str, str]:
     return doc_utils.build_document_control_map(front_matter, include_additional=True)
 
 
@@ -127,13 +127,13 @@ def check_document(path: Path) -> list[str]:
         if expected_value and actual_value and actual_value != expected_value:
             issues.append(
                 f"{path}: document controls field '{field}' value '{actual_value}' "
-                f"does not match front matter '{expected_value}'"
+                f"does not match front matter '{expected_value}'",
             )
         if expected_value and field not in values:
             issues.append(f"{path}: document controls missing field '{field}'")
         if not expected_value and field not in OPTIONAL_FIELDS and actual_value:
             issues.append(
-                f"{path}: document controls field '{field}' contains '{actual_value}' but front matter is blank"
+                f"{path}: document controls field '{field}' contains '{actual_value}' but front matter is blank",
             )
 
     for field in values:

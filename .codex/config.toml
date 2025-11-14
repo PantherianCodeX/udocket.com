@@ -1,7 +1,13 @@
 model = "gpt-5.1-codex"
 model_reasoning_effort = "medium"
+
 [projects."/home/user/Code/udocket"]
 trust_level = "trusted"
+mcp_servers = ["archon","langchain-docs"]
+
+[mcp_servers.archon]
+command = "node"
+args = ["/home/user/.nvm/versions/node/v22.12.0/lib/node_modules/mcp-remote/dist/proxy.js", "http://localhost:8051/mcp"]
 
 [notice]
 hide_gpt5_1_migration_prompt = true

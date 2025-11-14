@@ -287,7 +287,7 @@ def _wrap_analyze_method(
     method: Callable[[AnalyzeGraphState], AnalyzeGraphState],
     state_adapter: AnalyzeStateAdapter,
 ) -> Callable[[StateMapping], StateMapping]:
-    def _invoke(state: StateMapping) -> StateMapping:
+    def _invoke(self: object, state: StateMapping) -> StateMapping:  # noqa: ARG001 - binder for descriptor
         typed_state = state_adapter.from_mapping(state)
         updated = method(typed_state)
         return state_adapter.into_mapping(updated, state)
@@ -307,7 +307,7 @@ def _wrap_compose_method(
     method: Callable[[ComposeGraphState], ComposeGraphState],
     state_adapter: ComposeStateAdapter,
 ) -> Callable[[StateMapping], StateMapping]:
-    def _invoke(state: StateMapping) -> StateMapping:
+    def _invoke(self: object, state: StateMapping) -> StateMapping:  # noqa: ARG001 - binder for descriptor
         typed_state = state_adapter.from_mapping(state)
         updated = method(typed_state)
         return state_adapter.into_mapping(updated, state)
@@ -339,24 +339,18 @@ def _apply_metadata(metadata: RunMetadata, mapping: StateMapping) -> None:
 
 
 def _coerce_case_id(value: object) -> CaseID | None:
-    if isinstance(value, CaseID):
-        return value
     if isinstance(value, str) and value:
         return CaseID(value)
     return None
 
 
 def _coerce_job_id(value: object) -> JobID | None:
-    if isinstance(value, JobID):
-        return value
     if isinstance(value, str) and value:
         return JobID(value)
     return None
 
 
 def _coerce_org_id(value: object) -> OrganizationID | None:
-    if isinstance(value, OrganizationID):
-        return value
     if isinstance(value, str) and value:
         return OrganizationID(value)
     return None

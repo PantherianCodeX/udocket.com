@@ -38,7 +38,9 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
     start, end = find_section(lines, SECTION_HEADER)
     existing = collect_entries(lines, start, end)
 
-    managed_targets = {path.relative_to(paths.DOCS_ROOT).as_posix(): path for path in appendix_paths}
+    managed_targets = {
+        path.relative_to(paths.DOCS_ROOT).as_posix(): path for path in appendix_paths
+    }
     managed_scope = set(managed_targets)
     preserved, static_entries = partition_entries(existing, managed_scope)
     managed_entries: list[NavEntry] = []
@@ -75,10 +77,26 @@ def sync_nav(config_path: Path, appendix_paths: list[Path], *, dry_run: bool) ->
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ensure TDD appendices are listed in MkDocs nav.")
-    parser.add_argument("--config", type=Path, default=MKDOCS_CONFIG, help="Path to mkdocs.yml")
-    parser.add_argument("--appendix-dir", type=Path, default=APPENDICES_DIR, help="Directory containing appendix markdown files")
-    parser.add_argument("--dry-run", action="store_true", help="Show planned changes without editing files")
+    parser = argparse.ArgumentParser(
+        description="Ensure TDD appendices are listed in MkDocs nav."
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=MKDOCS_CONFIG,
+        help="Path to mkdocs.yml",
+    )
+    parser.add_argument(
+        "--appendix-dir",
+        type=Path,
+        default=APPENDICES_DIR,
+        help="Directory with appendix markdown files",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show planned changes without editing files",
+    )
     return parser.parse_args(argv or sys.argv[1:])
 
 

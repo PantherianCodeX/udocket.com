@@ -9,7 +9,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 from doc_tools.config import paths
 
@@ -28,7 +28,7 @@ VALE_CI_CONFIG = str((CONFIG_DIR / "vale-ci.ini").relative_to(REPO_ROOT))
 VALE_TARGETS = [
     str((DOCS_DIR / "_template.md").relative_to(REPO_ROOT)),
     str((DOCS_DIR / "experience" / "_template.md").relative_to(REPO_ROOT)),
-    str((Path("packages/docs_tooling/tests/vale_fixtures/service_valid.md"))),
+    str(Path("packages/docs_tooling/tests/vale_fixtures/service_valid.md")),
 ]
 
 
@@ -49,7 +49,7 @@ class Task:
     builder: CmdBuilder
     optional: bool = False
     install_hint: str | None = None
-    env: Dict[str, str] | None = None
+    env: dict[str, str] | None = None
     description: str | None = None
     skip_in_dry_run: bool = False
 
@@ -64,7 +64,7 @@ def resolve_targets(raw_targets: Sequence[str]) -> list[Path]:
             path = REPO_ROOT / path
         if not path.exists():
             print(
-                f"[manage-docs] warning: target '{entry}' does not exist; skipping", file=sys.stderr
+                f"[manage-docs] warning: target '{entry}' does not exist; skipping", file=sys.stderr,
             )
             continue
         resolved.append(path)
@@ -139,7 +139,7 @@ def builder_vale_sync(_: RunContext) -> list[str]:
     ]
 
 
-def builder_vale(ctx: RunContext) -> list[str]:
+def builder_vale(_ctx: RunContext) -> list[str]:
     cmd = [
         "vale",
         "--config",

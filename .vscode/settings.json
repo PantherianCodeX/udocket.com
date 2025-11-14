@@ -82,7 +82,10 @@
   "terminal.integrated.profiles.linux": {
     "bash": {
       "path": "bash",
-      "args": ["-l"],
+      "args": [
+        "-lc",
+        "if [ -f '${workspaceFolder}/.codex/.codexhome' ]; then read -r CODEX_HOME < '${workspaceFolder}/.codex/.codexhome'; export CODEX_HOME; fi; exec bash -l"
+      ],
       "icon": "terminal-bash"
     }
   }

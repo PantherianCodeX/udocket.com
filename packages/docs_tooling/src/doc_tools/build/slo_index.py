@@ -9,7 +9,7 @@ import sys
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from collections.abc import Sequence
 
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
@@ -92,7 +92,7 @@ def collect_entries() -> list[SLOEntry]:
                 doc_path=doc_path,
                 display_name=derive_display_name(doc_path),
                 content=content,
-            )
+            ),
         )
 
     entries.sort(key=lambda e: e.display_name.lower())

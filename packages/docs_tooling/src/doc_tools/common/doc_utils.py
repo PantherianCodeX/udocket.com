@@ -7,7 +7,8 @@ import re
 import sys
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence, Tuple, cast
+from typing import Any, cast
+from collections.abc import Iterable, Mapping, Sequence
 
 import yaml
 
@@ -180,7 +181,7 @@ def parse_front_matter(lines: Sequence[str]) -> dict[str, Any]:
         return {}
     if not isinstance(raw, dict):
         return {}
-    return cast(dict[str, Any], raw)
+    return cast("dict[str, Any]", raw)
 
 
 def stringify(value: Any) -> str:
@@ -193,7 +194,7 @@ def stringify(value: Any) -> str:
     if isinstance(value, (bytes, bytearray)):
         return value.decode().strip()
     if isinstance(value, list):
-        parts = [stringify(item) for item in cast(list[Any], value)]
+        parts = [stringify(item) for item in cast("list[Any]", value)]
         return "; ".join(part for part in parts if part)
     if isinstance(value, dict):
         dumped = yaml.safe_dump(value, sort_keys=True).strip()
@@ -293,7 +294,7 @@ def normalize_key(value: str) -> str:
     return "_".join(token for token in tokens if token)
 
 
-def key_variants(raw_key: str) -> Tuple[str, ...]:
+def key_variants(raw_key: str) -> tuple[str, ...]:
     """Return normalised key variants accounting for pluralisation."""
 
     base = normalize_key(raw_key)
@@ -445,10 +446,10 @@ def build_document_control_map(
     front_matter: Mapping[str, Any],
     *,
     include_additional: bool = True,
-) -> "OrderedDict[str, str]":
+) -> OrderedDict[str, str]:
     """Return an ordered mapping of document-control fields to values."""
 
-    fields: "OrderedDict[str, str]" = OrderedDict()
+    fields: OrderedDict[str, str] = OrderedDict()
     for label, keys in DOCUMENT_CONTROL_FIELD_MAPPINGS:
         fields[label] = _select_front_matter_value(front_matter, keys)
 
@@ -469,7 +470,7 @@ def iter_markdown_tables(
     lines: Sequence[str],
     *,
     allow_optional_tags: bool = False,
-) -> Iterable[Tuple[int, list[str]]]:
+) -> Iterable[tuple[int, list[str]]]:
     """Yield ``(index, rows)`` for each markdown table present in *lines*.
 
     If ``allow_optional_tags`` is ``True`` the first cell may begin with
@@ -544,7 +545,7 @@ def parse_markdown_table(rows: Sequence[str]) -> list[dict[str, str]]:
     return records
 
 
-def iter_yaml_blocks(lines: Sequence[str]) -> Iterable[Tuple[int, list[str]]]:
+def iter_yaml_blocks(lines: Sequence[str]) -> Iterable[tuple[int, list[str]]]:
     """Yield ``(start_index, block_lines)`` for fenced YAML blocks within *lines*."""
 
     idx = 0
@@ -571,7 +572,7 @@ def is_optional_yaml_value(value: Any) -> bool:
 
 
 class YamlSchema:
-    __slots__ = ("kind", "optional", "fields", "item")
+    __slots__ = ("fields", "item", "kind", "optional")
 
     def __init__(
         self,
@@ -589,7 +590,7 @@ class YamlSchema:
 
 def build_yaml_schema(node: Any) -> YamlSchema:
     if isinstance(node, dict):
-        mapping = cast(dict[str, Any], node)
+        mapping = cast("dict[str, Any]", node)
         fields: dict[str, YamlSchema] = {}
         for key, value in mapping.items():
             if is_optional_yaml_value(value):
@@ -599,7 +600,7 @@ def build_yaml_schema(node: Any) -> YamlSchema:
             fields[key] = child
         return YamlSchema("mapping", fields=fields)
     if isinstance(node, list):
-        seq = cast(list[Any], node)
+        seq = cast("list[Any]", node)
         if not seq:
             return YamlSchema("sequence", item=YamlSchema("any"))
         if len(seq) == 1 and is_optional_yaml_value(seq[0]):
@@ -618,7 +619,7 @@ def validate_yaml_schema(schema: YamlSchema, data: Any, path: list[str], errors:
         if not isinstance(data, dict):
             errors.append(f"{'.'.join(path) or '<root>'}: expected mapping")
             return
-        mapping = cast(dict[str, Any], data)
+        mapping = cast("dict[str, Any]", data)
         for key, child in (schema.fields or {}).items():
             value = mapping.get(key)
             if key not in data:
@@ -633,7 +634,7 @@ def validate_yaml_schema(schema: YamlSchema, data: Any, path: list[str], errors:
             errors.append(f"{'.'.join(path) or '<root>'}: expected list")
             return
         item_schema = schema.item or YamlSchema("any")
-        sequence = cast(list[Any], data)
+        sequence = cast("list[Any]", data)
         for index, item in enumerate(sequence):
             validate_yaml_schema(item_schema, item, path + [str(index)], errors)
         return

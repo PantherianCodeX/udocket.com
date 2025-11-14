@@ -7,8 +7,10 @@ from typing import Dict, Optional, Tuple
 from xml.etree import ElementTree as ET
 
 from bs4 import BeautifulSoup  # Requires: beautifulsoup4
-from mkdocs.config import config_options
+from mkdocs.config import Config, config_options
 from mkdocs.plugins import BasePlugin
+from mkdocs.structure.files import Files
+from mkdocs.structure.pages import Page
 from ._image_wrappers import open_image
 
 
@@ -100,11 +102,12 @@ class AutoImageScalePlugin(BasePlugin):
     def on_page_content(  # noqa: N802
         self,
         html: str,
-        page,
-        config,
-        files,
+        page: Page,
+        config: Config,
+        files: Files,
     ) -> str:
-        docs_dir = config.get("docs_dir")
+        _ = files
+        docs_dir_value = str(config["docs_dir"])
         page_dir = os.path.dirname(page.file.abs_src_path)
 
         soup = BeautifulSoup(html, "html.parser")
@@ -112,7 +115,7 @@ class AutoImageScalePlugin(BasePlugin):
         def resolve_src(src: str) -> Optional[str]:
             if not src or "://" in src or src.startswith("data:"):
                 return None
-            abs_candidate = os.path.normpath(os.path.join(docs_dir, src))
+            abs_candidate = os.path.normpath(os.path.join(docs_dir_value, src))
             if os.path.isfile(abs_candidate):
                 return abs_candidate
             rel_candidate = os.path.normpath(os.path.join(page_dir, src))

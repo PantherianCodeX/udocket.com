@@ -7,7 +7,7 @@ import argparse
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from weasyprint import CSS, HTML
 
@@ -70,7 +70,7 @@ def render_target(target: PdfTarget) -> None:
     html_path = target.html_path()
     if not html_path.exists():
         raise FileNotFoundError(
-            f"Expected HTML for '{target.name}' at {html_path}. Run mkdocs build first or check nav paths."
+            f"Expected HTML for '{target.name}' at {html_path}. Run mkdocs build first or check nav paths.",
         )
 
     target.output.parent.mkdir(parents=True, exist_ok=True)

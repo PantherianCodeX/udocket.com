@@ -9,12 +9,13 @@ from packages.common import env as env_module
 from packages.common.env import load_env_defaults, reset_env_loader_state
 
 
-@pytest.fixture(autouse=True)
 def _reset_env(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_env_loader_state()
     for key in list(os.environ.keys()):
         if key.startswith("TEST_ENV_"):
             monkeypatch.delenv(key, raising=False)
+
+_reset_env = pytest.fixture(_reset_env, autouse=True)
 
 
 # Reference the fixture symbol so type checkers mark it as used.

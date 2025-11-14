@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
-from typing import Iterable, Iterator, List, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from doc_tools.config.header_includes import (
     COMPUTED_FRONT_PLACEHOLDERS,
@@ -41,7 +41,7 @@ HEADER_CONFIG = HEADER_INCLUDES_CONFIG
 class HeaderUpdatePlan:
     start: int
     end: int
-    replacement: List[str]
+    replacement: list[str]
 
 
 def _front_matter_bounds(lines: Sequence[str]) -> tuple[int, int] | None:
@@ -73,13 +73,13 @@ def _find_header_block_range(lines: Sequence[str], bounds: tuple[int, int]) -> t
     return end, end
 
 
-def _indent_literal_block(content: str) -> List[str]:
+def _indent_literal_block(content: str) -> list[str]:
     lines = content.strip("\n").splitlines() or [""]
     indented = [f"    {line}" if line else "    " for line in lines]
     return ["  - |", *indented]
 
 
-def _render_header_includes(front: Mapping[str, object]) -> List[str]:
+def _render_header_includes(front: Mapping[str, object]) -> list[str]:
     def _value(key: str) -> str:
         return escape(stringify(front.get(key, "")))
 
@@ -112,13 +112,13 @@ def _render_header_includes(front: Mapping[str, object]) -> List[str]:
     builtin_context["prefix"] = prefix
 
     blocks = HEADER_CONFIG.render(front_values=front_context, builtin_values=builtin_context)
-    lines: List[str] = ["header-includes:"]
+    lines: list[str] = ["header-includes:"]
     for block in blocks:
         lines.extend(_indent_literal_block(block))
     return lines
 
 
-def _plan_header_update(lines: List[str], front: Mapping[str, object]) -> HeaderUpdatePlan | None:
+def _plan_header_update(lines: list[str], front: Mapping[str, object]) -> HeaderUpdatePlan | None:
     bounds = _front_matter_bounds(lines)
     if bounds is None:
         return None
@@ -231,7 +231,7 @@ def sync_file(path: Path, *, dry_run: bool = False) -> bool:
         table_rows = lines[table_start:end_idx]
     else:
         table_start = idx
-        table_rows: List[str] = []
+        table_rows: list[str] = []
         while idx < len(lines) and lines[idx].startswith("|"):
             table_rows.append(lines[idx])
             idx += 1

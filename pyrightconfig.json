@@ -1,8 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pyright/schemas/pyrightconfig.schema.json",
   "pythonVersion": "3.12",
-  "venvPath": ".",
-  "venv": ".venv",
   "typeCheckingMode": "standard",
   // Enable strict via per-file pragma for clean modules only.
   // Keep repo-wide scanning limited initially to core packages.
@@ -24,6 +21,7 @@
   "reportUnnecessaryTypeIgnoreComment": "warning",
   "reportUnnecessaryCast": "warning",
   "reportUnnecessaryIsInstance": "warning",
+  "reportMissingModuleSource": "none",
 // // STAGE 2
 //   "reportOptionalMemberAccess": "warning",
 //   "reportOptionalSubscript": "warning",
@@ -56,30 +54,24 @@
     "apps/platform/jobs",
     "apps/platform/tenancy.py",
     "apps/platform/ui",
+    "packages/docs_tooling",
     
     "typings/vendor",
     "typings/external_stubs",
     "scripts"
   ],
-  "djangoSettingsModule": "apps.platform.config.settings.dev",
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["apps", "automation", "services"],
-      "venvPath": "opt",
-      "venv": "venv"
+      "extraPaths": ["apps", "automation", "services"]
     },
     {
       "root": "packages/docs_tooling",
-      "extraPaths": ["src", ".."],
-      "venvPath": "packages/docs_tooling",
-      "venv": ".venv"
+      "extraPaths": ["src", ".."]
     },
     {
       "root": "packages/udocket_core",
-      "extraPaths": ["src", ".."],
-      "venvPath": "packages/udocket_core",
-      "venv": ".venv"
+      "extraPaths": ["src", ".."]
     }
   ]
   ,

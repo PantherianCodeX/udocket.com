@@ -14,13 +14,45 @@ ignore = [
 "apps/**" = ["ALL"]
 "packages/common/**" = ["ALL"]
 "packages/core/**" = ["ALL"]
-"packages/docs_tooling/**" = ["ALL"]
 "packages/client_sdks/**" = ["ALL"]
 "typings/**" = ["ALL"]
 "tests/**" = ["S101", "PLR2004", "INP001", "I001", "E501"]
 "packages/ai/tests/**" = ["S101", "PLR2004", "INP001", "I001", "E501"]
 "packages/ai/providers/interfaces.py" = ["TID252"]
 "packages/ai/providers/registry.py" = ["TC001", "TID252"]
+"packages/docs_tooling/src/**" = [
+  # CLI/script-style modules: allow prints and higher complexity temporarily
+  "T201", "C901", "PLR0911", "PLR0912", "PLR0915", "PLR2004",
+  # Execution and packaging noise while we migrate scripts
+  "EXE001", "INP001",
+  # Message style on exceptions in tooling
+  "TRY003", "EM101", "EM102",
+  # Security checks for controlled local tooling invocations
+  "S603", "S607",
+  # Minor perf/simplification suggestions in tooling code
+  "SIM103", "PERF403",
+  # Allow long lines in user-facing messages for now
+  "E501",
+  # Process-level warnings for subprocess options
+  "PLW1510",
+  # Temporarily ignore import formatting/type-checking-only import nudges
+  "I001", "TC003",
+  # Remaining style/perf hints to be addressed incrementally
+  "RET504", "ANN204", "PERF401", "TRY300", "C416", "SIM108", "SIM110", "W291",
+  "RUF005", "PLR0913", "FBT001", "TRY201", "BLE001",
+]
+"packages/docs_tooling/src/doc_tools/__init__.py" = ["EXE002"]
+"packages/docs_tooling/src/doc_tools/config/settings.py" = ["E402"]
+"packages/docs_tooling/src/doc_tools/common/doc_utils.py" = [
+  "ANN401", "TRY203", "RUF001", "PLW2901", "ARG001", "PIE810"
+]
+"packages/docs_tooling/src/doc_tools/sync/nav/appendices.py" = ["I001", "COM812"]
+"packages/docs_tooling/src/doc_tools/sync/nav_mapping.py" = ["I001", "TC003"]
+"packages/docs_tooling/src/doc_tools/config/paths.py" = ["E402", "TC003"]
+
+# Strengthen annotations: disallow Any usage across the repo.
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = false
 
 [tool.ruff.format]
 quote-style = "double"

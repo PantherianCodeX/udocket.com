@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from ..taxonomy.categories import (
     CountryCode,
@@ -13,6 +21,10 @@ from ..taxonomy.categories import (
     OrderCategory,
 )
 from ..taxonomy.namespace import LocalCode
+
+
+class _LocalCodeCarrier(Protocol):
+    code: LocalCode
 
 # -------------------------
 # Core reference models
@@ -125,7 +137,7 @@ class Court(BaseModel):
                 )
 
         # 4) LocalCode uniqueness within the court
-        def _accumulate_codes(seq, name):
+        def _accumulate_codes(seq: Iterable[_LocalCodeCarrier], name: str) -> None:
             seen_codes: set[str] = set()
             for item in seq:
                 code = item.code.code
@@ -161,7 +173,7 @@ class CourtCatalog(BaseModel):
 
     @field_validator("courts")
     @classmethod
-    def _keys_match(cls, v: dict[str, Court], info) -> dict[str, Court]:
+    def _keys_match(cls, v: dict[str, Court], _info: ValidationInfo) -> dict[str, Court]:
         for key, court in v.items():
             if key != court.key:
                 raise ValueError(f"Court dict key '{key}' must equal Court.key '{court.key}'.")
@@ -221,3 +233,18 @@ class CatalogBundle(BaseModel):
     db: CatalogDBInfo
     data: list[CourtCatalog]
     meta: CatalogMeta = Field(default_factory=CatalogMeta)
+
+
+__all__ = [
+    "Location",
+    "HearingCode",
+    "FilingCode",
+    "OrderCode",
+    "Court",
+    "CourtCatalog",
+    "DBTableHint",
+    "CatalogDBInfo",
+    "CatalogMeta",
+    "CatalogBundle",
+    "CourtLevel",
+]

@@ -26,6 +26,16 @@ packages/docs_tooling/.venv/
 node_modules/
 .cache/
 
+# Codex CLI runtime (keep prompts/config committed, ignore user artifacts)
+.codex/.codexhome
+.codex/app-port
+.codex/auth.json
+.codex/history.jsonl
+.codex/log/
+.codex/sessions/
+.codex/version.json
+.codex/*.lock
+
 # Workspace outputs & local storage
 out/
 storage/

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, cast
+from typing import cast
 
 import yaml
 
@@ -68,22 +69,26 @@ class HeaderIncludesConfig:
 def load_header_includes_config(path: Path = CONFIG_PATH) -> HeaderIncludesConfig:
     raw_obj = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw_obj, dict):
-        raise ValueError("header includes config must be a mapping")
-    raw_map = cast(dict[object, object], raw_obj)
+        msg = "header includes config must be a mapping"
+        raise TypeError(msg)
+    raw_map = cast("dict[object, object]", raw_obj)
     raw: dict[str, object] = {str(key): value for key, value in raw_map.items()}
 
     blocks_obj = raw.get("blocks")
     if not isinstance(blocks_obj, list):
-        raise ValueError("header includes config 'blocks' must be a list of strings")
+        msg = "header includes config 'blocks' must be a list of strings"
+        raise TypeError(msg)
     blocks_list: list[str] = []
-    for item in cast(list[object], blocks_obj):
+    for item in cast("list[object]", blocks_obj):
         if not isinstance(item, str):
-            raise ValueError("header includes config blocks must be strings")
+            msg = "header includes config blocks must be strings"
+            raise TypeError(msg)
         blocks_list.append(item.rstrip())
 
     subtitle_lead_obj = raw.get("subtitle_lead", " <br> ")
     if not isinstance(subtitle_lead_obj, str):
-        raise ValueError("header includes config 'subtitle_lead' must be a string")
+        msg = "header includes config 'subtitle_lead' must be a string"
+        raise TypeError(msg)
     subtitle_lead = subtitle_lead_obj
 
     front_placeholders = frozenset(
@@ -110,7 +115,7 @@ HEADER_INCLUDES_CONFIG = load_header_includes_config()
 __all__ = [
     "COMPUTED_FRONT_PLACEHOLDERS",
     "DEFAULT_BUILTIN_HTML",
-    "HeaderIncludesConfig",
     "HEADER_INCLUDES_CONFIG",
+    "HeaderIncludesConfig",
     "load_header_includes_config",
 ]

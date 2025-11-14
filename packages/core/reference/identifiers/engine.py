@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from re import Pattern
 
 from .base import (
     CaseNumber,
@@ -86,11 +87,11 @@ def _apply_transform(s: str, t: Transform) -> str:
     return s
 
 
-def _normalize(value: str, rule: RegexRule) -> tuple[str, re.Pattern]:
+def _normalize(value: str, rule: RegexRule) -> tuple[str, Pattern[str]]:
     s = value
     for tr in rule.transforms or []:
         s = _apply_transform(s, tr)
-    pat = re.compile(rule.pattern, _compile_flags(rule.flags))
+    pat: Pattern[str] = re.compile(rule.pattern, _compile_flags(rule.flags))
     return s, pat
 
 

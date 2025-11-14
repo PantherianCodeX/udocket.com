@@ -23,6 +23,7 @@ from .stage_overrides import (
     StageOverrideConfig,
     normalize_stage_override_mapping,
     parse_stage_overrides,
+    stage_overrides_by_name,
     stage_overrides_to_json,
 )
 
@@ -45,5 +46,6 @@ __all__ = [
     "StageOverrideConfig",
     "normalize_stage_override_mapping",
     "parse_stage_overrides",
+    "stage_overrides_by_name",
     "stage_overrides_to_json",
 ]

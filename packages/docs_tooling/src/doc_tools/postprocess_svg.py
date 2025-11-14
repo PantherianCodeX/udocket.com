@@ -13,7 +13,8 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Any, Iterable, Tuple
+from typing import Any
+from collections.abc import Iterable
 
 from lxml import etree
 
@@ -32,7 +33,7 @@ def parse_svg(path: Path) -> SvgTree | None:
     return etree.parse(str(path), parser)
 
 
-def float_pairs_from_path(d: str) -> Tuple[Iterable[float], Iterable[float]]:
+def float_pairs_from_path(d: str) -> tuple[Iterable[float], Iterable[float]]:
     values = [float(match) for match in re.findall(r"[-+]?(?:\d+\.\d+|\d+)", d)]
     if len(values) < 8 or len(values) % 2 != 0:
         raise ValueError("path does not look like a rectangle")
@@ -41,7 +42,7 @@ def float_pairs_from_path(d: str) -> Tuple[Iterable[float], Iterable[float]]:
     return xs, ys
 
 
-def bounding_box_from_path(d: str) -> Tuple[float, float, float, float]:
+def bounding_box_from_path(d: str) -> tuple[float, float, float, float]:
     xs, ys = float_pairs_from_path(d)
     x_min, x_max = min(xs), max(xs)
     y_min, y_max = min(ys), max(ys)
@@ -171,7 +172,7 @@ def ensure_rect_radius(root: SvgElement, radius: float = 12.0) -> bool:
     changed = False
     for rect in root.findall(f".//{SVG}rect"):
         cls = rect.get("class", "")
-        if "divider" in cls or "row-rect" in cls and "background" not in cls:
+        if "divider" in cls or ("row-rect" in cls and "background" not in cls):
             continue
         if rect.get("rx") != f"{radius}":
             rect.set("rx", f"{radius}")

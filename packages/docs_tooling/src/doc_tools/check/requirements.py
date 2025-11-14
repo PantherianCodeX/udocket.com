@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cached_property
-from typing import FrozenSet
 
 from doc_tools.config.header_includes import HEADER_INCLUDES_CONFIG, HeaderIncludesConfig
 from doc_tools.common.doc_utils import normalize_key
 
-BASE_FRONT_MATTER_KEYS: FrozenSet[str] = frozenset(
+BASE_FRONT_MATTER_KEYS: frozenset[str] = frozenset(
     {
         "title",
         "subtitle",
@@ -24,10 +23,10 @@ BASE_FRONT_MATTER_KEYS: FrozenSet[str] = frozenset(
         "approvers",
         "approved_by",
         "approved_date",
-    }
+    },
 )
-OPTIONAL_KEYS: FrozenSet[str] = frozenset({"approved_by", "approved_date"})
-EXCLUDED_CONTROL_KEYS: FrozenSet[str] = frozenset({"title", "subtitle", "header-includes"})
+OPTIONAL_KEYS: frozenset[str] = frozenset({"approved_by", "approved_date"})
+EXCLUDED_CONTROL_KEYS: frozenset[str] = frozenset({"title", "subtitle", "header-includes"})
 
 
 @dataclass(frozen=True)
@@ -37,12 +36,12 @@ class TemplateRequirements:
     header_config: HeaderIncludesConfig = HEADER_INCLUDES_CONFIG
 
     @cached_property
-    def required_front_matter_keys(self) -> FrozenSet[str]:
+    def required_front_matter_keys(self) -> frozenset[str]:
         header_keys = self.header_config.required_front_matter_keys
         return frozenset(BASE_FRONT_MATTER_KEYS | header_keys)
 
     @cached_property
-    def required_document_control_keys(self) -> FrozenSet[str]:
+    def required_document_control_keys(self) -> frozenset[str]:
         return frozenset(
             key
             for key in self.required_front_matter_keys
@@ -50,7 +49,7 @@ class TemplateRequirements:
         )
 
     @cached_property
-    def required_document_control_labels(self) -> FrozenSet[str]:
+    def required_document_control_labels(self) -> frozenset[str]:
         return frozenset(normalize_key(key) for key in self.required_document_control_keys)
 
 

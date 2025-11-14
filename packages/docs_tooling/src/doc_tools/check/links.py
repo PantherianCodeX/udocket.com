@@ -104,11 +104,11 @@ def check_services(text: str) -> list[str]:
             continue
         if anchor and anchor not in load_service_anchors(path):
             problems.append(
-                f"Anchor '#{anchor}' missing in ../{area}/{file_part}"
+                f"Anchor '#{anchor}' missing in ../{area}/{file_part}",
             )
     return problems
 
-@lru_cache()
+@lru_cache
 def load_service_anchors(path: Path) -> set[str]:
     anchors: set[str] = set()
     text = path.read_text(encoding="utf-8")

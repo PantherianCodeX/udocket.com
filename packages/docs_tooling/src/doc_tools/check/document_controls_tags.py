@@ -7,7 +7,7 @@ import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import begin_auto_generated_marker, end_auto_generated_marker
@@ -80,7 +80,7 @@ def check_file(path: Path) -> list[MarkerIssue]:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Verify Document Controls tables include auto-generated begin/end markers."
+        description="Verify Document Controls tables include auto-generated begin/end markers.",
     )
     parser.add_argument(
         "targets",

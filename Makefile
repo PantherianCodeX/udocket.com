@@ -3,9 +3,20 @@ SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 PYTHON ?= python
-UV ?= uv
+UV_BIN ?= uv
 PROJECT_NAME ?= udocket
 DC := COMPOSE_PROJECT_NAME=$(PROJECT_NAME) docker compose
+
+REPO_ROOT := $(abspath .)
+ROOT_VENV := $(REPO_ROOT)/.venv
+DOCS_VENV_HOST := $(REPO_ROOT)/packages/docs_tooling/.venv
+DOCS_VENV_CONTAINER := /udocket/packages/docs_tooling/.venv
+UV_CACHE_HOST := $(REPO_ROOT)/.cache/uv
+UV_CACHE_CONTAINER := /udocket/.cache/uv
+
+UV_ROOT := UV_PROJECT_ENVIRONMENT=$(ROOT_VENV) UV_CACHE_DIR=$(UV_CACHE_HOST) $(UV_BIN)
+UV_DOCS_HOST := UV_PROJECT_ENVIRONMENT=$(DOCS_VENV_HOST) UV_CACHE_DIR=$(UV_CACHE_HOST) $(UV_BIN)
+UV_DOCS_CONTAINER := UV_PROJECT_ENVIRONMENT=$(DOCS_VENV_CONTAINER) UV_CACHE_DIR=$(UV_CACHE_CONTAINER) $(UV_BIN)
 
 COMPOSE_BASE := docker-compose.yml
 COMPOSE_DEV := docker-compose.dev.yml
@@ -48,7 +59,12 @@ CMD ?=
 DEV_SERVICE := platform-dev
 DOCS_SERVICE := docs
 DOCS_RUN := $(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c
-DOCS_PY := $(UV) run --project packages/docs_tooling --extra dev
+ifeq ($(DOCS_TOOLBOX),1)
+  DOCS_EXEC := bash -c
+else
+  DOCS_EXEC := $(DOCS_RUN)
+endif
+DOCS_PY_CONTAINER := $(UV_DOCS_CONTAINER) run --project packages/docs_tooling --extra dev
 DOCSITE_CONTAINER ?= udocket-docs-site
 DOCSITE_ADDR ?= 0.0.0.0
 DOCSITE_HOST ?= localhost
@@ -135,6 +151,7 @@ CONFIRM_CMD = @CONFIRM_TARGET="$@" $(PYTHON) scripts/confirm.py
 
 .PHONY: \
   help %.help \
+  uv.platform.sync \
   ci.precommit.install ci.check \
   pytest.all pytest.verbose pytest.failfast pytest.cov pytest.clean \
   typing.run typing.baseline typing.strict typing.ci \
@@ -162,9 +179,12 @@ CONFIRM_CMD = @CONFIRM_TARGET="$@" $(PYTHON) scripts/confirm.py
 
 ##@ CI
 ci.precommit.install: ## Install pre-commit and register git hooks
-	$(UV) pip install --quiet pre-commit || true
+	$(UV_ROOT) pip install --quiet pre-commit || true
 	pre-commit install
 ci.check: typing.run docs.lint all.test ## Run typing checks, docs lint, and tests (CI parity)
+
+uv.platform.sync: ## Hydrate the apps/platform project environment with dev extras
+	$(UV_ROOT) sync --project apps/platform --extra dev
 
 ##@ Tests
 all.test: ## Run all automated test suites in parallel
@@ -173,61 +193,69 @@ all.test: ## Run all automated test suites in parallel
 pytest.all: ## Execute pytest suite quietly (backwards compatible alias)
 	@$(MAKE) all.test
 pytest.verbose: ## Execute pytest suite with verbose output
-	$(UV) run --project apps/platform --extra dev pytest -v
+	$(UV_ROOT) run --project apps/platform --extra dev pytest -v
 pytest.failfast: ## Execute pytest suite, stopping on first failure
-	$(UV) run --project apps/platform --extra dev pytest -x
+	$(UV_ROOT) run --project apps/platform --extra dev pytest -x
 pytest.cov: ## Execute pytest suite with coverage reporting
-	$(UV) run --project apps/platform --extra dev pytest --cov=apps/platform
+	$(UV_ROOT) run --project apps/platform --extra dev pytest --cov=apps/platform
 pytest.clean: ## Remove pytest cache directory
 	rm -rf .pytest_cache
 
 common.test: ## Run packages.common test suite
-	$(UV) run --project apps/platform --extra dev pytest -n auto -q packages/common
+	$(UV_ROOT) run --project apps/platform --extra dev pytest -n auto -q packages/common
 
 core.test: ## Run packages.core test suite
-	$(UV) run --project apps/platform --extra dev pytest -n auto -q tests/core
+	$(UV_ROOT) run --project apps/platform --extra dev pytest -n auto -q tests/packages/core
 
 platform.test: ## Run platform test suite
-	$(UV) run --project apps/platform --extra dev pytest -n auto -q
+	$(UV_ROOT) run --project apps/platform --extra dev pytest -n auto -q
 
 ##@ Typing
 typing.run: typing.baseline typing.strict ## Run baseline and strict typing checks
 typing.baseline: ## Run pyright and mypy type checks
 	mkdir -p out/test-reports/typing
-	$(UV) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
-	$(UV) run --project apps/platform --extra dev mypy
+	$(UV_ROOT) run --project apps/platform --extra dev typewiz audit --mode current --fail-on warnings --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
+	$(UV_ROOT) run --project apps/platform --extra dev mypy
 	$(MAKE) typing.ai
 typing.strict: ## Enforce strict typing gates
-	$(PYTHON) scripts/typing/ci_enforce_strict.py
-	$(PYTHON) scripts/typing/check_strict.py --tool both
-	$(UV) run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
+	$(UV_ROOT) run --project apps/platform --extra dev python scripts/typing/ci_enforce_strict.py
+	$(UV_ROOT) run --project apps/platform --extra dev python scripts/typing/check_strict.py --tool both
+	$(UV_ROOT) run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 
 typing.ai: typing.ai.mypy typing.ai.pyright typing.ai.ruff ## Lint + type-check packages/ai
 
 typing.ai.mypy: ## Run mypy for packages/ai with its local config
-	$(UV) run --project apps/platform --extra dev mypy --config-file packages/ai/mypy.ini packages/ai
+	$(UV_ROOT) run --project apps/platform --extra dev mypy --config-file packages/ai/mypy.ini packages/ai
 
 typing.ai.pyright: ## Run pyright for packages/ai using its project config
-	$(UV) run --project apps/platform --extra dev pyright --project packages/ai/pyrightconfig.json
+	$(UV_ROOT) run --project apps/platform --extra dev pyright --project packages/ai/pyrightconfig.json
 
 typing.ai.ruff: ## Run Ruff checks for packages/ai with its config
-	$(UV) run --project packages/common --extra dev python -m ruff check packages/ai --config packages/ai/ruff.toml
+	$(UV_ROOT) run --project packages/common --extra dev python -m ruff check packages/ai --config packages/ai/ruff.toml
+
+##@ Linting
+lint.run: lint.repo lint.ai ## Run Ruff for repo areas and packages/ai
+lint.repo: ## Run Ruff on config/ and all docs_tooling src
+	$(UV_ROOT) run --project apps/platform --extra dev python -m ruff check \
+		packages/docs_tooling/src
+lint.ai: ## Run Ruff for packages/ai (existing target)
+	$(MAKE) typing.ai.ruff
 typing.ci: ## CI-focused Typewiz run (JSON + markdown + HTML where possible)
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format json --output out/test-reports/typing/dashboard.json || true
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md || true
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html || true
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz audit --max-depth 3 --mode full --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format json --output out/test-reports/typing/dashboard.json || true
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md || true
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html || true
 
 ##@ Typewiz
 typewiz.audit: ## Generate Typewiz audit manifest
-	$(UV) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz audit --max-depth 3 --manifest out/test-reports/typing/typing_audit.json --readiness --readiness-status blocked --readiness-status ready apps/platform/operations packages/core/agents packages/common
 typewiz.dashboard: ## Render Typewiz dashboards (MD + HTML)
 	$(MAKE) typewiz.audit
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md
-	$(UV) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format markdown --output out/test-reports/typing/dashboard.md
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz dashboard --manifest out/test-reports/typing/typing_audit.json --format html --output out/test-reports/typing/dashboard.html
 typewiz.readiness: ## Show Typewiz readiness summary (blocked/ready folders)
 	$(MAKE) typewiz.audit
-	$(UV) run --no-sync --project apps/platform typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
+	$(UV_ROOT) run --no-sync --project apps/platform typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 typewiz.clean: ## Drop Typewiz caches and generated reports
 	rm -rf .typewiz_cache out/test-reports/typing
 
@@ -328,51 +356,51 @@ doctools.shell: ## Open a shell inside the docs toolbox container
 
 ##@ Doctools • Tools
 docs.build: ## Render docs output (PDF/HTML as configured)
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --build"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.manage_docs --build"
 docs.lint: ## Run docs linting pipeline inside the toolbox
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --lint"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.manage_docs --lint"
 docs.sync: ## Sync docs artifacts (standard tasks only)
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --sync --verbose"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.manage_docs --sync --verbose"
 docs.sync.all: ## Run full docs sync (includes optional extras such as nav mapping)
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.manage_docs --sync-all --verbose"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.manage_docs --sync-all --verbose"
 docs.sync.nav: ## Ensure MkDocs navigation entries are up to date
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.sync.nav"
 docs.sync.nav-mapping: ## Apply the nav mapping migration (heavy; use sparingly)
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav_mapping"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.sync.nav_mapping"
 docs.check.nav: ## Verify MkDocs navigation entries without writing changes
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.sync.nav --dry-run"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.sync.nav --dry-run"
 docs.sync.runbooks: ## Refresh the Ops runbook catalog appendix
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.runbook_catalog"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.runbook_catalog"
 docs.check.runbooks: ## Verify the Ops runbook catalog appendix is current
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.runbook_catalog --check"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.runbook_catalog --check"
 docs.sync.api_codes: ## Refresh API error codes appendix aggregates
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.api_error_codes"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.api_error_codes"
 docs.check.api_codes: ## Verify API error codes appendix aggregates are current
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.api_error_codes --check"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.api_error_codes --check"
 docs.sync.slo: ## Refresh service SLO appendix aggregates
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.slo_index"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.slo_index"
 docs.check.slo: ## Verify service SLO appendix aggregates are current
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.slo_index --check"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.slo_index --check"
 docs.sync.diagrams: ## Refresh diagram appendix indexes
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.diagram_index"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.diagram_index"
 docs.check.diagrams: ## Verify diagram appendix indexes are current
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.build.diagram_index --check"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.diagram_index --check"
 docs.sync.trees: ## Refresh repository tree appendix (disabled until repo realignment completes)
 	@echo "docs.sync.trees is locked until the repository structure matches the appendix."
 	@echo "Skip this target for now; it will be re-enabled after the tree refactor."
 	@exit 1
 docs.check.trees: ## Verify repository tree appendix matches the current repo structure
-	$(DOCS_RUN) "set -euo pipefail; $(DOCS_PY) python -m doc_tools.check.repository_trees"
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.check.repository_trees"
 docs.check: ## Run all docs checks (tree check excluded until refactor lands)
 	@$(MAKE) docs.check.nav docs.check.runbooks docs.check.api_codes docs.check.slo docs.check.diagrams docs.check.build
 docs.check.build: ## Validate docs build prerequisites without modifying artifacts
-	$(DOCS_RUN) "set -euo pipefail; \
+	$(DOCS_EXEC) "set -euo pipefail; \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf \$$TMP_DIR' EXIT; \
-	$(DOCS_PY) python -m doc_tools.sync.doc_assets --dry-run; \
-	$(DOCS_PY) python -m doc_tools.check.asset_paths docs; \
-	$(DOCS_PY) python -m doc_tools.build.diagram_index --check; \
-	$(DOCS_PY) mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/docs_tooling/mkdocs.yml"
+	$(DOCS_PY_CONTAINER) python -m doc_tools.sync.doc_assets --dry-run; \
+	$(DOCS_PY_CONTAINER) python -m doc_tools.check.asset_paths docs; \
+	$(DOCS_PY_CONTAINER) python -m doc_tools.build.diagram_index --check; \
+	$(DOCS_PY_CONTAINER) mkdocs build --strict --site-dir \$$TMP_DIR --config-file packages/docs_tooling/mkdocs.yml"
 
 docs.clean: ## Remove rendered docs artifacts (diagrams + site outputs)
 	rm -rf docs/build
@@ -428,10 +456,10 @@ escape_dquotes = $(subst ",\",$(1))
 DOCS_ARGS ?= $(filter-out docs.test docs.test.coverage,$(MAKECMDGOALS))
 
 docs.test:
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV_DOCS_CONTAINER) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner"
 
 docs.test.coverage:
-	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner --coverage"
+	$(DOCS_COMPOSE) run --rm $(DOCS_SERVICE) bash -c "set -eo pipefail; DOCS_PYTEST_ARGS=\"$(call escape_dquotes,$(strip $(DOCS_ARGS)))\" $(UV_DOCS_CONTAINER) run --project packages/docs_tooling --extra dev python -m doc_tools.pytest_runner --coverage"
 
 ##@ Devcontainer • Environment
 dev.build: ## Build the devcontainer image
@@ -597,7 +625,7 @@ help:
 	@printf "See \033[32mREADME.md#Common Make arguments \033[0mfor additional options."
 
 %.help:
-	@$(UV) run --project packages/docs_tooling --extra dev python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
+	@$(UV_DOCS_HOST) run --project packages/docs_tooling --extra dev python scripts/make_help.py "$*" "$(firstword $(MAKEFILE_LIST))"
 TYPEWIZ_STATUSES ?= blocked ready
 TYPEWIZ_LEVEL ?= folder
 TYPEWIZ_LIMIT ?= 20

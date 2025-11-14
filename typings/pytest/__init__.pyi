@@ -7,7 +7,27 @@ _P = ParamSpec("_P")
 _R = TypeVar("_R")
 
 
+@overload
 def fixture(func: Callable[_P, _R]) -> Callable[_P, _R]: ...
+
+
+@overload
+def fixture(
+    *,
+    scope: str | None = ...,
+    autouse: bool = ...,
+    name: str | None = ...,
+) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]: ...
+
+
+@overload
+def fixture(
+    func: Callable[_P, _R],
+    *,
+    scope: str | None = ...,
+    autouse: bool = ...,
+    name: str | None = ...,
+) -> Callable[_P, _R]: ...
 
 
 class MonkeyPatch:
@@ -20,6 +40,8 @@ class MonkeyPatch:
     def setenv(self, name: str, value: str, *, prepend: bool = ...) -> None: ...
 
     def getenv(self, name: str, default: Any | None = ...) -> Any: ...
+
+    def delenv(self, name: str, *, raising: bool = ...) -> None: ...
 
 def raises(
     expected_exception: type[BaseException] | tuple[type[BaseException], ...],

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "instructions": [
+    {
+      "id": "guardian-default-safety",
+      "title": "Block disallowed content",
+      "text": "Reject deliverables that include disallowed content (legal advice, PHI, SPI, harassment, or policy violations) and include the offending excerpt in violations.",
+      "applies_to": [
+        "SUMMARY",
+        "TRANSCRIPT",
+        "COMPOSE",
+        "ASSISTANT"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "guardian-default-quality",
+      "title": "Escalate low quality output",
+      "text": "Flag drafts with hallucinations, missing prerequisites, or unsupported claims for manual review before sign-off.",
+      "applies_to": [
+        "SUMMARY",
+        "ANALYZE"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "guardian-default-brand",
+      "title": "Enforce brand and privacy guidelines",
+      "text": "Ensure deliverables follow the brand style guide, do not add speculative customer promises, and respect residency/privacy controls called out in the case metadata.",
+      "applies_to": [],
+      "severity": "medium"
+    }
+  ]
+}

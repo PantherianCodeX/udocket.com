@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from doc_tools.config import paths
 from doc_tools.check.requirements import OPTIONAL_KEYS, TEMPLATE_REQUIREMENTS
@@ -21,7 +21,7 @@ TEMPLATE_NAME = "_template.md"
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate documentation templates (front matter, header-includes, document controls)."
+        description="Validate documentation templates (front matter, header-includes, document controls).",
     )
     parser.add_argument(
         "paths",
@@ -112,7 +112,7 @@ def validate_document_controls(path: Path, lines: Sequence[str]) -> list[str]:
     ]
     if missing_rows:
         errors.append(
-            f"{path}: document controls missing required rows: {', '.join(missing_rows)}"
+            f"{path}: document controls missing required rows: {', '.join(missing_rows)}",
         )
 
     optional_norm = {normalize_key(key) for key in OPTIONAL_KEYS}

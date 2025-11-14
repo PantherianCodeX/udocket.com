@@ -5,7 +5,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 from doc_tools.config import paths
 
@@ -105,7 +105,7 @@ def gather_targets(inputs: Iterable[Path]) -> list[Path]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate embedded asset paths remain within the docs tree."
+        description="Validate embedded asset paths remain within the docs tree.",
     )
     parser.add_argument(
         "paths",

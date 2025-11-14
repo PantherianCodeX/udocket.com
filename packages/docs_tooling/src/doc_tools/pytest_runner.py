@@ -4,10 +4,10 @@ import argparse
 import os
 import shlex
 import sys
-from typing import Any, Iterable, List
+from typing import Any
+from collections.abc import Iterable
 
 import pytest
-from typing import Any
 
 from doc_tools.config import paths
 
@@ -31,7 +31,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
-def build_pytest_args(env_value: str | None, cli_args: Iterable[str]) -> List[str]:
+def build_pytest_args(env_value: str | None, cli_args: Iterable[str]) -> list[str]:
     args: list[str] = []
     if env_value:
         args.extend(shlex.split(env_value))
@@ -68,7 +68,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             f"--cov-fail-under={threshold}",
             *pytest_args,
         ]
-    pytest_main: Any = getattr(pytest, "main")
+    pytest_main: Any = pytest.main
     result = pytest_main(pytest_args)
     return int(result) if isinstance(result, int) else 0
 

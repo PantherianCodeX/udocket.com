@@ -36,7 +36,11 @@ from packages.common.operations import (
 )
 from packages.common.text import unique_title
 from automation.agents import ComposeAgent as _ComposeAgent, ComposeConfig, get_ai_client
-from packages.common.agents import parse_stage_overrides, stage_overrides_to_json
+from packages.common.agents import (
+    parse_stage_overrides,
+    stage_overrides_by_name,
+    stage_overrides_to_json,
+)
 from packages.core.llm.config import LLMSettings, load_llm_settings
 from packages.core.logging.context import LogContext
 
@@ -306,6 +310,9 @@ def execute_compose_job(
         if compose_stage_overrides
         else raw_stage_map
     )
+    compose_stage_overrides_by_name = (
+        stage_overrides_by_name(compose_stage_overrides) if compose_stage_overrides else None
+    )
     stage_map = ComposeStageMap.from_mapping(normalized_stage_map_payload)
 
     provider_chain_values = coerce_str_list(active_config.get("provider_chain"), unique=False)
@@ -414,7 +421,7 @@ def execute_compose_job(
                 provider_credentials=provider_credentials.to_dict(),
                 progress_callback=_progress,
                 resume=resume,
-                stage_overrides=compose_stage_overrides or None,
+                stage_overrides=compose_stage_overrides_by_name,
             )
     except Exception as exc:  # noqa: BLE001
         log.error(

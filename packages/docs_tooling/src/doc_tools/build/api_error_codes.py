@@ -9,8 +9,8 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterable
-from typing import Any, Sequence, cast
+from collections.abc import Iterable, Sequence
+from typing import cast
 
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
@@ -70,7 +70,7 @@ def _fail(message: str) -> None:
     raise RuntimeError(message)
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
+def _load_yaml(path: Path) -> dict[str, object]:
     if yaml is None:  # pragma: no cover - pyYAML bundled with docs tooling
         _fail("PyYAML is required to parse API error definitions")
     try:
@@ -79,10 +79,10 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         raise RuntimeError(f"Failed to parse {path}: {exc}") from exc
     if not isinstance(raw, dict):
         _fail(f"{path}: expected mapping with 'error_codes' list")
-    return cast(dict[str, Any], raw)
+    return cast("dict[str, object]", raw)
 
 
-def _ensure_text(path: Path, code: str, value: Any, field: str) -> str:
+def _ensure_text(path: Path, code: str, value: object, field: str) -> str:
     if value is None:
         _fail(f"{path}: error code '{code}' missing required field '{field}'")
     text = str(value).strip()
@@ -93,7 +93,7 @@ def _ensure_text(path: Path, code: str, value: Any, field: str) -> str:
     return text
 
 
-def _coerce_http_status(path: Path, code: str, value: Any) -> str:
+def _coerce_http_status(path: Path, code: str, value: object) -> str:
     text = _ensure_text(path, code, value, "http_status")
     try:
         number = int(text)
@@ -104,7 +104,7 @@ def _coerce_http_status(path: Path, code: str, value: Any) -> str:
     return str(number)
 
 
-def _coerce_bool(path: Path, code: str, value: Any, field: str) -> bool:
+def _coerce_bool(path: Path, code: str, value: object, field: str) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -117,7 +117,7 @@ def _coerce_bool(path: Path, code: str, value: Any, field: str) -> bool:
     return False  # pragma: no cover
 
 
-def _normalize_metrics(value: Any) -> list[str]:
+def _normalize_metrics(value: object) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
@@ -125,7 +125,7 @@ def _normalize_metrics(value: Any) -> list[str]:
         return [cleaned] if cleaned else []
     if isinstance(value, Iterable):
         items: list[str] = []
-        for element in cast(Iterable[Any], value):
+        for element in cast("Iterable[object]", value):
             text = str(element).strip()
             if text.lower() == "[optional]" or not text:
                 continue
@@ -143,7 +143,7 @@ def _load_entries(yaml_path: Path) -> list[ErrorCodeEntry]:
 
     entries: list[ErrorCodeEntry] = []
     seen: set[str] = set()
-    codes_list = cast(list[dict[str, Any]], codes_obj)
+    codes_list = cast("list[dict[str, object]]", codes_obj)
     for item in codes_list:
         raw_code = _ensure_text(yaml_path, "<unknown>", item.get("code"), "code")
         code = raw_code
@@ -164,7 +164,7 @@ def _load_entries(yaml_path: Path) -> list[ErrorCodeEntry]:
                 audit_required=audit_required,
                 metrics=metrics,
                 description=description,
-            )
+            ),
         )
         seen.add(code)
     return sorted(entries, key=lambda entry: entry.code)
@@ -187,8 +187,7 @@ def _find_section_anchor(doc_path: Path) -> str:
     for line in doc_path.read_text(encoding="utf-8").splitlines():
         if pattern.match(line.strip()):
             if "{#" in line:
-                anchor = line.split("{#", 1)[1].split("}", 1)[0].strip()
-                return anchor
+                return line.split("{#", 1)[1].split("}", 1)[0].strip()
             title = re.sub(r"{#.*}" , "", line).strip()
             base = re.sub(r"^#+\s+", "", title)
             return mkdocs_slug(base)
@@ -200,8 +199,7 @@ def _derive_display_name(doc_path: Path) -> str:
     lines = read_markdown_lines(doc_path)
     front = parse_front_matter(lines)
     title = front.get("title")
-    label = derive_doc_label(str(title or ""), fallback=doc_path.stem.replace("-", " ").title())
-    return label
+    return derive_doc_label(str(title or ""), fallback=doc_path.stem.replace("-", " ").title())
 
 
 def _replace_block(content: str, begin: str, end: str, body_lines: list[str]) -> str:
@@ -252,7 +250,7 @@ def _render_catalog_table(entries: list[ErrorCodeEntry]) -> list[str]:
                 status=entry.http_status,
                 audit="Yes" if entry.audit_required else "No",
                 metrics=metrics or "—",
-            )
+            ),
         )
     return lines
 
@@ -369,7 +367,7 @@ def _collect_components() -> list[Component]:
                 section_anchor=section_anchor,
                 index_anchor=index_anchor,
                 entries=entries,
-            )
+            ),
         )
     components.sort(key=lambda item: item.display_name.lower())
     if errors:
@@ -423,7 +421,7 @@ ERROR_HEADING_PATTERN = re.compile(r"^###\s+3\.3\b", re.IGNORECASE | re.MULTILIN
 class ApiErrorCodesError(RuntimeError):
     """Raised when API error code generation cannot proceed."""
 
-    def __init__(self, messages: Sequence[str]):
+    def __init__(self, messages: Sequence[str]) -> None:
         joined = "\n".join(messages) if messages else "API error code generation failed"
         super().__init__(joined)
         self.messages = list(messages) if messages else [joined]

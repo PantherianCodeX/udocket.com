@@ -8,7 +8,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Sequence
+from collections.abc import Sequence
 
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
@@ -37,7 +37,7 @@ class Diagram:
     version: str
     source_rel: Path
     svg_rel: Path
-    metadata: Dict[str, str]
+    metadata: dict[str, str]
 
 
 @dataclass
@@ -47,8 +47,8 @@ class OwnerGroup:
     entries: list[Diagram]
 
 
-def parse_metadata(path: Path) -> Dict[str, str]:
-    metadata: Dict[str, str] = {}
+def parse_metadata(path: Path) -> dict[str, str]:
+    metadata: dict[str, str] = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line:
@@ -104,7 +104,7 @@ def _build_output_rel(rel: Path) -> Path:
     return Path(*trimmed)
 
 
-def derive_version(metadata: Dict[str, str], stem: str) -> str:
+def derive_version(metadata: dict[str, str], stem: str) -> str:
     version = metadata.get("version", "")
     if version:
         return version
@@ -114,8 +114,8 @@ def derive_version(metadata: Dict[str, str], stem: str) -> str:
     return ""
 
 
-def collect_diagrams() -> Dict[Path | None, list[Diagram]]:
-    diagrams: Dict[Path | None, list[Diagram]] = {}
+def collect_diagrams() -> dict[Path | None, list[Diagram]]:
+    diagrams: dict[Path | None, list[Diagram]] = {}
     for path in sorted(DOCS_DIR.rglob("*.mmd")):
         rel = path.relative_to(DOCS_DIR)
         if "diagrams" not in rel.parts:
@@ -136,7 +136,7 @@ def collect_diagrams() -> Dict[Path | None, list[Diagram]]:
                 source_rel=source_rel,
                 svg_rel=svg_rel,
                 metadata=metadata,
-            )
+            ),
         )
     return diagrams
 
@@ -151,7 +151,7 @@ def owner_display(owner_doc: Path | None) -> str:
     return derive_doc_label(title, fallback=fallback)
 
 
-def build_groups(diagrams: Dict[Path | None, list[Diagram]]) -> list[OwnerGroup]:
+def build_groups(diagrams: dict[Path | None, list[Diagram]]) -> list[OwnerGroup]:
     groups: list[OwnerGroup] = []
     for owner_doc, entries in diagrams.items():
         label = owner_display(owner_doc)
@@ -161,7 +161,7 @@ def build_groups(diagrams: Dict[Path | None, list[Diagram]]) -> list[OwnerGroup]
                 doc_path=owner_doc,
                 display_name=label,
                 entries=entries_sorted,
-            )
+            ),
         )
     groups.sort(key=lambda g: g.display_name.lower())
     return groups

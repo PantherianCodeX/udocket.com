@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from collections.abc import Mapping
-from typing import Any
+from typing import cast
 
 from packages.common.agents.stage_map import StageKey
 from packages.common.json_utils import JSONObject, coerce_json_object
+
+
+def _default_json_object() -> JSONObject:
+    return {}
 
 
 def _normalize_provider(value: str) -> str:
@@ -43,7 +47,7 @@ class StageOverrideConfig:
 
     providers: tuple[str, ...] = ()
     model: str | None = None
-    options: JSONObject = field(default_factory=dict)
+    options: JSONObject = field(default_factory=_default_json_object)
     max_tokens: int | None = None
 
     @classmethod
@@ -53,11 +57,15 @@ class StageOverrideConfig:
         if isinstance(providers_value, str):
             providers.append(_normalize_provider(providers_value))
         elif isinstance(providers_value, (list, tuple, set)):
-            for entry in providers_value:
-                if isinstance(entry, str):
-                    normalized = _normalize_provider(entry)
-                    if normalized:
-                        providers.append(normalized)
+            iterable_candidates = cast("Iterable[object]", providers_value)
+            string_entries: list[str] = []
+            for candidate in iterable_candidates:
+                if isinstance(candidate, str):
+                    string_entries.append(candidate)
+            for entry in string_entries:
+                normalized = _normalize_provider(entry)
+                if normalized:
+                    providers.append(normalized)
         single_provider = payload.get("provider")
         if isinstance(single_provider, str):
             normalized = _normalize_provider(single_provider)
@@ -67,7 +75,16 @@ class StageOverrideConfig:
         model = _coerce_string(payload.get("model"))
 
         options_payload = payload.get("options")
-        options = coerce_json_object(options_payload) if isinstance(options_payload, Mapping) else {}
+        options: JSONObject
+        if isinstance(options_payload, Mapping):
+            mapping_options = cast("Mapping[object, object]", options_payload)
+            normalized_options: dict[str, object] = {}
+            for key_obj, value_obj in mapping_options.items():
+                key_text = str(key_obj)
+                normalized_options[key_text] = value_obj
+            options = coerce_json_object(normalized_options)
+        else:
+            options = {}
 
         max_tokens = _coerce_int(payload.get("max_tokens") or payload.get("max_output_tokens"))
         if max_tokens is not None and max_tokens <= 0:
@@ -128,17 +145,31 @@ def parse_stage_overrides(payload: Mapping[str, object] | None) -> dict[StageKey
         return {}
     overrides: dict[StageKey, StageOverrideConfig] = {}
     for raw_key, raw_value in payload.items():
-        if not isinstance(raw_key, str) or not isinstance(raw_value, Mapping):
+        if not isinstance(raw_value, Mapping):
             continue
         stage_key = _coerce_stage_key(raw_key)
         if stage_key is None:
             continue
-        overrides[stage_key] = StageOverrideConfig.from_payload(raw_value)
+        normalized_payload: dict[str, object] = {}
+        mapping_payload = cast("Mapping[object, object]", raw_value)
+        for key_obj, value_obj in mapping_payload.items():
+            normalized_payload[str(key_obj)] = value_obj
+        overrides[stage_key] = StageOverrideConfig.from_payload(normalized_payload)
     return overrides
 
 
 def stage_overrides_to_json(overrides: Mapping[StageKey, StageOverrideConfig]) -> dict[str, JSONObject]:
     return {stage_key.value: override.to_json() for stage_key, override in overrides.items()}
+
+
+def stage_overrides_by_name(
+    overrides: Mapping[StageKey, StageOverrideConfig] | None,
+) -> dict[str, StageOverrideConfig]:
+    """Return overrides keyed by canonical stage identifiers."""
+
+    if not overrides:
+        return {}
+    return {stage_key.value: override for stage_key, override in overrides.items()}
 
 
 def normalize_stage_override_mapping(

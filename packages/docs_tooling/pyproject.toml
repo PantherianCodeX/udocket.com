@@ -33,6 +33,7 @@ dev = [
     "pytest==8.4.2",
     "pytest-cov==5.0.0",
     "pytest-xdist==3.6.1",
+    "pyright==1.1.407",
 ]
 
 [dependency-groups]
@@ -43,6 +44,7 @@ dev = [
     "pytest==8.4.2",
     "pytest-cov==5.0.0",
     "pytest-xdist==3.6.1",
+    "pyright==1.1.407",
 ]
 
 [tool.setuptools.packages.find]

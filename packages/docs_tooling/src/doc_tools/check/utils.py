@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 
 from doc_tools.common.doc_utils import split_table_row
 
@@ -17,10 +17,10 @@ def find_section_header(lines: Sequence[str], header: str) -> int:
     raise ValueError(f"missing section header '{header}'")
 
 
-def extract_table_rows(lines: Sequence[str], header_idx: int) -> List[str]:
+def extract_table_rows(lines: Sequence[str], header_idx: int) -> list[str]:
     """Extract the contiguous markdown table rows following *header_idx*."""
 
-    rows: List[str] = []
+    rows: list[str] = []
     idx = header_idx + 1
     capturing = False
     while idx < len(lines):
@@ -47,7 +47,7 @@ def extract_table_rows(lines: Sequence[str], header_idx: int) -> List[str]:
     return rows
 
 
-def parse_table(rows: Sequence[str]) -> Tuple[str, str, List[Tuple[str, str]]]:
+def parse_table(rows: Sequence[str]) -> tuple[str, str, list[tuple[str, str]]]:
     """Parse *rows* into (header_row, separator_row, data_rows)."""
 
     if len(rows) < 2:
@@ -55,7 +55,7 @@ def parse_table(rows: Sequence[str]) -> Tuple[str, str, List[Tuple[str, str]]]:
 
     header_row = rows[0]
     separator_row = rows[1]
-    data_rows: List[Tuple[str, str]] = []
+    data_rows: list[tuple[str, str]] = []
     for raw in rows[2:]:
         cells = split_table_row(raw)
         if len(cells) < 2:

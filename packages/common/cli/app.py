@@ -196,7 +196,7 @@ def _handle_tests_common(_: argparse.Namespace) -> int:
 
 
 def _handle_tests_core(_: argparse.Namespace) -> int:
-    uv_run("apps/platform", "pytest", "-n", "auto", "-q", "tests/core", extras=("dev",))
+    uv_run("apps/platform", "pytest", "-n", "auto", "-q", "tests/packages/core", extras=("dev",))
     return 0
 
 

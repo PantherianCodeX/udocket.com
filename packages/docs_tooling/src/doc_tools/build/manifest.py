@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 from doc_tools.config import paths
 
@@ -25,7 +25,7 @@ def build_manifest(files: Iterable[Path]) -> dict[str, object]:
             continue
         entries.append({"name": file.name, "sha256": sha256_digest(file)})
     return {
-        "generated_at": datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "artifacts": entries,
     }
 

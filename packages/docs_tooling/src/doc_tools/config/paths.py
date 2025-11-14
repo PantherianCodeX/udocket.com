@@ -4,22 +4,25 @@ from __future__ import annotations
 
 """Path helpers backed by doc_tools settings."""
 
+from collections.abc import Sequence
 from functools import lru_cache
-from pathlib import Path
-from typing import Any, Sequence, cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import yaml
 
-from config.paths import REPO_ROOT
+from packages.common.repo import REPO_ROOT
+
 from .settings import (
     resolve_build_root,
     resolve_config_root,
+    resolve_diagram_index_path,
     resolve_doc_builds_root,
     resolve_docs_root,
     resolve_package_root,
-    resolve_diagram_index_path,
 )
-
 
 DOCS_PACKAGE_ROOT = resolve_package_root()
 DOCS_ROOT = resolve_docs_root()
@@ -51,15 +54,11 @@ def load_service_areas(config_path: Path | None = None) -> tuple[str, ...]:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         return tuple(_DEFAULT_SERVICE_AREAS)
-    data = cast(dict[str, Any], raw)
-    areas_obj = data.get("service_areas", _DEFAULT_SERVICE_AREAS)
-    if not isinstance(areas_obj, list):
-        return tuple(_DEFAULT_SERVICE_AREAS)
+    # Coerce to a mapping with "object" values to avoid Any.
+    data = cast("dict[str, object]", raw)
+    areas_obj = cast("list[str]", data.get("service_areas", _DEFAULT_SERVICE_AREAS))
     cleaned: list[str] = []
-    typed_list = cast(list[Any], areas_obj)
-    for item in typed_list:
-        if not isinstance(item, str):
-            return tuple(_DEFAULT_SERVICE_AREAS)
+    for item in areas_obj:
         trimmed = item.strip()
         if trimmed:
             cleaned.append(trimmed)
@@ -77,22 +76,22 @@ def area_path(area: str) -> Path:
 
 
 __all__ = [
-    "REPO_ROOT",
+    "ALL_TEMPLATE_ROOTS",
+    "AREA_PREFIXES",
+    "BUILD_ROOT",
+    "CONFIG_PATH",
+    "CONFIG_ROOT",
+    "DIAGRAM_INDEX_PATH",
     "DOCS_PACKAGE_ROOT",
     "DOCS_ROOT",
-    "DIAGRAM_INDEX_PATH",
-    "CONFIG_ROOT",
-    "BUILD_ROOT",
     "DOC_BUILDS_ROOT",
-    "SITE_OUTPUT_ROOT",
-    "PDF_OUTPUT_ROOT",
-    "SITE_DEV_DIR",
     "PDF_DEV_DIR",
-    "CONFIG_PATH",
+    "PDF_OUTPUT_ROOT",
+    "REPO_ROOT",
     "SERVICE_AREAS",
-    "AREA_PREFIXES",
     "SERVICE_ROOTS",
-    "ALL_TEMPLATE_ROOTS",
+    "SITE_DEV_DIR",
+    "SITE_OUTPUT_ROOT",
     "area_path",
     "load_service_areas",
 ]

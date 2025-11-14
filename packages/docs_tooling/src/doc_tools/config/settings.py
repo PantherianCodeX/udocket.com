@@ -5,13 +5,12 @@ from __future__ import annotations
 """Environment-backed settings for doc_tools."""
 
 from pathlib import Path
-from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from packages.common.env import load_env_defaults
-from config.paths import REPO_ROOT
+from packages.common.repo import REPO_ROOT
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 
@@ -29,16 +28,16 @@ class DocToolsSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="DOCS_TOOLING_", extra="ignore")
 
-    repo_root: Optional[Path] = Field(default=None, alias="REPO_ROOT")
-    package_root: Optional[Path] = Field(default=None, alias="PACKAGE_ROOT")
-    docs_root: Optional[Path] = Field(default=None, alias="ROOT")
-    config_root: Optional[Path] = Field(default=None, alias="CONFIG_ROOT")
-    build_root: Optional[Path] = Field(default=None, alias="BUILD_ROOT")
-    doc_builds_root: Optional[Path] = Field(default=None, alias="DOC_BUILDS_ROOT")
-    diagram_index_path: Optional[Path] = Field(default=None, alias="DIAGRAM_INDEX_PATH")
+    repo_root: Path | None = Field(default=None, alias="REPO_ROOT")
+    package_root: Path | None = Field(default=None, alias="PACKAGE_ROOT")
+    docs_root: Path | None = Field(default=None, alias="ROOT")
+    config_root: Path | None = Field(default=None, alias="CONFIG_ROOT")
+    build_root: Path | None = Field(default=None, alias="BUILD_ROOT")
+    doc_builds_root: Path | None = Field(default=None, alias="DOC_BUILDS_ROOT")
+    diagram_index_path: Path | None = Field(default=None, alias="DIAGRAM_INDEX_PATH")
 
 
-def _expand(path: Optional[Path], default: Path) -> Path:
+def _expand(path: Path | None, default: Path) -> Path:
     return path.expanduser() if path else default
 
 
@@ -75,17 +74,21 @@ def resolve_diagram_index_path(cfg: DocToolsSettings | None = None) -> Path:
     return _expand(settings.diagram_index_path, default)
 
 
+def resolve_repo_root(_: DocToolsSettings | None = None) -> Path:
+    return REPO_ROOT
+
+
 doc_tools_settings = DocToolsSettings()
 
 
 __all__ = [
     "DocToolsSettings",
     "doc_tools_settings",
-    "resolve_repo_root",
-    "resolve_package_root",
-    "resolve_docs_root",
-    "resolve_config_root",
     "resolve_build_root",
-    "resolve_doc_builds_root",
+    "resolve_config_root",
     "resolve_diagram_index_path",
+    "resolve_doc_builds_root",
+    "resolve_docs_root",
+    "resolve_package_root",
+    "resolve_repo_root",
 ]

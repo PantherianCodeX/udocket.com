@@ -8,7 +8,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from doc_tools.config import paths
 from doc_tools.common.doc_utils import (
@@ -136,7 +136,7 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
             text = heading_match.group(2).strip()
             if first_heading and level < 2:
                 raise ValueError(
-                    f"Runbook sections must begin with an H2 or deeper heading in {path.name}: '{text}'."
+                    f"Runbook sections must begin with an H2 or deeper heading in {path.name}: '{text}'.",
                 )
             if first_heading:
                 if level > 2:
@@ -160,7 +160,7 @@ def transform_section(section: list[str], label: str, path: Path) -> tuple[list[
             output.append(heading_line)
             pending_blank_after_heading = True
             headings.append(
-                Heading(level=normalized_level, text=prefixed_text, slug=mkdocs_slug(prefixed_text))
+                Heading(level=normalized_level, text=prefixed_text, slug=mkdocs_slug(prefixed_text)),
             )
         else:
             if pending_blank_after_heading:

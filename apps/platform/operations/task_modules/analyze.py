@@ -50,6 +50,7 @@ from packages.common.agents import (
     StageKey,
     StageOverrideConfig,
     parse_stage_overrides,
+    stage_overrides_by_name,
     stage_overrides_to_json,
 )
 from packages.core.llm.config import load_llm_settings as _load_llm_settings
@@ -352,6 +353,9 @@ def analyze_job(
         if parsed_stage_overrides
         else raw_stage_map
     )
+    parsed_stage_overrides_by_name = (
+        stage_overrides_by_name(parsed_stage_overrides) if parsed_stage_overrides else None
+    )
     stage_map = ComposeStageMap.from_mapping(normalized_stage_map_payload)
     provider_chain_override: Sequence[str] = (
         tuple(config_payload["provider_chain"])
@@ -444,7 +448,7 @@ def analyze_job(
             transcript_hint=transcript_hint_payload,
             provider_chain=config_chain or analyze_config.provider_chain,
             stage_map=stage_map.to_dict(),
-             stage_overrides=parsed_stage_overrides or None,
+            stage_overrides=parsed_stage_overrides_by_name,
             provider_credentials=provider_credentials or None,
             progress_callback=_progress,
         )
