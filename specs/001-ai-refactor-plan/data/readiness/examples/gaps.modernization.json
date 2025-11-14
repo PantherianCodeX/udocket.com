@@ -1,0 +1,17 @@
+[
+  {
+    "gap_id": "1d3a15dc-6302-43bc-b13f-dfd9ae970509",
+    "component_id": "readiness-aggregator",
+    "stage_key": "analyze.gaps_extract",
+    "category": "telemetry",
+    "severity": "high",
+    "owner": "ai-modernization",
+    "mitigation_plan": "Implement LangFuse-backed sampling to feed gap detection telemetry and update readiness CLI checks.",
+    "due_date": "2025-12-08",
+    "status": "open",
+    "resolution_notes": null,
+    "related_controls": [
+      "f0b9b801-4f4a-44d5-afe7-4f0cd0c8b0c1"
+    ]
+  }
+]

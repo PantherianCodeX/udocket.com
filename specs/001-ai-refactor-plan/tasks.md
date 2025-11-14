@@ -22,17 +22,17 @@ description: "Task list for executing the AI Module Migration Completion Plan"
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Capture Codex CLI home pinning steps (script invocation, expected output) in `/home/user/Code/udocket/specs/001-ai-refactor-plan/setup/codex_home.md` so future implementation can run the command confidently.
-- [ ] T002 [P] Document required LangSmith/LangFuse `.env` variables and rotation notes in `/home/user/Code/udocket/specs/001-ai-refactor-plan/setup/env_placeholders.md`; no repo-level `.env.example` edits occur yet.
-- [ ] T003 [P] Author `/home/user/Code/udocket/specs/001-ai-refactor-plan/reports/ops_audit_manifest.md` explaining how readiness ops JSONL/audit artifacts will be stored under the feature directory during this planning phase.
+- [X] T001 Capture Codex CLI home pinning steps (script invocation, expected output) in `/home/user/Code/udocket/specs/001-ai-refactor-plan/setup/codex_home.md` so future implementation can run the command confidently.
+- [X] T002 [P] Document required LangSmith/LangFuse `.env` variables and rotation notes in `/home/user/Code/udocket/specs/001-ai-refactor-plan/setup/env_placeholders.md`; no repo-level `.env.example` edits occur yet.
+- [X] T003 [P] Author `/home/user/Code/udocket/specs/001-ai-refactor-plan/reports/ops_audit_manifest.md` explaining how readiness ops JSONL/audit artifacts will be stored under the feature directory during this planning phase.
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T004 Draft typed primitives (`MigrationStageReadiness`, `CapabilityGap`, `ObservabilityControl`, `LLMToolingDecision`, `ToolingWorkspace`, `EvaluationEvidence`, `ObservabilitySession`, `VendorUsageBudget`) in `/home/user/Code/udocket/specs/001-ai-refactor-plan/drafts/readiness_types.py`, mapping each field to the eventual package locations.
-- [ ] T005 [P] Record LangGraph stage catalog deltas in `/home/user/Code/udocket/specs/001-ai-refactor-plan/drafts/stage_catalog.md`, referencing the canonical entries in `packages/common/agents/stage_map.py` without editing production files.
-- [ ] T006 [P] Create deterministic readiness fixture samples under `/home/user/Code/udocket/specs/001-ai-refactor-plan/data/readiness/examples/` and outline property-test expectations in `/home/user/Code/udocket/specs/001-ai-refactor-plan/drafts/test_plan.md`.
+- [X] T004 Draft typed primitives (`MigrationStageReadiness`, `CapabilityGap`, `ObservabilityControl`, `LLMToolingDecision`, `ToolingWorkspace`, `EvaluationEvidence`, `ObservabilitySession`, `VendorUsageBudget`) in `/home/user/Code/udocket/specs/001-ai-refactor-plan/drafts/readiness_types.py`, mapping each field to the eventual package locations.
+- [X] T005 [P] Record LangGraph stage catalog deltas in `/home/user/Code/udocket/specs/001-ai-refactor-plan/drafts/stage_catalog.md`, referencing the canonical entries in `packages/common/agents/stage_map.py` without editing production files.
+- [X] T006 [P] Create deterministic readiness fixture samples under `/home/user/Code/udocket/specs/001-ai-refactor-plan/data/readiness/examples/` and outline property-test expectations in `/home/user/Code/udocket/specs/001-ai-refactor-plan/drafts/test_plan.md`.
 
 ---
 
@@ -44,7 +44,7 @@ description: "Task list for executing the AI Module Migration Completion Plan"
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Write the API contract test plan in `/home/user/Code/udocket/specs/001-ai-refactor-plan/testplans/api_readiness_tests.md`, citing request/response payloads from `contracts/openapi.yaml`.
+- [X] T007 [P] [US1] Write the API contract test plan in `/home/user/Code/udocket/specs/001-ai-refactor-plan/testplans/api_readiness_tests.md`, citing request/response payloads from `contracts/openapi.yaml`.
 - [ ] T008 [P] [US1] Describe readiness snapshot unit/property tests in `/home/user/Code/udocket/specs/001-ai-refactor-plan/testplans/readiness_snapshot_tests.md`, covering scoring ranges, owner validation, and automated gap creation triggers.
 
 ### Implementation for User Story 1

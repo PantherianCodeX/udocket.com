@@ -1,0 +1,33 @@
+[
+  {
+    "stage_key": "analyze.input_discovery",
+    "status": "complete",
+    "owner_team": "ai-readiness",
+    "last_validated_at": "2025-11-10T15:30:00Z",
+    "evidence_links": [
+      "storage://ops/jsonl/run-2025-11-10T15:30:00Z",
+      "docs://ai-module/runbooks/input-discovery"
+    ],
+    "architecture_score": 5,
+    "compliance_score": 5,
+    "observability_score": 4,
+    "cutoff_date": "2025-12-01",
+    "capability_gaps": []
+  },
+  {
+    "stage_key": "analyze.gaps_extract",
+    "status": "blocked",
+    "owner_team": "ai-modernization",
+    "last_validated_at": null,
+    "evidence_links": [
+      "storage://ops/jsonl/run-2025-11-12T09:00:00Z"
+    ],
+    "architecture_score": 2,
+    "compliance_score": 3,
+    "observability_score": 2,
+    "cutoff_date": "2025-12-15",
+    "capability_gaps": [
+      "1d3a15dc-6302-43bc-b13f-dfd9ae970509"
+    ]
+  }
+]
