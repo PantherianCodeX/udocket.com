@@ -87,7 +87,7 @@ Given that feature description, do this:
     7. Identify Key Entities (if data involved)
     8. Return: SUCCESS (spec ready for planning)
 
-5. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
+5. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings. All spec-related artifacts (spec.md, checklists, validation notes) MUST be written under the same FEATURE_DIR (`specs/[###-feature-name]/`) and MUST NOT create additional feature-specific files elsewhere in the repo.
 
 6. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
 

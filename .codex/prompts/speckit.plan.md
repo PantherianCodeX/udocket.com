@@ -20,9 +20,10 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")
    - Fill Constitution Check section from constitution
    - Evaluate gates (ERROR if violations unjustified)
-   - Phase 0: Generate research.md (resolve all NEEDS CLARIFICATION)
-   - Phase 1: Generate data-model.md, contracts/, quickstart.md
+   - Phase 0: Generate research.md (resolve all NEEDS CLARIFICATION) under FEATURE_DIR
+   - Phase 1: Generate data-model.md, contracts/, quickstart.md under FEATURE_DIR
    - Phase 1: Update agent context by running the agent script
+   - Phase 1: **Do not** create or modify any non-code files outside FEATURE_DIR unless the specifically planned.
    - Re-evaluate Constitution Check post-design
 
 4. **Stop and report**: Command ends after Phase 2 planning. Report branch, IMPL_PLAN path, and generated artifacts.
@@ -79,3 +80,4 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 - Use absolute paths
 - ERROR on gate failures or unresolved clarifications
+- Do not create or modify any non-code files outside FEATURE_DIR (`specs/[###-feature-name]/`) unless the user explicitly requests a repo-wide update

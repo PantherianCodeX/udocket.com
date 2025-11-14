@@ -30,7 +30,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Create parallel execution examples per user story
    - Validate task completeness (each user story has all needed tasks, independently testable)
 
-4. **Generate tasks.md**: Use `.specify.specify/templates/tasks-template.md` as structure, fill with:
+4. **Generate tasks.md**: Use `.specify/templates/tasks-template.md` as structure, fill with:
    - Correct feature name from plan.md
    - Phase 1: Setup tasks (project initialization)
    - Phase 2: Foundational tasks (blocking prerequisites for all user stories)
@@ -42,6 +42,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Dependencies section showing story completion order
    - Parallel execution examples per story
    - Implementation strategy section (MVP first, incremental delivery)
+   - The generated tasks.md MUST be written to FEATURE_DIR (`specs/[###-feature-name]/tasks.md`) and MUST NOT create additional planning artifacts outside FEATURE_DIR
 
 5. **Report**: Output path to generated tasks.md and summary:
    - Total task count

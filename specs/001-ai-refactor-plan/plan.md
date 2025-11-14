@@ -1,34 +1,51 @@
 # Implementation Plan: AI Module Migration Completion Plan
 
-**Branch**: `001-ai-refactor-plan` | **Date**: 2025-11-14 | **Spec**: `/home/user/Code/udocket/specs/001-ai-refactor-plan/spec.md`
-**Input**: Feature specification + directives recorded in `specs/001-ai-refactor-plan/spec.md`
+**Branch**: `001-ai-refactor-plan` | **Date**: 2025-11-14 | **Spec**: `specs/001-ai-refactor-plan/spec.md`
+**Input**: Feature specification + research artifacts under `specs/001-ai-refactor-plan/`
 
 ## Summary
 
-Create the authoritative modernization blueprint for the AI module: capture the full readiness inventory, codify the modernization backlog against LangGraph stages, and land LangSmith (evaluations) plus temporary LangFuse (observability) enablement so the pipeline can dial up with governed telemetry. Execution leans on Python 3.12 services orchestrated through LangGraph, uv-managed environments, and ops JSONL/audit artifacts defined in the TDD. Local workflows must operate outside the deprecated dev container, so the plan documents uv sync flows, pytest + typing targets, and `.env`-backed key storage while we work toward the future secrets service described in the TDD.
+Execute the seven-phase modernization initiative: rename the canonical schema bundle to `schemas/`, clean the repo root
+of stray artifacts, restore `automation/pipelines/` with stage metadata/QA/cost ceilings, return `packages/common/` to a
+framework-free helper library, relocate coverage/Typewiz/requirements outputs into `out/`, document + enforce the Codex
+workflow (scripts/codexhome.sh + VS Code bootstrap), and capture remaining confirmations (deps/typewiz vendor notice,
+dev/stub directory boundaries, Docker refs). All phases reinforce LangGraph readiness, LangSmith/LangFuse governance,
+ops JSONL + audit requirements, and the `docs/CONTRIBUTING-docs.md` workflow so doc lints pass alongside code changes.
+Readiness datasets, capability gaps, LangSmith/LangFuse evidence, and activation playbooks stay co-located under
+`specs/001-ai-refactor-plan/data|reports`, while a new `packages/devops/readiness/` toolkit ingests those artifacts to power developer-facing services (CLI + dashboard payloads) without touching production systems yet.
 
 ## Technical Context
 
 **Language/Version**: Python 3.12 for agents/services, TypeScript (React) for readiness dashboards.  
-**Primary Dependencies**: LangGraph runtime, LangSmith SDK (`langsmith`), LangFuse client, structlog, OpenTelemetry, Postgres drivers (`asyncpg`/`psycopg`), uv-managed tooling, pytest/Hypothesis, Typewiz, Ruff, Pyright.  
-**Storage**: Postgres (`services/readiness`), append-only ops JSONL/audit JSONL in `storage/`, object storage for artifacts, `.env` for local secrets until secrets service lands.  
-**Testing**: `make typing.ai`, `make all.test`, targeted `pytest` modules (`services/readiness`, `packages/ai`), Hypothesis property suites for UUIDs/manifests, LangSmith eval harness (prompt regressions), doc tooling (`make docs.check.*`).  
-**Target Platform**: Linux containers + GitHub Actions runners; local developers run on macOS/Linux without a dev container.  
-**Project Type**: Multi-service backend (Django + Celery) plus LangGraph agents, automation scripts, and supporting docs/spec artifacts.  
-**Performance Goals**: Readiness recompute <10 minutes; observability exports <2 minutes; LangSmith eval turnaround <30 minutes p95; LangFuse sampling overhead <5% runtime; readiness dashboards P95 render <250 ms; LangFuse disablement SLA ≤15 minutes.  
-**Constraints**: All LLM traffic routed through `packages.ai.api`; LangFuse limited to dev/staging with capped sampling (≤25%) and automatic teardown; residency metadata required before promotion; keys managed via checked-in `.env` template until centralized secrets ship; no dev-container-specific tooling; uv/pyproject is source of truth for dependencies.  
-**Scale/Scope**: Entire AI module estate (every LangGraph stage, readiness component, and LangSmith evaluation workspace) plus cross-cutting telemetry and governance touchpoints.
+**Primary Dependencies**: LangGraph runtime, `packages.ai.api` (AI runtime), LangSmith SDK, LangFuse client, structlog,
+OpenTelemetry, pytest/Hypothesis, Ruff, Pyright, Spectral/doc_tools, Typewiz, uv.  
+**Storage**: Feature datasets live under `specs/001-ai-refactor-plan/data|reports` and are ingested by `packages/devops/readiness/`, which can also sync normalized tables into the developer Postgres database for dashboard previews (production Postgres/ops JSONL remain untouched until implementation). Object storage still houses artifacts, docs live in `docs/`, and dev tooling continues referencing CONTRIBUTING.
+docs in `docs/` governed by CONTRIBUTING guide.  
+**Testing**: `make typing.ai`, `make all.test`, property tests for deterministic surfaces, prompt eval harnesses via
+LangSmith, doc tooling (`doc_tools.manage_docs`, `doc_tools.check.links`), Spectral schema lint, Typewiz ratchet.  
+**Target Platform**: Linux containers + developer hosts managed by uv; CI/CD pipelines run in containerized GitHub/GCP
+runners.  
+**Project Type**: Monorepo (automation agents + Django services + tooling).  
+**Performance Goals**: Readiness inventory recompute <10 minutes; LangSmith evaluations complete <30 minutes p95;
+LangFuse sampling overhead <5%; doc tooling, Typewiz, and coverage jobs stay within existing CI budgets.  
+**Constraints**: Strict type-first development (no new `Any`), AI runtime isolation, forward-only migrations, doc edits must
+follow `docs/CONTRIBUTING-docs.md` formatting/structure to satisfy aggressive lints.  
+**Scale/Scope**: Repo-wide refactor touching automation/, packages/, docs/, schemas/, tooling/, storage/, ops/, scripts/.
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
-- [x] **P1 – Type-First & Schema-Driven Guarantees**: Data models (MigrationStageReadiness, CapabilityGap, ObservabilityControl, LLMToolingDecision, ToolingWorkspace, EvaluationEvidence, ObservabilitySession, VendorUsageBudget) will be maintained as typed dataclasses/StrEnums with JSON Schema exports before logic ships.
-- [x] **P2 – AI Runtime Isolation**: Plan enforces exclusive use of `packages.ai.api`/`AIClient` for provider access; LangSmith/LangFuse integrations plug into the runtime and inherit residency/egress guards defined in the TDD.
-- [x] **P3 – Deterministic Pipelines & QA**: StageKeys sourced from `packages/common/agents/stage_map.py`; readiness + backlog artifacts emit ops JSONL/audit hashes per run; LangSmith eval exports versioned via EvaluationEvidence schema.
-- [x] **P4 – Testing & Coverage Discipline**: ≥90 % coverage enforced through `make all.test`, targeted pytest modules, Hypothesis property tests for manifests/UUIDs, and LangSmith prompt evals gated via automation scripts; typing gates (`make typing.ai`, pyright/mypy/ruff) codified.
-- [x] **P5 – Observability, Compliance & DR**: OTLP spans + structlog instrumentation defined per stage, LangFuse enable/disable evidence captured in `ops/runbooks/langfuse-rd.md`, ops JSONL/audit JSONL appended for every job, DR runbooks updated with LangFuse teardown/residency notes.
-- [x] **P6 – Secure, Performant SaaS Delivery**: Threat model covers prompt injection, dashboard access, LangSmith/LangFuse key leakage; load budgets + kill-switch automation defined; `.env` handling documented with rotation cadence until secrets service exists; no backward-compat shims added.
+- [x] **P1 – Type-First & Schema-Driven Guarantees**: Schema bundle rename keeps a single canonical source; typed
+  models (MigrationStageReadiness, CapabilityGap, etc.) already defined; Spectral/doc tooling updates enforce schemas.
+- [x] **P2 – AI Runtime Isolation**: All LangSmith/LangFuse usage continues through `packages.ai.api`/`AIClient`; no
+  direct provider SDK imports are added.
+- [x] **P3 – Deterministic Pipelines & QA**: Reintroducing `automation/pipelines/` re-aligns StagePlan metadata with the
+  LangGraph TDD appendix and ensures manifests/ops JSONL remain deterministic.
+- [x] **P4 – Testing & Coverage Discipline**: Plan reiterates ≥90 % coverage, property tests, Typewiz ratchet, and
+  LangSmith prompt eval requirements before promotion.
+- [x] **P5 – Observability, Compliance & DR**: OTLP spans, ops JSONL, LangFuse enable/disable evidence, residency notes,
+  and DR documentation explicitly tracked in spec + quickstart.
+- [x] **P6 – Secure, Performant SaaS Delivery**: Threat model, performance budgets, forward-only repo cleanup, and
+  accessibility/localization obligations are covered; no DRY violations introduced.
 
 ## Project Structure
 
@@ -36,30 +53,63 @@ Create the authoritative modernization blueprint for the AI module: capture the 
 
 ```text
 specs/001-ai-refactor-plan/
-├── plan.md
-├── research.md
-├── data-model.md
-├── quickstart.md
+├── plan.md          # /speckit.plan output (this file)
+├── research.md      # Phase 0 decisions + rationale (complete)
+├── data-model.md    # Phase 1 entity definitions (complete)
+├── quickstart.md    # Phase 1 environment + workflow guide (complete)
 ├── contracts/
-│   └── openapi.yaml
-└── tasks.md   # generated during /speckit.tasks later
+│   └── openapi.yaml # Phase 1 API/schema exports for readiness + tooling endpoints
+└── spec.md          # Feature specification kept in sync with phases
 ```
 
-### Source Code (repository root)
+All doc edits in `docs/` (e.g., `docs/overview/tdd/appendices/repository_trees.md`, `docs/automation/langgraph-agents.md`,
+README changes) MUST follow `docs/CONTRIBUTING-docs.md`, including running `doc_tools.manage_docs`,
+`doc_tools.check.links`, and the MkDocs build before PR submission.
 
 ```text
-apps/platform/                # Django + Celery entrypoints and tests
-automation/pipelines/         # LangSmith + LangFuse automation scripts
-packages/ai/                  # AI runtime adapters, LangGraph orchestration
-packages/common/              # Shared enums, schemas, stage maps
-services/readiness/           # Inventory + backlog services
-ops/runbooks/                 # Telemetry + governance runbooks (LangFuse R&D, etc.)
-docs/overview,tdd.md          # Platform blueprint + residency/secrets expectations
-tests/langgraph/, tests/core/ # Property + integration tests (readiness, telemetry)
+automation/
+├── pipelines/                # New home for stage metadata, QA, cost ceilings
+├── agents/
+└── langgraph/
+
+docs/
+├── CONTRIBUTING-docs.md      # Mandatory reference for every docs change
+├── overview/
+│   └── tdd/appendices/repository_trees.md
+└── automation/langgraph-agents.md
+
+schemas/                      # Renamed from spec/
+├── automation/
+├── platform/
+├── guardian/
+├── ops/
+└── shared/
+
+packages/
+├── common/                   # Refactored to pure helpers (paths/, json/, prompts/)
+├── core/                     # Receives framework-aware helpers relocated from common
+└── devops/                   # Advanced tooling (e.g., readiness service sourcing specs/<feature>/ data)
+
+out/
+├── test-reports/coverage.xml
+├── typewiz/
+└── requirements/
+
+tooling/
+├── fixtures/sqlalchemy/      # Receives former db/ helpers
+├── doc_tools/
+└── scripts/
+
+tests/
+├── agents/
+├── automation/
+└── regression/
 ```
 
-**Structure Decision**: Multi-service backend/automation repo—work spans documentation (`specs/...`), shared packages (`packages/ai`, `packages/common`), service code (`services/readiness`, `apps/platform`), automation scripts, and ops runbooks. No separate frontend/mobile projects are added.
+**Structure Decision**: Maintain the existing monorepo layout while enforcing the canonical root set (apps/, automation/,
+packages/, services/, config/, infra/, ops/, tests/, tooling/, docs/, schemas/, specs/, out/, storage/, scripts/). All doc
+changes must reference `docs/CONTRIBUTING-docs.md` and run the doc lint targets before submission.
 
 ## Complexity Tracking
 
-*No violations to record.*
+_No constitutional violations requiring justification._
