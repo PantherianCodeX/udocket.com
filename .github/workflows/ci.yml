@@ -17,12 +17,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [platform, core, common]
+        include:
+          - package: platform
+            lock_file: apps/platform/uv.lock
+          - package: core
+            lock_file: packages/core/uv.lock
+          - package: common
+            lock_file: packages/common/uv.lock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -40,6 +53,13 @@ jobs:
               uv sync --frozen --group dev --project packages/common
               ;;
           esac
+      - name: Cache Ruff
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ruff
+          key: ruff-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            ruff-${{ runner.os }}-
       - name: Ruff check
         run: |
           set -euo pipefail
@@ -61,12 +81,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [platform, core, common]
+        include:
+          - package: platform
+            lock_file: apps/platform/uv.lock
+          - package: core
+            lock_file: packages/core/uv.lock
+          - package: common
+            lock_file: packages/common/uv.lock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -84,6 +117,13 @@ jobs:
               uv sync --frozen --group dev --project packages/common
               ;;
           esac
+      - name: Cache Pyright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pyright
+          key: pyright-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            pyright-${{ runner.os }}-
       - name: Pyright
         run: |
           set -euo pipefail
@@ -105,12 +145,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [platform, core, common]
+        include:
+          - package: platform
+            lock_file: apps/platform/uv.lock
+          - package: core
+            lock_file: packages/core/uv.lock
+          - package: common
+            lock_file: packages/common/uv.lock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -128,6 +181,13 @@ jobs:
               uv sync --frozen --group dev --project packages/common
               ;;
           esac
+      - name: Cache Mypy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            mypy-${{ runner.os }}-
       - name: Mypy
         env:
           MYPY_CACHE_DIR: .mypy_cache
@@ -153,6 +213,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('apps/platform/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -176,6 +243,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('apps/platform/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -184,6 +258,13 @@ jobs:
         run: |
           set -euo pipefail
           uv sync --frozen --group dev --no-install-project
+      - name: Cache Typewiz
+        uses: actions/cache@v4
+        with:
+          path: .typewiz_cache
+          key: typewiz-${{ runner.os }}-${{ hashFiles('typewiz.toml') }}
+          restore-keys: |
+            typewiz-${{ runner.os }}-
       - name: Typewiz audit
         run: |
           set -euo pipefail
@@ -210,12 +291,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [platform, core, common, docs]
+        include:
+          - package: platform
+            lock_file: apps/platform/uv.lock
+          - package: core
+            lock_file: packages/core/uv.lock
+          - package: common
+            lock_file: packages/common/uv.lock
+          - package: docs
+            lock_file: packages/docs_tooling/uv.lock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles(matrix.lock_file) }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -278,6 +374,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('apps/platform/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -298,6 +401,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('apps/platform/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"
@@ -361,6 +471,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('apps/platform/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.*"

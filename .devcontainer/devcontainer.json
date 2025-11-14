@@ -32,7 +32,15 @@
     "vscode": {
       "settings": {
         "python.defaultInterpreterPath": "/udocket/.venv/bin/python",
-        "python.terminal.activateEnvironment": true
+        "python.terminal.activateEnvironment": true,
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "bash",
+            "args": ["-l"],
+            "icon": "terminal-bash"
+          }
+        }
       },
       "extensions": [
         "ms-azuretools.vscode-containers",

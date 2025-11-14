@@ -2,7 +2,7 @@ services:
   platform-dev:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.platform
+      dockerfile: infra/docker/Dockerfile.devcontainer
       network: host
       # Enable BuildKit cache read/write by adding ../docker-compose.cache.yml to dockerComposeFile.
       args:
@@ -48,8 +48,8 @@ services:
 
   docs:
     build:
-      context: packages/docs_tooling
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: packages/docs_tooling/Dockerfile
     command: sleep infinity
     tty: true
     volumes:

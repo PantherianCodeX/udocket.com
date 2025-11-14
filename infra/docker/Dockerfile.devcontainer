@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1.7-labs
+
+# Devcontainer-only base image. Keeps platform Dockerfile clean while
+# providing a comfortable developer shell and required tooling.
+
+ARG PYTHON_BASE=python:3.12-slim-bookworm
+
+FROM ${PYTHON_BASE} AS base
+
+ARG TARGETARCH
+ARG STARSHIP_VERSION=v1.24.0
+
+ENV PIP_NO_CACHE_DIR=0 \
+    PIP_BUILD_PARALLEL=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /udocket
+
+# Speed up apt by disabling translation index downloads and preferring gzip indexes.
+RUN cat > /etc/apt/apt.conf.d/99udocket-fast-apt <<EOF
+Acquire::Languages \"none\";
+Acquire::CompressionTypes::Order { \"gz\"; };
+APT::Get::Assume-Yes \"true\";
+EOF
+
+# Share helper scripts across images
+COPY infra/docker/scripts /usr/local/share/udocket-scripts
+
+# Prepare keyrings/repos and refresh indexes with cache mounts.
+RUN --mount=type=cache,id=udocket-apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=udocket-apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=toolchain-downloads-${TARGETARCH},target=/tmp/cache-downloads,sharing=locked \
+    /usr/local/share/udocket-scripts/setup_apt_repos.sh; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      git \
+      docker-buildx-plugin \
+      docker-ce-cli \
+      docker-compose-plugin \
+      gh \
+      git-lfs \
+      jq \
+      ripgrep \
+      less \
+      nano \
+      unzip \
+      vim-tiny \
+      wget; \
+    git lfs install --system
+ 
+RUN --mount=type=cache,target=/tmp/.cache/starship \
+    set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) asset="starship-x86_64-unknown-linux-musl.tar.gz";; \
+      arm64) asset="starship-aarch64-unknown-linux-musl.tar.gz";; \
+      *) echo "Unsupported arch: ${TARGETARCH}"; exit 1;; \
+    esac; \
+    cache_dir=/tmp/.cache/starship; \
+    mkdir -p "$cache_dir"; \
+    archive="$cache_dir/${asset}"; \
+    if [ ! -f "$archive" ]; then \
+      echo "Downloading starship $STARSHIP_VERSION -> $archive"; \
+      curl -fsSL -o "$archive" "https://github.com/starship/starship/releases/download/${STARSHIP_VERSION}/${asset}"; \
+    else \
+      echo "Using cached starship archive $archive"; \
+    fi; \
+    tar -xzf "$archive" -C "$cache_dir"; \
+    mv "$cache_dir"/starship /usr/local/bin/starship; \
+    chmod 0755 /usr/local/bin/starship;
+
+# Install uv globally using cached installer script.
+RUN --mount=type=cache,target=/root/.cache/uv-installer,sharing=locked \
+    bash /usr/local/share/udocket-scripts/install_uv.sh
+
+# Auto-init starship for interactive shells.
+RUN cat <<'EOF' > /etc/profile.d/udocket-starship.sh \
+ && chmod 0644 /etc/profile.d/udocket-starship.sh
+# Initialize Starship if installed
+ if command -v starship >/dev/null 2>&1; then
+    eval "$(starship init bash)"
+ fi 
+EOF
+
+CMD ["bash", "-l"]

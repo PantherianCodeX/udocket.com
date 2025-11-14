@@ -8,57 +8,43 @@ ARG BAKE_VENV=1
 FROM ${PYTHON_BASE} AS python-base
 
 ARG TARGETARCH
+ARG DEV_TOOLS
 ARG BAKE_VENV
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV PIP_NO_CACHE_DIR=0 \
+    PIP_BUILD_PARALLEL=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
-    
-# Prepare keyrings/repos once so downstream stages can reuse apt metadata.
-RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=toolchain-downloads-${TARGETARCH},target=/tmp/cache-downloads,sharing=locked \
-    set -eux; \
-    install -m 0755 -d /etc/apt/keyrings; \
-    cache_dir="/tmp/cache-downloads"; \
-    mkdir -p "$cache_dir"; \
-    docker_key="$cache_dir/docker.gpg"; \
-    gh_key="$cache_dir/gh.gpg"; \
-    if [ ! -f "$docker_key" ]; then \
-      python -c 'import sys, urllib.request; urllib.request.urlretrieve("https://download.docker.com/linux/debian/gpg", sys.argv[1])' "$docker_key"; \
-    fi; \
-    cp "$docker_key" /etc/apt/keyrings/docker.asc; \
-    chmod a+r /etc/apt/keyrings/docker.asc; \
-    if [ ! -f "$gh_key" ]; then \
-      python -c 'import sys, urllib.request; urllib.request.urlretrieve("https://cli.github.com/packages/githubcli-archive-keyring.gpg", sys.argv[1])' "$gh_key"; \
-    fi; \
-    cp "$gh_key" /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
-    chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list; \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list; \
-    apt-get update
 
-# Core packages needed for every image.
-RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+# Speed up apt by disabling translation index downloads and preferring gzip indexes.
+RUN cat > /etc/apt/apt.conf.d/99udocket-fast-apt <<EOF
+Acquire::Languages \"none\";
+Acquire::CompressionTypes::Order { \"gz\"; };
+APT::Get::Assume-Yes \"true\";
+EOF
+    
+# Share helper scripts across images
+COPY infra/docker/scripts /usr/local/share/udocket-scripts
+
+# Prepare keyrings/repos and install required APT packages once in the base.
+RUN --mount=type=cache,id=udocket-apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=udocket-apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=toolchain-downloads-${TARGETARCH},target=/tmp/cache-downloads,sharing=locked \
+    /usr/local/share/udocket-scripts/setup_apt_repos.sh; \
     set -eux; \
-    apt-get install -y --no-install-recommends \
-      ffmpeg \
-      ca-certificates \
-      curl \
-      git
+    base_pkgs="ffmpeg ca-certificates curl git"; \
+    dev_pkgs="build-essential libpq-dev pkg-config postgresql-client-15 docker-buildx-plugin docker-ce-cli docker-compose-plugin gh git-lfs htop iputils-ping jq less lsof nano netcat-openbsd ripgrep strace tree unzip vim-tiny wget"; \
+    if [ "$DEV_TOOLS" = "1" ]; then \
+      apt-get install -y --no-install-recommends $base_pkgs $dev_pkgs; \
+      git lfs install --system; \
+    else \
+      apt-get install -y --no-install-recommends $base_pkgs; \
+    fi
 
 # Install uv once so downstream stages share the same toolchain.
-RUN --mount=type=cache,target=/root/.cache/uv-installer,sharing=locked <<'EOF'
-set -eux
-cache_dir="/root/.cache/uv-installer"
-mkdir -p "$cache_dir"
-script="$cache_dir/install.sh"
-if [ ! -f "$script" ]; then
-  curl -fsSL https://astral.sh/uv/install.sh -o "$script"
-fi
-UV_INSTALL_DIR=/usr/local/bin sh "$script"
-EOF
+RUN --mount=type=cache,target=/root/.cache/uv-installer,sharing=locked \
+    bash /usr/local/share/udocket-scripts/install_uv.sh
 
 # Keep pip modern once so every downstream stage benefits. Optionally pre-bake /opt/venv.
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
@@ -77,56 +63,8 @@ FROM python-base AS toolchain
 ARG TARGETARCH
 ARG DEV_TOOLS
 
-# Optional developer tooling (docker CLI, debugging helpers, etc.)
-RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
-    if [ "$DEV_TOOLS" = "1" ]; then \
-      set -eux; \
-      apt-get install -y --no-install-recommends \
-        build-essential \
-        g++ \
-        gcc \
-        libpq-dev \
-        pkg-config \
-        postgresql-client-15; \
-    fi;
-
-RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
-    if [ "$DEV_TOOLS" = "1" ]; then \
-      set -eux; \
-      apt-get install -y --no-install-recommends \
-        docker-buildx-plugin \
-        docker-ce-cli \
-        docker-compose-plugin \
-        gh; \
-    fi;
-
-RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
-    if [ "$DEV_TOOLS" = "1" ]; then \
-      set -eux; \
-      apt-get install -y --no-install-recommends \
-        git-lfs \
-        htop \
-        iputils-ping \
-        jq \
-        less \
-        lsof \
-        nano \
-        netcat-openbsd \
-        ripgrep \
-        strace \
-        tree \
-        unzip \
-        vim-tiny \
-        wget; \
-    fi;
-
-RUN if [ "$DEV_TOOLS" = "1" ]; then \
-      set -eux; \
-      git lfs install --system; \
-    fi;
+# All APT work is done in python-base; keep this stage lean.
+RUN true
 
 FROM toolchain AS python-deps
 ARG DEV_TOOLS
@@ -143,10 +81,10 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     if [ "$BAKE_VENV" = "1" ]; then \
       export UV_PROJECT_ENVIRONMENT=/opt/venv VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:${PATH}"; \
       uv sync --frozen --no-dev --no-install-project --project apps/platform; \
-    fi; \
-    if [ "$DEV_TOOLS" = "1" ]; then \
-      # export UV_PROJECT_ENVIRONMENT=.venv VIRTUAL_ENV=.venv PATH=".venv/bin:${PATH}"; \
-      uv sync --frozen --only-group dev --no-install-project --project apps/platform; \
+      if [ "$DEV_TOOLS" = "1" ]; then \
+        export UV_PROJECT_ENVIRONMENT=.venv VIRTUAL_ENV=.venv PATH=".venv/bin:${PATH}"; \
+        uv sync --frozen --only-group dev --no-install-project --project apps/platform; \
+      fi; \
     fi;
 
 FROM python-deps AS app
@@ -157,9 +95,9 @@ WORKDIR /udocket
 COPY . /udocket
 
 
-ENV UV_PROJECT_ENVIRONMENT=.venv
-ENV VIRTUAL_ENV=.venv
-# ENV PATH=".venv/bin:${PATH}" 
+ENV VIRTUAL_ENV=/opt/venv
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 EXPOSE 8000
 

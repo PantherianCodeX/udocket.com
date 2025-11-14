@@ -4,7 +4,7 @@ set -euo pipefail
 # Ensure Django manage commands run before starting the target process.
 # Retries keep startup resilient when Postgres isn't ready yet.
 
-RETRIES=${STARTUP_DB_RETRIES:-10}
+RETRIES=${STARTUP_DB_RETRIES:-3}
 SLEEP_SECONDS=${STARTUP_DB_RETRY_DELAY:-3}
 
 function run_manage_cmd() {
@@ -40,14 +40,9 @@ if [[ "${SKIP_PLATFORM_BOOTSTRAP:-0}" == "1" ]]; then
 fi
 
 if [[ "${RUN_PLATFORM_MIGRATIONS}" == "1" ]]; then
-  # run_with_retries
-  if python manage.py migrate; then
-    echo "[entrypoint] Database migrations applied."
-    return 0
-  fi
-  if [[ ${attempt} -ge ${RETRIES} ]]; then
-    echo "[entrypoint] Failed to run migrations after ${attempt} attempts." >&2
-    return 1
+  if ! run_with_retries; then
+    echo "[entrypoint] Migrations did not succeed after ${RETRIES} attempts; aborting startup." >&2
+    exit 1
   fi
 fi
 

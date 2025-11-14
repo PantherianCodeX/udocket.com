@@ -216,4 +216,4 @@ DOCSITE_URL = os.environ.get("DOCSITE_URL") or f"http://{DOCSITE_HOST}:{DOCSITE_
 DOCSITE_PREVIEW = Path(os.environ.get("DOCSITE_PREVIEW", "out/doc-builds/sites/dev/index.html"))
 
 PLATFORM_VENV_DIR = Path(os.environ.get("PLATFORM_VENV_DIR", ".venv"))
-DOCTOOLS_VENV_DIR = Path(os.environ.get("DOCTOOLS_VENV_DIR", "packages/docs_tooling/.venv"))
+DOCTOOLS_VENV_DIR = Path(os.environ.get("DOCTOOLS_VENV_DIR", ".venv"))

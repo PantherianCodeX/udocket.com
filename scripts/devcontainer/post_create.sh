@@ -13,6 +13,8 @@ export VIRTUAL_ENV="$VENV_DIR"
 export PATH="$VENV_DIR/bin:${PATH}"
 
 printf '[devcontainer] Preparing build cache scaffolding…\n'
+"$ROOT/scripts/devcontainer/ensure_buildx_builder.sh"
+export DOCKER_BUILDKIT=1
 ./scripts/setup_buildx_cache.sh
 
 printf '[devcontainer] Priming platform build cache…\n'
@@ -47,11 +49,30 @@ else
 fi
 popd >/dev/null
 
-if ! grep -Fq '/udocket/.venv/bin/activate' /root/.bashrc; then
-  printf '\n[ -f /udocket/.venv/bin/activate ] && source /udocket/.venv/bin/activate\n' >> /root/.bashrc
+PROFILE_SCRIPT="/etc/profile.d/udocket-venv.sh"
+cat <<'EOF' > "$PROFILE_SCRIPT"
+# shellcheck shell=sh
+if [ -d /udocket/.venv/bin ]; then
+  export VIRTUAL_ENV=/udocket/.venv
+  export UV_PROJECT_ENVIRONMENT=/udocket/.venv
+  case ":$PATH:" in
+    *":/udocket/.venv/bin:"*) ;;
+    *) PATH="/udocket/.venv/bin:${PATH}" ;;
+  esac
+  export PATH
 fi
+EOF
+chmod 0644 "$PROFILE_SCRIPT"
 
 printf '[devcontainer] Initializing Codex home and port…\n'
 ./scripts/devcontainer/setup_codex_home.sh
+
+# Persist BuildKit defaults for interactive shells
+cat <<'EOF' > /etc/profile.d/udocket-buildx.sh
+# shellcheck shell=sh
+export DOCKER_BUILDKIT=1
+export UDOCKET_BUILDX_BUILDER=${UDOCKET_BUILDX_BUILDER:-udocket-builder}
+EOF
+chmod 0644 /etc/profile.d/udocket-buildx.sh
 
 printf '[devcontainer] All tooling ready. Happy hacking! 🚀\n'

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Doc tooling for uDocket diagrams",
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=21.0.0",
     "npm": ">=10.0.0"
   },
   "scripts": {
@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^11.12.0",
-    "markdownlint-cli": "^0.39.0"
+    "markdownlint-cli": "^0.39.0",
+    "puppeteer": "^24.29.1"
   }
 }
