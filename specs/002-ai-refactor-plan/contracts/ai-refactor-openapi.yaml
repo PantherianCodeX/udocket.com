@@ -1,0 +1,183 @@
+openapi: 3.1.0
+info:
+  title: AI Refactor Implementation API
+  version: 0.1.0
+  description: |
+    Internal-only endpoints that surface implementation manifest status, readiness snapshots,
+    and residency/observability ledger data for Feature 002. These endpoints expose the JSON
+    artifacts stored under `specs/002-ai-refactor-plan/reports/` and `storage/ops|audit/`.
+servers:
+  - url: https://internal.udocket.local/api
+    description: Internal ops network
+
+components:
+  securitySchemes:
+    OpsToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ImplementationBlueprintRecord:
+      type: object
+      required: [id, artifactPath, targetRepoPath, owner, status, evidenceRefs, dependencies, criticalPath]
+      properties:
+        id:
+          type: string
+          format: uuid
+        artifactPath:
+          type: string
+        artifactSha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        targetRepoPath:
+          type: string
+        owner:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, complete, blocked]
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+            format: uuid
+        dependencies:
+          type: array
+          items:
+            type: string
+        criticalPath:
+          type: boolean
+    ReadinessSnapshot:
+      type: object
+      required: [componentId, laneId, owner, status, lastValidatedAt, evidenceRefs, riskScore]
+      properties:
+        componentId:
+          type: string
+          format: uuid
+        laneId:
+          type: string
+        owner:
+          type: string
+        status:
+          type: string
+          enum: [unknown, partial, ready, blocked]
+        lastValidatedAt:
+          type: string
+          format: date-time
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+            format: uuid
+        riskScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+    ResidencyLedgerEntry:
+      type: object
+      required:
+        [ledgerId, featureId, runId, stageKey, residencyTag, telemetryBundlePath,
+         timestamp, langsmithEvalIds]
+      properties:
+        ledgerId:
+          type: string
+          format: uuid
+        featureId:
+          type: string
+        runId:
+          type: string
+          format: uuid
+        stageKey:
+          type: string
+        residencyTag:
+          type: string
+        telemetryBundlePath:
+          type: string
+        langsmithEvalIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        langfuseSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        disconnectEvent:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+
+paths:
+  /ai-refactor/manifest:
+    get:
+      summary: Fetch the implementation manifest for feature 002
+      security:
+        - OpsToken: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, in_progress, complete, blocked]
+      responses:
+        '200':
+          description: Manifest records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImplementationBlueprintRecord'
+
+  /ai-refactor/readiness-snapshots:
+    get:
+      summary: List readiness snapshots with freshness + risk metadata
+      security:
+        - OpsToken: []
+      parameters:
+        - name: laneId
+          in: query
+          schema:
+            type: string
+        - name: maxStalenessDays
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Current readiness state
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReadinessSnapshot'
+
+  /ai-refactor/residency-ledger:
+    get:
+      summary: Retrieve residency/observability ledger entries for auditing
+      security:
+        - OpsToken: []
+      parameters:
+        - name: runId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: stageKey
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ledger entries filtered by query
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResidencyLedgerEntry'

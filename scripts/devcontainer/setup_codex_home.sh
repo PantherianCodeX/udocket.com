@@ -2,8 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-# Default to the Codex CLI's standard path inside the devcontainer. The
-# devcontainer maps a named volume to /root/.codex to persist across rebuilds.
+# Default to the Codex CLI's standard path inside the devcontainer. The# devcontainer maps a named volume to /root/.codex to persist across rebuilds.
 CODEX_HOME="${CODEX_HOME:-/root/.codex}"
 PORT_BASE="${CODEX_PORT_BASE:-20000}"
 PORT_SPAN="${CODEX_PORT_SPAN:-10000}"

@@ -108,12 +108,12 @@ behaviour; it only enforces cross-cutting engineering discipline.
 - `docs/platform/settings.md` — configuration governance and activation model.
 
 ## Recent Changes
+- 002-ai-refactor-plan: Added Python 3.12 (monorepo standard for automation agents/services). + LangGraph runtime, `packages.ai.api` + injected `AIClient`, LangSmith SDK, LangFuse client (R&D-only), structlog, OpenTelemetry, pytest/Hypothesis, uv tooling, Typewiz, Ruff/Pyright, repo-standard make targets.
 
 - 001-ai-refactor-plan: Added Python 3.12 for agents/services, TypeScript (React) for readiness dashboards. + LangGraph runtime, LangSmith SDK (`langsmith`), LangFuse client, structlog, OpenTelemetry, Postgres drivers (`asyncpg`/`psycopg`), uv-managed tooling, pytest/Hypothesis, Typewiz, Ruff, Pyright.
 - 001-ai-refactor-plan: Added Python 3.12 (monorepo standard) + LangGraph orchestration, `packages.ai.api` runtime, LangSmith SDK for evaluations, LangFuse collector (R&D only), structlog + OpenTelemetry, ops JSONL pipeline
-- 001-ai-refactor-plan: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 ## Active Technologies
+- Python 3.12 (monorepo standard for automation agents/services). + LangGraph runtime, `packages.ai.api` + injected `AIClient`, LangSmith SDK, LangFuse client (R&D-only), structlog, OpenTelemetry, pytest/Hypothesis, uv tooling, Typewiz, Ruff/Pyright, repo-standard make targets. (002-ai-refactor-plan)
+- Append-only ops JSONL + audit JSONL under `storage/ops|audit/ai-refactor/`; readiness datasets under `specs/001-ai-refactor-plan/data/`; schemas in `schemas/automation/`; Postgres used only by the established readiness dashboards (no new stores added). (002-ai-refactor-plan)
 
-- Python 3.12 for agents/services, TypeScript (React) for readiness dashboards. + LangGraph runtime, LangSmith SDK (`langsmith`), LangFuse client, structlog, OpenTelemetry, Postgres drivers (`asyncpg`/`psycopg`), uv-managed tooling, pytest/Hypothesis, Typewiz, Ruff, Pyright. (001-ai-refactor-plan)
-- Postgres (`services/readiness`), append-only ops JSONL/audit JSONL in `storage/`, object storage for artifacts, `.env` for local secrets until secrets service lands. (001-ai-refactor-plan)
