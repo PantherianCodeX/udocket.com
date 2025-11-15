@@ -3,6 +3,12 @@ dist/
 build/
 out/
 
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+
 # Dependencies & caches
 node_modules/
 .cache/

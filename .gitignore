@@ -5,6 +5,14 @@
 /typings/external_stubs/
 /typings/vendor/
 
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.idea/
+.vscode/
+
 # Codex CLI runtime (keep prompts/config committed, ignore user artifacts)
 .codex/.codexhome
 .codex/app-port

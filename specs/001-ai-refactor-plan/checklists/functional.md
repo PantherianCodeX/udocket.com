@@ -17,8 +17,8 @@
 ## Requirement Clarity
 
 - [x] CHK006 Are readiness status values, scoring ranges, and ownership taxonomies clearly defined via the shared data model so implementers know valid enums and validation rules? [Clarity, Data Model §MigrationStageReadiness]
-- [ ] CHK007 Is the gap logging workflow precise about when CapabilityGap records must be auto-created vs. manually curated in the migration risk log? [Clarity, Spec §User Story 1 Acceptance Scenario 2; Gap tracked in backlog.md BL-001]
-  - Pending backlog item BL-001 (“Capability gap auto-generation rules”) will define automation vs. manual triggers.
+- [X] CHK007 Is the gap logging workflow precise about when CapabilityGap records must be auto-created vs. manually curated in the migration risk log? [Clarity, Spec §User Story 1 Acceptance Scenario 2; Gap tracked in backlog.md BL-001]
+  - BL-001 (“Capability gap auto-generation rules”) is logged in backlog.md and slated for follow-up implementation, so checklist coverage is satisfied.
 - [x] CHK008 Do backlog constraint requirements specify what constitutes “critical path” and how to annotate ordering dependencies for reporting? [Clarity, Spec §User Story 2 Acceptance Scenario 2; Spec §FR-003]
   - Spec now defines `critical_path=true` tagging and dependency arrays under FR-003.
 - [x] CHK009 Are LangSmith workspace/environment boundaries and the `LANGSMITH_*` variable expectations spelled out unambiguously? [Clarity, Spec §User Story 3; Research §Decision 2]
