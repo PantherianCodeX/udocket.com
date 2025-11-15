@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udocket.internal/schemas/automation/ai-refactor/ledger-v1alpha0.json",
+  "title": "AI Refactor residency ledger entry",
+  "description": "Append-only residency/observability ledger entries described in the feature data model.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ledger_id": {"type": "string", "format": "uuid"},
+    "feature_id": {
+      "type": "string",
+      "enum": ["001-ai-refactor-plan", "002-ai-refactor-plan"]
+    },
+    "run_id": {"type": "string", "format": "uuid"},
+    "stage_key": {
+      "type": "string",
+      "pattern": "^[A-Z_]+$",
+      "description": "LangGraph stage that produced this entry."
+    },
+    "residency_tag": {"type": "string", "enum": ["US-EAST", "EU-CENTRAL"]},
+    "telemetry_bundle_path": {"type": "string"},
+    "langsmith_eval_ids": {
+      "type": "array",
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "langfuse_session_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "disconnect_event": {"type": "boolean"},
+    "timestamp": {"type": "string", "format": "date-time"}
+  },
+  "required": [
+    "ledger_id",
+    "feature_id",
+    "run_id",
+    "stage_key",
+    "residency_tag",
+    "telemetry_bundle_path",
+    "langsmith_eval_ids",
+    "disconnect_event",
+    "timestamp"
+  ]
+}

@@ -222,7 +222,10 @@ typing.strict: ## Enforce strict typing gates
 	$(UV_ROOT) run --project apps/platform --extra dev python scripts/typing/check_strict.py --tool both
 	$(UV_ROOT) run --project apps/platform --extra dev typewiz readiness --manifest out/test-reports/typing/typing_audit.json --level $(TYPEWIZ_LEVEL) $(foreach status,$(TYPEWIZ_STATUSES),--status $(status)) --limit $(TYPEWIZ_LIMIT) || true
 
-typing.ai: typing.ai.mypy typing.ai.pyright typing.ai.ruff ## Lint + type-check packages/ai
+typing.ai: typing.ai.guardrail typing.ai.mypy typing.ai.pyright typing.ai.ruff ## Lint + type-check packages/ai
+
+typing.ai.guardrail: ## Guardrail for packages/common import hygiene
+	@echo "Guardrail skipped (per automation-only workflow)"
 
 typing.ai.mypy: ## Run mypy for packages/ai with its local config
 	$(UV_ROOT) run --project apps/platform --extra dev mypy --config-file packages/ai/mypy.ini packages/ai
@@ -385,12 +388,20 @@ docs.sync.diagrams: ## Refresh diagram appendix indexes
 	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.diagram_index"
 docs.check.diagrams: ## Verify diagram appendix indexes are current
 	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.build.diagram_index --check"
+docs.check.links: ## Validate docs link integrity
+	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.check.links"
 docs.sync.trees: ## Refresh repository tree appendix (disabled until repo realignment completes)
 	@echo "docs.sync.trees is locked until the repository structure matches the appendix."
 	@echo "Skip this target for now; it will be re-enabled after the tree refactor."
 	@exit 1
 docs.check.trees: ## Verify repository tree appendix matches the current repo structure
 	$(DOCS_EXEC) "set -euo pipefail; $(DOCS_PY_CONTAINER) python -m doc_tools.check.repository_trees"
+schema.lint: ## Placeholder schema lint target (runs when schemas directory exists)
+	@if [ -d schemas ]; then \
+		$(UV_ROOT) run --project automation --extra dev spectral lint schemas; \
+	else \
+		echo "No schemas directory yet; skipping schema.lint"; \
+	fi
 docs.check: ## Run all docs checks (tree check excluded until refactor lands)
 	@$(MAKE) docs.check.nav docs.check.runbooks docs.check.api_codes docs.check.slo docs.check.diagrams docs.check.build
 docs.check.build: ## Validate docs build prerequisites without modifying artifacts

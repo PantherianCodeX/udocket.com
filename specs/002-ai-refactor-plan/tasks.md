@@ -23,17 +23,17 @@ description: "Task list for AI Refactor Implementation Delivery"
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Configure Codex home and the shared `.venv` per `./scripts/codexhome.sh --print-export .` and capture the exported env in `specs/002-ai-refactor-plan/reports/baseline_env.log`.
-- [ ] T002 Install automation project dependencies by running `uv pip install -r automation/requirements.txt --python .venv/bin/python` and log success to `specs/002-ai-refactor-plan/reports/automation_install.log`.
-- [ ] T003 Run baseline gates (`make typing.ai`, `make all.test`, `make docs.check.links`, `make schema.lint`) and archive the output under `specs/002-ai-refactor-plan/reports/baseline_gates.log`.
+- [x] T001 Configure Codex home and the shared `.venv` per `./scripts/codexhome.sh --print-export .` and capture the exported env in `specs/002-ai-refactor-plan/reports/baseline_env.log`.
+- [x] T002 Install automation project dependencies by running `uv pip install -r automation/requirements.txt --python .venv/bin/python` and log success to `specs/002-ai-refactor-plan/reports/automation_install.log`.
+- [x] T003 Run baseline gates (`make typing.ai`, `make all.test`, `make docs.check.links`, `make schema.lint`) and archive the output under `specs/002-ai-refactor-plan/reports/baseline_gates.log`.
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T004 Create the required reporting directories (`specs/002-ai-refactor-plan/reports/manifest.jsonl`, `specs/002-ai-refactor-plan/reports/manifest_gaps.json`, `specs/002-ai-refactor-plan/reports/automation_env.log`, `storage/ops/ai-refactor/graphs/`, `storage/audit/ai-refactor/`) and commit README placeholders describing their contents.
+- [x] T004 Create the required reporting directories (`specs/002-ai-refactor-plan/reports/manifest.jsonl`, `specs/002-ai-refactor-plan/reports/manifest_gaps.json`, `specs/002-ai-refactor-plan/reports/automation_env.log`, `storage/ops/ai-refactor/graphs/`, `storage/audit/ai-refactor/`) and commit README placeholders describing their contents.
 - [ ] T005 Implement a `scripts/check_common_guardrail.py` helper that scans `packages/common/` and fails if any module imports Django/LangGraph/telemetry packages, then call it from `make typing.ai` to enforce the framework-free guardrail.
-- [ ] T006 Capture the pre-cleanup root layout using `tree -L 1 > specs/002-ai-refactor-plan/reports/root_before.txt` so the repo baseline is documented before refactors.
+- [x] T006 Capture the pre-cleanup root layout using `tree -L 1 > specs/002-ai-refactor-plan/reports/root_before.txt` so the repo baseline is documented before refactors.
 
 ---
 
@@ -43,14 +43,14 @@ description: "Task list for AI Refactor Implementation Delivery"
 
 **Independent Test**: `python -m packages.devops.readiness.cli manifest --feature 002-ai-refactor-plan --out specs/002-ai-refactor-plan/reports/manifest.jsonl` plus `python -m packages.devops.readiness.cli verify --feature 002-ai-refactor-plan` should produce the manifest and surface gaps.
 
-- [ ] T007 [US1] Add typed dataclasses/StrEnums in `packages/common/types/ai_refactor.py` covering `ImplementationBlueprintRecord`, `StageExecutionRecord`, and telemetry ledger references per `data-model.md`.
-- [ ] T008 [US1] Publish JSON Schemas for the manifest and telemetry ledger under `schemas/automation/ai-refactor/manifest-v1alpha2.json` and `ledger-v1alpha0.json`, sourcing field definitions from the contracts and data model.
-- [ ] T009 [US1] Extend `packages/devops/readiness/cli.py` with the `manifest` subcommand that ingests `specs/001-ai-refactor-plan/` artifacts, hydrates the typed records, and writes `specs/002-ai-refactor-plan/reports/manifest.jsonl`.
-- [ ] T010 [US1] Implement manifest signing/verifier helpers in `packages/devops/readiness/manifest.py` that compute SHA256 per artifact, timestamp entries, and attach owner metadata.
-- [ ] T011 [US1] Add a manifest gap detector writing `specs/002-ai-refactor-plan/reports/manifest_gaps.json` when artifacts are unmapped, including dependency cycles flagged as blocked.
-- [ ] T012 [US1] Implement the `/ai-refactor/manifest` endpoint in `automation/langgraph/api_refactor.py` (per `contracts/ai-refactor-openapi.yaml`) that proxies `specs/002-ai-refactor-plan/reports/manifest.jsonl` and respects the OpsToken security scheme.
-- [ ] T013 [US1] Add property/regression tests in `tests/automation/test_manifest.py` that assert determinism/hashing and exercise the manifest endpoint with mocked tokens.
-- [ ] T014 [US1] Document the manifest workflow, API contract, and evidence expectations in `docs/automation/langgraph-agents.md` and `specs/002-ai-refactor-plan/quickstart.md` section 3.
+- [x] T007 [US1] Add typed dataclasses/StrEnums in `packages/common/types/ai_refactor.py` covering `ImplementationBlueprintRecord`, `StageExecutionRecord`, and telemetry ledger references per `data-model.md`.
+- [x] T008 [US1] Publish JSON Schemas for the manifest and telemetry ledger under `schemas/automation/ai-refactor/manifest-v1alpha2.json` and `ledger-v1alpha0.json`, sourcing field definitions from the contracts and data model.
+- [x] T009 [US1] Extend `packages/devops/readiness/cli.py` with the `manifest` subcommand that ingests `specs/001-ai-refactor-plan/` artifacts, hydrates the typed records, and writes `specs/002-ai-refactor-plan/reports/manifest.jsonl`.
+- [x] T010 [US1] Implement manifest signing/verifier helpers in `packages/devops/readiness/manifest.py` that compute SHA256 per artifact, timestamp entries, and attach owner metadata.
+- [x] T011 [US1] Add a manifest gap detector writing `specs/002-ai-refactor-plan/reports/manifest_gaps.json` when artifacts are unmapped, including dependency cycles flagged as blocked.
+- [x] T012 [US1] Implement the `/ai-refactor/manifest` endpoint in `automation/langgraph/api_refactor.py` (per `contracts/ai-refactor-openapi.yaml`) that proxies `specs/002-ai-refactor-plan/reports/manifest.jsonl` and respects the OpsToken security scheme.
+- [x] T013 [US1] Add property/regression tests in `tests/automation/test_manifest.py` that assert determinism/hashing and exercise the manifest endpoint with mocked tokens.
+- [x] T014 [US1] Document the manifest workflow, API contract, and evidence expectations in `docs/automation/langgraph-agents.md` and `specs/002-ai-refactor-plan/quickstart.md` section 3.
 
 ---
 
@@ -59,6 +59,8 @@ description: "Task list for AI Refactor Implementation Delivery"
 **Goal**: Materialize typed LangGraph lanes, StageMaps, and AI runtime wiring so the automation pipelines defined in spec 001 execute deterministically with QA contracts and residency tagging.
 
 **Independent Test**: `make automation.langgraph.plan` should instantiate every lane/stage, emit deterministic ops JSONL entries, and log QA contract satisfaction.
+
+> **Doc check reminder:** Before editing LangGraph, LangSmith, or LangFuse wiring covered in this story, consult the official docs (LangGraph spec plus LangSmith/LangFuse documentation surfaced via the Archon knowledge base) to guarantee you’re implementing the latest runtime behaviors rather than relying on outdated training-data assumptions; capture the doc references you used in `specs/002-ai-refactor-plan/reports/`.
 
 - [ ] T015 [US2] Expand `automation/pipelines/stage_map.py` with the lane definitions, StageKey sequences, QA contract IDs, and cost ceilings described in spec 001 while keeping stage metadata typed.
 - [ ] T016 [US2] Create lane-value objects/StrEnums in `automation/pipelines/models.py` that mirror `LangGraphLanePackage` (lane_id, stage_keys, ai_runtime_profile) and expose validation helpers.
@@ -75,6 +77,8 @@ description: "Task list for AI Refactor Implementation Delivery"
 **Goal**: Ensure telemetry (OTLP, LangSmith, LangFuse), residency ledgers, and the Entity Relationship Graph persist alongside each automation dry run and expose readiness snapshots + ledger data via the documented contracts.
 
 **Independent Test**: `uv run --project automation make ai-module.dry-run` should emit OTLP spans, LangSmith eval IDs, LangFuse evidence, ops JSONL, residency ledger entries, and write entity graph snapshots to `storage/ops/ai-refactor/graphs/`, then `uv run --project automation python -m packages.devops.readiness.cli verify --feature 002-ai-refactor-plan` should assert those outputs.
+
+> **Doc check reminder:** Confirm the LangGraph, LangSmith, and LangFuse documentation referenced in your work reflects the current production guidance (use the Archon knowledge base to retrieve the latest sources) before modifying instrumentation or epidemiology surfaces, and log the doc versions cited in the appropriate `specs/002-ai-refactor-plan/reports/` artifact.
 
 - [ ] T022 [US3] Implement the telemetry configuration module in `packages/telemetry/config.py` that centralizes structlog/OTLP setup, LangSmith workspace routing, LangFuse toggles, and writes ledger rows to `storage/audit/ai-refactor/` per the contracts.
 - [ ] T023 [US3] Instrument LangGraph stages to append residency ledger entries (including `residency_tag`, `telemetry_bundle_path`, `langsmith_eval_ids`, `langfuse_session_id`, `disconnect_event`) handled by `packages/common/types/ai_refactor.py` and persisted under `storage/audit/ai-refactor/ledger.jsonl`.

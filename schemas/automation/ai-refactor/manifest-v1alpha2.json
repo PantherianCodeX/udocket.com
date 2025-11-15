@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udocket.internal/schemas/automation/ai-refactor/manifest-v1alpha2.json",
+  "title": "AI Refactor implementation manifest entry",
+  "description": "Links blueprint artifacts to repo paths, owners, telemetry, and stage executions for Feature 002.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_path": {
+      "type": "string",
+      "description": "Relative path under specs/001-ai-refactor-plan pointing to the blueprint artifact."
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "target_repo_path": {
+      "type": "string",
+      "description": "Destination path in the repo that implements the artifact."
+    },
+    "owner": {
+      "type": "string",
+      "enum": [
+        "Platform Architecture",
+        "Applied AI Engineering",
+        "Automation Engineering"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "complete", "blocked"]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string", "format": "uuid"},
+      "description": "Ledger/evidence IDs that justify completion or blocking."
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Artifact IDs that must finish before this entry resolves."
+    },
+    "critical_path": {
+      "type": "boolean",
+      "description": "Indicates whether delays here block LangGraph dial-up."
+    },
+    "stage_executions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/defs/stage_execution"
+      }
+    }
+  },
+  "required": [
+    "artifact_path",
+    "artifact_sha256",
+    "target_repo_path",
+    "owner",
+    "status",
+    "evidence_refs",
+    "dependencies",
+    "critical_path",
+    "stage_executions"
+  ],
+  "defs": {
+    "stage_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {"type": "string", "format": "uuid"},
+        "lane_id": {
+          "type": "string",
+          "enum": ["TRANSCRIBE", "ANALYZE", "COMPOSE", "TIMELINE", "RELATIONSHIP"]
+        },
+        "stage_key": {
+          "type": "string",
+          "pattern": "^[A-Z_]+$",
+          "description": "LangGraph stage key (must match packages.common.agents.stage_map.StageKey)."
+        },
+        "status": {"type": "string", "enum": ["pending", "in_progress", "complete", "blocked"]},
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": ["string", "null"], "format": "date-time"},
+        "token_usage": {"type": ["integer", "null"], "minimum": 0},
+        "telemetry_refs": {
+          "type": "array",
+          "items": {"type": "string", "format": "uuid"}
+        },
+        "residency_ledger_id": {"type": ["string", "null"], "format": "uuid"}
+      },
+      "required": [
+        "run_id",
+        "lane_id",
+        "stage_key",
+        "status",
+        "started_at",
+        "telemetry_refs"
+      ]
+    }
+  }
+}

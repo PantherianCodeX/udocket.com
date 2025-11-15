@@ -1,0 +1,45 @@
+.
+├── AGENTS.md
+├── apps
+├── automation
+├── bake.hcl
+├── CHANGELOG.md
+├── config
+├── conftest.py
+├── CONTRIBUTING.md
+├── coverage.xml
+├── db
+├── deps
+├── docker-compose.cache.yml
+├── docker-compose.dev.yml
+├── docker-compose.prod.yml
+├── docker-compose.yml
+├── docs
+├── infra
+├── Makefile
+├── manage.py
+├── mypy.ini
+├── ops
+├── out
+├── packages
+├── __pycache__
+├── pyproject.toml
+├── pyrightconfig.docs-scripts.json
+├── pyrightconfig.json
+├── pytest.ini
+├── README.md
+├── requirements
+├── scripts
+├── services
+├── spec
+├── specs
+├── storage
+├── tests
+├── tooling
+├── typewiz.html
+├── typewiz.json
+├── typewiz.toml
+├── typings
+└── uv.lock
+
+20 directories, 22 files

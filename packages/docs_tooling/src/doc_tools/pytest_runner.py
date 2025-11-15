@@ -4,7 +4,7 @@ import argparse
 import os
 import shlex
 import sys
-from typing import Any
+from typing import Any, Callable
 from collections.abc import Iterable
 
 import pytest
@@ -68,7 +68,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             f"--cov-fail-under={threshold}",
             *pytest_args,
         ]
-    pytest_main: Any = pytest.main
+    pytest_main: Callable[[list[str]], Any] = getattr(pytest, "main")
     result = pytest_main(pytest_args)
     return int(result) if isinstance(result, int) else 0
 

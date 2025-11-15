@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-import importlib
-from types import ModuleType
+from . import manage_docs  # noqa: F401
+from . import paths  # noqa: F401
+from . import pytest_runner  # noqa: F401
 
 __all__ = ["manage_docs", "paths", "pytest_runner"]
-
-
-def __getattr__(name: str) -> ModuleType:  # pragma: no cover - thin wrapper
-    if name not in __all__:
-        raise AttributeError(f"module 'doc_tools' has no attribute {name!r}")
-    return importlib.import_module(f".{name}", __name__)

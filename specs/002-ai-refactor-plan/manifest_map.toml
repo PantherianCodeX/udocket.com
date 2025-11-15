@@ -1,0 +1,43 @@
+[[artifacts]]
+id = "ops_manifest"
+artifact_path = "specs/001-ai-refactor-plan/reports/ops_audit_manifest.md"
+target_repo_path = "specs/002-ai-refactor-plan/reports/manifest.jsonl"
+owner = "Automation Engineering"
+status = "in_progress"
+dependencies = []
+critical_path = true
+
+evidence_refs = []
+
+[[artifacts]]
+id = "manifest_helper"
+artifact_path = "specs/001-ai-refactor-plan/blueprints/devops_readiness_module.md"
+target_repo_path = "packages/devops/readiness/manifest.py"
+owner = "Automation Engineering"
+status = "pending"
+dependencies = ["ops_manifest"]
+critical_path = true
+
+evidence_refs = []
+
+[[artifacts]]
+id = "manifest_cli"
+artifact_path = "specs/001-ai-refactor-plan/blueprints/readiness_api.md"
+target_repo_path = "packages/devops/readiness/cli.py"
+owner = "Automation Engineering"
+status = "pending"
+dependencies = ["manifest_helper"]
+critical_path = false
+
+evidence_refs = []
+
+[[artifacts]]
+id = "manifest_api"
+artifact_path = "specs/001-ai-refactor-plan/blueprints/langsmith_ingestion_api.md"
+target_repo_path = "automation/langgraph/api_refactor.py"
+owner = "Automation Engineering"
+status = "pending"
+dependencies = ["manifest_cli"]
+critical_path = false
+
+evidence_refs = []

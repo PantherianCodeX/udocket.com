@@ -76,14 +76,17 @@ WORKDIR /udocket
 COPY deps/typewiz /udocket/deps/typewiz
 
 COPY apps/platform/pyproject.toml apps/platform/uv.lock /udocket/apps/platform/
+COPY automation/pyproject.toml automation/uv.lock /udocket/automation/
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     if [ "$BAKE_VENV" = "1" ]; then \
       export UV_PROJECT_ENVIRONMENT=/opt/venv VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:${PATH}"; \
       uv sync --frozen --no-dev --no-install-project --project apps/platform; \
+      uv sync --frozen --no-dev --no-install-project --project automation; \
       if [ "$DEV_TOOLS" = "1" ]; then \
         export UV_PROJECT_ENVIRONMENT=.venv VIRTUAL_ENV=.venv PATH=".venv/bin:${PATH}"; \
         uv sync --frozen --only-group dev --no-install-project --project apps/platform; \
+        uv sync --frozen --only-group dev --no-install-project --project automation; \
       fi; \
     fi;
 

@@ -33,6 +33,7 @@ uv run --project automation make readiness.dry-run
 ```
 - Confirm OTLP spans, LangSmith evals, LangFuse R&D traces, ops JSONL, and residency ledger entries land in `storage/ops|audit/ai-refactor/`.
 - Execute the LangFuse disconnect playbook and re-run the dry run to ensure ingestion stops and evidence is logged.
+- **Doc check reminder:** Before modifying LangSmith, LangFuse, or LangGraph wiring, consult the official documentation (LangGraph spec plus LangSmith/LangFuse references available through the Archon knowledge base) to ensure you’re building against the latest implementation guidance rather than stale training data, and capture the version you referenced along with the telemetry evidence.
 
 ## 6. Testing & Quality Gates
 - `make typing.ai`

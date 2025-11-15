@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "udocket-automation"
+version = "0.1.0"
+description = "LangGraph automation pipelines, telemetry wiring, and operational tooling."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.6.10,<0.7",
+    "langsmith>=0.4.39,<0.5",
+    "langfuse>=3.10.0,<3.11",
+    "structlog>=24.0.0,<25",
+    "opentelemetry-api>=1.29.0,<2",
+    "opentelemetry-sdk>=1.29.0,<2",
+    "opentelemetry-instrumentation>=0.52.0,<1",
+    "hypothesis>=6.95.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2,<9",
+    "pytest-cov>=5.0.0,<6",
+    "pytest-xdist>=3.8.0,<4",
+    "pyright>=1.1.407,<2",
+    "ruff>=0.7.0,<1",
+    "mypy>=1.18.2,<1.19",
+    "spectral==0.24",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]

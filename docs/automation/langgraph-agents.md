@@ -67,6 +67,8 @@ ______________________________________________________________________
 - **References:** This document intentionally scopes to LangGraph agents. Integration specifics live in their respective service documents.
 - **Contacts:** Applied AI Engineering (primary owners), Platform Architecture (co-owners).
 
+> **Doc discipline:** Before updating any LangGraph, LangSmith, or LangFuse implementation detail mentioned in this spec, consult the relevant authoritative documentation (LangGraph spec + LangSmith/LangFuse docs surfaced via the Archon knowledge base) so the work reflects the current runtime contracts instead of older training-data artifacts. Capture the doc versions you relied on in the evidence logs (`specs/002-ai-refactor-plan/reports/`) for traceability.
+
 ______________________________________________________________________
 
 ## 1) Purpose

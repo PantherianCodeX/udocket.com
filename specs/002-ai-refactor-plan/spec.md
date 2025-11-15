@@ -33,6 +33,8 @@ The modernization program manager needs an implementation operating picture that
 
 The lead engineer needs real LangGraph lanes, typed models, and AI runtime integrations that reflect the structures defined in spec 001 so that modernization is visible inside `automation/pipelines/` and `packages/ai/` rather than remaining conceptual.
 
+> **Doc requirement:** When touching LangGraph, LangSmith, or LangFuse wiring for this story, consult the authoritative documentation (LangGraph spec plus LangSmith/LangFuse docs surfaced through Archon knowledge base) so you implement modern behavior rather than relying on obsolete training data; log the version/date of the docs you referenced in `specs/002-ai-refactor-plan/reports/` evidence.
+
 **Why this priority**: The business value arrives only when the new lanes, type contracts, and runtime protections are merged; staying in planning mode blocks LangGraph adoption and AI runtime guardrails.
 
 **Independent Test**: Execute `make automation.langgraph.plan` and confirm it instantiates every lane described in `specs/001-ai-refactor-plan/plan.md`, producing deterministic manifests, ops JSONL, and audit entries without importing provider SDKs directly.
