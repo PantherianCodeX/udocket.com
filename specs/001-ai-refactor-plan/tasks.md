@@ -45,17 +45,17 @@ description: "Task list for executing the AI Module Migration Completion Plan"
 ### Tests for User Story 1
 
 - [X] T007 [P] [US1] Write the API contract test plan in `/home/user/Code/udocket/specs/001-ai-refactor-plan/testplans/api_readiness_tests.md`, citing request/response payloads from `contracts/openapi.yaml`.
-- [ ] T008 [P] [US1] Describe readiness snapshot unit/property tests in `/home/user/Code/udocket/specs/001-ai-refactor-plan/testplans/readiness_snapshot_tests.md`, covering scoring ranges, owner validation, and automated gap creation triggers.
+- [X] T008 [P] [US1] Describe readiness snapshot unit/property tests in `/home/user/Code/udocket/specs/001-ai-refactor-plan/testplans/readiness_snapshot_tests.md`, covering scoring ranges, owner validation, and automated gap creation triggers.
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Populate baseline readiness datasets (`inventory.json`, `gaps.json`) inside `/home/user/Code/udocket/specs/001-ai-refactor-plan/data/readiness/` using the drafted typed primitives.
-- [ ] T010 [P] [US1] Build an aggregation notebook `/home/user/Code/udocket/specs/001-ai-refactor-plan/tools/readiness_aggregator.ipynb` that produces readiness matrices, blocker summaries, and export snippets for dashboards.
-- [ ] T011 [US1] Implement `packages/devops/readiness/cli.py` with a `refresh` command that ingests raw inputs (CSV/Sheets) and regenerates readiness + ops JSONL artifacts into `specs/001-ai-refactor-plan/data|reports/`.
-- [ ] T012 [US1] Build the underlying ingest/aggregation module in `packages/devops/readiness/service.py` plus a pyproject entry point; capture contract details in `blueprints/devops_readiness_module.md`.
-- [ ] T013 [P] [US1] Draft the API blueprint in `/home/user/Code/udocket/specs/001-ai-refactor-plan/blueprints/readiness_api.md`, detailing serializers/views that will consume the devops module outputs.
-- [ ] T014 [US1] Design the readiness dashboard UX in `/home/user/Code/udocket/specs/001-ai-refactor-plan/blueprints/readiness_dashboard.md`, including wireframes, accessibility notes, and data bindings drawing from the devops module.
-- [ ] T015 [US1] Maintain a blockers/risk log at `/home/user/Code/udocket/specs/001-ai-refactor-plan/reports/risk_log.jsonl`, tagging each entry with owners, severity, and mitigation plan references.
+- [X] T009 [US1] Populate baseline readiness datasets (`inventory.json`, `gaps.json`) inside `/home/user/Code/udocket/specs/001-ai-refactor-plan/data/readiness/` using the drafted typed primitives.
+- [X] T010 [P] [US1] Build an aggregation notebook `/home/user/Code/udocket/specs/001-ai-refactor-plan/tools/readiness_aggregator.ipynb` that produces readiness matrices, blocker summaries, and export snippets for dashboards.
+- [X] T011 [US1] Implement `packages/devops/readiness/cli.py` with a `refresh` command that ingests raw inputs (CSV/Sheets) and regenerates readiness + ops JSONL artifacts into `specs/001-ai-refactor-plan/data|reports/`.
+- [X] T012 [US1] Build the underlying ingest/aggregation module in `packages/devops/readiness/service.py` plus a pyproject entry point; capture contract details in `blueprints/devops_readiness_module.md`.
+- [X] T013 [P] [US1] Draft the API blueprint in `/home/user/Code/udocket/specs/001-ai-refactor-plan/blueprints/readiness_api.md`, detailing serializers/views that will consume the devops module outputs.
+- [X] T014 [US1] Design the readiness dashboard UX in `/home/user/Code/udocket/specs/001-ai-refactor-plan/blueprints/readiness_dashboard.md`, including wireframes, accessibility notes, and data bindings drawing from the devops module.
+- [X] T015 [US1] Maintain a blockers/risk log at `/home/user/Code/udocket/specs/001-ai-refactor-plan/reports/risk_log.jsonl`, tagging each entry with owners, severity, and mitigation plan references.
 
 ---
 
@@ -67,14 +67,14 @@ description: "Task list for executing the AI Module Migration Completion Plan"
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Create `testplans/backlog_generator_tests.md` covering dependency sorting, critical-path flags (`critical_path=true`), and gate propagation rules.
+- [X] T016 [P] [US2] Create `testplans/backlog_generator_tests.md` covering dependency sorting, critical-path flags (`critical_path=true`), and gate propagation rules.
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Author `blueprints/migration_stage_plan.md` describing stage metadata, QA policies, and cost ceilings aligned to the LangGraph TDD appendix.
-- [ ] T018 [US2] Prototype the backlog generator logic in `/home/user/Code/udocket/specs/001-ai-refactor-plan/scripts/migration_plan_generator.py`, consuming readiness datasets and emitting draft `MigrationTask` records.
-- [ ] T019 [P] [US2] Document the `/migrations/backlog` API shape plus serializer expectations in `blueprints/migration_plan_api.md`, linking to `contracts/openapi.yaml`.
-- [ ] T020 [US2] Generate `data/backlog/migration_backlog.json` and the narrative companion `reports/dependency_story.md`, noting critical path chains and sequencing rationale.
+- [X] T017 [US2] Author `blueprints/migration_stage_plan.md` describing stage metadata, QA policies, and cost ceilings aligned to the LangGraph TDD appendix.
+- [X] T018 [US2] Prototype the backlog generator logic in `/home/user/Code/udocket/specs/001-ai-refactor-plan/scripts/migration_plan_generator.py`, consuming readiness datasets and emitting draft `MigrationTask` records.
+- [X] T019 [P] [US2] Document the `/migrations/backlog` API shape plus serializer expectations in `blueprints/migration_plan_api.md`, linking to `contracts/openapi.yaml`.
+- [X] T020 [US2] Generate `data/backlog/migration_backlog.json` and the narrative companion `reports/dependency_story.md`, noting critical path chains and sequencing rationale.
 
 ---
 
@@ -86,21 +86,21 @@ description: "Task list for executing the AI Module Migration Completion Plan"
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] Capture LangSmith ingestion test cases in `testplans/langsmith_ingestion.md`, including schema validation and AI runtime enforcement scenarios.
-- [ ] T022 [P] [US3] Capture LangFuse enable/disable test cases in `testplans/langfuse_sessions.md`, covering sampling caps, TTL enforcement, and kill-switch timelines.
+- [X] T021 [P] [US3] Capture LangSmith ingestion test cases in `testplans/langsmith_ingestion.md`, including schema validation and AI runtime enforcement scenarios.
+- [X] T022 [P] [US3] Capture LangFuse enable/disable test cases in `testplans/langfuse_sessions.md`, covering sampling caps, TTL enforcement, and kill-switch timelines.
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Document workspace metadata (env names, owners, rotation cadence, `.env` variable mapping) in `data/tooling/workspaces.yaml`.
-- [ ] T024 [US3] Script LangSmith workspace provisioning under `scripts/langsmith/provision_workspace.py`, emitting logs/evidence into `reports/langsmith_workspace_records.jsonl`.
-- [ ] T025 [US3] Script LangSmith evaluation runs under `scripts/langsmith/run_eval.py`, tagging prompts/datasets and producing `reports/langsmith_eval_results.json`.
-- [ ] T026 [US3] Script LangSmith export processing under `scripts/langsmith/export_results.py` using the local schema `schemas/tooling/evaluation_evidence.schema.json` inside the feature directory.
-- [ ] T027 [US3] Draft the tooling ingestion blueprint (`blueprints/langsmith_ingestion_api.md`) describing how `/tooling/langsmith/evaluations` will be implemented later.
-- [ ] T028 [US3] Write the LangFuse enable/disable SOP in `reports/langfuse_enable_disable.md`, attaching screenshots/evidence references.
-- [ ] T029 [US3] Update `docs/automation/langgraph-agents.md` §8.3 with LangSmith evaluation and LangFuse R&D activation steps, referencing the evidence files stored under `specs/001-ai-refactor-plan/reports/` (this is the only out-of-feature edit).
-- [ ] T030 [P] [US3] Extend `quickstart.md` with the LangSmith/LangFuse operational checklist, noting evidence file locations.
-- [ ] T031 [US3] Document vendor budget monitoring thresholds and alert hooks in `reports/vendor_budget_plan.md`, tying to the data-model’s `VendorUsageBudget` fields.
-- [ ] T032 [US3] Map telemetry and audit evidence expectations to actual file outputs in `reports/tooling_evidence_matrix.md` to satisfy observability success criteria.
+- [X] T023 [US3] Document workspace metadata (env names, owners, rotation cadence, `.env` variable mapping) in `data/tooling/workspaces.yaml`.
+- [X] T024 [US3] Script LangSmith workspace provisioning under `scripts/langsmith/provision_workspace.py`, emitting logs/evidence into `reports/langsmith_workspace_records.jsonl`.
+- [X] T025 [US3] Script LangSmith evaluation runs under `scripts/langsmith/run_eval.py`, tagging prompts/datasets and producing `reports/langsmith_eval_results.json`.
+- [X] T026 [US3] Script LangSmith export processing under `scripts/langsmith/export_results.py` using the local schema `schemas/tooling/evaluation_evidence.schema.json` inside the feature directory.
+- [X] T027 [US3] Draft the tooling ingestion blueprint (`blueprints/langsmith_ingestion_api.md`) describing how `/tooling/langsmith/evaluations` will be implemented later.
+- [X] T028 [US3] Write the LangFuse enable/disable SOP in `reports/langfuse_enable_disable.md`, attaching screenshots/evidence references.
+- [X] T029 [US3] Update `docs/automation/langgraph-agents.md` §8.3 with LangSmith evaluation and LangFuse R&D activation steps, referencing the evidence files stored under `specs/001-ai-refactor-plan/reports/` (this is the only out-of-feature edit).
+- [X] T030 [P] [US3] Extend `quickstart.md` with the LangSmith/LangFuse operational checklist, noting evidence file locations.
+- [X] T031 [US3] Document vendor budget monitoring thresholds and alert hooks in `reports/vendor_budget_plan.md`, tying to the data-model’s `VendorUsageBudget` fields.
+- [X] T032 [US3] Map telemetry and audit evidence expectations to actual file outputs in `reports/tooling_evidence_matrix.md` to satisfy observability success criteria.
 
 ---
 
@@ -108,36 +108,36 @@ description: "Task list for executing the AI Module Migration Completion Plan"
 
 **Goal**: Produce execution blueprints for schema rename, root cleanup, automation tree restoration, packages/common purity, tooling outputs, Codex workflow, and confirmations.
 
-- [ ] T033 [US4] Draft the schema-bundle rename plan (`blueprints/schema_rename_playbook.md`) covering command sequence, doc updates, and verification steps before touching `/spec → /schemas` in a future implementation.
-- [ ] T034 [P] [US4] Prepare the root-cleanup checklist (`blueprints/root_cleanup.md`) enumerating artifacts to remove/relocate, with before/after screenshots stored under `reports/root_cleanup_evidence/`.
-- [ ] T035 [US4] Describe the automation tree restoration blueprint in `blueprints/automation_tree.md`, aligning `automation/pipelines/` structure with the TDD appendix without modifying the tree yet.
-- [ ] T036 [US4] Draft the `packages/common/` purity migration plan (`blueprints/common_purity.md`), listing modules to relocate and shim strategy notes.
-- [ ] T037 [P] [US4] Document the tooling output relocation plan (`blueprints/tooling_outputs.md`) for coverage/Typewiz/requirements, including updates needed in `.coveragerc`, `typewiz.toml`, and README when implementation occurs.
-- [ ] T038 [US4] Summarize Codex workflow documentation changes in `blueprints/codex_workflow_docs.md`, referencing the sections of AGENTS.md and docs overview appendix that will need edits.
-- [ ] T039 [P] [US4] Draft the confirmations/exception plan in `blueprints/remaining_confirmations.md`, covering `deps/typewiz/` annotation, dev/stub directory policy, and Docker reference audits.
-- [ ] T040 [US4] Prepare patch-ready snippets for `docs/overview/tdd/appendices/repository_trees.md` and `docs/automation/langgraph-agents.md` inside `drafts/docs_updates/` so the documentation changes can be applied atomically when implementation proceeds.
-- [ ] T041 [US4] Capture the governance acceptance checklist in `reports/governance_storyboard.md`, linking each FR (010–016) to the corresponding blueprint/evidence file.
+- [X] T033 [US4] Draft the schema-bundle rename plan (`blueprints/schema_rename_playbook.md`) covering command sequence, doc updates, and verification steps before touching `/spec → /schemas` in a future implementation.
+- [X] T034 [P] [US4] Prepare the root-cleanup checklist (`blueprints/root_cleanup.md`) enumerating artifacts to remove/relocate, with before/after screenshots stored under `reports/root_cleanup_evidence/`.
+- [X] T035 [US4] Describe the automation tree restoration blueprint in `blueprints/automation_tree.md`, aligning `automation/pipelines/` structure with the TDD appendix without modifying the tree yet.
+- [X] T036 [US4] Draft the `packages/common/` purity migration plan (`blueprints/common_purity.md`), listing modules to relocate and shim strategy notes.
+- [X] T037 [P] [US4] Document the tooling output relocation plan (`blueprints/tooling_outputs.md`) for coverage/Typewiz/requirements, including updates needed in `.coveragerc`, `typewiz.toml`, and README when implementation occurs.
+- [X] T038 [US4] Summarize Codex workflow documentation changes in `blueprints/codex_workflow_docs.md`, referencing the sections of AGENTS.md and docs overview appendix that will need edits.
+- [X] T039 [P] [US4] Draft the confirmations/exception plan in `blueprints/remaining_confirmations.md`, covering `deps/typewiz/` annotation, dev/stub directory policy, and Docker reference audits.
+- [X] T040 [US4] Prepare patch-ready snippets for `docs/overview/tdd/appendices/repository_trees.md` and `docs/automation/langgraph-agents.md` inside `drafts/docs_updates/` so the documentation changes can be applied atomically when implementation proceeds.
+- [X] T041 [US4] Capture the governance acceptance checklist in `reports/governance_storyboard.md`, linking each FR (010–016) to the corresponding blueprint/evidence file.
 
 ---
 
 ## Phase 7: Activation Plan (FR-007)
 
-- [ ] T042 Outline the activation playbook (dry-runs, sampling strategy—even if 100% local—rollback triggers, decision checkpoints) in `reports/activation_plan.md`.
-- [ ] T043 [P] Script dry-run evidence generation in `scripts/activation/run_dry_run.py`, storing JSONL results in `reports/activation_dry_run.jsonl`.
-- [ ] T044 Update `docs/automation/langgraph-agents.md` §8.3 to include the activation workflow (RB-AGENT-ACTIVATION) referencing the feature evidence files.
-- [ ] T045 [P] Create `reports/activation_checklist.md` mapping each rollback command/toggle/verification step to the relevant readiness artifacts.
-- [ ] T046 Record activation sign-off (even as a solo approval) and rollback rehearsal timestamps in `reports/activation_signoff.md`.
+- [X] T042 Outline the activation playbook (dry-runs, sampling strategy—even if 100% local—rollback triggers, decision checkpoints) in `reports/activation_plan.md`.
+- [X] T043 [P] Script dry-run evidence generation in `scripts/activation/run_dry_run.py`, storing JSONL results in `reports/activation_dry_run.jsonl`.
+- [X] T044 Update `docs/automation/langgraph-agents.md` §8.3 to include the activation workflow (RB-AGENT-ACTIVATION) referencing the feature evidence files.
+- [X] T045 [P] Create `reports/activation_checklist.md` mapping each rollback command/toggle/verification step to the relevant readiness artifacts.
+- [X] T046 Record activation sign-off (even as a solo approval) and rollback rehearsal timestamps in `reports/activation_signoff.md`.
 
 ---
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T047 Compile modernization release notes in `reports/release_notes.md` and stage the corresponding `docs/automation/langgraph-agents.md` updates for later merge.
-- [ ] T048 [P] Summarize LangSmith/LangFuse telemetry and schema references in `reports/telemetry_summary.md`, mirroring the highlights that will eventually land in platform docs.
-- [ ] T049 [P] Re-run the quickstart validation (documented in `quickstart.md`) and log timestamps/evidence links in `reports/quickstart_validation.md`.
-- [ ] T050 [P] Execute the docs container workflow locally (via `make`/`uv` commands) and archive logs in `reports/docs/ai_module_migration.log`.
-- [ ] T051 Record doc-workflow compliance evidence (commands, timestamps, links) in `reports/doc_workflow_checks.md` to satisfy FR-017.
-- [ ] T052 Produce the LangSmith adoption readiness playbook in `reports/adoption_playbook.md`, outlining staged rollout steps and ownership handoff once implementation begins (supports SC-005).
+- [X] T047 Compile modernization release notes in `reports/release_notes.md` and stage the corresponding `docs/automation/langgraph-agents.md` updates for later merge.
+- [X] T048 [P] Summarize LangSmith/LangFuse telemetry and schema references in `reports/telemetry_summary.md`, mirroring the highlights that will eventually land in platform docs.
+- [X] T049 [P] Re-run the quickstart validation (documented in `quickstart.md`) and log timestamps/evidence links in `reports/quickstart_validation.md`.
+- [X] T050 [P] Execute the docs container workflow locally (via `make`/`uv` commands) and archive logs in `reports/docs/ai_module_migration.log`.
+- [X] T051 Record doc-workflow compliance evidence (commands, timestamps, links) in `reports/doc_workflow_checks.md` to satisfy FR-017.
+- [X] T052 Produce the LangSmith adoption readiness playbook in `reports/adoption_playbook.md`, outlining staged rollout steps and ownership handoff once implementation begins (supports SC-005).
 
 ---
 

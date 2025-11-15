@@ -1,0 +1,24 @@
+# Tooling workspaces for LangSmith & LangFuse
+langsmith:
+  - workspace_id: d6f1d8c7-3d0c-4d6b-8db8-7c7a1e3b8f45
+    environment: dev
+    owners: ["ai-modernization"]
+    env_var_names: ["LANGSMITH_API_KEY", "LANGSMITH_ENDPOINT", "LANGSMITH_PROJECT", "LANGSMITH_TRACING"]
+    expires_at: 2026-01-15T00:00:00Z
+    governance_status: approved
+    notes: "Dev workspace for readiness planning"
+  - workspace_id: 1a6fc6c3-1b22-4056-ae0c-9fb727d7c394
+    environment: staging
+    owners: ["ai-modernization", "ai-readiness"]
+    env_var_names: ["LANGSMITH_API_KEY", "LANGSMITH_ENDPOINT", "LANGSMITH_PROJECT", "LANGSMITH_TRACING"]
+    expires_at: 2026-01-30T00:00:00Z
+    governance_status: pending
+    notes: "Staging workspace awaiting residency attestation"
+langfuse:
+  - workspace_id: 8d95d4d1-2c88-4a1f-9aa3-5d8b0b191bbe
+    environment: dev
+    owners: ["ai-observability"]
+    env_var_names: ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"]
+    expires_at: 2025-12-14T00:00:00Z
+    governance_status: approved
+    notes: "Temporary R&D session; disable within 15 minutes when requested"

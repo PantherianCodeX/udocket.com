@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udocket.internal/schemas/tooling/evaluation_evidence.schema.json",
+  "title": "EvaluationEvidence",
+  "type": "object",
+  "required": [
+    "experiment_id",
+    "dataset_hash",
+    "prompt_bundle_id",
+    "metrics",
+    "run_started_at",
+    "run_completed_at",
+    "owner"
+  ],
+  "properties": {
+    "experiment_id": {"type": "string"},
+    "dataset_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "prompt_bundle_id": {"type": "string"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {"type": "number"}
+    },
+    "run_started_at": {"type": "string", "format": "date-time"},
+    "run_completed_at": {"type": "string", "format": "date-time"},
+    "owner": {"type": "string"},
+    "governance_tags": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "attachments": {
+      "type": "array",
+      "items": {"type": "string", "format": "uri"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "run_started_at": {"type": "string", "format": "date-time"},
+          "run_completed_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "then": {
+        "properties": {
+          "run_started_at": {"type": "string"},
+          "run_completed_at": {"type": "string"}
+        }
+      }
+    }
+  ]
+}

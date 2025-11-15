@@ -1,0 +1,68 @@
+[
+  {
+    "task_id": "MIG-001",
+    "title": "Modernize analyze.atoms_extract",
+    "stage_key": "analyze.atoms_extract",
+    "status": "in_flight",
+    "dependencies": [
+      "analyze.input_discovery"
+    ],
+    "effort_low": 3,
+    "effort_high": 5,
+    "critical_path": false,
+    "qa_gates": [
+      "token_histogram",
+      "owner_ack"
+    ],
+    "cost_ceiling": 0.2
+  },
+  {
+    "task_id": "MIG-002",
+    "title": "Modernize analyze.gaps_extract",
+    "stage_key": "analyze.gaps_extract",
+    "status": "blocked",
+    "dependencies": [
+      "analyze.context_builder"
+    ],
+    "effort_low": 5,
+    "effort_high": 8,
+    "critical_path": true,
+    "qa_gates": [
+      "gap_diff_hash"
+    ],
+    "cost_ceiling": 0.3
+  },
+  {
+    "task_id": "MIG-003",
+    "title": "Modernize analyze.flags_extract",
+    "stage_key": "analyze.flags_extract",
+    "status": "not_started",
+    "dependencies": [
+      "analyze.gaps_extract"
+    ],
+    "effort_low": 2,
+    "effort_high": 3,
+    "critical_path": false,
+    "qa_gates": [
+      "risk_log_sync"
+    ],
+    "cost_ceiling": 0.15
+  },
+  {
+    "task_id": "MIG-004",
+    "title": "Modernize compose.release_gate",
+    "stage_key": "compose.release_gate",
+    "status": "blocked",
+    "dependencies": [
+      "analyze.flags_extract"
+    ],
+    "effort_low": 5,
+    "effort_high": 8,
+    "critical_path": true,
+    "qa_gates": [
+      "residency_attestation",
+      "readiness_hash_check"
+    ],
+    "cost_ceiling": 0.0
+  }
+]

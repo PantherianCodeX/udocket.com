@@ -465,7 +465,7 @@ ______________________________________________________________________
 **Breadcrumbs:** Runbook catalog `docs/ops/runbooks.md`, evidence store `ops/runbooks/agents/`, drill tracker `ops/runbooks/agents/drill_log.csv`. **|**
 **References:** Ops governance policy, RB-AGENT-* runbooks.
 
-- Runbooks must cover activation rollback, shadow divergence, and QA defect surge.
+- Runbooks must cover activation rollback, shadow divergence, QA defect surge, plus the temporary LangSmith/LangFuse workflows documented under `specs/001-ai-refactor-plan/reports/`.
 - On-call rotation uses `RB-AGENT-TIMEOUT`, `RB-AGENT-RETRY`, `RB-AGENT-ACTIVATION`, `RB-AGENT-SHADOW`, and `RB-AGENT-QA`.
 - Drill cadence and evidence capture feed quarterly readiness reviews and SOC2/SOCPA audits.
 
@@ -488,6 +488,9 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **References:** Ops QA policy.
 
 - Activation rollback: capture commands to revert settings activation, disable pipelines, and restore prior manifests.
+- LangSmith evaluation ingest: include the `packages/devops/readiness` CLI flow plus evidence artifacts (`reports/langsmith_workspace_records.jsonl`, `reports/langsmith_eval_export.json`, `reports/langsmith_smoke.jsonl`) before promoting prompts.
+- LangFuse R&D enablement: reference the SOP in `specs/001-ai-refactor-plan/reports/langfuse_enable_disable.md`, enforce the 15-minute disable SLA, and list `reports/langfuse_enable_disable.md` as the binding evidence log.
+- Activation dry-runs: follow `specs/001-ai-refactor-plan/reports/activation_plan.md`, log steps via `reports/activation_dry_run.jsonl`, and store checklists/signoff artifacts referenced below.
 - Shadow divergence: enumerate alert thresholds, disable steps, data capture for analysis, and communications checklist.
 - QA defect surge: describe manual QA staffing and follow-up tasks.
 

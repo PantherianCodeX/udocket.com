@@ -1,0 +1,14 @@
+{
+  "experiment_id": "EXP-001",
+  "workspace": "dev",
+  "prompt_bundle_id": "readiness-baseline.toml",
+  "dataset_hash": "6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d6a5d",
+  "owner": "user",
+  "metrics": {
+    "pass_rate": 0.9,
+    "latency_ms": 450.0,
+    "cost_usd": 2.15
+  },
+  "run_started_at": "2025-11-15T00:57:35.986635Z",
+  "run_completed_at": "2025-11-15T00:57:35.986635Z"
+}

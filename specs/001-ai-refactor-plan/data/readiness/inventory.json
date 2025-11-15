@@ -1,0 +1,79 @@
+[
+  {
+    "stage_key": "analyze.input_discovery",
+    "status": "complete",
+    "owner_team": "ai-readiness",
+    "last_validated_at": "2025-11-10T17:05:00Z",
+    "evidence_links": [
+      "storage://ops/jsonl/run-2025-11-10T17:05:00Z",
+      "docs://ai-module/runbooks/input-discovery"
+    ],
+    "architecture_score": 5,
+    "compliance_score": 5,
+    "observability_score": 4,
+    "cutoff_date": "2025-12-01",
+    "capability_gaps": []
+  },
+  {
+    "stage_key": "analyze.atoms_extract",
+    "status": "in_flight",
+    "owner_team": "ai-modernization",
+    "last_validated_at": "2025-11-12T08:30:00Z",
+    "evidence_links": [
+      "storage://ops/jsonl/run-2025-11-12T08:30:00Z"
+    ],
+    "architecture_score": 3,
+    "compliance_score": 4,
+    "observability_score": 3,
+    "cutoff_date": "2025-12-08",
+    "capability_gaps": []
+  },
+  {
+    "stage_key": "analyze.gaps_extract",
+    "status": "blocked",
+    "owner_team": "ai-modernization",
+    "last_validated_at": null,
+    "evidence_links": [
+      "storage://ops/jsonl/run-2025-11-12T09:00:00Z",
+      "docs://ai-module/issues/gaps-extract-lag"
+    ],
+    "architecture_score": 2,
+    "compliance_score": 3,
+    "observability_score": 2,
+    "cutoff_date": "2025-12-15",
+    "capability_gaps": [
+      "6ab5a11a-54e0-4a59-a5dd-9f3eb7707d31",
+      "1d3a15dc-6302-43bc-b13f-dfd9ae970509"
+    ]
+  },
+  {
+    "stage_key": "analyze.flags_extract",
+    "status": "not_started",
+    "owner_team": "governance",
+    "last_validated_at": null,
+    "evidence_links": [],
+    "architecture_score": 1,
+    "compliance_score": 2,
+    "observability_score": 1,
+    "cutoff_date": "2025-12-22",
+    "capability_gaps": [
+      "c9b993aa-00c9-4063-8a0b-7ca408fe465e"
+    ]
+  },
+  {
+    "stage_key": "compose.release_gate",
+    "status": "blocked",
+    "owner_team": "delivery",
+    "last_validated_at": null,
+    "evidence_links": [
+      "storage://ops/jsonl/run-2025-11-13T11:20:00Z"
+    ],
+    "architecture_score": 3,
+    "compliance_score": 3,
+    "observability_score": 3,
+    "cutoff_date": "2026-01-05",
+    "capability_gaps": [
+      "f0b9b801-4f4a-44d5-afe7-4f0cd0c8b0c1"
+    ]
+  }
+]

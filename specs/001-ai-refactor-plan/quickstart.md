@@ -40,3 +40,9 @@
 - ✅ Budget alerts configured in `packages/common/telemetry/vendor_usage.py` with thresholds.
 
 Once complete, proceed to `/speckit.tasks` to break down execution work.
+
+## 7. LangSmith & LangFuse Operational Checklist
+1. Record LangSmith workspace provisioning via `python specs/001-ai-refactor-plan/scripts/langsmith/provision_workspace.py <env> <key_suffix> <actor>`; confirm entry lands in `reports/langsmith_workspace_records.jsonl`.
+2. Run `python specs/001-ai-refactor-plan/scripts/langsmith/run_eval.py --experiment-id <id> --prompt-bundle <bundle> --dataset <hash> --owner <name>` and validate export with `python specs/001-ai-refactor-plan/scripts/langsmith/export_results.py`; attach outputs to `reports/langsmith_eval_results.json` + `reports/langsmith_eval_export.json`.
+3. Execute the LangFuse enable SOP in `reports/langfuse_enable_disable.md`, ensuring the evidence table captures enable + disable timestamps within the 15-minute SLA.
+4. Update `reports/tooling_evidence_matrix.md` (see T032) with links to all generated artifacts before closing the run.

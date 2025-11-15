@@ -1,0 +1,60 @@
+[
+  {
+    "gap_id": "6ab5a11a-54e0-4a59-a5dd-9f3eb7707d31",
+    "component_id": "readiness-ingest",
+    "stage_key": "analyze.gaps_extract",
+    "category": "architecture",
+    "severity": "critical",
+    "owner": "ai-modernization",
+    "mitigation_plan": "Refactor ingestion DAG to emit deterministic diffs before feeding the gap extractor; pair with ops JSONL hash validation.",
+    "due_date": "2025-12-10",
+    "status": "in_progress",
+    "resolution_notes": null,
+    "related_controls": [
+      "d425bfe9-42c7-48ef-9957-fbf8e9c5d20b"
+    ]
+  },
+  {
+    "gap_id": "1d3a15dc-6302-43bc-b13f-dfd9ae970509",
+    "component_id": "readiness-aggregator",
+    "stage_key": "analyze.gaps_extract",
+    "category": "telemetry",
+    "severity": "high",
+    "owner": "ai-modernization",
+    "mitigation_plan": "Implement LangFuse-backed sampling to feed gap detection telemetry and update readiness CLI checks.",
+    "due_date": "2025-12-08",
+    "status": "open",
+    "resolution_notes": null,
+    "related_controls": [
+      "f0b9b801-4f4a-44d5-afe7-4f0cd0c8b0c1"
+    ]
+  },
+  {
+    "gap_id": "c9b993aa-00c9-4063-8a0b-7ca408fe465e",
+    "component_id": "governance-flags",
+    "stage_key": "analyze.flags_extract",
+    "category": "risk",
+    "severity": "medium",
+    "owner": "governance",
+    "mitigation_plan": "Stand up interim reviewer workflow that syncs LangGraph risk tags with readiness flags before activation.",
+    "due_date": "2025-12-20",
+    "status": "open",
+    "resolution_notes": null,
+    "related_controls": []
+  },
+  {
+    "gap_id": "f0b9b801-4f4a-44d5-afe7-4f0cd0c8b0c1",
+    "component_id": "compose-release",
+    "stage_key": "compose.release_gate",
+    "category": "residency",
+    "severity": "high",
+    "owner": "delivery",
+    "mitigation_plan": "Finalize residency attestation workflow linking release gate to readiness ops JSONL seals before publishing client artifacts.",
+    "due_date": "2026-01-02",
+    "status": "open",
+    "resolution_notes": null,
+    "related_controls": [
+      "bb699841-f4b3-40ee-8e6a-88eb1d92cb33"
+    ]
+  }
+]
