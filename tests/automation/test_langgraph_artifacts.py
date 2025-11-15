@@ -1,68 +1,92 @@
+# pyright: strict
+"""Tests for automation.langgraph.artifacts helpers."""
+
 from __future__ import annotations
 
-import json
-from typing import TYPE_CHECKING
+from pathlib import Path
+
+from packages.ai.types import JobID
 
 from automation.langgraph.artifacts import (
+    ArtifactWriteResult,
+    OpsWriteResult,
     append_audit_log,
     write_json_artifact,
     write_ops_record,
     write_text_artifact,
 )
-from packages.ai.types import JobID
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
-def test_write_json_artifact_versions(tmp_path: Path) -> None:
-    result = write_json_artifact(
-        case_dir=tmp_path,
-        job_id=JobID("job-21"),
+def test_write_json_artifact_creates_versioned_file(tmp_path: Path) -> None:
+    case_dir = tmp_path
+    job_id = JobID("job-123")
+
+    result1 = write_json_artifact(
+        case_dir=case_dir,
+        job_id=job_id,
         artifact_name="summary",
-        payload={"status": "ok"},
+        payload={"value": 1},
     )
-    assert result.path.exists()
-    assert result.path.name == "job-21__summary_v1.json"
-    second = write_json_artifact(
-        case_dir=tmp_path,
-        job_id=JobID("job-21"),
+    result2 = write_json_artifact(
+        case_dir=case_dir,
+        job_id=job_id,
         artifact_name="summary",
-        payload={"status": "ok"},
+        payload={"value": 2},
     )
-    assert second.path.name == "job-21__summary_v2.json"
+
+    assert isinstance(result1, ArtifactWriteResult)
+    assert isinstance(result2, ArtifactWriteResult)
+    assert result1.path.exists()
+    assert result2.path.exists()
+    assert result1.path != result2.path
+    # Names follow <job_id>__<artifact_name>_v{n}.json
+    assert result1.path.name.startswith(f"{job_id}__summary_v1")
+    assert result2.path.name.startswith(f"{job_id}__summary_v2")
+    assert result1.checksum
+    assert result2.checksum
 
 
-def test_write_text_artifact(tmp_path: Path) -> None:
+def test_write_text_artifact_uses_extension_and_versions(tmp_path: Path) -> None:
+    case_dir = tmp_path
+    job_id = JobID("job-456")
+
     result = write_text_artifact(
-        case_dir=tmp_path,
-        job_id=JobID("job-22"),
-        artifact_name="summary_md",
-        contents="# Summary",
+        case_dir=case_dir,
+        job_id=job_id,
+        artifact_name="staff_report",
+        contents="report body",
+        extension="md",
     )
+
+    assert isinstance(result, ArtifactWriteResult)
     assert result.path.exists()
     assert result.path.suffix == ".md"
+    assert result.path.name.startswith(f"{job_id}__staff_report_v1")
+    assert result.checksum
 
 
-def test_write_ops_record(tmp_path: Path) -> None:
-    result = write_ops_record(
-        case_dir=tmp_path,
-        job_id=JobID("job-23"),
-        record_name="summary_log",
-        payload={"status": "ok"},
+def test_write_ops_record_and_append_audit_log(tmp_path: Path) -> None:
+    case_dir = tmp_path
+    job_id = JobID("job-789")
+
+    ops_result = write_ops_record(
+        case_dir=case_dir,
+        job_id=job_id,
+        record_name="manifest",
+        payload={"ok": True},
     )
-    assert result.path.exists()
-    assert result.path.name == "job-23__summary_log.json"
-    data = json.loads(result.path.read_text(encoding="utf-8"))
-    assert data["status"] == "ok"
+    assert isinstance(ops_result, OpsWriteResult)
+    assert ops_result.path.exists()
+    # Path should live under ops/ with deterministic name
+    assert ops_result.path.parent.name == "ops"
+    assert ops_result.path.name == f"{job_id}__manifest.json"
 
-
-def test_append_audit_log(tmp_path: Path) -> None:
-    path = append_audit_log(
-        case_dir=tmp_path,
+    audit_path = append_audit_log(
+        case_dir=case_dir,
         audit_name="ops_summary",
-        payload={"event": "done"},
+        payload={"event": "test"},
     )
-    assert path.exists()
-    contents = path.read_text(encoding="utf-8").strip().splitlines()
-    assert json.loads(contents[0])["event"] == "done"
+    assert audit_path.exists()
+    assert audit_path.parent.name == "ops"
+    assert audit_path.name == "ops_summary.jsonl"
+

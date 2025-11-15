@@ -69,6 +69,13 @@ description: "Task list for AI Refactor Implementation Delivery"
 - [ ] T019 [US2] Publish QA/cost verification tests in `tests/automation/test_stage_contracts.py` (or similar) that compare StageMap entries against spec 001 QA metadata with zero placeholders.
 - [ ] T020 [US2] Update `tests/automation/test_stage_graph.py` property suite to assert StageMap acyclicity and cost ceilings and rerun after each change.
 - [ ] T021 [US2] Reflect the lane/QA updates in `docs/automation/langgraph-agents.md` and `docs/overview/tdd.md` with schema references plus plan linkages.
+- [x] T015 [US2] Expand `automation/pipelines/stage_map.py` with the lane definitions, StageKey sequences, QA contract IDs, and cost ceilings described in spec 001 while keeping stage metadata typed.
+- [x] T016 [US2] Create lane-value objects/StrEnums in `automation/pipelines/models.py` that mirror `LangGraphLanePackage` (lane_id, stage_keys, ai_runtime_profile) and expose validation helpers.
+- [x] T017 [US2] Update `automation/langgraph/runtime.py` to load the refreshed lane packages, enforce dependency ordering, and record ops/audit entries under `storage/ops/ai-refactor/` whenever a lane runs.
+- [x] T018 [US2] Register new AI runtime profiles/residency tags in `packages/ai/api.py` for the lanes added above so `AIClient` routing stays on the hardened runtime.
+- [x] T019 [US2] Publish QA/cost verification tests in `tests/automation/test_stage_contracts.py` (or similar) that compare StageMap entries against spec 001 QA metadata with zero placeholders.
+- [x] T020 [US2] Update `tests/automation/test_stage_graph.py` property suite to assert StageMap acyclicity and cost ceilings and rerun after each change.
+- [x] T021 [US2] Reflect the lane/QA updates in `docs/automation/langgraph-agents.md` and `docs/overview/tdd.md` with schema references plus plan linkages.
 
 ---
 
@@ -80,14 +87,14 @@ description: "Task list for AI Refactor Implementation Delivery"
 
 > **Doc check reminder:** Confirm the LangGraph, LangSmith, and LangFuse documentation referenced in your work reflects the current production guidance (use the Archon knowledge base to retrieve the latest sources) before modifying instrumentation or epidemiology surfaces, and log the doc versions cited in the appropriate `specs/002-ai-refactor-plan/reports/` artifact.
 
-- [ ] T022 [US3] Implement the telemetry configuration module in `packages/telemetry/config.py` that centralizes structlog/OTLP setup, LangSmith workspace routing, LangFuse toggles, and writes ledger rows to `storage/audit/ai-refactor/` per the contracts.
-- [ ] T023 [US3] Instrument LangGraph stages to append residency ledger entries (including `residency_tag`, `telemetry_bundle_path`, `langsmith_eval_ids`, `langfuse_session_id`, `disconnect_event`) handled by `packages/common/types/ai_refactor.py` and persisted under `storage/audit/ai-refactor/ledger.jsonl`.
-- [ ] T024 [US3] Build the entity graph service in `automation/entity_graph/service.py` that reads Analyze outputs, emits node/edge records (per `EntityRelationshipGraph`), and writes them to `storage/ops/ai-refactor/graphs/graph_<run_id>.json` with provenance references.
-- [ ] T025 [US3] Add `automation/entity_graph/cli.py` exposing `graph sync` and `graph verify` commands that validate mandatory relationships and block progress when edges/missing nodes occur, writing failures to `specs/002-ai-refactor-plan/reports/graph_failures.log`.
-- [ ] T026 [US3] Integrate entity graph snapshots into `automation/pipelines/entity_graph.py` helpers so StageMaps can pull relational context (e.g., component-to-artifact edges) when computing readiness signals.
-- [ ] T027 [US3] Implement the `/ai-refactor/readiness-snapshots` and `/ai-refactor/residency-ledger` endpoints in `automation/langgraph/api_refactor.py` per `contracts/ai-refactor-openapi.yaml`, returning structured data from `storage/ops/ai-refactor/graphs/` and `storage/audit/ai-refactor/`.
-- [ ] T028 [US3] Create regression tests (`tests/regression/test_langsmith_hooks.py`, `tests/regression/test_langfuse_offline.py`) that exercise LangSmith eval uploads, LangFuse disable toggles, and ledger immutability when LangFuse goes offline.
-- [ ] T029 [US3] Update telemetry/graph schema docs in `docs/automation/langgraph-agents.md` and `docs/overview/tdd.md` to cite the residency ledger schema, entity graph exports, and dry-run validation command.
+- [x] T022 [US3] Implement the telemetry configuration module in `packages/telemetry/config.py` that centralizes structlog/OTLP setup, LangSmith workspace routing, LangFuse toggles, and writes ledger rows to `storage/audit/ai-refactor/` per the contracts.
+- [x] T023 [US3] Instrument LangGraph stages to append residency ledger entries (including `residency_tag`, `telemetry_bundle_path`, `langsmith_eval_ids`, `langfuse_session_id`, `disconnect_event`) handled by `packages/common/types/ai_refactor.py` and persisted under `storage/audit/ai-refactor/ledger.jsonl`.
+- [x] T024 [US3] Build the entity graph service in `automation/entity_graph/service.py` that reads Analyze outputs, emits node/edge records (per `EntityRelationshipGraph`), and writes them to `storage/ops/ai-refactor/graphs/graph_<run_id>.json` with provenance references.
+- [x] T025 [US3] Add `automation/entity_graph/cli.py` exposing `graph sync` and `graph verify` commands that validate mandatory relationships and block progress when edges/missing nodes occur, writing failures to `specs/002-ai-refactor-plan/reports/graph_failures.log`.
+- [x] T026 [US3] Integrate entity graph snapshots into `automation/pipelines/entity_graph.py` helpers so StageMaps can pull relational context (e.g., component-to-artifact edges) when computing readiness signals.
+- [x] T027 [US3] Implement the `/ai-refactor/readiness-snapshots` and `/ai-refactor/residency-ledger` endpoints in `automation/langgraph/api_refactor.py` per `contracts/ai-refactor-openapi.yaml`, returning structured data from `storage/ops/ai-refactor/graphs/` and `storage/audit/ai-refactor/`.
+- [x] T028 [US3] Create regression tests (`tests/regression/test_langsmith_hooks.py`, `tests/regression/test_langfuse_offline.py`) that exercise LangSmith eval uploads, LangFuse disable toggles, and ledger immutability when LangFuse goes offline.
+- [x] T029 [US3] Update telemetry/graph schema docs in `docs/automation/langgraph-agents.md` and `docs/overview/tdd.md` to cite the residency ledger schema, entity graph exports, and dry-run validation command.
 
 ---
 

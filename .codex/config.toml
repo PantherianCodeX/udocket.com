@@ -1,5 +1,5 @@
-model = "gpt-5.1-codex"
-model_reasoning_effort = "medium"
+model = "gpt-5.1"
+model_reasoning_effort = "low"
 
 [projects."/home/user/Code/udocket"]
 trust_level = "trusted"

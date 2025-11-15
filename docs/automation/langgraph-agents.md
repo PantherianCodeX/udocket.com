@@ -74,11 +74,11 @@ ______________________________________________________________________
 ## 1) Purpose
 
 **Purpose:** Define the canonical LangGraph-based agent pipelines, contracts, and guardrails that transform transcripts into downstream analyses and deliverables. **|**
-**Contract:** This spec owns the agent interface, graph configuration model, QA gates, and operational controls that keep agents deterministic, observable, and compliant. Implementations must adhere to the shared manifests, artifact naming conventions, and error taxonomy defined here. **|**
+**Contract:** This spec owns the agent interface, graph configuration model, QA gates, and operational controls that keep agents deterministic, observable, and compliant. Implementations must adhere to the shared manifests, artifact naming conventions, and error taxonomy defined here. LangGraph graphs are embedded inside the existing uDocket runtime; we do not run a standalone LangGraph Agent Server. **|**
 **State:** Manifests persist per job under `storage/media/tenants/<ORG_ID>/cases/<case>/analysis|docs|ops`. **|**
 **Failures & handling:** Graph activation rejects invalid schemas; runtime failures follow the taxonomy in §5. **|**
 **Observability:** Metrics for pipeline/job/lane execution and ops JSONL streams (`ops_transcription.jsonl`, `ops_summary.jsonl`, `ops_compose.jsonl`) record pipeline versions, node usage, and retry history. **|**
-**Breadcrumbs:** Orchestration runtime and graph builders live under `packages/core/agents/*`; acceptance tests under `tests/*`. **|**
+**Breadcrumbs:** Orchestration runtime and graph builders live under `packages/core/agents/langgraph_orchestrator.py` and `automation/langgraph/*`; LangGraph pipeline tests under `tests/automation/*`. **|**
 **References:** TDD §5.5, Platform Runtime §3, Ops runbooks RB-AGENT-*.
 
 ______________________________________________________________________
@@ -90,7 +90,7 @@ ______________________________________________________________________
 **State:** Each agent manages job manifests, derived artifact manifests, envelope hashes, QA logs, and Ops JSON per run; Analyze maintains an internal `AtomsIndex` leveraged by validation. **|**
 **Failures & handling:** Runtime failures map to the taxonomy in §5. **|**
 **Observability:** Metrics `agent_job_duration_seconds{agent=}`, `agent_retry_total`, `atoms_extracted_total`, QA issue density, and pipeline dashboards. **|**
-**Breadcrumbs:** Transcription `packages/core/agents/transcribe_lib.py`, Analyze `packages/core/agents/analyze_lib.py` + stages `packages/core/agents/analyze/stages/`, Compose `packages/core/agents/compose_lib.py` + orchestrator `packages/core/agents/compose/orchestrator.py`, manifests `packages/core/agents/manifests.py`. **|**
+**Breadcrumbs:** Transcription `packages/core/agents/transcribe_lib.py`, Analyze `packages/core/agents/analyze_lib.py` + stages `packages/core/agents/analyze/stages/`, Compose `packages/core/agents/compose_lib.py`; LangGraph graphs and agent orchestration live under `automation/agents/*` and `automation/langgraph/*`. **|**
 **References:** Transcribe/Analyze/Compose specs, automation LangGraph diagrams, Ops runbooks RB-AGENT-*.
 
 <figure class="full-width-diagram">
@@ -190,19 +190,19 @@ Lane QA emits structured findings that include metric values, pass/fail checks, 
 
 ### 2.4 Timeline & relationship agents (roadmap, informative)
 
-- Roadmap agents will consume Analyze timeline/events and entities JSON to produce richer chronological visualisations and relationship graphs with deterministic UUID lineage.
-- Responsibilities: maintain speaker attribution, event windows, entity linkage, and evidence references.
-- Dependencies: reuse LangGraph pipelines with dedicated nodes for diarisation merge, event normalisation, entity clustering, and QA scoring. QA stages must emit focused revision directives (event-level or edge-level) so replays correct only failing segments while preserving accepted evidence.
-- Current status: prototypes remain in shadow mode until QA metrics meet §6 targets; binding specification will follow once promoted.
+- Timeline and relationship agents consume Analyze timeline/events and entities JSON to produce richer chronological visualisations and relationship graphs with deterministic UUID lineage.
+- Responsibilities: maintain speaker attribution, event windows, entity and place linkage, issue/alert context, and evidence references; expose graphs where nodes represent entities/events/issues and edges capture relationships (for example, person ↔ event, event ↔ location, issue ↔ evidence).
+- Dependencies: reuse LangGraph pipelines with dedicated nodes for diarisation merge, event normalisation, entity clustering, relationship edge construction, and QA scoring. QA stages must emit focused revision directives (event-level or edge-level) so replays correct only failing segments while preserving accepted evidence.
+- Current status: graph schemas and contracts are defined in this spec and Appendix A; concrete agent implementations live under `automation/agents/timeline` and `automation/agents/relationship` and will graduate to binding once QA metrics meet §6 targets.
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/diagrams/automation/langgraph-agents/timeline-pipeline-v1.svg" alt="Timeline agent pipeline">
-  <figcaption style="font-size: 0.9em; color: #555;">Future timeline agent pipeline with revision directives scoped to event corrections</figcaption>
+  <figcaption style="font-size: 0.9em; color: #555;">Timeline agent pipeline with event-level revision directives scoped to corrections</figcaption>
 </figure>
 
 <figure class="full-width-diagram">
   <img class="diagram" src="../build/diagrams/automation/langgraph-agents/relationship-pipeline-v1.svg" alt="Relationship agent pipeline">
-  <figcaption style="font-size: 0.9em; color: #555;">Future relationship agent pipeline with edge-level revision directives to prevent unnecessary rewrites</figcaption>
+  <figcaption style="font-size: 0.9em; color: #555;">Relationship agent pipeline emitting entity–event–issue graphs with edge-level revision directives</figcaption>
 </figure>
 
 ### 2.5 Stage capability catalog (binding)
@@ -213,7 +213,7 @@ Lane QA emits structured findings that include metric values, pass/fail checks, 
   - `EVAL` — evaluation/QA/factuality scoring (lane QA, cross-lane QA, staff QA reports).
   - `EMBED` — embedding/vectorization (retrieval prep, future similarity search).
   - `ATOMS` — deterministic atomisation with optional LLM assists (input discovery + citations); falls back to `EXTRACT` if no provider call is required.
-- Stage keys: every LangGraph node carries a typed `StageKey` (`StageKey` StrEnum) that records intent, schema, dependencies, and retries. A typed `StageMap` (exported in `packages/automation/pipelines/stage_map.py`) maps each `StageKey` to `{agent_task, llm_profile_id, model_hint, depends_on[], retry_budget, cost_ceiling}` so routing stays deterministic.
+- Stage keys: every LangGraph node carries a typed `StageKey` (`StageKey` StrEnum) that records intent, schema, dependencies, and retries. A typed `StageMap` (exported in `packages/common/agents/stage_map.py` and specialised per lane in `automation/pipelines/stage_map.py`) maps each `StageKey` to `{agent_task, llm_profile_id, model_hint, depends_on[], retry_budget, cost_ceiling}` so routing stays deterministic.
 - Canonical Analyze stage keys (`AN_*`) map to capability classes as follows:
 
 | StageKey | Capability (`AgentTask`) | Purpose |
@@ -247,7 +247,7 @@ ______________________________________________________________________
 **State:** Activation metadata captures `graph_version`, `graph_schema_sha256`, `settings_snapshot_sha256`, lane concurrency budgets, and idempotency keys; compiled graphs are cached for reuse alongside per-job checkpoints. Tool registry cache stores schema-validated bindings. **|**
 **Failures & handling:** Invalid activations fail closed with actionable errors (`E_INPUT_INVALID`, `E_SCHEMA_MISMATCH`); runtime mismatches raise `E_INTEGRITY_MISMATCH`; missing tools block activation. **|**
 **Observability:** Activation dashboards, CI contract tests, tool registry validation logs, prompts provenance, and ops manifests capture pipeline changes and drifting configurations. **|**
-**Breadcrumbs:** Settings integration `apps/platform/settings/agents_pipeline.py`, pipeline catalog `packages/core/agents/pipeline_catalog.py`, LangGraph orchestrator `packages/core/agents/langgraph_orchestrator.py`, analyze stages `packages/core/agents/analyze/stages/`, compose orchestrator `packages/core/agents/compose/orchestrator.py`, activation tests `tests/agents/test_pipeline_catalog.py`. **|**
+**Breadcrumbs:** LangGraph orchestrator `packages/core/agents/langgraph_orchestrator.py`, lane packages `automation/pipelines/models.py`, stage maps `packages/common/agents/stage_map.py` + `automation/pipelines/stage_map.py`, LangGraph runtime helpers `automation/langgraph/runtime.py`, and pipeline contract tests under `tests/automation/*.py`. **|**
 **References:** This section focuses on LangGraph contracts; platform activation specifics are covered elsewhere.
 
 <figure class="full-width-diagram">
@@ -274,7 +274,7 @@ ______________________________________________________________________
 **State:** Runtime emits error codes as part of agent responses; schema parity is enforced by `spec/schemas/api_error.schema.json`. **|**
 **Failures & handling:** Unknown codes fail lint and trigger `agent_api_error_total{code="unknown"}` alerts. **|**
 **Observability:** Dashboards chart `agent_api_error_total{code}`; synthetic launches follow pause/resume flows. **|**
-**Breadcrumbs:** Error catalog lives in `docs/overview/tdd/appendices/api_error_codes.md`, enforcement in `packages/core/agents/api_errors.py`, tests `tests/agents/test_error_codes.py`. **|**
+**Breadcrumbs:** Error catalog lives in `docs/overview/tdd/appendices/api_error_codes.md`; enforcement and tests will be added alongside LangGraph API surfaces as they are implemented. **|**
 **References:** Platform Runtime §3.3, Ops runbooks RB-AGENT-ACTIVATION/RB-AGENT-QA.
 
 > _Full listing:_ [API error codes index](../overview/tdd/appendices/api_error_codes.md#langgraph-agent-orchestration)
@@ -346,7 +346,7 @@ ______________________________________________________________________
 **State:** Manifests stored under `storage/media/tenants/<ORG_ID>/cases/<case>/ops/<job_id>__<agent>_manifest.json`; audit JSONL streams append to `ops/ops_<agent>.jsonl`; QA logs and acceptance verdicts live alongside artifacts. **|**
 **Failures & handling:** Missing or corrupt manifests trigger `E_INTEGRITY_MISMATCH` and quarantine outputs; pipeline activation blocks if manifests fail schema validation. **|**
 **Observability:** Manifests feed lineage diagrams, QA dashboards, and FinOps metrics. `python -m doc_tools.manage_docs --lint --check-manifests` ensures schema parity during CI. **|**
-**Breadcrumbs:** Manifest models `packages/core/agents/manifests.py`, ops logging `packages/core/agents/logging.py`, lineage tooling `packages/core/agents/lineage.py`, QA harness `tests/agents/test_manifest_compliance.py`. **|**
+**Breadcrumbs:** Ops JSONL writers and logging live under `packages/core/logging/*`; LangGraph manifest and lineage models will be implemented under `automation/langgraph/artifacts.py` with tests in `tests/automation/test_langgraph_artifacts.py`. **|**
 **References:** This document.
 
 - Filesystem layout: transcripts (text + JSON) under `transcript/`; analysis artifacts (`outline_v1.json`, `timeline_v1.json`, `entities_v1.json`, `issues_v1.json`, `gaps_v1.json`, `flags_v1.json`, `alerts_v1.json`, `summary_v1.json`, `staff_report_v1.md`, `qa_report_v1.json`) under `analysis/`; compose deliverables and QA/staff artifacts under `docs/`; ops metadata/logs under `ops/`.
@@ -364,7 +364,7 @@ ______________________________________________________________________
 **State:** Ops metadata JSON records `{code, class, attempt, final, retry_after}`; manifests flag partial outputs; QA logs capture verification failures. **|**
 **Failures & handling:** Transient provider errors retry with exponential backoff; policy violations quarantine; input errors surface; integrity mismatches halt and trigger audit; concurrency conflicts short-retry before manual intervention. **|**
 **Observability:** Metrics `agent_retry_total{class=}`, `agent_job_duration_seconds{outcome=}` and synthetic jobs monitor reliability. **|**
-**Breadcrumbs:** Failure taxonomy `packages/core/agents/errors.py`, retry logic `packages/core/agents/retry.py`, tests `tests/agents/test_failure_modes.py`. **|**
+**Breadcrumbs:** Failure taxonomy and shared retry logic live under `packages/core/retry/*` and related domain error modules; LangGraph-specific failure tests live under `tests/automation/test_stage_graph.py` and `tests/automation/test_stage_overrides.py`. **|**
 **References:** LangGraph runtime and this spec.
 
 - Cancellation semantics: GraphRunner issues cancellation tokens to active nodes; nodes honour cooperative cancellation and persist progress for partial outputs.
@@ -381,8 +381,14 @@ ______________________________________________________________________
 **State:** Metrics exported via Prometheus/Grafana; QA harness outputs stored as artifacts (`analysis/<job_id>__qa_report.json`), QA issue logs appended to ops JSON. Quality review summaries archived as `QUALITY_KPI_REPORT` artifacts. **|**
 **Failures & handling:** Metric regressions trigger runbooks; QA harness failures block release; FinOps anomalies create decision-log entries (`DECISION_LOG_AGENTS`). **|**
 **Observability:** Dashboards “Agent Pipelines – Activation”, “Agent Shadow Runs”, “QA Acceptance”, FinOps monitors; synthetic jobs generate consistent load. **|**
-**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, WER evaluation `tests/agents/test_transcription_quality.py`, Grafana dashboards `infra/grafana/agents_quality.json`, FinOps monitors `ops/finops/agents_cost_dashboard.json`. **|**
+**Breadcrumbs:** QA harness and LangGraph acceptance tests live under `tests/automation/test_langgraph_acceptance.py` and related `tests/automation/*` modules; Grafana dashboards `infra/grafana/agents_quality.json`, FinOps monitors `ops/finops/agents_cost_dashboard.json`. **|**
 **References:** This document.
+
+### AI Refactor Telemetry & Residency
+
+- **Purpose:** LangGraph lanes now emit telemetry bundles (OTLP exports, LangSmith eval IDs, LangFuse sessions) plus entity relationship graphs so the future centralized telemetry system can consume structured evidence without rehydrating raw artifacts.  
+- **Contract:** Every telemetry/residency change must append ledger rows at `storage/audit/ai-refactor/ledger.jsonl`, write entity graph snapshots to `storage/ops/ai-refactor/graphs/graph_<run_id>.json`, and expose them via `/ai-refactor/readiness-snapshots` and `/ai-refactor/residency-ledger` (see `specs/002-ai-refactor-plan/contracts/ai-refactor-openapi.yaml`).  
+- **Doc requirement:** Before touching these surfaces, consult the latest LangGraph, LangSmith, and LangFuse documentation via the Archon knowledge base and log the used references inside `specs/002-ai-refactor-plan/reports/telemetry_reports/`.  
 
 - **Transcription accuracy:** WER ≤ 8 % on on-demand, ≤ 6 % on batch measured quarterly; metrics `transcription_wer_pct{mode,language}`; regressions ≥ 2 % trigger incident review.
 
@@ -397,7 +403,7 @@ ______________________________________________________________________
 **State:** Metrics `agent_job_completion_ratio`, `agent_lane_duration_seconds`, `agent_queue_latency_seconds`, `agent_token_budget_violation_total`; dashboards “Agent Pipelines – Activation”, “Agent QA Acceptance”, FinOps monitors `ops/finops/agents_cost_dashboard.json`. **|**
 **Failures & handling:** Breaches invoke RB-AGENT-PIPELINE, RB-AGENT-QA, or RB-FINOPS-LANGGRAPH before enabling new activations. **|**
 **Observability:** Grafana dashboards, Alertmanager burn-rate alerts, QA harness reports, and shadow run comparisons provide evidence. **|**
-**Breadcrumbs:** QA harness `tests/agents/test_langgraph_acceptance.py`, telemetry `packages/core/agents/logging.py`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
+**Breadcrumbs:** QA harness `tests/automation/test_langgraph_acceptance.py`, telemetry helpers `packages/ai/telemetry/*`, runbooks `docs/ops/runbooks/agents/*.md`. **|**
 **References:** This document.
 
 - **Pipeline availability:** ≥99.5% of LangGraph runs complete without manual retry, measured via `agent_job_completion_ratio`; breaches trigger RB-AGENT-PIPELINE before promotions proceed.
@@ -509,7 +515,7 @@ The catalog enumerates each runbook with owner, verification cadence, and Ops ca
 **State:** Migration scripts live under `ops/scripts/agents/`; run logs and manifests stored with timestamps in `ops/backfill/agents/`. **|**
 **Failures & handling:** Backfill failures trigger rollback and incident tracking. **|**
 **Observability:** Backfill dashboards, ops JSONL entries (`ops_agents_backfill.jsonl`), and post-run validation harness. **|**
-**Breadcrumbs:** Backfill tooling `ops/scripts/agents/backfill_manifests.py`, validation tests `tests/agents/test_backfill_validation.py`. **|**
+**Breadcrumbs:** Backfill tooling `ops/scripts/agents/backfill_manifests.py`, validation tests (to be added) will live under `tests/automation/test_backfill_validation.py`. **|**
 **References:** TDD §6 summary, Ops runbooks `RB-AGENT-BACKFILL`, Settings spec §5.4.
 
 - Define cutover windows and pause new jobs if required.
@@ -558,10 +564,10 @@ ______________________________________________________________________
 
 **Purpose:** Provide typed schema examples and canonical error codes for agent outputs. **|**
 **Contract:** Schemas must remain in sync with implementation; error codes are authoritative and map to failure classes in §5. **|**
-**State:** Pydantic models live in `packages/core/agents/schemas.py`; schema snapshots export to `spec/schemas/agents/*.schema.json`; lane validators and QA harnesses use these schemas for runtime validation. **|**
+**State:** Pydantic models and dataclasses will live in a dedicated automation schema module (for example, `automation/langgraph/types.py`); schema snapshots export to `spec/schemas/agents/*.schema.json`; lane validators and QA harnesses use these schemas for runtime validation. **|**
 **Failures & handling:** Schema drift fails CI; unknown error codes block merges via lint; manifests lacking schema versions trigger `E_INTEGRITY_MISMATCH`. **|**
 **Observability:** Schema lints in CI, error code coverage dashboards, QA harness logs. **|**
-**Breadcrumbs:** Models `packages/core/agents/schemas.py`, schemas `spec/schemas/agents/`, tests `tests/agents/test_schema_consistency.py`. **|**
+**Breadcrumbs:** Schemas `spec/schemas/agents/`; implementation and schema-consistency tests will be added under `automation/langgraph/types.py` and `tests/automation/test_langgraph_types.py` as they are implemented. **|**
 **References:** Compose spec Appendix B, Analyze spec Appendix A, Platform TDD §6.
 
 ### A.1 Analyze agent schema (binding)

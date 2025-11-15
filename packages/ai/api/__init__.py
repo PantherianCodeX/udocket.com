@@ -51,6 +51,16 @@ class ComposeAudience(StrEnum):
     LAWYER = "lawyer"
 
 
+class ResidencyTag(StrEnum):
+    US_EAST = "US-EAST"
+    EU_CENTRAL = "EU-CENTRAL"
+
+
+class RuntimeProfile(StrEnum):
+    ANALYZE = "automation.analyze"
+    COMPOSE = "automation.compose"
+
+
 @dataclass(slots=True, frozen=True)
 class SummarizeRequest:
     """Input payload for the summarize agent."""
@@ -242,6 +252,8 @@ def _require_client(client: AIClient | None, task: AgentTask) -> AIClient:
 
 __all__ = [
     "AIClient",
+    "ResidencyTag",
+    "RuntimeProfile",
     "ChatMessage",
     "ChatRequest",
     "ChatResult",

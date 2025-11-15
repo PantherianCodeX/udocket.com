@@ -56,6 +56,11 @@ ______________________________________________________________________
 
 **Status:** KEP: Provisional → Implementable → Implemented
 
+## Automation LangGraph Stage Map
+
+- **Purpose:** Restores the AI refactor lane definitions from `specs/001-ai-refactor-plan/plan.md` inside `automation/pipelines/stage_map.py`; each lane now publishes sorted `StageKey` sequences, QA contracts, cost ceilings, residency tags, and runtime profiles that match the LangGraph spec.
+- **Contract:** Every update to these lanes or the `packages/ai/api` runtime profiles must reference the current LangGraph + LangSmith + LangFuse documentation surfaced via the Archon knowledge base so implementation matches the latest runtime guidance; capture the doc version/date alongside the telemetry evidence stored in `specs/002-ai-refactor-plan/reports/`.
+- **Breadcrumbs:** Implementation lives in `automation/pipelines/models.py`, `automation/pipelines/stage_map.py`, and `automation/langgraph/runtime.py`; QA validation lives in `tests/automation/test_stage_contracts.py` & `tests/automation/test_stage_graph.py`.
 ## Canonical vocabulary (binding)
 
 **Breadcrumbs:** Implementation `packages/core/artifacts/status.py`, Tests `tests/platform/artifacts/test_status_vocab.py::test_all_statuses_linked`, Observability Grafana “Docs Quality – Vocabulary Drift”.
@@ -2414,6 +2419,12 @@ All sub-processors contractually commit to “no training on customer prompts/ou
 Vendor monitoring: Compliance subscribes to provider trust-center feeds (Azure, SendGrid, Telnyx) and maintains a quarterly calendar reminder to review policy updates. Appendix Q entries include `last_reviewed_at` metadata in the waiver ledger; deviations raise `VENDOR_POLICY_CHANGE` audit events and prompt Architecture/Security sign-off before continuing usage.
 
 ______________________________________________________________________
+
+## AI Refactor Telemetry Exports
+
+- **Purpose:** The automation lanes for the AI refactor emit OTLP spans, LangSmith eval IDs, LangFuse session metadata, and entity graph snapshots so the future centralized telemetry pipeline can consume deterministic evidence without rehydrating artifacts. **|**
+- **Contract:** Residency ledger rows live at `storage/audit/ai-refactor/ledger.jsonl`, entity graphs under `storage/ops/ai-refactor/graphs/graph_<run_id>.json`, and both are surfaced via `/ai-refactor/readiness-snapshots` + `/ai-refactor/residency-ledger` (see `specs/002-ai-refactor-plan/contracts/ai-refactor-openapi.yaml`). **|**
+- **Doc requirement:** Before updating these telemetry/residency surfaces, consult the latest LangGraph, LangSmith, and LangFuse documentation via the Archon knowledge base and record the referenced versions inside `specs/002-ai-refactor-plan/reports/telemetry_reports/`. **|**
 
 ## Appendix R — Data lineage maps
 
